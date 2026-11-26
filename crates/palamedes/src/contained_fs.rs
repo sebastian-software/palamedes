@@ -337,8 +337,8 @@ mod platform {
         validate_single_file_name,
     };
 
-    const UNIX_DIR_LOCK_NAME: &std::ffi::CStr = c".pmds-lock";
-    const UNIX_DIR_LOCK_MAGIC: &[u8] = b"palamedes-dir-lock-v1\n";
+    pub(super) const UNIX_DIR_LOCK_NAME: &std::ffi::CStr = c".pmds-lock";
+    pub(super) const UNIX_DIR_LOCK_MAGIC: &[u8] = b"palamedes-dir-lock-v1\n";
 
     #[derive(Debug)]
     struct UnixDirLock {
@@ -2111,7 +2111,7 @@ mod platform {
         result
     }
 
-    fn stat_identity(stat: &libc::stat) -> FileIdentity {
+    pub(super) fn stat_identity(stat: &libc::stat) -> FileIdentity {
         #[allow(clippy::unnecessary_cast)]
         FileIdentity {
             dev: stat.st_dev as u64,
@@ -2119,7 +2119,7 @@ mod platform {
         }
     }
 
-    fn fstat_fd(fd: std::os::fd::RawFd) -> io::Result<libc::stat> {
+    pub(super) fn fstat_fd(fd: std::os::fd::RawFd) -> io::Result<libc::stat> {
         let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: `fd` is an open descriptor and `stat` is writable.
         if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } != 0 {
@@ -2165,45 +2165,165 @@ mod platform {
         }
     }
 
-    fn wait_for_readonly_lock_release(
+    fn flock_shared(fd: std::os::fd::RawFd) -> io::Result<()> {
+        loop {
+            // SAFETY: `fd` is an open file descriptor.
+            if unsafe { libc::flock(fd, libc::LOCK_SH) } == 0 {
+                return Ok(());
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            return Err(error);
+        }
+    }
+
+    /// Waits for a read-only `.pmds-lock` opened on a filesystem that rejects
+    /// `flock(LOCK_EX)` on `O_RDONLY` descriptors (such as Linux NFS). Once
+    /// `LOCK_SH` succeeds, no active writer holds `LOCK_EX` on `existing_id`:
+    /// if `.pmds-lock` is already gone or replaced, the live writer released it
+    /// cleanly; if `.pmds-lock` still names `existing_id`, the previous owner
+    /// died without unlinking it and we coordinate atomic single-winner unlink
+    /// via a per-inode `.pmds-claim-<dev>-<ino>` lock file so concurrent
+    /// waiters can never unlink a newly created replacement lock.
+    pub(super) fn wait_for_readonly_lock_release(
         dir: &ContainedDir,
         existing_fd: OwnedFd,
         existing_id: FileIdentity,
     ) -> Result<(), ContainedFsError> {
-        // Attempt a blocking `LOCK_SH` first (which Linux NFS permits on
-        // `O_RDONLY` descriptors and wakes as soon as the writer releases
-        // `LOCK_EX`). Always drop the descriptor before polling so we never
-        // pin the lock open against another writer.
-        loop {
-            // SAFETY: `existing_fd` is an open file descriptor.
-            let rc = unsafe { libc::flock(existing_fd.as_raw_fd(), libc::LOCK_SH) };
-            if rc == 0 {
-                break;
-            }
-            if io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
-                continue;
-            }
-            break;
-        }
-        drop(existing_fd);
+        let dir_raw = dir.fd.as_raw_fd();
+        flock_shared(existing_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
 
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-        let mut backoff_ms: u64 = 2;
-        loop {
-            match fstatat_nofollow(dir.fd.as_raw_fd(), UNIX_DIR_LOCK_NAME) {
-                Ok(stat) if stat_identity(&stat) == existing_id => {
-                    if std::time::Instant::now() >= deadline {
-                        return Err(ContainedFsError::Io(io::Error::new(
-                            io::ErrorKind::TimedOut,
-                            "timed out waiting for active catalog lock \".pmds-lock\" to release",
-                        )));
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
-                    backoff_ms = (backoff_ms * 2).min(50);
+        match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
+            Ok(stat) if stat_identity(&stat) == existing_id => {
+                if stat.st_nlink > 1 {
+                    reclaim_interrupted_lock_temp_links(dir, existing_id);
                 }
+            }
+            Ok(_) => return Ok(()),
+            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(()),
+            Err(error) => return Err(ContainedFsError::Io(error)),
+        }
+
+        // Keep `existing_fd` locked with `LOCK_SH` across recovery so no writer
+        // can simultaneously hold `LOCK_EX` on `existing_id`.
+        let claim_name = CString::new(format!(
+            ".pmds-claim-{}-{}",
+            existing_id.dev, existing_id.ino
+        ))
+        .expect("ASCII recovery claim name has no NUL bytes");
+        let dir_group_writable = fstat_fd(dir_raw)
+            .map(|stat| (stat.st_mode & 0o020) != 0)
+            .unwrap_or(false);
+
+        loop {
+            match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
+                Ok(stat) if stat_identity(&stat) == existing_id => {}
                 Ok(_) => return Ok(()),
                 Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(()),
                 Err(error) => return Err(ContainedFsError::Io(error)),
+            }
+
+            // SAFETY: `dir_raw` is open and `claim_name` is a valid C string.
+            let claim_raw = unsafe {
+                libc::openat(
+                    dir_raw,
+                    claim_name.as_ptr(),
+                    libc::O_RDWR
+                        | libc::O_CREAT
+                        | libc::O_EXCL
+                        | libc::O_NOFOLLOW
+                        | libc::O_CLOEXEC,
+                    0o664 as libc::c_uint,
+                )
+            };
+            if claim_raw >= 0 {
+                // SAFETY: `claim_raw` is a newly opened valid file descriptor.
+                let claim_fd = unsafe { OwnedFd::from_raw_fd(claim_raw) };
+                let claim_guard = UnixTempFileGuard::new(dir, claim_name);
+                if let Ok(claim_stat) = fstat_fd(claim_fd.as_raw_fd()) {
+                    let mut target_mode = (claim_stat.st_mode & 0o664) | 0o644;
+                    if dir_group_writable {
+                        target_mode |= 0o020;
+                    }
+                    if (claim_stat.st_mode & 0o777) != target_mode {
+                        // SAFETY: `claim_fd` is an open file we just created.
+                        let _ = unsafe { libc::fchmod(claim_fd.as_raw_fd(), target_mode) };
+                    }
+                }
+                flock_exclusive(claim_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
+
+                match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
+                    Ok(stat) if stat_identity(&stat) == existing_id => {
+                        // SAFETY: `dir_raw` is open and `UNIX_DIR_LOCK_NAME` is valid.
+                        if unsafe { libc::unlinkat(dir_raw, UNIX_DIR_LOCK_NAME.as_ptr(), 0) } != 0 {
+                            let error = io::Error::last_os_error();
+                            if error.raw_os_error() != Some(libc::ENOENT) {
+                                drop(claim_guard);
+                                drop(claim_fd);
+                                return Err(ContainedFsError::Io(error));
+                            }
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {}
+                    Err(error) => {
+                        drop(claim_guard);
+                        drop(claim_fd);
+                        return Err(ContainedFsError::Io(error));
+                    }
+                }
+                drop(claim_guard);
+                drop(claim_fd);
+                return Ok(());
+            }
+
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::EEXIST) {
+                return Err(ContainedFsError::Io(error));
+            }
+
+            // Another waiter already created `.pmds-claim-<dev>-<ino>`: wait on
+            // it via `LOCK_SH`, and if that claimant also died before unlinking
+            // `existing_id`, remove the stale claim and retry.
+            // SAFETY: `dir_raw` is open and `claim_name` is a valid C string.
+            let other_raw = unsafe {
+                libc::openat(
+                    dir_raw,
+                    claim_name.as_ptr(),
+                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                )
+            };
+            if other_raw < 0 {
+                let open_err = io::Error::last_os_error();
+                if open_err.raw_os_error() == Some(libc::ENOENT) {
+                    continue;
+                }
+                return Err(ContainedFsError::Io(open_err));
+            }
+            // SAFETY: `other_raw` is a newly opened valid file descriptor.
+            let other_fd = unsafe { OwnedFd::from_raw_fd(other_raw) };
+            let other_id = stat_identity(&fstat_fd(other_fd.as_raw_fd())?);
+            let _ = flock_shared(other_fd.as_raw_fd());
+            let still_abandoned = match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
+                Ok(stat) => stat_identity(&stat) == existing_id,
+                Err(err) if err.raw_os_error() == Some(libc::ENOENT) => false,
+                Err(err) => return Err(ContainedFsError::Io(err)),
+            };
+            if !still_abandoned {
+                return Ok(());
+            }
+            if let Ok(claim_stat) = fstatat_nofollow(dir_raw, &claim_name)
+                && stat_identity(&claim_stat) == other_id
+            {
+                // SAFETY: `dir_raw` is open and `claim_name` is a verified stale claim file.
+                if unsafe { libc::unlinkat(dir_raw, claim_name.as_ptr(), 0) } != 0 {
+                    let unlink_err = io::Error::last_os_error();
+                    if unlink_err.raw_os_error() != Some(libc::ENOENT) {
+                        return Err(ContainedFsError::Io(unlink_err));
+                    }
+                }
             }
         }
     }
@@ -2372,11 +2492,18 @@ mod platform {
             // SAFETY: `temp_raw` is a newly opened valid file descriptor.
             let temp_fd = unsafe { OwnedFd::from_raw_fd(temp_raw) };
             let mut temp_guard = UnixTempFileGuard::new(dir, temp_name.clone());
-            // Ensure the lock file is at least 0644 (never world-writable) so
-            // other authorized users in a shared sticky directory can open it
-            // `O_RDONLY` and wait on `flock(LOCK_EX)` even under a 0077 umask.
+            // Ensure the lock file is at least 0644 (and 0664 in group-writable
+            // directories, never world-writable) so other authorized users in
+            // shared or sticky directories can open it (`O_RDWR` for same-group
+            // NFS locking, or `O_RDONLY` fallback) even under a 0022/0077 umask.
             if let Ok(temp_stat) = fstat_fd(temp_fd.as_raw_fd()) {
-                let target_mode = (temp_stat.st_mode & 0o664) | 0o644;
+                let mut target_mode = (temp_stat.st_mode & 0o664) | 0o644;
+                if fstat_fd(dir.fd.as_raw_fd())
+                    .map(|dir_stat| (dir_stat.st_mode & 0o020) != 0)
+                    .unwrap_or(false)
+                {
+                    target_mode |= 0o020;
+                }
                 if (temp_stat.st_mode & 0o777) != target_mode {
                     // SAFETY: `temp_fd` is an open file descriptor we just created.
                     let _ = unsafe { libc::fchmod(temp_fd.as_raw_fd(), target_mode) };
@@ -6284,5 +6411,77 @@ mod tests {
                 "expected PermissionDenied error for foreign ACL, got {error:?}"
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_readonly_lock_recovery_reclaims_abandoned_lock_and_waits_for_live_holder() {
+        use std::os::fd::{AsRawFd, OwnedFd};
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        let lock_path = root.path().join(".pmds-lock");
+
+        // 1. Abandoned read-only `.pmds-lock` with valid magic and no active flock:
+        //    must be reclaimed immediately rather than timing out.
+        fs::write(&lock_path, super::platform::UNIX_DIR_LOCK_MAGIC).expect("write abandoned lock");
+        fs::set_permissions(&lock_path, fs::Permissions::from_mode(0o444)).expect("chmod 0444");
+        let fd = OwnedFd::from(fs::File::open(&lock_path).expect("open read-only lock"));
+        let stat = super::platform::fstat_fd(fd.as_raw_fd()).expect("fstat abandoned lock");
+        let id = super::platform::stat_identity(&stat);
+
+        let started = std::time::Instant::now();
+        super::platform::wait_for_readonly_lock_release(&dir, fd, id)
+            .expect("abandoned read-only lock must recover");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "abandoned lock recovery must not time out"
+        );
+        assert!(
+            !lock_path.exists(),
+            "abandoned .pmds-lock must be unlinked during recovery"
+        );
+        let leftover_claims: Vec<_> = fs::read_dir(root.path())
+            .expect("read dir")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".pmds-claim-")
+            })
+            .collect();
+        assert!(
+            leftover_claims.is_empty(),
+            "recovery claim file must be cleaned up"
+        );
+
+        // 2. Active live writer holding LOCK_EX: must wait until holder unlinks
+        //    and releases LOCK_EX cleanly.
+        let live_guard = dir.lock_target(OsStr::new("en.po")).expect("live lock");
+        let live_ro_fd = OwnedFd::from(fs::File::open(&lock_path).expect("open live lock"));
+        let live_stat = super::platform::fstat_fd(live_ro_fd.as_raw_fd()).expect("fstat live lock");
+        let live_id = super::platform::stat_identity(&live_stat);
+
+        let dir_path = root.path().to_path_buf();
+        let waiter = std::thread::spawn(move || {
+            let waiter_dir = ContainedDir::open_root(&dir_path).expect("waiter open root");
+            let t0 = std::time::Instant::now();
+            super::platform::wait_for_readonly_lock_release(&waiter_dir, live_ro_fd, live_id)
+                .expect("wait for live lock");
+            t0.elapsed()
+        });
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        assert!(
+            lock_path.exists(),
+            "waiter must not unlink active holder's lock"
+        );
+        drop(live_guard);
+        let waited = waiter.join().expect("waiter join");
+        assert!(
+            waited >= std::time::Duration::from_millis(45),
+            "waiter should block until active holder releases lock (waited {waited:?})"
+        );
+        assert!(!lock_path.exists());
     }
 }

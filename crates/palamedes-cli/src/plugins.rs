@@ -1594,16 +1594,12 @@ mod windows_alias_spawn {
 #[derive(Debug)]
 struct PinnedPluginBinary {
     #[cfg(unix)]
-    leaf_dir_fd: std::os::fd::OwnedFd,
-    #[cfg(unix)]
-    file_name: std::ffi::CString,
-    #[cfg(unix)]
     file_fd: std::os::fd::OwnedFd,
     #[cfg(unix)]
     dev: u64,
     #[cfg(unix)]
     ino: u64,
-    #[cfg(unix)]
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     readable: bool,
     #[cfg(windows)]
     _pinned_handle: std::os::windows::io::OwnedHandle,
@@ -1684,18 +1680,6 @@ mod unix_pinned_plugin {
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     const DARWIN_O_EXEC: libc::c_int = 0x4000_0000;
 
-    pub(super) struct PinnedShellLaunch {
-        pub(super) program: &'static str,
-        pub(super) pre_args: Vec<String>,
-        pub(super) script_body: String,
-    }
-
-    enum ScriptAuth {
-        Authorized,
-        #[cfg(target_os = "linux")]
-        FallbackToKernelExec,
-    }
-
     enum WalkStep {
         Normal(OsString),
         ParentDir,
@@ -1711,8 +1695,6 @@ mod unix_pinned_plugin {
     }
 
     struct WalkedFile {
-        leaf_dir_fd: OwnedFd,
-        file_name: CString,
         file_fd: OwnedFd,
         dev: u64,
         ino: u64,
@@ -1755,16 +1737,6 @@ mod unix_pinned_plugin {
         }
         // SAFETY: `fstatat` succeeded and initialized `stat`.
         Ok(unsafe { stat.assume_init() })
-    }
-
-    fn dup_cloexec(fd: RawFd) -> io::Result<OwnedFd> {
-        // SAFETY: `fd` is an open file descriptor.
-        let raw = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) };
-        if raw < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        // SAFETY: `raw` is a newly duplicated valid file descriptor.
-        Ok(unsafe { OwnedFd::from_raw_fd(raw) })
     }
 
     fn readlinkat_os(dir_fd: RawFd, name: &CString) -> io::Result<OsString> {
@@ -2026,13 +1998,14 @@ mod unix_pinned_plugin {
                 return Err(script_plugin_failure(specifier, &walked.canonical_path));
             }
             let pinned = Arc::new(PinnedPluginBinary {
-                leaf_dir_fd: walked.leaf_dir_fd,
-                file_name: walked.file_name,
                 file_fd: walked.file_fd,
                 dev: walked.dev,
                 ino: walked.ino,
+                #[cfg(any(target_os = "linux", target_os = "freebsd"))]
                 readable: walked.readable,
             });
+            #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+            let _ = walked.readable;
             Ok((walked.canonical_path, invocation_path, pinned))
         }
 
@@ -2232,16 +2205,9 @@ mod unix_pinned_plugin {
                                     canonical_path.push(name);
                                 }
                                 canonical_path.push(&seg);
-                                let leaf_dir_fd = match dir_stack.pop() {
-                                    Some((_, fd)) => fd,
-                                    None => dup_cloexec(self.root_fd.as_raw_fd())
-                                        .map_err(WalkError::Io)?,
-                                };
                                 #[allow(clippy::unnecessary_cast)]
                                 let (dev, ino) = (stat.st_dev as u64, stat.st_ino as u64);
                                 return Ok(WalkedFile {
-                                    leaf_dir_fd,
-                                    file_name: c_seg,
                                     file_fd,
                                     dev,
                                     ino,
@@ -2279,313 +2245,7 @@ mod unix_pinned_plugin {
         }
     }
 
-    fn is_safe_shell_shebang_flag(flag: &str) -> bool {
-        let Some(letters) = flag.strip_prefix('-') else {
-            return false;
-        };
-        !letters.is_empty()
-            && letters
-                .bytes()
-                .all(|byte| matches!(byte, b'e' | b'u' | b'x' | b'f' | b'v'))
-    }
-
-    fn static_shell_path(head: &str) -> Option<&'static str> {
-        match head {
-            "/bin/sh" => Some("/bin/sh"),
-            "/bin/bash" => Some("/bin/bash"),
-            "/bin/dash" => Some("/bin/dash"),
-            "/bin/zsh" => Some("/bin/zsh"),
-            "/usr/bin/sh" => Some("/usr/bin/sh"),
-            "/usr/bin/bash" => Some("/usr/bin/bash"),
-            "/usr/bin/dash" => Some("/usr/bin/dash"),
-            "/usr/bin/zsh" => Some("/usr/bin/zsh"),
-            _ => None,
-        }
-    }
-
-    fn static_env_path(head: &str) -> Option<&'static str> {
-        match head {
-            "/usr/bin/env" => Some("/usr/bin/env"),
-            "/bin/env" => Some("/bin/env"),
-            _ => None,
-        }
-    }
-
-    fn parse_pinned_shell_shebang(first_line: &str) -> Option<(&'static str, Vec<String>)> {
-        let rest = first_line.strip_prefix("#!")?.trim_end_matches('\r').trim();
-        let mut parts = rest.split_ascii_whitespace();
-        let head = parts.next()?;
-        let arg1 = parts.next();
-        let arg2 = parts.next();
-        let arg3 = parts.next();
-        if parts.next().is_some() {
-            return None;
-        }
-        if let Some(shell) = static_shell_path(head) {
-            return match (arg1, arg2, arg3) {
-                (None, None, None) => Some((shell, Vec::new())),
-                (Some(flag), None, None) if is_safe_shell_shebang_flag(flag) => {
-                    Some((shell, vec![flag.to_owned()]))
-                }
-                _ => None,
-            };
-        }
-        if let Some(env_bin) = static_env_path(head) {
-            return match (arg1, arg2, arg3) {
-                (Some(shell @ ("sh" | "bash" | "dash" | "zsh")), None, None) => {
-                    Some((env_bin, vec![shell.to_owned()]))
-                }
-                (Some("-S"), Some(shell @ ("sh" | "bash" | "dash" | "zsh")), None) => {
-                    Some((env_bin, vec![shell.to_owned()]))
-                }
-                (Some("-S"), Some(shell @ ("sh" | "bash" | "dash" | "zsh")), Some(flag))
-                    if is_safe_shell_shebang_flag(flag) =>
-                {
-                    Some((env_bin, vec![shell.to_owned(), flag.to_owned()]))
-                }
-                _ => None,
-            };
-        }
-        None
-    }
-
-    /// Asks the kernel to authorize execution of the pinned script inode,
-    /// enforcing mode bits, ACLs (e.g. macOS `deny execute` and POSIX ACLs),
-    /// LSM/MAC policies, and `noexec` mount flags before launching any shell.
-    fn authorize_pinned_script_execution(pinned: &PinnedPluginBinary) -> io::Result<ScriptAuth> {
-        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
-        {
-            #[cfg(any(target_os = "macos", target_os = "ios"))]
-            let exec_flag = DARWIN_O_EXEC;
-            #[cfg(target_os = "freebsd")]
-            let exec_flag = libc::O_EXEC;
-
-            // SAFETY: `leaf_dir_fd` is open and `file_name` is NUL-terminated.
-            let exec_raw = unsafe {
-                libc::openat(
-                    pinned.leaf_dir_fd.as_raw_fd(),
-                    pinned.file_name.as_ptr(),
-                    exec_flag | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-                )
-            };
-            if exec_raw < 0 {
-                return Err(io::Error::last_os_error());
-            }
-            // SAFETY: `exec_raw` is a newly opened valid file descriptor.
-            let exec_fd = unsafe { OwnedFd::from_raw_fd(exec_raw) };
-            let exec_stat = fstat_fd(exec_fd.as_raw_fd())?;
-            #[allow(clippy::unnecessary_cast)]
-            let matches_inode = exec_stat.st_dev as u64 == pinned.dev
-                && exec_stat.st_ino as u64 == pinned.ino
-                && (exec_stat.st_mode & libc::S_IFMT) == libc::S_IFREG;
-            if !matches_inode {
-                return Err(io::Error::from_raw_os_error(libc::ENOENT));
-            }
-            let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
-            // SAFETY: `exec_fd` is open and `fs_stat` is writable.
-            if unsafe { libc::fstatfs(exec_fd.as_raw_fd(), fs_stat.as_mut_ptr()) } != 0 {
-                return Err(io::Error::last_os_error());
-            }
-            // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
-            let fs_stat = unsafe { fs_stat.assume_init() };
-            #[allow(clippy::unnecessary_cast)]
-            if (fs_stat.f_flags as u64 & libc::MNT_NOEXEC as u64) != 0 {
-                return Err(io::Error::from_raw_os_error(libc::EACCES));
-            }
-            Ok(ScriptAuth::Authorized)
-        }
-        #[cfg(target_os = "linux")]
-        {
-            let raw_fd = pinned.file_fd.as_raw_fd();
-            let mut vfs_stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
-            // SAFETY: `raw_fd` is open and `vfs_stat` is writable.
-            if unsafe { libc::fstatvfs(raw_fd, vfs_stat.as_mut_ptr()) } != 0 {
-                return Err(io::Error::last_os_error());
-            }
-            // SAFETY: `fstatvfs` succeeded and initialized `vfs_stat`.
-            let vfs_stat = unsafe { vfs_stat.assume_init() };
-            if (vfs_stat.f_flag & libc::ST_NOEXEC) != 0 {
-                return Err(io::Error::from_raw_os_error(libc::EACCES));
-            }
-            let proc_fd = format!("/proc/self/fd/{raw_fd}");
-            if let Ok(proc_cstr) = CString::new(proc_fd.as_bytes()) {
-                let mut proc_stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-                // SAFETY: `proc_cstr` is NUL-terminated and `proc_stat` is writable.
-                let proc_ok = unsafe {
-                    libc::fstatat(
-                        libc::AT_FDCWD,
-                        proc_cstr.as_ptr(),
-                        proc_stat.as_mut_ptr(),
-                        0,
-                    )
-                } == 0;
-                if proc_ok {
-                    // SAFETY: `fstatat` succeeded and initialized `proc_stat`.
-                    let proc_stat = unsafe { proc_stat.assume_init() };
-                    #[allow(clippy::unnecessary_cast)]
-                    if proc_stat.st_dev as u64 == pinned.dev
-                        && proc_stat.st_ino as u64 == pinned.ino
-                    {
-                        // SAFETY: `proc_cstr` is NUL-terminated; checks kernel
-                        // `MAY_EXEC` directly on the pinned inode (mode, ACLs, LSM).
-                        if unsafe {
-                            libc::faccessat(
-                                libc::AT_FDCWD,
-                                proc_cstr.as_ptr(),
-                                libc::X_OK,
-                                libc::AT_EACCESS,
-                            )
-                        } != 0
-                        {
-                            return Err(io::Error::last_os_error());
-                        }
-                        return Ok(ScriptAuth::Authorized);
-                    }
-                }
-            }
-            // `/proc` unavailable fallback: verify `leaf_dir_fd` + `file_name`
-            // still names the pinned inode before and after `faccessat`.
-            let leaf_raw = pinned.leaf_dir_fd.as_raw_fd();
-            let pre_stat = match fstatat_nofollow(leaf_raw, &pinned.file_name) {
-                Ok(stat) => stat,
-                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
-                    return Ok(ScriptAuth::FallbackToKernelExec);
-                }
-                Err(error) => return Err(error),
-            };
-            #[allow(clippy::unnecessary_cast)]
-            if pre_stat.st_dev as u64 != pinned.dev || pre_stat.st_ino as u64 != pinned.ino {
-                return Ok(ScriptAuth::FallbackToKernelExec);
-            }
-            // SAFETY: `leaf_raw` is open and `file_name` is NUL-terminated.
-            if unsafe {
-                libc::faccessat(
-                    leaf_raw,
-                    pinned.file_name.as_ptr(),
-                    libc::X_OK,
-                    libc::AT_EACCESS,
-                )
-            } != 0
-            {
-                return Err(io::Error::last_os_error());
-            }
-            let post_stat = fstatat_nofollow(leaf_raw, &pinned.file_name)?;
-            #[allow(clippy::unnecessary_cast)]
-            if post_stat.st_dev as u64 != pinned.dev || post_stat.st_ino as u64 != pinned.ino {
-                return Ok(ScriptAuth::FallbackToKernelExec);
-            }
-            Ok(ScriptAuth::Authorized)
-        }
-        #[cfg(not(any(
-            target_os = "macos",
-            target_os = "ios",
-            target_os = "freebsd",
-            target_os = "linux"
-        )))]
-        {
-            let _ = pinned;
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "kernel execute authorization for pinned scripts is not supported on this Unix target",
-            ))
-        }
-    }
-
-    /// Reads a pinned POSIX shell `#!` wrapper directly from `pinned.file_fd`
-    /// after kernel execute authorization so we can execute
-    /// `<shell> -c <body> <invocation_path>` without any pathname lookup while
-    /// keeping `$0` equal to `invocation_path` (which `execveat(AT_EMPTY_PATH)`
-    /// and macOS `/.vol/<dev>/<ino>` cannot preserve for `#!` scripts). Returns
-    /// `Ok(None)` for native binaries or other interpreters.
-    pub(super) fn read_pinned_posix_shell_script(
-        pinned: &PinnedPluginBinary,
-    ) -> io::Result<Option<PinnedShellLaunch>> {
-        const MAX_INLINE_SHELL_BYTES: usize = 64 * 1024;
-        if !pinned.readable {
-            return Ok(None);
-        }
-        let fd = pinned.file_fd.as_raw_fd();
-        let mut header = [0_u8; 256];
-        // SAFETY: `fd` is open and `header` is writable.
-        let header_read = unsafe { libc::pread(fd, header.as_mut_ptr().cast(), header.len(), 0) };
-        if header_read < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        #[allow(clippy::cast_sign_loss)]
-        let header_len = header_read as usize;
-        if header_len < 2 || header[..2] != *b"#!" {
-            return Ok(None);
-        }
-        let line_end = header[..header_len]
-            .iter()
-            .position(|&byte| byte == b'\n')
-            .unwrap_or(header_len);
-        let Ok(first_line) = std::str::from_utf8(&header[..line_end]) else {
-            return Ok(None);
-        };
-        if parse_pinned_shell_shebang(first_line).is_none() {
-            return Ok(None);
-        }
-
-        match authorize_pinned_script_execution(pinned)? {
-            ScriptAuth::Authorized => {}
-            #[cfg(target_os = "linux")]
-            ScriptAuth::FallbackToKernelExec => return Ok(None),
-        }
-
-        let stat = fstat_fd(fd)?;
-        #[allow(clippy::cast_sign_loss)]
-        let file_len = stat.st_size.max(0) as usize;
-        if file_len > MAX_INLINE_SHELL_BYTES {
-            return Ok(None);
-        }
-        let mut bytes = vec![0_u8; file_len];
-        let mut offset = 0usize;
-        while offset < bytes.len() {
-            #[allow(clippy::cast_possible_wrap)]
-            let read = unsafe {
-                libc::pread(
-                    fd,
-                    bytes[offset..].as_mut_ptr().cast(),
-                    bytes.len() - offset,
-                    offset as libc::off_t,
-                )
-            };
-            if read < 0 {
-                let error = io::Error::last_os_error();
-                if error.raw_os_error() == Some(libc::EINTR) {
-                    continue;
-                }
-                return Err(error);
-            }
-            if read == 0 {
-                bytes.truncate(offset);
-                break;
-            }
-            #[allow(clippy::cast_sign_loss)]
-            {
-                offset += read as usize;
-            }
-        }
-        if bytes.contains(&0) {
-            return Ok(None);
-        }
-        let Ok(text) = String::from_utf8(bytes) else {
-            return Ok(None);
-        };
-        // Re-verify the shebang on the full buffer in case the file changed in place.
-        let full_first_line = text.lines().next().unwrap_or_default();
-        let Some((program, pre_args)) = parse_pinned_shell_shebang(full_first_line) else {
-            return Ok(None);
-        };
-        Ok(Some(PinnedShellLaunch {
-            program,
-            pre_args,
-            script_body: text,
-        }))
-    }
-
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     pub(super) fn fd_starts_with_shebang(fd: RawFd) -> io::Result<bool> {
         let mut magic = [0_u8; 2];
         // SAFETY: `fd` is open and `magic` is 2 writable bytes.
@@ -2679,6 +2339,73 @@ mod unix_pinned_plugin {
     }
 }
 
+#[cfg(any(windows, test))]
+fn windows_wide_root_len(units: &[u16]) -> Option<usize> {
+    const BS: u16 = b'\\' as u16;
+    const Q: u16 = b'?' as u16;
+    const COLON: u16 = b':' as u16;
+
+    if units.len() >= 8
+        && units[0] == BS
+        && units[1] == BS
+        && units[2] == Q
+        && units[3] == BS
+        && (units[4] == u16::from(b'U') || units[4] == u16::from(b'u'))
+        && (units[5] == u16::from(b'N') || units[5] == u16::from(b'n'))
+        && (units[6] == u16::from(b'C') || units[6] == u16::from(b'c'))
+        && units[7] == BS
+    {
+        let server_rel = units[8..].iter().position(|&unit| unit == BS)?;
+        if server_rel == 0 {
+            return None;
+        }
+        let share_start = 8 + server_rel + 1;
+        if share_start >= units.len() {
+            return None;
+        }
+        return match units[share_start..].iter().position(|&unit| unit == BS) {
+            Some(0) => None,
+            Some(share_rel) => Some(share_start + share_rel + 1),
+            None => Some(units.len()),
+        };
+    }
+    if units.len() >= 4 && units[0] == BS && units[1] == BS && units[2] == Q && units[3] == BS {
+        return match units[4..].iter().position(|&unit| unit == BS) {
+            Some(0) => None,
+            Some(vol_rel) => Some(4 + vol_rel + 1),
+            None => Some(units.len()),
+        };
+    }
+    if units.len() >= 3
+        && u8::try_from(units[0]).is_ok_and(|byte| byte.is_ascii_alphabetic())
+        && units[1] == COLON
+        && units[2] == BS
+    {
+        return Some(3);
+    }
+    None
+}
+
+#[cfg(any(windows, test))]
+fn windows_parent_wide_path(units: &[u16]) -> Option<&[u16]> {
+    const BS: u16 = b'\\' as u16;
+
+    let root_len = windows_wide_root_len(units)?;
+    let mut end = units.len();
+    while end > root_len && units[end - 1] == BS {
+        end -= 1;
+    }
+    if end <= root_len {
+        return None;
+    }
+    let slash = units[..end].iter().rposition(|&unit| unit == BS)?;
+    if slash < root_len {
+        Some(&units[..root_len])
+    } else {
+        Some(&units[..slash])
+    }
+}
+
 #[cfg(windows)]
 mod windows_pinned_plugin {
     use std::ffi::{OsString, c_void};
@@ -2692,7 +2419,7 @@ mod windows_pinned_plugin {
 
     use super::{
         PackageManifest, PinnedPluginBinary, PluginFailure, is_blocked_script_extension,
-        script_plugin_failure, validate_plugin_binary_relative_path,
+        script_plugin_failure, validate_plugin_binary_relative_path, windows_parent_wide_path,
     };
 
     const FILE_READ_DATA: u32 = 0x0000_0001;
@@ -2703,9 +2430,17 @@ mod windows_pinned_plugin {
     const FILE_SHARE_WRITE: u32 = 0x0000_0002;
     const FILE_SHARE_DELETE: u32 = 0x0000_0004;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
     const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0000_0010;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
     const FILE_NAME_NORMALIZED: u32 = 0x0;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    struct FileIdentity {
+        volume_serial: u32,
+        file_index_high: u32,
+        file_index_low: u32,
+    }
 
     #[repr(C)]
     struct FileTime {
@@ -2725,6 +2460,16 @@ mod windows_pinned_plugin {
         number_of_links: u32,
         file_index_high: u32,
         file_index_low: u32,
+    }
+
+    impl ByHandleFileInformation {
+        fn identity(&self) -> FileIdentity {
+            FileIdentity {
+                volume_serial: self.volume_serial_number,
+                file_index_high: self.file_index_high,
+                file_index_low: self.file_index_low,
+            }
+        }
     }
 
     #[link(name = "kernel32")]
@@ -2771,21 +2516,43 @@ mod windows_pinned_plugin {
         }
     }
 
-    fn path_is_strictly_inside(dir_units: &[u16], file_units: &[u16]) -> bool {
-        let dir_str = OsString::from_wide(dir_units)
-            .to_string_lossy()
-            .to_ascii_lowercase();
-        let file_str = OsString::from_wide(file_units)
-            .to_string_lossy()
-            .to_ascii_lowercase();
-        let dir_trimmed = dir_str.trim_end_matches('\\');
-        file_str.len() > dir_trimmed.len()
-            && file_str.starts_with(dir_trimmed)
-            && file_str.as_bytes().get(dir_trimmed.len()) == Some(&b'\\')
+    /// Verifies that `file_final_units` has the pinned package directory
+    /// (`root_dir_id`) as a strict kernel-identity ancestor, walking raw UTF-16
+    /// parent paths without case folding or lossy UTF-8 conversion (safe under
+    /// per-directory NTFS case sensitivity and unpaired UTF-16 surrogates).
+    fn is_strict_descendant_of_dir(
+        root_dir_id: FileIdentity,
+        file_final_units: &[u16],
+    ) -> io::Result<bool> {
+        let mut current = file_final_units;
+        while let Some(parent_units) = windows_parent_wide_path(current) {
+            let parent_path = PathBuf::from(OsString::from_wide(parent_units));
+            let dir = match OpenOptions::new()
+                .access_mode(FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(&parent_path)
+            {
+                Ok(dir) => dir,
+                Err(_) => return Ok(false),
+            };
+            let info = handle_info(dir.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0
+                || (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0
+            {
+                return Ok(false);
+            }
+            if info.identity() == root_dir_id {
+                return Ok(true);
+            }
+            current = parent_units;
+        }
+        Ok(false)
     }
 
     pub(super) struct PinnedPackageDir {
         dir_file: File,
+        dir_id: FileIdentity,
         package_dir: PathBuf,
         canonical_dir: PathBuf,
     }
@@ -2824,6 +2591,7 @@ mod windows_pinned_plugin {
                     ),
                 ));
             }
+            let dir_id = info.identity();
             let dir_final = final_path_units(dir_file.as_raw_handle()).map_err(|error| {
                 PluginFailure::new(
                     "PLUGIN_INVALID",
@@ -2836,6 +2604,7 @@ mod windows_pinned_plugin {
             let canonical_dir = PathBuf::from(OsString::from_wide(&dir_final));
             Ok(Self {
                 dir_file,
+                dir_id,
                 package_dir: package_dir.to_path_buf(),
                 canonical_dir,
             })
@@ -2862,8 +2631,9 @@ mod windows_pinned_plugin {
                 ));
             }
             let manifest_final = final_path_units(file.as_raw_handle())?;
-            let dir_final_after = final_path_units(self.dir_file.as_raw_handle())?;
-            if !path_is_strictly_inside(&dir_final_after, &manifest_final) {
+            if !is_strict_descendant_of_dir(self.dir_id, &manifest_final)?
+                || final_path_units(file.as_raw_handle())? != manifest_final
+            {
                 return Err(io::Error::new(
                     io::ErrorKind::PermissionDenied,
                     "package.json escapes package directory",
@@ -2959,16 +2729,16 @@ mod windows_pinned_plugin {
                     format!("Could not verify pinned executable for \"{specifier}\": {error}"),
                 )
             })?;
-            let dir_final_after =
-                final_path_units(self.dir_file.as_raw_handle()).map_err(|error| {
+            let contained =
+                is_strict_descendant_of_dir(self.dir_id, &bin_final).map_err(|error| {
                     PluginFailure::new(
                         "PLUGIN_INVALID",
                         format!(
-                            "Could not verify pinned package directory for \"{specifier}\": {error}"
+                            "Could not verify pinned package ancestry for \"{specifier}\": {error}"
                         ),
                     )
                 })?;
-            if !path_is_strictly_inside(&dir_final_after, &bin_final) {
+            if !contained {
                 return Err(PluginFailure::new(
                     "PLUGIN_INVALID",
                     format!(
@@ -3056,94 +2826,90 @@ fn spawn_resolved_binary(
 
     #[cfg(unix)]
     let mut command = if let Some(ref pinned) = resolved.pinned_binary {
-        if let Some(launch) = unix_pinned_plugin::read_pinned_posix_shell_script(pinned)? {
-            let mut cmd = Command::new(launch.program);
-            cmd.args(&launch.pre_args)
-                .arg("-c")
-                .arg(launch.script_body)
-                .arg(&resolved.invocation_path);
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::fd::AsRawFd;
+
+            let raw_fd = pinned.file_fd.as_raw_fd();
+            let is_shebang = pinned.readable && unix_pinned_plugin::fd_starts_with_shebang(raw_fd)?;
+            let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
+                &resolved.invocation_path,
+                NATIVE_EXECUTABLE_ENV,
+                native_executable,
+            )?;
+            let mut cmd = Command::new(&resolved.binary_path);
+            // SAFETY: runs in the forked child after Rust configures stdio
+            // pipes, `current_dir`, and process group; invokes
+            // `execveat(AT_EMPTY_PATH)` directly on the verified descriptor
+            // so the kernel enforces all execute policies (mode, ACLs, noexec,
+            // IMA, LSM) with zero pathname lookup and no script body in argv.
+            unsafe {
+                cmd.pre_exec(move || {
+                    if is_shebang && libc::fcntl(raw_fd, libc::F_SETFD, 0) != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    libc::syscall(
+                        libc::SYS_execveat,
+                        raw_fd,
+                        c"".as_ptr(),
+                        exec_arrays.argv_ptr(),
+                        exec_arrays.envp_ptr(),
+                        libc::AT_EMPTY_PATH,
+                    );
+                    Err(io::Error::last_os_error())
+                });
+            }
             cmd
-        } else {
-            #[cfg(target_os = "linux")]
-            {
-                use std::os::fd::AsRawFd;
+        }
+        #[cfg(target_os = "freebsd")]
+        {
+            use std::os::fd::AsRawFd;
 
-                let raw_fd = pinned.file_fd.as_raw_fd();
-                let is_shebang =
-                    pinned.readable && unix_pinned_plugin::fd_starts_with_shebang(raw_fd)?;
-                let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
-                    &resolved.invocation_path,
-                    NATIVE_EXECUTABLE_ENV,
-                    native_executable,
-                )?;
-                let mut cmd = Command::new(&resolved.binary_path);
-                // SAFETY: runs in the forked child after Rust configures stdio
-                // pipes, `current_dir`, and process group; invokes
-                // `execveat(AT_EMPTY_PATH)` directly on the verified descriptor
-                // without needing `/proc` or any pathname lookup.
-                unsafe {
-                    cmd.pre_exec(move || {
-                        if is_shebang && libc::fcntl(raw_fd, libc::F_SETFD, 0) != 0 {
-                            return Err(io::Error::last_os_error());
-                        }
-                        libc::syscall(
-                            libc::SYS_execveat,
-                            raw_fd,
-                            c"".as_ptr(),
-                            exec_arrays.argv_ptr(),
-                            exec_arrays.envp_ptr(),
-                            libc::AT_EMPTY_PATH,
-                        );
-                        Err(io::Error::last_os_error())
-                    });
-                }
-                cmd
+            let raw_fd = pinned.file_fd.as_raw_fd();
+            let is_shebang = pinned.readable && unix_pinned_plugin::fd_starts_with_shebang(raw_fd)?;
+            let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
+                &resolved.invocation_path,
+                NATIVE_EXECUTABLE_ENV,
+                native_executable,
+            )?;
+            let mut cmd = Command::new(&resolved.binary_path);
+            // SAFETY: runs in the forked child after stdio/cwd/pgid setup
+            // and replaces the process image directly via `fexecve`.
+            unsafe {
+                cmd.pre_exec(move || {
+                    if is_shebang && libc::fcntl(raw_fd, libc::F_SETFD, 0) != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    libc::fexecve(raw_fd, exec_arrays.argv_ptr(), exec_arrays.envp_ptr());
+                    Err(io::Error::last_os_error())
+                });
             }
-            #[cfg(target_os = "freebsd")]
-            {
-                use std::os::fd::AsRawFd;
-
-                let raw_fd = pinned.file_fd.as_raw_fd();
-                let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
-                    &resolved.invocation_path,
-                    NATIVE_EXECUTABLE_ENV,
-                    native_executable,
-                )?;
-                let mut cmd = Command::new(&resolved.binary_path);
-                // SAFETY: runs in the forked child after stdio/cwd/pgid setup
-                // and replaces the process image directly via `fexecve`.
-                unsafe {
-                    cmd.pre_exec(move || {
-                        libc::fexecve(raw_fd, exec_arrays.argv_ptr(), exec_arrays.envp_ptr());
-                        Err(io::Error::last_os_error())
-                    });
-                }
-                cmd
-            }
-            #[cfg(any(target_os = "macos", target_os = "ios"))]
-            {
-                // Execute via XNU volfs (`/.vol/<dev>/<ino>`) while
-                // `pinned.file_fd` keeps the inode allocated and un-reusable:
-                // the kernel binds execution directly to `(dev, ino)` with zero
-                // directory/symlink lookup and fails closed if unlinked or on a
-                // volume without volfs support.
-                let volfs_path = format!("/.vol/{}/{}", pinned.dev, pinned.ino);
-                let mut cmd = Command::new(&volfs_path);
-                cmd.arg0(&resolved.invocation_path);
-                cmd
-            }
-            #[cfg(not(any(
-                target_os = "linux",
-                target_os = "freebsd",
-                target_os = "macos",
-                target_os = "ios"
-            )))]
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "pinned descriptor plugin execution is not supported on this Unix target",
-                ));
-            }
+            cmd
+        }
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            // Execute via XNU volfs (`/.vol/<dev>/<ino>`) while
+            // `pinned.file_fd` keeps the inode allocated and un-reusable:
+            // the kernel binds execution directly to `(dev, ino)` with zero
+            // directory/symlink lookup, enforces all execute policies (mode,
+            // ACLs, MNT_NOEXEC), keeps script contents out of argv, and fails
+            // closed if unlinked or on a volume without volfs support.
+            let volfs_path = format!("/.vol/{}/{}", pinned.dev, pinned.ino);
+            let mut cmd = Command::new(&volfs_path);
+            cmd.arg0(&resolved.invocation_path);
+            cmd
+        }
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "macos",
+            target_os = "ios"
+        )))]
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "pinned descriptor plugin execution is not supported on this Unix target",
+            ));
         }
     } else {
         let mut cmd = Command::new(&resolved.binary_path);
@@ -5149,16 +4915,23 @@ plugins:
         )
         .expect("plugin manifest");
         let script = plugin.join("describe");
+        let implementation = plugin.join("implementation");
+        let counter = plugin.join("counter");
         write_executable_fixture(
             &script,
-            "#!/bin/sh\n# variant-a\n. \"$(dirname \"$0\")/implementation\"\n",
+            format!(
+                "#!/bin/sh\n# variant-a\n. \"{}\"\n",
+                implementation.display()
+            ),
         );
-        let implementation = plugin.join("implementation");
         fs::write(
             &implementation,
-            "read _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
-             printf '{\"event\":\"manifest\",\"name\":\"alpha\",\
-             \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
+            format!(
+                "read _request\nprintf x >> \"{}\"\n\
+                 printf '{{\"event\":\"manifest\",\"name\":\"alpha\",\
+                 \"protocolVersion\":1,\"commands\":{{\"inspect\":{{}}}}}}\\n'\n",
+                counter.display()
+            ),
         )
         .expect("plugin implementation");
         fs::write(
@@ -5281,11 +5054,15 @@ plugins:
             )
             .expect("plugin manifest");
             let script = plugin.join("describe");
+            let counter = plugin.join("counter");
             write_executable_fixture(
                 &script,
-                "#!/bin/sh\nread _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
-                 printf '{\"event\":\"manifest\",\"name\":\"shared\",\
-                 \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
+                format!(
+                    "#!/bin/sh\nread _request\nprintf x >> \"{}\"\n\
+                     printf '{{\"event\":\"manifest\",\"name\":\"shared\",\
+                     \"protocolVersion\":1,\"commands\":{{\"inspect\":{{}}}}}}\\n'\n",
+                    counter.display()
+                ),
             );
         }
         fs::write(
@@ -5845,10 +5622,43 @@ catalogs:
         );
     }
 
+    #[test]
+    fn windows_parent_wide_path_walks_utf16_ancestors_without_folding() {
+        let to_u16 = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        let from_u16 = |u: &[u16]| String::from_utf16(u).expect("valid UTF-16");
+
+        let drive = to_u16(r"\\?\C:\Pkg\bin\tool.exe");
+        let p1 = super::windows_parent_wide_path(&drive).expect("bin dir");
+        assert_eq!(from_u16(p1), r"\\?\C:\Pkg\bin");
+        let p2 = super::windows_parent_wide_path(p1).expect("pkg dir");
+        assert_eq!(from_u16(p2), r"\\?\C:\Pkg");
+        let p3 = super::windows_parent_wide_path(p2).expect("drive root");
+        assert_eq!(from_u16(p3), r"\\?\C:\");
+        assert!(super::windows_parent_wide_path(p3).is_none());
+
+        let unc = to_u16(r"\\?\UNC\server\share\pkg\tool.exe");
+        let u1 = super::windows_parent_wide_path(&unc).expect("unc pkg");
+        assert_eq!(from_u16(u1), r"\\?\UNC\server\share\pkg");
+        let u2 = super::windows_parent_wide_path(u1).expect("unc root");
+        assert_eq!(from_u16(u2), r"\\?\UNC\server\share\");
+        assert!(super::windows_parent_wide_path(u2).is_none());
+
+        // Preserve unpaired UTF-16 surrogates intact while walking parents.
+        let mut with_surrogate = to_u16(r"\\?\C:\");
+        with_surrogate.push(0xD800);
+        with_surrogate.extend(to_u16(r"\bin\tool.exe"));
+        let s1 = super::windows_parent_wide_path(&with_surrogate).expect("bin");
+        let s2 = super::windows_parent_wide_path(s1).expect("surrogate dir");
+        assert_eq!(s2[7], 0xD800);
+        assert_eq!(s2.len(), 8);
+    }
+
     #[cfg(unix)]
     #[test]
-    fn env_bash_package_plugin_wrapper_preserves_sibling_resource_path() {
-        let root = temp_dir("plugin-env-bash-wrapper");
+    fn private_env_bash_package_plugin_runs_via_kernel_without_argv_leak() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("plugin-private-env-bash");
         let pkg_dir = root.join("node_modules/acme-env-wrapper");
         let bin_dir = pkg_dir.join("bin");
         fs::create_dir_all(&bin_dir).expect("create bin dir");
@@ -5857,22 +5667,24 @@ catalogs:
             r#"{"name":"acme-env-wrapper","palamedes":{"pluginBinary":"bin/acme-wrapper"}}"#,
         )
         .expect("write package.json");
-        fs::write(
-            bin_dir.join("sibling-manifest.json"),
-            "{\"event\":\"manifest\",\"name\":\"env-wrapper\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}\n",
-        )
-        .expect("write sibling manifest");
+        let wrapper = bin_dir.join("acme-wrapper");
         write_executable_fixture(
-            &bin_dir.join("acme-wrapper"),
-            "#!/usr/bin/env bash\ncat \"$(dirname \"$0\")/sibling-manifest.json\"\n",
+            &wrapper,
+            concat!(
+                "#!/usr/bin/env bash\n",
+                "# PRIVATE_TOKEN_MUST_NOT_APPEAR_IN_ARGV\n",
+                "if [ \"$#\" -ne 0 ]; then exit 99; fi\n",
+                "printf '{\"event\":\"manifest\",\"name\":\"env-wrapper\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}\\n'\n",
+            ),
         );
+        fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o700)).expect("chmod 0700");
 
         let config_path = root.join("palamedes.yaml");
         fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
         let resolved =
             super::resolve_binary_plugin("acme-env-wrapper", &config_path).expect("resolve plugin");
         let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
-            .expect("env bash wrapper must preserve package invocation path for sibling lookups");
+            .expect("private env bash wrapper must execute directly through the kernel");
         assert_eq!(manifest.name, "env-wrapper");
     }
 
