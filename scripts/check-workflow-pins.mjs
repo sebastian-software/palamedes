@@ -15,6 +15,11 @@ const ENV_EXPRESSION_PATTERN =
   /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/gu;
 const SINGLE_ENV_EXPRESSION_PATTERN =
   /^\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}$/u;
+const MATRIX_EXPRESSION_PATTERN =
+  /\$\{\{\s*matrix(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[A-Za-z0-9_-]+)'|"(?<dq>[A-Za-z0-9_-]+)")\])\s*\}\}/gu;
+const SINGLE_MATRIX_EXPRESSION_PATTERN =
+  /^\$\{\{\s*matrix(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[A-Za-z0-9_-]+)'|"(?<dq>[A-Za-z0-9_-]+)")\])\s*\}\}$/u;
+const BLOCK_SCALAR_HEADER_PATTERN = /^[|>](?:[+-]\d*|\d+[+-]?)?$/u;
 const ENV_PREFIX_ASSIGNMENT_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$/u;
 const SHELL_COMMAND_PREFIXES = new Set([
   "if",
@@ -258,6 +263,74 @@ function stripInlineComment(text) {
     }
   }
   return text.trimEnd();
+}
+
+function hasClosedQuote(text) {
+  const quote = text[0];
+  if (quote !== '"' && quote !== "'") {
+    return true;
+  }
+  let escaping = false;
+  for (let index = 1; index < text.length; index += 1) {
+    const ch = text[index];
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (ch === "\\" && quote === '"') {
+      escaping = true;
+      continue;
+    }
+    if (ch === quote) {
+      if (quote === "'" && text[index + 1] === "'") {
+        index += 1;
+        continue;
+      }
+      return index === text.length - 1;
+    }
+  }
+  return false;
+}
+
+function isFlowBalanced(text) {
+  let quote = null;
+  let escaping = false;
+  let depth = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const ch = text[index];
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (ch === "\\" && quote === '"') {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        if (quote === "'" && text[index + 1] === "'") {
+          index += 1;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "{" || ch === "[") {
+      depth += 1;
+      continue;
+    }
+    if (ch === "}" || ch === "]") {
+      depth -= 1;
+    }
+  }
+
+  return quote === null && depth === 0;
 }
 
 function decodeDoubleQuoted(raw) {
@@ -676,11 +749,12 @@ function parseYaml(source) {
       }
 
       const inlineIndent = lineIndent + (content.length - afterDash.length);
-      const colon = findMappingColon(afterDash);
-      if (!itemAnchor && colon !== -1 && !afterDash.startsWith("{") && !afterDash.startsWith("[")) {
-        // Inline mapping starting on the `- ` line (e.g. `- name: Build\n  run: ...`).
+      const colon = findMappingColon(itemRest);
+      if (colon !== -1 && !itemRest.startsWith("{") && !itemRest.startsWith("[")) {
+        // Inline mapping starting on the `- ` line (e.g. `- name: Build\n  run: ...`
+        // or `- &checkout uses: actions/checkout@v7`).
         const map = new Map();
-        const parsedFirst = parseMappingEntry(cursor, afterDash, inlineIndent);
+        const parsedFirst = parseMappingEntry(cursor, itemRest, inlineIndent);
         mergeYamlMappingEntry(map, parsedFirst.key, parsedFirst.valueNode);
         cursor = parsedFirst.nextIndex;
 
@@ -708,11 +782,15 @@ function parseYaml(source) {
           mergeYamlMappingEntry(map, entry.key, entry.valueNode);
           cursor = entry.nextIndex;
         }
-        items.push({ kind: "map", value: map, line: lineNumber });
+        const mapNode = { kind: "map", value: map, line: lineNumber };
+        if (itemAnchor) {
+          anchors.set(itemAnchor, mapNode);
+        }
+        items.push(mapNode);
         continue;
       }
 
-      if (/^[|>][+-]?\d*$/u.test(itemRest)) {
+      if (BLOCK_SCALAR_HEADER_PATTERN.test(itemRest)) {
         const block = parseBlockScalar(cursor, seqIndent, itemRest);
         if (itemAnchor) {
           anchors.set(itemAnchor, block.node);
@@ -722,8 +800,31 @@ function parseYaml(source) {
         continue;
       }
 
-      items.push(parseFlowValue(afterDash, lineNumber, anchors));
-      cursor += 1;
+      let itemCombined = itemRest;
+      let itemCursor = cursor + 1;
+      if (
+        (itemCombined.startsWith('"') || itemCombined.startsWith("'")) &&
+        !hasClosedQuote(itemCombined)
+      ) {
+        while (itemCursor < lines.length && !hasClosedQuote(itemCombined)) {
+          itemCombined = `${itemCombined} ${lines[itemCursor].text.trim()}`;
+          itemCursor += 1;
+        }
+      } else if (
+        (itemCombined.startsWith("{") || itemCombined.startsWith("[")) &&
+        !isFlowBalanced(itemCombined)
+      ) {
+        while (itemCursor < lines.length && !isFlowBalanced(itemCombined)) {
+          itemCombined = `${itemCombined} ${stripInlineComment(lines[itemCursor].text.trim()).trim()}`;
+          itemCursor += 1;
+        }
+      }
+      const itemNode = parseFlowValue(itemCombined, lineNumber, anchors);
+      if (itemAnchor) {
+        anchors.set(itemAnchor, itemNode);
+      }
+      items.push(itemNode);
+      cursor = itemCursor;
     }
 
     return {
@@ -748,7 +849,7 @@ function parseYaml(source) {
       return node;
     };
 
-    if (/^[|>][+-]?\d*$/u.test(restWithoutComment)) {
+    if (BLOCK_SCALAR_HEADER_PATTERN.test(restWithoutComment)) {
       const block = parseBlockScalar(lineIndex, entryIndent, restWithoutComment);
       return { key, valueNode: recordAnchor(block.node), nextIndex: block.nextIndex };
     }
@@ -778,23 +879,24 @@ function parseYaml(source) {
       };
     }
 
-    // Handle multi-line flow mapping/sequence spanning lines if unclosed.
+    // Handle multi-line quoted scalars, multi-line flow collections, and
+    // indented multi-line plain scalars.
     let combined = restWithoutComment;
     let cursor = lineIndex + 1;
-    if (
-      (combined.startsWith("{") && !combined.endsWith("}")) ||
-      (combined.startsWith("[") && !combined.endsWith("]"))
+    if ((combined.startsWith('"') || combined.startsWith("'")) && !hasClosedQuote(combined)) {
+      while (cursor < lines.length && !hasClosedQuote(combined)) {
+        combined = `${combined} ${lines[cursor].text.trim()}`;
+        cursor += 1;
+      }
+      combined = stripInlineComment(combined).trim();
+    } else if (
+      (combined.startsWith("{") || combined.startsWith("[")) &&
+      !isFlowBalanced(combined)
     ) {
-      while (cursor < lines.length) {
+      while (cursor < lines.length && !isFlowBalanced(combined)) {
         const nextText = stripInlineComment(lines[cursor].text.trim()).trim();
         combined = `${combined} ${nextText}`;
         cursor += 1;
-        if (
-          (combined.startsWith("{") && combined.endsWith("}")) ||
-          (combined.startsWith("[") && combined.endsWith("]"))
-        ) {
-          break;
-        }
       }
     } else if (
       !combined.startsWith('"') &&
@@ -1031,7 +1133,13 @@ function extractHeredocDelimiters(line) {
     if (ch === "#" && (index === 0 || /\s/u.test(line[index - 1]))) {
       break;
     }
-    if (ch === "<" && line[index + 1] === "<" && line[index + 2] !== "<") {
+    if (ch === "<" && line[index + 1] === "<") {
+      // Consume Bash here-string `<<<` as a single operator so it is never
+      // misread as a heredoc `<<` with no closing delimiter.
+      if (line[index + 2] === "<") {
+        index += 2;
+        continue;
+      }
       let cursor = index + 2;
       let stripTabs = false;
       if (line[cursor] === "-") {
@@ -1122,7 +1230,97 @@ function collectExecutableShellLines(entries) {
   return logicalLines;
 }
 
-function inspectShellRunScript(runNode, inheritedEnv, filePath, problems) {
+function extractJobMatrixValues(jobNode) {
+  const matrixValues = new Map();
+  const strategyNode = jobNode?.value?.get("strategy");
+  const matrixNode = strategyNode?.kind === "map" ? strategyNode.value.get("matrix") : null;
+  if (matrixNode?.kind !== "map") {
+    return matrixValues;
+  }
+
+  const recordValue = (key, valueNode) => {
+    if (valueNode?.kind !== "scalar") {
+      return;
+    }
+    const list = matrixValues.get(key) ?? [];
+    list.push({ value: String(valueNode.value), line: valueNode.line });
+    matrixValues.set(key, list);
+  };
+
+  for (const [key, entryNode] of matrixNode.value) {
+    if (key === "exclude") {
+      continue;
+    }
+    if (key === "include" && entryNode?.kind === "seq") {
+      for (const rowNode of entryNode.value) {
+        if (rowNode?.kind !== "map") {
+          continue;
+        }
+        for (const [rowKey, rowVal] of rowNode.value) {
+          recordValue(rowKey, rowVal);
+        }
+      }
+      continue;
+    }
+    if (entryNode?.kind === "seq") {
+      for (const itemNode of entryNode.value) {
+        recordValue(key, itemNode);
+      }
+    }
+  }
+
+  return matrixValues;
+}
+
+function expandMatrixReferences(rawText, matrixValues, fallbackLine) {
+  const matches = [...rawText.matchAll(MATRIX_EXPRESSION_PATTERN)];
+  if (matches.length === 0 || !matrixValues || matrixValues.size === 0) {
+    return [{ text: rawText, line: fallbackLine }];
+  }
+
+  const singleMatrix = SINGLE_MATRIX_EXPRESSION_PATTERN.exec(rawText);
+  if (singleMatrix) {
+    const key = singleMatrix.groups.dot ?? singleMatrix.groups.sq ?? singleMatrix.groups.dq;
+    const candidates = matrixValues.get(key);
+    if (!candidates || candidates.length === 0) {
+      return [{ text: rawText, line: fallbackLine }];
+    }
+    return candidates.map((entry) => ({ text: entry.value, line: entry.line }));
+  }
+
+  const keys = [...new Set(matches.map((m) => m.groups.dot ?? m.groups.sq ?? m.groups.dq))];
+  if (keys.some((key) => !matrixValues.has(key))) {
+    return [{ text: rawText, line: fallbackLine }];
+  }
+
+  let combinations = [{ text: rawText, line: fallbackLine }];
+  for (const key of keys) {
+    const next = [];
+    for (const combo of combinations) {
+      for (const candidate of matrixValues.get(key)) {
+        const replaced = combo.text.replace(
+          MATRIX_EXPRESSION_PATTERN,
+          (match, _p1, _p2, _p3, _offset, _str, groups) => {
+            const name = groups.dot ?? groups.sq ?? groups.dq;
+            return name === key ? candidate.value : match;
+          },
+        );
+        next.push({ text: replaced, line: candidate.line });
+        if (next.length >= 256) {
+          break;
+        }
+      }
+      if (next.length >= 256) {
+        break;
+      }
+    }
+    combinations = next;
+  }
+
+  return combinations;
+}
+
+function inspectShellRunScript(runNode, inheritedEnv, matrixValues, filePath, problems) {
   const vars = new Map(inheritedEnv);
 
   // Build executable shell lines with accurate line numbers, skipping heredoc bodies.
@@ -1235,18 +1433,24 @@ function inspectShellRunScript(runNode, inheritedEnv, filePath, problems) {
         continue;
       }
 
-      const resolved = resolveVars(imageToken, commandVars);
-      if (isDynamicReference(resolved)) {
-        continue;
-      }
+      const defaultLine =
+        lookupSingleVarLine(imageToken, commandVars, lineNumber) !== lineNumber
+          ? lookupSingleVarLine(imageToken, commandVars, lineNumber)
+          : sourceLines
+            ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ??
+              lineNumber)
+            : lineNumber;
 
-      if (!isPinnedDigest(resolved)) {
-        let reportLine = lookupSingleVarLine(imageToken, commandVars, lineNumber);
-        if (reportLine === lineNumber && sourceLines) {
-          reportLine =
-            sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber;
+      const resolvedWithVars = resolveVars(imageToken, commandVars);
+      for (const candidate of expandMatrixReferences(resolvedWithVars, matrixValues, defaultLine)) {
+        if (isDynamicReference(candidate.text)) {
+          continue;
         }
-        problems.push(`${filePath}:${reportLine}: ${resolved} is not pinned to a sha256 digest`);
+        if (!isPinnedDigest(candidate.text)) {
+          problems.push(
+            `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`,
+          );
+        }
       }
     }
   }
@@ -1268,6 +1472,7 @@ function extractEnvMap(envNode, baseEnv) {
 function checkImageField(
   node,
   envMap,
+  matrixValues,
   filePath,
   problems,
   { allowLocalDockerAction = false } = {},
@@ -1276,20 +1481,24 @@ function checkImageField(
     return;
   }
   const rawRef = String(node.value).trim();
-  const imageRef = resolveEnvExpressions(rawRef, envMap);
-  if (!imageRef || isDynamicReference(imageRef)) {
-    return;
-  }
-  if (allowLocalDockerAction && isLocalDockerActionImage(imageRef)) {
-    return;
-  }
-  if (!isPinnedDigest(imageRef)) {
-    const reportLine = lookupSingleVarLine(rawRef, envMap, node.line);
-    problems.push(`${filePath}:${reportLine}: ${imageRef} is not pinned to a sha256 digest`);
+  const envResolved = resolveEnvExpressions(rawRef, envMap);
+  const envLine = lookupSingleVarLine(rawRef, envMap, node.line);
+
+  for (const candidate of expandMatrixReferences(envResolved, matrixValues, envLine)) {
+    const imageRef = candidate.text.trim();
+    if (!imageRef || isDynamicReference(imageRef)) {
+      continue;
+    }
+    if (allowLocalDockerAction && isLocalDockerActionImage(imageRef)) {
+      continue;
+    }
+    if (!isPinnedDigest(imageRef)) {
+      problems.push(`${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`);
+    }
   }
 }
 
-function checkStepsList(stepsNode, baseEnv, filePath, problems) {
+function checkStepsList(stepsNode, baseEnv, matrixValues, filePath, problems) {
   if (stepsNode?.kind !== "seq") {
     return;
   }
@@ -1300,7 +1509,7 @@ function checkStepsList(stepsNode, baseEnv, filePath, problems) {
     const stepEnv = extractEnvMap(stepNode.value.get("env"), baseEnv);
     const runNode = stepNode.value.get("run");
     if (runNode?.kind === "scalar") {
-      inspectShellRunScript(runNode, stepEnv, filePath, problems);
+      inspectShellRunScript(runNode, stepEnv, matrixValues, filePath, problems);
     }
   }
 }
@@ -1526,7 +1735,7 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
   }
 
   if (doc.kind === "seq") {
-    checkStepsList(doc, new Map(), filePath, problems);
+    checkStepsList(doc, new Map(), new Map(), filePath, problems);
     return problems;
   }
 
@@ -1537,37 +1746,38 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
   const workflowEnv = extractEnvMap(doc.value.get("env"), new Map());
 
   // Support snippet inputs containing top-level `container`, `image`, `services`, or `steps`.
-  const checkContainerNode = (containerNode, envMap) => {
+  const checkContainerNode = (containerNode, envMap, matrixValues) => {
     if (!containerNode) {
       return;
     }
     if (containerNode.kind === "scalar") {
-      checkImageField(containerNode, envMap, filePath, problems);
+      checkImageField(containerNode, envMap, matrixValues, filePath, problems);
     } else if (containerNode.kind === "map") {
-      checkImageField(containerNode.value.get("image"), envMap, filePath, problems);
+      checkImageField(containerNode.value.get("image"), envMap, matrixValues, filePath, problems);
     }
   };
 
-  const checkServicesNode = (servicesNode, envMap) => {
+  const checkServicesNode = (servicesNode, envMap, matrixValues) => {
     if (servicesNode?.kind !== "map") {
       return;
     }
     for (const serviceNode of servicesNode.value.values()) {
-      checkContainerNode(serviceNode, envMap);
+      checkContainerNode(serviceNode, envMap, matrixValues);
     }
   };
 
-  checkContainerNode(doc.value.get("container"), workflowEnv);
-  checkServicesNode(doc.value.get("services"), workflowEnv);
-  checkImageField(doc.value.get("image"), workflowEnv, filePath, problems);
-  checkStepsList(doc.value.get("steps"), workflowEnv, filePath, problems);
+  const emptyMatrix = new Map();
+  checkContainerNode(doc.value.get("container"), workflowEnv, emptyMatrix);
+  checkServicesNode(doc.value.get("services"), workflowEnv, emptyMatrix);
+  checkImageField(doc.value.get("image"), workflowEnv, emptyMatrix, filePath, problems);
+  checkStepsList(doc.value.get("steps"), workflowEnv, emptyMatrix, filePath, problems);
 
   const runsNode = doc.value.get("runs");
   if (runsNode?.kind === "map") {
-    checkImageField(runsNode.value.get("image"), workflowEnv, filePath, problems, {
+    checkImageField(runsNode.value.get("image"), workflowEnv, emptyMatrix, filePath, problems, {
       allowLocalDockerAction: true,
     });
-    checkStepsList(runsNode.value.get("steps"), workflowEnv, filePath, problems);
+    checkStepsList(runsNode.value.get("steps"), workflowEnv, emptyMatrix, filePath, problems);
   }
 
   const jobsNode = doc.value.get("jobs");
@@ -1577,9 +1787,10 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
         continue;
       }
       const jobEnv = extractEnvMap(jobNode.value.get("env"), workflowEnv);
-      checkContainerNode(jobNode.value.get("container"), jobEnv);
-      checkServicesNode(jobNode.value.get("services"), jobEnv);
-      checkStepsList(jobNode.value.get("steps"), jobEnv, filePath, problems);
+      const jobMatrix = extractJobMatrixValues(jobNode);
+      checkContainerNode(jobNode.value.get("container"), jobEnv, jobMatrix);
+      checkServicesNode(jobNode.value.get("services"), jobEnv, jobMatrix);
+      checkStepsList(jobNode.value.get("steps"), jobEnv, jobMatrix, filePath, problems);
     }
   }
 

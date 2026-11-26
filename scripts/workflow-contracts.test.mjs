@@ -1389,7 +1389,8 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual([]);
-    // YAML document markers and Docker examples inside heredocs must not trigger false positives.
+    // YAML document markers and Docker examples inside heredocs must not trigger false positives,
+    // while Bash here-strings (`<<<`) must not hide subsequent Docker commands.
     expect(
       unpinnedWorkflowContainerReferences(
         [
@@ -1398,7 +1399,9 @@ describe("workflow contracts", () => {
           "  docs:",
           "    runs-on: ubuntu-24.04",
           "    steps:",
-          "      - run: |",
+          '      - name: "Multi-line quoted',
+          '          step title"',
+          "        run: |",
           "          cat <<'YAML' > manifest.yaml",
           "          ---",
           "          kind: Demo",
@@ -1407,11 +1410,66 @@ describe("workflow contracts", () => {
           "          cat <<'EOF' >> \"$GITHUB_STEP_SUMMARY\"",
           "          docker pull node:24",
           "          EOF",
+          '          grep -qF ok <<<"ok"',
           `          docker pull node:24@${digest}`,
           "",
         ].join("\n"),
       ),
     ).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  herestring:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - run: |",
+          '          grep -qF ok <<<"ok"',
+          "          docker pull node:24",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:7: node:24 is not pinned to a sha256 digest"]);
+    // Anchored inline step mappings and literal job matrix image references are checked.
+    expect(
+      unpinnedActionReferences(
+        [
+          "jobs:",
+          "  first:",
+          "    steps:",
+          "      - &checkout uses: actions/checkout@v7",
+          "  second:",
+          "    steps:",
+          "      - *checkout",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:4: actions/checkout@v7 is not pinned to a full commit SHA",
+      "<memory>:4: actions/checkout@v7 is not pinned to a full commit SHA",
+    ]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  matrix-images:",
+          "    strategy:",
+          "      matrix:",
+          "        image:",
+          "          - node:24",
+          `          - node:24@${digest}`,
+          "        include:",
+          "          - extra: alpine:3.20",
+          "    container: ${{ matrix.image }}",
+          "    steps:",
+          "      - run: docker pull ${{ matrix.extra }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:6: node:24 is not pinned to a sha256 digest",
+      "<memory>:9: alpine:3.20 is not pinned to a sha256 digest",
+    ]);
     expect(
       unpinnedWorkflowContainerReferences(
         "      - name: Multi\n        run: docker version && docker pull node:24\n",
@@ -1474,19 +1532,23 @@ describe("workflow contracts", () => {
       { depName: "node", currentValue: "24-alpine", hasDigest: true },
       { depName: "node", currentValue: "24-alpine", hasDigest: true },
     ]);
-    const muslRules = (renovateConfig.packageRules ?? []).filter((rule) =>
-      rule.matchFileNames?.includes(".github/actions/verify-musl-native/action.yml"),
-    );
-    expect(
-      muslRules.some(
-        (rule) =>
-          rule.enabled === false &&
-          ["major", "minor", "patch"].every((type) => rule.matchUpdateTypes?.includes(type)),
-      ),
-    ).toBe(true);
-    expect(
-      muslRules.some((rule) => rule.enabled === true && rule.matchUpdateTypes?.includes("digest")),
-    ).toBe(true);
+    for (const fileName of [".github/actions/verify-musl-native/action.yml", "Containerfile"]) {
+      const rules = (renovateConfig.packageRules ?? []).filter((rule) =>
+        rule.matchFileNames?.includes(fileName),
+      );
+      expect(
+        rules.some(
+          (rule) =>
+            rule.enabled === false &&
+            ["major", "minor", "patch"].every((type) => rule.matchUpdateTypes?.includes(type)),
+        ),
+        fileName,
+      ).toBe(true);
+      expect(
+        rules.some((rule) => rule.enabled === true && rule.matchUpdateTypes?.includes("digest")),
+        fileName,
+      ).toBe(true);
+    }
   });
 
   it("runs the dependency policy and the pin check in CI", async () => {
