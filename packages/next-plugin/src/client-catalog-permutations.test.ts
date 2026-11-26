@@ -1,10 +1,19 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
 
+import { transformMacrosNative } from "@palamedes/core-node";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -34,6 +43,10 @@ const marker = (key: string) =>
   `"pmds-next:${key}:${Buffer.from(JSON.stringify({ source: "src/a.tsx", ids: ["x"] })).toString("base64url")}"`;
 const KEY_A = "aaaaaaaaaaaa";
 const KEY_B = "bbbbbbbbbbbb";
+const HELLO_COMPILED_ID = transformMacrosNative(
+  'import { t } from "@palamedes/core/macro"; export const hello = () => t`Hello`;',
+  "page.tsx",
+).compiledIds[0]!;
 
 function graph(entries: Record<string, string>): ChunkGraph {
   const known = new Set(Object.keys(entries));
@@ -494,7 +507,9 @@ describe("locale resolution", () => {
   });
 
   it("embeds optional-root-locale route-tree detection into built manifests without relying on layout asset entries", async () => {
-    const projectRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-built-optional-locale-"));
+    const projectRoot = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "palamedes-built-optional-locale-")),
+    );
     try {
       // Minimal Palamedes project with two locales and a server-only root layout
       // at app/shop/[[...locale]]/layout.jsx (omitted from entryJSFiles/entryCSSFiles,
@@ -511,12 +526,16 @@ describe("locale resolution", () => {
         path.join(projectRoot, "app/shop/[[...locale]]/layout.jsx"),
         "export default function Layout({ children }) { return children; }\n",
       );
+      writeFileSync(
+        path.join(projectRoot, "app/shop/[[...locale]]/page.jsx"),
+        "export default function Page() { return null; }\n",
+      );
 
       const distDir = path.join(projectRoot, ".next");
       mkdirSync(path.join(distDir, "static/chunks"), { recursive: true });
       mkdirSync(path.join(distDir, "server/app/shop/[[...locale]]"), { recursive: true });
       const payload = Buffer.from(
-        JSON.stringify({ source: "app/shop/[[...locale]]/page.jsx", ids: ["Hello"] }),
+        JSON.stringify({ source: "app/shop/[[...locale]]/page.jsx", ids: [HELLO_COMPILED_ID] }),
       ).toString("base64url");
       writeFileSync(
         path.join(distDir, "static/chunks/page.js"),
@@ -568,6 +587,7 @@ globalThis.__RSC_MANIFEST["/shop/[[...locale]]/page"] = ${JSON.stringify({
       // Because app/shop/[[...locale]]/layout.jsx is the root layout, an
       // omitted locale on /shop must fall back to "en" instead of trusting the header.
       expect(entryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+      expect(readFileSync(path.join(distDir, entryFiles[0]!), "utf8")).toContain('"Hello"');
 
       // Adding a top-level app/layout.jsx moves the root layout above /shop/[[...locale]],
       // so the same route now accepts the Proxy header in route-first mode.
@@ -599,13 +619,16 @@ globalThis.__RSC_MANIFEST["/shop/[[...locale]]/page"] = ${JSON.stringify({
         nestedContext.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
       )["/shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/shop/[[...locale]]/page"]!;
       expect(nestedEntryFiles[0]).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
+      expect(readFileSync(path.join(distDir, nestedEntryFiles[0]!), "utf8")).toContain('"Hallo"');
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 
   it("embeds optional-root-locale detection for escaped %5F underscore route segments", async () => {
-    const projectRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-built-escaped-locale-"));
+    const projectRoot = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "palamedes-built-escaped-locale-")),
+    );
     try {
       mkdirSync(path.join(projectRoot, "app/%5Fshop/[[...locale]]"), { recursive: true });
       mkdirSync(path.join(projectRoot, "locales"), { recursive: true });
@@ -619,12 +642,16 @@ globalThis.__RSC_MANIFEST["/shop/[[...locale]]/page"] = ${JSON.stringify({
         path.join(projectRoot, "app/%5Fshop/[[...locale]]/layout.tsx"),
         "export default function Layout({ children }) { return children; }\n",
       );
+      writeFileSync(
+        path.join(projectRoot, "app/%5Fshop/[[...locale]]/page.tsx"),
+        "export default function Page() { return null; }\n",
+      );
 
       const distDir = path.join(projectRoot, ".next");
       mkdirSync(path.join(distDir, "static/chunks"), { recursive: true });
       mkdirSync(path.join(distDir, "server/app/_shop/[[...locale]]"), { recursive: true });
       const payload = Buffer.from(
-        JSON.stringify({ source: "app/%5Fshop/[[...locale]]/page.tsx", ids: ["Hello"] }),
+        JSON.stringify({ source: "app/%5Fshop/[[...locale]]/page.tsx", ids: [HELLO_COMPILED_ID] }),
       ).toString("base64url");
       writeFileSync(
         path.join(distDir, "static/chunks/page.js"),
@@ -672,13 +699,16 @@ globalThis.__RSC_MANIFEST["/_shop/[[...locale]]/page"] = ${JSON.stringify({
         context.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
       )["/_shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/%5Fshop/[[...locale]]/page"]!;
       expect(entryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+      expect(readFileSync(path.join(distDir, entryFiles[0]!), "utf8")).toContain('"Hello"');
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 
   it("derives the root-layout boundary from Next's compiled loaderTree even when wrapper-configured pageExtensions differ", async () => {
-    const projectRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-compiled-loader-tree-"));
+    const projectRoot = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "palamedes-compiled-loader-tree-")),
+    );
     try {
       // A wrapper applied after withPalamedes() added `page.tsx`, so the layout
       // file is `layout.page.tsx` while emitClientCatalogPermutations() receives
@@ -696,13 +726,17 @@ globalThis.__RSC_MANIFEST["/_shop/[[...locale]]/page"] = ${JSON.stringify({
         path.join(projectRoot, "app/[[...locale]]/layout.page.tsx"),
         "export default function Layout({ children }) { return children; }\n",
       );
+      writeFileSync(
+        path.join(projectRoot, "app/[[...locale]]/page.page.tsx"),
+        "export default function Page() { return null; }\n",
+      );
 
       const distDir = path.join(projectRoot, ".next");
       mkdirSync(path.join(distDir, "static/chunks"), { recursive: true });
       mkdirSync(path.join(distDir, "server/app/[[...locale]]"), { recursive: true });
       mkdirSync(path.join(distDir, "server/chunks/ssr"), { recursive: true });
       const payload = Buffer.from(
-        JSON.stringify({ source: "app/[[...locale]]/page.page.tsx", ids: ["Hello"] }),
+        JSON.stringify({ source: "app/[[...locale]]/page.page.tsx", ids: [HELLO_COMPILED_ID] }),
       ).toString("base64url");
       writeFileSync(
         path.join(distDir, "static/chunks/page.js"),
@@ -768,6 +802,7 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
         context.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
       )["/[[...locale]]/page"]!.entryJSFiles["[project]/app/[[...locale]]/page"]!;
       expect(entryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+      expect(readFileSync(path.join(distDir, entryFiles[0]!), "utf8")).toContain('"Hello"');
 
       // When the compiled loaderTree has a root layout at "" above [[...locale]],
       // compiledRouteHasOptionalRootLocale returns false even if no default-named
@@ -1168,7 +1203,9 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       // inconclusive AND the optional route's source directory is missing,
       // emitClientCatalogPermutations() still sets optionalRootLocale=true so
       // an omitted segment ignores x-palamedes-locale.
-      const missingSourceRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-missing-src-root-"));
+      const missingSourceRoot = realpathSync(
+        mkdtempSync(path.join(os.tmpdir(), "palamedes-missing-src-root-")),
+      );
       try {
         mkdirSync(path.join(missingSourceRoot, "locales"), { recursive: true });
         writeFileSync(
