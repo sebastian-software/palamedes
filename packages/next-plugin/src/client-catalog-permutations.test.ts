@@ -1588,7 +1588,7 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
           );
           writeFileSync(
             collidingFilenameChunk,
-            `module.exports = [92e3, async a => { let counter = 1; const half = counter++ / 2; const ratio = obj.return / 2; const metric = metrics.with(params) / 2; for await (const line of lines) /\\]$/.test(line) && counter++; const link = { href: "/shop/" + half + ratio + metric }; a.s(["default", 0, link]); }, '[project]/user-page-mod', a => { a.s([]); }];\n`,
+            `module.exports = [92e3, async a => { let counter = 1; const { of, period } = { of: 72, period: "km/h" }; const scale = unit => (unit === "m/s" ? 1 : 3.6); const speed = of / scale(period ?? "km/h"); const half = counter++ / 2; const ratio = obj.return / 2; const metric = metrics.with(params) / 2; for await (const line of lines) /\\]$/.test(line) && counter++; const link = { href: "/shop/" + speed + half + ratio + metric }; a.s(["default", 0, link]); }, '[project]/user-page-mod', a => { a.s([]); }];\n`,
           );
           writeFileSync(
             templateChunk,

@@ -455,10 +455,14 @@ export function Greeting() {
         `import { Greeting } from "./greeting";
 export const dynamic = "force-dynamic";
 const metrics = { with: (value: number) => value };
+const intervals: Record<string, number> = { "m/s": 1, "km/h": 3.6 };
+const scale = (unit: string) => intervals[unit] ?? 1;
 export default async function Page() {
   let counter = 1;
   for await (const line of ["ok", "end]"]) /\\]$/.test(line) && counter++;
-  const half = counter++ / 2 + metrics.with(4) / 2;
+  const { of, period } = { of: 72, period: "km/h" };
+  const speed = of / scale(period ?? "km/h");
+  const half = counter++ / 2 + metrics.with(4) / 2 + speed;
   return (
     <a href={"/shop/" + half}>
       <Greeting />

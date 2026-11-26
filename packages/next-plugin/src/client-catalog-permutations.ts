@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, readdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import vm from "node:vm";
 
@@ -612,7 +613,6 @@ const REGEX_PRECEDING_KEYWORDS = new Set([
   "case",
   "default",
   "in",
-  "of",
   "instanceof",
   "typeof",
   "void",
@@ -1560,74 +1560,197 @@ type TurbopackFactoryGroup = { ids: string[]; factory: string };
 type TurbopackExtractedChunk = { groups: TurbopackFactoryGroup[] };
 type TurbopackChunkModuleCache = Map<string, TurbopackExtractedChunk | null>;
 
-function unwrapNestedTurbopackFactoryArray(expr: string): string | undefined {
-  const withoutSpread = expr.trim().startsWith("...") ? expr.trim().slice(3) : expr;
-  const trimmed = stripOuterParens(withoutSpread);
-  if (trimmed.startsWith("[") && scanBalancedEnd(trimmed, 0) === trimmed.length) {
-    return trimmed;
+type AcornNode = {
+  type: string;
+  start: number;
+  end: number;
+  [key: string]: unknown;
+};
+
+type AcornModule = {
+  parse(
+    input: string,
+    options: {
+      ecmaVersion: "latest";
+      sourceType: "script" | "module";
+      allowHashBang?: boolean;
+      allowReturnOutsideFunction?: boolean;
+      allowImportExportEverywhere?: boolean;
+      allowAwaitOutsideFunction?: boolean;
+      allowSuperOutsideMethod?: boolean;
+    },
+  ): AcornNode;
+};
+
+let cachedAcorn: AcornModule | undefined;
+
+function loadAcorn(resolveFromDir?: string): AcornModule | null {
+  if (cachedAcorn) return cachedAcorn;
+  const attempts: Array<() => AcornModule> = [];
+  if (resolveFromDir) {
+    attempts.push(
+      () =>
+        createRequire(path.join(resolveFromDir, "package.json"))(
+          "next/dist/compiled/acorn",
+        ) as AcornModule,
+    );
   }
-  // Strict-mode IIFE table: `(() => { "use strict"; return [...]; })()` or
-  // `(function() { "use strict"; return [...]; })()`.
-  const callMatch = /^([\s\S]+?)\(\s*\)$/u.exec(trimmed);
-  if (!callMatch) return;
-  const callee = stripOuterParens(callMatch[1]!);
-  const conciseArrow = /^\(\s*\)\s*=>\s*([\s\S]+)$/u.exec(callee);
-  if (conciseArrow) {
-    const bodyExpr = stripOuterParens(conciseArrow[1]!);
-    if (bodyExpr.startsWith("[") && scanBalancedEnd(bodyExpr, 0) === bodyExpr.length) {
-      return bodyExpr;
+  attempts.push(
+    () => createRequire(import.meta.url)("next/dist/compiled/acorn") as AcornModule,
+    () =>
+      createRequire(path.join(process.cwd(), "package.json"))(
+        "next/dist/compiled/acorn",
+      ) as AcornModule,
+  );
+  for (const attempt of attempts) {
+    try {
+      const mod = attempt();
+      if (mod && typeof mod.parse === "function") {
+        cachedAcorn = mod;
+        return mod;
+      }
+    } catch {
+      // Try next resolution root.
     }
   }
-  const blockMatch = /^(?:\(\s*\)\s*=>|function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*\))\s*\{/u.exec(
-    callee,
-  );
-  if (!blockMatch) return;
-  const openBrace = blockMatch[0].length - 1;
-  if (scanBalancedEnd(callee, openBrace) !== callee.length) return;
-  const body = stripLeadingCommentsAndUseStrict(callee.slice(openBrace + 1, -1));
-  const returnMatch = /^return\s*([\s\S]+?)\s*;?$/u.exec(body);
-  if (!returnMatch) return;
-  const returned = stripOuterParens(returnMatch[1]!);
-  if (returned.startsWith("[") && scanBalancedEnd(returned, 0) === returned.length) {
-    return returned;
-  }
-  return;
+  return null;
 }
 
-function extractTurbopackFactoryTableGroups(
-  elements: readonly string[],
+function parseJsProgram(source: string, resolveFromDir?: string): AcornNode | null {
+  const acorn = loadAcorn(resolveFromDir);
+  if (!acorn) return null;
+  try {
+    return acorn.parse(source, {
+      ecmaVersion: "latest",
+      sourceType: "script",
+      allowHashBang: true,
+    });
+  } catch {
+    try {
+      return acorn.parse(source, {
+        ecmaVersion: "latest",
+        sourceType: "module",
+        allowHashBang: true,
+        allowReturnOutsideFunction: true,
+        allowImportExportEverywhere: true,
+        allowAwaitOutsideFunction: true,
+        allowSuperOutsideMethod: true,
+      });
+    } catch {
+      return null;
+    }
+  }
+}
+
+function isAcornNode(value: unknown): value is AcornNode {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { type?: unknown }).type === "string"
+  );
+}
+
+function walkAcornAst(
+  node: AcornNode,
+  parent: AcornNode | undefined,
+  visit: (node: AcornNode, parent: AcornNode | undefined) => boolean | void,
+): void {
+  if (visit(node, parent) === false) return;
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "type" || key === "start" || key === "end") continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (isAcornNode(item)) walkAcornAst(item, node, visit);
+      }
+    } else if (isAcornNode(value)) {
+      walkAcornAst(value, node, visit);
+    }
+  }
+}
+
+function isModuleExportsMember(node: AcornNode): boolean {
+  if (node.type !== "MemberExpression") return false;
+  const obj = node.object;
+  const prop = node.property;
+  if (!isAcornNode(obj) || !isAcornNode(prop)) return false;
+  if (obj.type !== "Identifier" || obj.name !== "module") return false;
+  if (node.computed) {
+    return prop.type === "Literal" && prop.value === "exports";
+  }
+  return prop.type === "Identifier" && prop.name === "exports";
+}
+
+function unwrapTurbopackArrayNode(node: AcornNode): AcornNode | undefined {
+  if (node.type === "ArrayExpression") return node;
+  // Strict-mode IIFE table: `(() => { "use strict"; return [...]; })()` or
+  // `(function() { "use strict"; return [...]; })()`.
+  if (node.type !== "CallExpression") return;
+  const args = node.arguments;
+  if (!Array.isArray(args) || args.length !== 0) return;
+  const callee = node.callee;
+  if (!isAcornNode(callee)) return;
+  if (callee.type !== "ArrowFunctionExpression" && callee.type !== "FunctionExpression") return;
+  const params = callee.params;
+  if (!Array.isArray(params) || params.length !== 0 || callee.async || callee.generator) return;
+  const fnBody = callee.body;
+  if (!isAcornNode(fnBody)) return;
+  if (fnBody.type === "ArrayExpression") return fnBody;
+  if (fnBody.type !== "BlockStatement" || !Array.isArray(fnBody.body)) return;
+  const statements = (fnBody.body as AcornNode[]).filter((stmt) => {
+    if (stmt.type === "EmptyStatement") return false;
+    if (stmt.type === "ExpressionStatement") {
+      if (stmt.directive === "use strict") return false;
+      const expr = stmt.expression;
+      if (isAcornNode(expr) && expr.type === "Literal" && expr.value === "use strict") {
+        return false;
+      }
+    }
+    return true;
+  });
+  if (statements.length !== 1) return;
+  const only = statements[0]!;
+  if (only.type !== "ReturnStatement" || !isAcornNode(only.argument)) return;
+  return only.argument.type === "ArrayExpression" ? only.argument : undefined;
+}
+
+function extractTurbopackFactoryTableFromArrayNode(
+  arrayNode: AcornNode,
+  source: string,
   groups: TurbopackFactoryGroup[],
   depth = 0,
 ): boolean {
-  if (depth > 2) return false;
+  if (depth > 2 || !Array.isArray(arrayNode.elements)) return false;
   // Turbopack registers one or more consecutive module IDs followed by their
   // shared factory function (`[3042, 77420, (a, b) => ...]`). Next 16.4.1 can
   // also place strict-mode factories inside a leading nested table (`[[id, fn],
   // id2, fn2]` or `[(() => { "use strict"; return [id, fn]; })(), id2, fn2]`).
   let pendingIds: string[] = [];
-  for (const rawElement of elements) {
-    const elem = rawElement.trim();
+  for (const elem of arrayNode.elements as Array<AcornNode | null>) {
     if (!elem) return false;
     if (pendingIds.length === 0) {
-      const nestedArray = unwrapNestedTurbopackFactoryArray(elem);
+      const nestedCandidate =
+        elem.type === "SpreadElement" && isAcornNode(elem.argument) ? elem.argument : elem;
+      const nestedArray = unwrapTurbopackArrayNode(nestedCandidate);
       if (nestedArray) {
-        const nestedElements = splitTopLevelArrayElements(nestedArray, 0);
-        if (
-          !nestedElements ||
-          !extractTurbopackFactoryTableGroups(nestedElements, groups, depth + 1)
-        ) {
+        if (!extractTurbopackFactoryTableFromArrayNode(nestedArray, source, groups, depth + 1)) {
           return false;
         }
         continue;
       }
     }
-    const normalizedId = normalizeTurbopackModuleId(elem);
-    if (normalizedId !== undefined) {
-      pendingIds.push(normalizedId);
-      continue;
+    if (elem.type === "SpreadElement") return false;
+    if (elem.type === "Literal") {
+      if (typeof elem.value === "number" && Number.isFinite(elem.value) && elem.value >= 0) {
+        pendingIds.push(`n:${elem.value}`);
+        continue;
+      }
+      if (typeof elem.value === "string") {
+        pendingIds.push(`s:${elem.value}`);
+        continue;
+      }
     }
     if (pendingIds.length === 0) return false;
-    groups.push({ ids: pendingIds, factory: elem });
+    groups.push({ ids: pendingIds, factory: source.slice(elem.start, elem.end).trim() });
     pendingIds = [];
   }
   return pendingIds.length === 0;
@@ -1635,113 +1758,61 @@ function extractTurbopackFactoryTableGroups(
 
 function extractTurbopackModulesFromSource(
   source: string,
-  options: { requireTable: boolean } = { requireTable: true },
+  options: { requireTable: boolean; resolveFromDir?: string } = { requireTable: true },
 ): TurbopackExtractedChunk | null {
+  const program = parseJsProgram(source, options.resolveFromDir);
+  if (!program || !Array.isArray(program.body)) return null;
   const groups: TurbopackFactoryGroup[] = [];
   let foundFactoryTable = false;
-  let regexAllowed = true;
-  let prevToken: "dot" | "other" = "other";
-  let index = 0;
+  let invalid = false;
 
-  while (index < source.length) {
-    const ch = source[index];
-    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
-      index += 1;
-      continue;
-    }
-    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
-      index = skipWhitespaceAndComments(source, index);
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      const end = scanQuotedStringEnd(source, index);
-      if (end === -1) return null;
-      index = end;
-      prevToken = "other";
-      regexAllowed = false;
-      continue;
-    }
-    if (ch === "`") {
-      const end = scanTemplateLiteralEnd(source, index);
-      if (end === -1) return null;
-      index = end;
-      prevToken = "other";
-      regexAllowed = false;
-      continue;
-    }
-    if (ch === "/" && regexAllowed) {
-      const end = scanRegexLiteralEnd(source, index);
-      if (end !== -1) {
-        index = end;
-        prevToken = "other";
-        regexAllowed = false;
-        continue;
-      }
-    }
-    if (ch === "{") {
-      const end = scanBalancedEnd(source, index);
-      if (end === -1) return null;
-      index = end;
-      prevToken = "other";
-      regexAllowed = true;
-      continue;
-    }
-    if (ch === ".") {
-      index += 1;
-      prevToken = "dot";
-      regexAllowed = false;
-      continue;
-    }
-    if (/[A-Za-z_$]/u.test(ch ?? "")) {
-      const wordStart = index;
-      index += 1;
-      while (index < source.length && /[\w$]/u.test(source[index] ?? "")) index += 1;
-      const word = source.slice(wordStart, index);
-      if (prevToken !== "dot" && word === "module") {
-        const assignMatch = /^\s*\.\s*exports\s*=(?!=)\s*/u.exec(source.slice(index));
-        if (assignMatch) {
-          const rhsStart = skipWhitespaceAndComments(source, index + assignMatch[0].length);
-          const rhsChar = source[rhsStart];
-          if (rhsChar === "[" || rhsChar === "(") {
-            const rhsEnd = scanBalancedEnd(source, rhsStart);
-            if (rhsEnd === -1) return null;
-            const unwrapped = stripOuterParens(source.slice(rhsStart, rhsEnd));
-            if (unwrapped.startsWith("[") && scanBalancedEnd(unwrapped, 0) === unwrapped.length) {
-              const elements = splitTopLevelArrayElements(unwrapped, 0);
-              if (!elements || !extractTurbopackFactoryTableGroups(elements, groups)) {
-                return null;
-              }
-              foundFactoryTable = true;
-              index = rhsEnd;
-              prevToken = "other";
-              regexAllowed = false;
-              continue;
-            }
+  const topLevelTables = new Set<AcornNode>();
+  for (const stmt of program.body as AcornNode[]) {
+    if (stmt.type !== "ExpressionStatement" || !isAcornNode(stmt.expression)) continue;
+    const exprs =
+      stmt.expression.type === "SequenceExpression" && Array.isArray(stmt.expression.expressions)
+        ? (stmt.expression.expressions as AcornNode[])
+        : [stmt.expression];
+    for (const expr of exprs) {
+      if (
+        expr.type === "AssignmentExpression" &&
+        expr.operator === "=" &&
+        isAcornNode(expr.left) &&
+        isModuleExportsMember(expr.left) &&
+        isAcornNode(expr.right)
+      ) {
+        const arrayNode = unwrapTurbopackArrayNode(expr.right);
+        if (arrayNode) {
+          if (!extractTurbopackFactoryTableFromArrayNode(arrayNode, source, groups)) {
+            return null;
           }
-          if (options.requireTable) return null;
+          topLevelTables.add(expr);
+          foundFactoryTable = true;
+        } else if (options.requireTable) {
+          return null;
         }
       }
-      prevToken = "other";
-      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
-      continue;
     }
-    if (/[0-9]/u.test(ch ?? "")) {
-      index += 1;
-      while (index < source.length && /[\w.]/u.test(source[index] ?? "")) index += 1;
-      prevToken = "other";
-      regexAllowed = false;
-      continue;
-    }
-    if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
-      index += 2;
-      prevToken = "other";
-      continue;
-    }
-    index += 1;
-    prevToken = "other";
-    regexAllowed = "([{=,:;!?&|^~+-*/%<>".includes(ch ?? "");
   }
-  if (options.requireTable && !foundFactoryTable) return null;
+
+  if (options.requireTable) {
+    // Reject chunks that also assign `module.exports` inside nested blocks or
+    // control flow outside the extracted factory table.
+    walkAcornAst(program, undefined, (node) => {
+      if (invalid || topLevelTables.has(node)) return false;
+      if (
+        node.type === "AssignmentExpression" &&
+        isAcornNode(node.left) &&
+        isModuleExportsMember(node.left)
+      ) {
+        invalid = true;
+        return false;
+      }
+      return;
+    });
+    if (invalid || !foundFactoryTable) return null;
+  }
+
   return { groups };
 }
 
@@ -1803,11 +1874,15 @@ function createTurbopackModuleResolver(
   inlineSources: readonly string[],
   chunkPaths: readonly string[] = [],
   chunkCache?: TurbopackChunkModuleCache,
+  resolveFromDir?: string,
 ): TurbopackModuleResolver {
   const inlineGroups: TurbopackFactoryGroup[] = [];
   let hasUnparseableSource = false;
   for (const source of inlineSources) {
-    const extracted = extractTurbopackModulesFromSource(source, { requireTable: false });
+    const extracted = extractTurbopackModulesFromSource(source, {
+      requireTable: false,
+      resolveFromDir,
+    });
     if (!extracted) {
       hasUnparseableSource = true;
     } else {
@@ -1826,6 +1901,7 @@ function createTurbopackModuleResolver(
           try {
             extracted = extractTurbopackModulesFromSource(readFileSync(chunkPath, "utf8"), {
               requireTable: true,
+              resolveFromDir,
             });
           } catch {
             // Unreadable or unparseable sibling chunks could register a
@@ -4433,163 +4509,72 @@ function extractTurbopackLoadedChunks(
   distDir: string,
   runtimeVar: string,
 ): string[] | undefined {
+  const program = parseJsProgram(entrySource, distDir);
+  if (!program) return;
   const loadedChunks: string[] = [];
-  let index = 0;
-  let prevWasDot = false;
-  let prevWord = "";
-  let regexAllowed = true;
-  let pendingCondition = false;
-  let bracketDepth = 0;
+  let invalid = false;
 
-  while (index < entrySource.length) {
-    const ch = entrySource[index];
-    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
-      index += 1;
-      continue;
-    }
-    if (ch === "/" && (entrySource[index + 1] === "/" || entrySource[index + 1] === "*")) {
-      index = skipWhitespaceAndComments(entrySource, index);
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      const end = scanQuotedStringEnd(entrySource, index);
-      if (end === -1) return;
-      index = end;
-      prevWord = "";
-      prevWasDot = false;
-      pendingCondition = false;
-      regexAllowed = false;
-      continue;
-    }
-    if (ch === "`") {
-      const end = scanTemplateLiteralEnd(entrySource, index);
-      if (end === -1) return;
-      index = end;
-      prevWord = "";
-      prevWasDot = false;
-      pendingCondition = false;
-      regexAllowed = false;
-      continue;
-    }
-    if (ch === "/" && regexAllowed) {
-      const end = scanRegexLiteralEnd(entrySource, index);
-      if (end !== -1) {
-        index = end;
-        prevWord = "";
-        prevWasDot = false;
-        pendingCondition = false;
-        regexAllowed = false;
-        continue;
-      }
-    }
+  walkAcornAst(program, undefined, (node, parent) => {
+    if (invalid) return false;
+    // Skip inline factory tables (`module.exports = [...]`) so unrelated
+    // expressions inside factories cannot collide with `runtimeVar`.
     if (
-      (ch === "+" && entrySource[index + 1] === "+") ||
-      (ch === "-" && entrySource[index + 1] === "-")
+      node.type === "AssignmentExpression" &&
+      isAcornNode(node.left) &&
+      isModuleExportsMember(node.left) &&
+      isAcornNode(node.right) &&
+      unwrapTurbopackArrayNode(node.right) !== undefined
     ) {
-      index += 2;
-      prevWord = "";
-      prevWasDot = false;
-      pendingCondition = false;
-      continue;
+      return false;
     }
-    if (ch && /[A-Za-z_$]/u.test(ch)) {
-      let end = index + 1;
-      while (end < entrySource.length && /[\w$]/u.test(entrySource[end]!)) end += 1;
-      const word = entrySource.slice(index, end);
-      if (bracketDepth === 0 && !prevWasDot && word === runtimeVar) {
-        const afterIdent = skipWhitespaceAndComments(entrySource, end);
-        let afterProp = -1;
-        if (entrySource[afterIdent] === ".") {
-          const propStart = skipWhitespaceAndComments(entrySource, afterIdent + 1);
-          let propEnd = propStart;
-          while (propEnd < entrySource.length && /[\w$]/u.test(entrySource[propEnd]!)) {
-            propEnd += 1;
-          }
-          if (entrySource.slice(propStart, propEnd) === "c") {
-            afterProp = propEnd;
-          }
-        } else if (entrySource[afterIdent] === "[") {
-          const bracketEnd = scanBalancedEnd(entrySource, afterIdent);
-          if (bracketEnd === -1) return;
-          const key = parseJsStringLiteral(entrySource.slice(afterIdent + 1, bracketEnd - 1));
-          if (key === "c") {
-            afterProp = bracketEnd;
-          }
-        }
-        if (afterProp !== -1) {
-          const openParen = skipWhitespaceAndComments(entrySource, afterProp);
-          if (entrySource[openParen] !== "(") return;
-          const closeParen = scanBalancedEnd(entrySource, openParen);
-          if (closeParen === -1) return;
-          const argText = entrySource.slice(openParen + 1, closeParen - 1).trim();
-          const chunkRel = parseJsStringLiteral(argText);
-          if (!chunkRel || path.isAbsolute(chunkRel)) return;
-          const resolvedChunk = path.resolve(distDir, chunkRel);
-          const relFromDist = path.relative(distDir, resolvedChunk);
-          if (
-            !relFromDist ||
-            relFromDist === ".." ||
-            relFromDist.startsWith(`..${path.sep}`) ||
-            path.isAbsolute(relFromDist)
-          ) {
-            return;
-          }
-          loadedChunks.push(resolvedChunk);
-          index = closeParen;
-          prevWord = "";
-          prevWasDot = false;
-          pendingCondition = false;
-          regexAllowed = false;
-          continue;
-        }
-      }
-      const isConditionKeyword =
-        !prevWasDot &&
-        (CONTROL_FLOW_KEYWORDS.has(word) ||
-          word === "for" ||
-          (word === "await" && prevWord === "for"));
-      regexAllowed = !prevWasDot && REGEX_PRECEDING_KEYWORDS.has(word);
-      prevWord = prevWasDot ? "" : word;
-      prevWasDot = false;
-      pendingCondition = isConditionKeyword;
-      index = end;
-      continue;
+    if (node.type !== "MemberExpression") return;
+    const obj = node.object;
+    const prop = node.property;
+    if (!isAcornNode(obj) || !isAcornNode(prop)) return;
+    if (obj.type !== "Identifier" || obj.name !== runtimeVar) return;
+    const isChunkLoadAccess = node.computed
+      ? prop.type === "Literal" && prop.value === "c"
+      : prop.type === "Identifier" && prop.name === "c";
+    if (node.computed && prop.type !== "Literal") {
+      invalid = true;
+      return false;
     }
-    if (ch === "(" && pendingCondition) {
-      const end = scanBalancedEnd(entrySource, index);
-      if (end === -1) return;
-      index = end;
-      prevWord = "";
-      prevWasDot = false;
-      pendingCondition = false;
-      regexAllowed = true;
-      continue;
+    if (!isChunkLoadAccess) return;
+    if (!parent || parent.type !== "CallExpression" || parent.callee !== node) {
+      invalid = true;
+      return false;
     }
-    if (ch === "[") {
-      bracketDepth += 1;
-      index += 1;
-      prevWord = "";
-      prevWasDot = false;
-      pendingCondition = false;
-      regexAllowed = true;
-      continue;
+    const args = parent.arguments;
+    if (!Array.isArray(args) || args.length !== 1) {
+      invalid = true;
+      return false;
     }
-    if (ch === "]") {
-      bracketDepth = Math.max(0, bracketDepth - 1);
-      index += 1;
-      prevWord = "";
-      prevWasDot = false;
-      pendingCondition = false;
-      regexAllowed = false;
-      continue;
+    const arg = args[0];
+    if (!isAcornNode(arg) || arg.type !== "Literal" || typeof arg.value !== "string") {
+      invalid = true;
+      return false;
     }
-    index += 1;
-    prevWord = "";
-    prevWasDot = ch === "." || ch === "#";
-    pendingCondition = false;
-    regexAllowed = "([{=,:;!?&|^~+-*/%<>}".includes(ch ?? "");
-  }
-  return loadedChunks;
+    const chunkRel = arg.value;
+    if (!chunkRel || path.isAbsolute(chunkRel)) {
+      invalid = true;
+      return false;
+    }
+    const resolvedChunk = path.resolve(distDir, chunkRel);
+    const relFromDist = path.relative(distDir, resolvedChunk);
+    if (
+      !relFromDist ||
+      relFromDist === ".." ||
+      relFromDist.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relFromDist)
+    ) {
+      invalid = true;
+      return false;
+    }
+    loadedChunks.push(resolvedChunk);
+    return;
+  });
+
+  return invalid ? undefined : loadedChunks;
 }
 
 export function compiledRouteHasOptionalRootLocale(
@@ -4637,7 +4622,7 @@ export function compiledRouteHasOptionalRootLocale(
     if (expectedModuleId === undefined) return;
     const normalizedExpectedId = normalizeTurbopackModuleId(expectedModuleId);
     if (!normalizedExpectedId) return;
-    const resolveModule = createTurbopackModuleResolver([], loadedChunks, chunkCache);
+    const resolveModule = createTurbopackModuleResolver([], loadedChunks, chunkCache, distDir);
     const entryFactory = resolveModule(normalizedExpectedId);
     if (typeof entryFactory !== "string") return;
     return compiledLoaderTreeHasOptionalRootLocale(
@@ -4648,7 +4633,7 @@ export function compiledRouteHasOptionalRootLocale(
     );
   }
   if (runtimeVar !== undefined && expectedModuleId === undefined) return;
-  const resolveEntryModule = createTurbopackModuleResolver([entrySource], [], chunkCache);
+  const resolveEntryModule = createTurbopackModuleResolver([entrySource], [], chunkCache, distDir);
   return compiledLoaderTreeHasOptionalRootLocale(
     entrySource,
     expectedPage,
