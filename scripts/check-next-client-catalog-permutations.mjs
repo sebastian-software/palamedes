@@ -450,9 +450,19 @@ export function Greeting() {
 }
 `,
       );
+      let probeRegexLiteral = "/\\p{Script=Garay}/u";
+      try {
+        // Use Unicode 17's Tolong_Siki when supported by the running Node
+        // release, falling back to Unicode 16's Garay on Node 24.3.x.
+        const tolongPattern = "\\p{Script=Tolong_Siki}";
+        const probe = new RegExp(tolongPattern, "u");
+        if (probe.unicode) probeRegexLiteral = `/${tolongPattern}/u`;
+      } catch {
+        // Older Node 24.x releases ship Unicode 16.
+      }
       writeFileSync(
         path.join(fixtureDir, "app/[[...locale]]/script-probe.js"),
-        `export const tolongScript = /\\p{Script=Tolong_Siki}/u;\n`,
+        `export const tolongScript = ${probeRegexLiteral};\n`,
       );
       writeFileSync(
         path.join(fixtureDir, "app/[[...locale]]/page.tsx"),

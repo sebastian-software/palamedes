@@ -4554,16 +4554,133 @@ export function compiledLoaderTreeHasOptionalRootLocale(
   return walkCompiledLoaderTree(treeExpr, 0, false);
 }
 
-function extractTurbopackLoadedChunks(
+type ParsedTurbopackPageEntry = {
+  runtimeVar?: string;
+  expectedModuleId?: string;
+  loadedChunks: string[];
+};
+
+function getMemberPropertyName(node: JsAstNode): string | undefined {
+  if (node.type !== "MemberExpression" || !isAstNode(node.property)) return;
+  if (node.computed) return getStringLiteralValue(node.property);
+  return node.property.type === "Identifier" && typeof node.property.name === "string"
+    ? node.property.name
+    : undefined;
+}
+
+function parseTurbopackPageEntry(
   entrySource: string,
   distDir: string,
-  runtimeVar: string,
-): string[] | undefined {
+): ParsedTurbopackPageEntry | undefined {
   const program = parseJsProgram(entrySource, distDir);
-  if (!program) return;
+  if (!program || !Array.isArray(program.body)) return;
+
+  let turbopackRequireVar: string | undefined;
+  let lastModuleExportsRhs: JsAstNode | undefined;
+  const topLevelExportsAssignments = new Set<JsAstNode>();
+
+  for (const stmt of program.body as JsAstNode[]) {
+    if (stmt.type === "VariableDeclaration" && Array.isArray(stmt.declarations)) {
+      for (const decl of stmt.declarations as JsAstNode[]) {
+        if (!isAstNode(decl.id) || decl.id.type !== "Identifier" || !isAstNode(decl.init)) continue;
+        // Match `var R = require("...turbopack...")(...)` or `var R = require("...turbopack...")`.
+        let reqCall: JsAstNode | undefined;
+        if (decl.init.type === "CallExpression") {
+          if (isAstNode(decl.init.callee) && decl.init.callee.type === "Identifier") {
+            reqCall = decl.init;
+          } else if (isAstNode(decl.init.callee) && decl.init.callee.type === "CallExpression") {
+            reqCall = decl.init.callee;
+          }
+        }
+        if (
+          reqCall &&
+          isAstNode(reqCall.callee) &&
+          reqCall.callee.type === "Identifier" &&
+          reqCall.callee.name === "require" &&
+          Array.isArray(reqCall.arguments) &&
+          reqCall.arguments.length >= 1 &&
+          isAstNode(reqCall.arguments[0])
+        ) {
+          const specifier = getStringLiteralValue(reqCall.arguments[0]);
+          if (specifier && specifier.includes("turbopack")) {
+            turbopackRequireVar = decl.id.name as string;
+          }
+        }
+      }
+      continue;
+    }
+    if (stmt.type !== "ExpressionStatement" || !isAstNode(stmt.expression)) continue;
+    const exprs =
+      stmt.expression.type === "SequenceExpression" && Array.isArray(stmt.expression.expressions)
+        ? (stmt.expression.expressions as JsAstNode[])
+        : [stmt.expression];
+    for (const expr of exprs) {
+      if (
+        expr.type === "AssignmentExpression" &&
+        expr.operator === "=" &&
+        isAstNode(expr.left) &&
+        isModuleExportsMember(expr.left) &&
+        isAstNode(expr.right)
+      ) {
+        topLevelExportsAssignments.add(expr);
+        lastModuleExportsRhs = expr.right;
+      }
+    }
+  }
+
+  let hasNestedModuleExportsWrite = false;
+  walkJsAst(program, undefined, (node) => {
+    if (hasNestedModuleExportsWrite) return false;
+    if (topLevelExportsAssignments.has(node)) return false;
+    if (
+      node.type === "AssignmentExpression" &&
+      isAstNode(node.left) &&
+      isModuleExportsMember(node.left)
+    ) {
+      hasNestedModuleExportsWrite = true;
+      return false;
+    }
+    return;
+  });
+  if (hasNestedModuleExportsWrite) return;
+
+  // Check if the live `module.exports = ...` assignment is `<rt>.m(<id>).exports`.
+  let exportRuntimeVar: string | undefined;
+  let expectedModuleId: string | undefined;
+  if (lastModuleExportsRhs && getMemberPropertyName(lastModuleExportsRhs) === "exports") {
+    const targetCall = lastModuleExportsRhs.object;
+    if (isAstNode(targetCall) && targetCall.type === "CallExpression") {
+      const callee = targetCall.callee;
+      if (
+        isAstNode(callee) &&
+        getMemberPropertyName(callee) === "m" &&
+        isAstNode(callee.object) &&
+        callee.object.type === "Identifier" &&
+        typeof callee.object.name === "string"
+      ) {
+        exportRuntimeVar = callee.object.name;
+        const args = targetCall.arguments;
+        if (!Array.isArray(args) || args.length !== 1 || !isAstNode(args[0])) return;
+        const numId = getNumberLiteralValue(args[0]);
+        const strId = getStringLiteralValue(args[0]);
+        if (numId !== undefined && numId >= 0) {
+          expectedModuleId = String(numId);
+        } else if (strId !== undefined) {
+          expectedModuleId = JSON.stringify(strId);
+        } else {
+          return;
+        }
+      }
+    }
+  }
+
+  const runtimeVar = exportRuntimeVar ?? turbopackRequireVar;
+  if (runtimeVar === undefined) {
+    return { loadedChunks: [] };
+  }
+
   const loadedChunks: string[] = [];
   let invalid = false;
-
   walkJsAst(program, undefined, (node, parent) => {
     if (invalid) return false;
     // Skip inline factory tables (`module.exports = [...]`) so unrelated
@@ -4602,11 +4719,7 @@ function extractTurbopackLoadedChunks(
     }
     const arg = args[0];
     const chunkRel = isAstNode(arg) ? getStringLiteralValue(arg) : undefined;
-    if (chunkRel === undefined) {
-      invalid = true;
-      return false;
-    }
-    if (!chunkRel || path.isAbsolute(chunkRel)) {
+    if (chunkRel === undefined || !chunkRel || path.isAbsolute(chunkRel)) {
       invalid = true;
       return false;
     }
@@ -4625,7 +4738,8 @@ function extractTurbopackLoadedChunks(
     return;
   });
 
-  return invalid ? undefined : loadedChunks;
+  if (invalid) return;
+  return { runtimeVar, expectedModuleId, loadedChunks };
 }
 
 export function compiledRouteHasOptionalRootLocale(
@@ -4648,24 +4762,11 @@ export function compiledRouteHasOptionalRootLocale(
   }
 
   const expectedPage = `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`;
-  const moduleExportCallMatch = /module\.exports\s*=\s*([A-Za-z_$][\w$]*)\.m\s*\(/u.exec(
-    entrySource,
-  );
-  const runtimeVar =
-    moduleExportCallMatch?.[1] ??
-    /(?:^|[;\n\r])\s*(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*(?:"(?:[^"\\]|\\.)*turbopack(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*turbopack(?:[^'\\]|\\.)*')\s*\)/u.exec(
-      entrySource,
-    )?.[1];
-  const expectedModuleId =
-    /module\.exports\s*=\s*[A-Za-z_$][\w$]*\.m\(\s*(\d+(?:\.\d+)?(?:[eE]\+?\d+)?|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*\)\.exports/u.exec(
-      entrySource,
-    )?.[1];
-  if (moduleExportCallMatch !== null && expectedModuleId === undefined) return;
-  const loadedChunks =
-    runtimeVar !== undefined ? extractTurbopackLoadedChunks(entrySource, distDir, runtimeVar) : [];
-  if (loadedChunks === undefined) return;
+  const parsedEntry = parseTurbopackPageEntry(entrySource, distDir);
+  if (!parsedEntry) return;
+  const { runtimeVar, expectedModuleId, loadedChunks } = parsedEntry;
 
-  // Identify the route entrypoint strictly by the module ID exported by
+  // Identify the route entrypoint strictly by the live module ID exported by
   // `page.js` (`module.exports = R.m(<id>).exports`) across its loaded chunks
   // rather than by chunk filename heuristics, which can collide with user route
   // segment names (for example `app/next_dist_build_templates_app-page_store/`).
@@ -4934,37 +5035,15 @@ export async function emitClientCatalogPermutations(
   const turbopackChunkCache: TurbopackChunkModuleCache = new Map();
   const inconclusiveOptionalLocaleRoutes: string[] = [];
   for (const file of manifests) {
-    const manifestRelativePath = path.relative(serverAppDir, file).split(path.sep).join("/");
-    const hasOptionalLocaleSegment = manifestRelativePath
-      .split("/")
-      .slice(0, -1)
-      .includes("[[...locale]]");
-    // Rely strictly on the compiled route tree from this build; never read the
-    // mutable app/ source directory on disk to authorize header selection. Fail
-    // closed (`true`) when an optional `[[...locale]]` route cannot be verified
-    // as having a compiled root layout above `[[...locale]]`, and surface the
-    // affected route at build time so header-driven layouts do not silently ship
-    // source-locale chunks.
-    let optionalRootLocale = false;
-    if (hasOptionalLocaleSegment) {
-      const detected = compiledRouteHasOptionalRootLocale(distDir, file, turbopackChunkCache);
-      if (detected === undefined) {
-        inconclusiveOptionalLocaleRoutes.push(
-          `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`,
-        );
-        optionalRootLocale = true;
-      } else {
-        optionalRootLocale = detected;
-      }
-    }
-    const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
     const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;
     // Next may construct paths from shared prefixes, so inspect the evaluated
     // arrays that the adapter actually replaces, not substrings in source.
+    // Evaluate coverage first so server-only routes without affected client
+    // chunks skip compiled route-tree inspection and avoid spurious warnings.
     let manifestCoverage: unknown;
     try {
       manifestCoverage = vm.runInNewContext(
-        `globalThis.process = { env: {} };\n${source}${adapter}`,
+        `globalThis.process = { env: {} };\n${source}${standardAdapter}`,
         Object.create(null),
         {
           timeout: 1000,
@@ -4985,7 +5064,38 @@ export async function emitClientCatalogPermutations(
         `Palamedes client catalog permutations: could not inspect manifest ${file}.`,
       );
     }
-    for (const key of manifestCoverage) if (typeof key === "string") covered.add(key);
+    let referencesAffectedChunks = false;
+    for (const key of manifestCoverage) {
+      if (typeof key === "string") {
+        covered.add(key);
+        referencesAffectedChunks = true;
+      }
+    }
+
+    const manifestRelativePath = path.relative(serverAppDir, file).split(path.sep).join("/");
+    const hasOptionalLocaleSegment = manifestRelativePath
+      .split("/")
+      .slice(0, -1)
+      .includes("[[...locale]]");
+    // Rely strictly on the compiled route tree from this build; never read the
+    // mutable app/ source directory on disk to authorize header selection. Fail
+    // closed (`true`) when an optional `[[...locale]]` route with affected
+    // client chunks cannot be verified as having a compiled root layout above
+    // `[[...locale]]`, and surface the affected route at build time so
+    // header-driven layouts do not silently ship source-locale chunks.
+    let optionalRootLocale = false;
+    if (referencesAffectedChunks && hasOptionalLocaleSegment) {
+      const detected = compiledRouteHasOptionalRootLocale(distDir, file, turbopackChunkCache);
+      if (detected === undefined) {
+        inconclusiveOptionalLocaleRoutes.push(
+          `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`,
+        );
+        optionalRootLocale = true;
+      } else {
+        optionalRootLocale = detected;
+      }
+    }
+    const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
     await writeFile(file, `${source}${adapter}`);
   }
   assertChunkCoverage(affected, covered);

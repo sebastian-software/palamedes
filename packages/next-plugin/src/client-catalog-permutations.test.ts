@@ -1665,6 +1665,21 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
             );
             expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
 
+            // Commented-out `module.exports` statements before the live export
+            // must be ignored, while a later assignment that overwrites the
+            // Turbopack export with another value must fail closed.
+            writeFileSync(
+              path.join(distDir, "server/app/[[...locale]]/page.js"),
+              `// module.exports=R.m(999999).exports\nvar R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+            );
+            expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+            writeFileSync(
+              path.join(distDir, "server/app/[[...locale]]/page.js"),
+              `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\nmodule.exports=overwrittenExports\n`,
+            );
+            expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
             // Non-literal chunk-load arguments fail closed as inconclusive.
             writeFileSync(
               path.join(distDir, "server/app/[[...locale]]/page.js"),
@@ -1741,6 +1756,24 @@ globalThis.__RSC_MANIFEST["/generated/[[...locale]]/page"] = ${JSON.stringify({
             entryCSSFiles: {},
             entryJSFiles: {
               "[project]/app/generated/[[...locale]]/page": ["static/chunks/page.js"],
+            },
+          })};`,
+        );
+        // Server-only `[[...locale]]` routes without affected client chunks
+        // must skip route-tree inspection and avoid spurious inconclusive warnings.
+        mkdirSync(path.join(missingDist, "server/app/server-only/[[...locale]]"), {
+          recursive: true,
+        });
+        writeFileSync(
+          path.join(
+            missingDist,
+            "server/app/server-only/[[...locale]]/page_client-reference-manifest.js",
+          ),
+          `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
+globalThis.__RSC_MANIFEST["/server-only/[[...locale]]/page"] = ${JSON.stringify({
+            entryCSSFiles: {},
+            entryJSFiles: {
+              "[project]/app/server-only/[[...locale]]/page": ["static/chunks/neutral.js"],
             },
           })};`,
         );

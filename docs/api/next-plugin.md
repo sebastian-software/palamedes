@@ -497,11 +497,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 ```
 
 In a root `[locale]` layout (`app/[locale]/layout.tsx`) using
-`localeSource: "header"`, `bindClientCatalogPermutations()` falls back to the
-`[locale]` route param before `source-locale` whenever `x-palamedes-locale` is
-missing or fails verification; mirror that fallback order in the layout
-(verified header, then supported `params.locale`, then `SOURCE_LOCALE`) so
-server HTML and client chunks stay aligned on every request.
+`localeSource: "header"`, `bindClientCatalogPermutations()` handles the two
+header fallback cases differently:
+
+- **Missing or invalid signature:** the header is ignored, and chunk selection
+  falls back to a supported `[locale]` route param before `source-locale`.
+- **Valid signature with an unsupported locale:** the verified header wins
+  without consulting `[locale]`, and chunk selection falls back directly to
+  `source-locale` (for example, a `/de` request carrying a validly signed `fr`
+  header on a build that only ships `en` and `de` selects `en` chunks).
+
+Mirror both cases in the layout—use `verified` when supported, fall back to
+`SOURCE_LOCALE` when `verified` is present but unsupported, and only fall back
+to a supported `params.locale` (then `SOURCE_LOCALE`) when `verified` is
+`undefined`—so server HTML and client chunks stay aligned on every request.
 
 A route that gets its locale from the header alone, such as a cookie strategy
 on fixed paths, has to render dynamically: declare
