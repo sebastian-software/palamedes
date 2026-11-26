@@ -20,6 +20,12 @@ class FakeHTMLLinkElement {
     this.href = href;
     this.parentElement = parentElement;
   }
+
+  public getAttribute(name: string): string | null {
+    if (name === "href") return this.href;
+    if (name === "rel") return this.rel;
+    return null;
+  }
 }
 
 beforeAll(() => {

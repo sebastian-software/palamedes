@@ -29,11 +29,24 @@ class FakeHTMLLinkElement {
   public href: string;
   public rel: string;
   public parentElement: unknown;
+  private readonly rawHref: string | null;
 
-  public constructor(href: string, rel = "modulepreload", parentElement?: unknown) {
+  public constructor(
+    href: string,
+    rel = "modulepreload",
+    parentElement?: unknown,
+    rawHref: string | null = href,
+  ) {
     this.href = href;
     this.rel = rel;
     this.parentElement = parentElement;
+    this.rawHref = rawHref;
+  }
+
+  public getAttribute(name: string): string | null {
+    if (name === "href") return this.rawHref;
+    if (name === "rel") return this.rel;
+    return null;
   }
 }
 
@@ -293,6 +306,24 @@ export const messages = { a: "Hallo" };`,
     await expect(loadWithConfiguredBase(MARKER)).rejects.toThrow(
       "The document has no Palamedes client catalog map.",
     );
+  });
+
+  it("resolves the raw href attribute against page location even when <base href> rewrites el.href", async () => {
+    await writeAsset("base-safe.de.mjs", 'export const messages = { a: "Basis" };\n');
+    const mapName = `catalogs.${(mapCount += 1)}.mjs`;
+    await writeAsset(
+      mapName,
+      `export default ${JSON.stringify({ locale: "de", assets: { "base-safe.de.mjs": KEY } })};`,
+    );
+    const head = { tagName: "HEAD" };
+    // Simulate a cross-origin `<base href="https://evil.example/">` rewriting
+    // `el.href` while the authored raw `href` attribute stays root-relative.
+    const rawHref = `/_next/static/palamedes/${mapName}`;
+    const baseRewrittenHref = `https://evil.example/_next/static/palamedes/${mapName}`;
+    const link = new FakeHTMLLinkElement(baseRewrittenHref, "modulepreload", head, rawHref);
+    stubDocumentLink(baseRewrittenHref, "de", { element: link, head });
+    const { loadClientCatalog } = await loadModule();
+    await expect(loadClientCatalog(MARKER)).resolves.toEqual({ a: "Basis" });
   });
 
   it("rejects unsafe asset filenames in map.assets", async () => {

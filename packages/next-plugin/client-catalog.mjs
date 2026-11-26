@@ -92,11 +92,15 @@ function mapUrl() {
     !(el instanceof HTMLLinkElement) ||
     el.rel !== "modulepreload" ||
     !document.head ||
-    el.parentElement !== document.head
+    el.parentElement !== document.head ||
+    typeof el.getAttribute !== "function"
   ) {
     return;
   }
-  return validateMapUrl(el.href);
+  // Read the raw `href` attribute instead of `el.href` so a `<base href>`
+  // element cannot rewrite a root-relative link to another origin before
+  // `validateMapUrl()` resolves it against `globalThis.location.href`.
+  return validateMapUrl(el.getAttribute("href"));
 }
 
 function waitForMapUrl() {
