@@ -524,6 +524,7 @@ globalThis.__RSC_MANIFEST["/shop/[[...locale]]/page"] = ${JSON.stringify({
       const distDir = path.join(projectRoot, ".next");
       mkdirSync(path.join(distDir, "static/chunks"), { recursive: true });
       mkdirSync(path.join(distDir, "server/app/_shop/[[...locale]]"), { recursive: true });
+      mkdirSync(path.join(distDir, "server/chunks/ssr"), { recursive: true });
       const payload = Buffer.from(
         JSON.stringify({ source: "app/%5Fshop/[[...locale]]/page.tsx", ids: [HELLO_COMPILED_ID] }),
       ).toString("base64url");
@@ -547,33 +548,83 @@ globalThis.__RSC_MANIFEST["/_shop/[[...locale]]/page"] = ${JSON.stringify({
           entryJSFiles: { "[project]/app/%5Fshop/[[...locale]]/page": ["static/chunks/page.js"] },
         })};`,
       );
+      writeFileSync(
+        path.join(distDir, "server/chunks/ssr/next_app_page_runtime.js"),
+        `module.exports=[59745,a=>{"use strict";var b=a.i(19317),d=a.i(38525);a.s(["f",0,function({tree:O,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){let U={require:R,loadChunk:S},V=new b.AppPageRouteModule({definition:{kind:d.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:O},distDir:".next",relativeProjectDir:""});async function Z(){return null}return{__next_app__:U,routeModule:V,handler:Z}}])},19317,(a,b)=>{b.exports=a.r(18622)},18622,(a,b)=>{b.exports=a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",()=>require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js"))}];\n`,
+      );
+      const templateChunk = path.join(
+        distDir,
+        "server/chunks/ssr/next_dist_esm_build_templates_app-page_escaped.js",
+      );
+      writeFileSync(
+        path.join(distDir, "server/app/_shop/[[...locale]]/page.js"),
+        `var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/_shop/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_app_page_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_escaped.js")\nmodule.exports=R.m(1).exports\n`,
+      );
+      const writeCompiledTree = (treeExpr: string) => {
+        writeFileSync(
+          templateChunk,
+          `module.exports=[1,a=>{var c=a.i(59745);let j=${treeExpr},m=(0,c.f)({tree:j,page:"/_shop/[[...locale]]/page",pathname:"/_shop/[[...locale]]",require:r,loadChunk:lc,interopDefault:id}),mp=m.__next_app__,mq=m.routeModule,mr=m.handler;a.s(["__next_app__",0,mp,"handler",0,mr,"routeModule",0,mq],1);}];`,
+        );
+      };
 
-      await emitClientCatalogPermutations({
+      // 1. Root layout sits inside `app/%5Fshop/[[...locale]]/layout.tsx`:
+      // classifier returns `true` and omitted segment ignores `x-palamedes-locale: de`.
+      writeCompiledTree(
+        `["",{children:["_shop",{children:["[[...locale]]",{children:["__PAGE__",{},{page:[p,"[project]/app/%5Fshop/[[...locale]]/page.tsx"]},[]]},{layout:[l,"[project]/app/%5Fshop/[[...locale]]/layout.tsx"]},[]]},{},[]]},{"global-error":[g,"builtin"]},[]]`,
+      );
+      expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(true);
+      const insideReport = await emitClientCatalogPermutations({
         distDir,
         projectRoot,
         failOnMissing: false,
       });
+      expect(insideReport.inconclusiveOptionalLocaleRoutes).toEqual([]);
 
-      const manifestSource = readFileSync(manifestPath, "utf8");
-      const context: Record<string, unknown> = { process: { env: {} } };
-      vm.runInNewContext(manifestSource, context);
-      const bind = context.__PALAMEDES_CLIENT_CATALOG_BIND as (
-        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
-      ) => void;
-      bind((availableLocales, fallbackLocale, optionalRootLocale) =>
-        resolveRenderLocale(
-          availableLocales,
-          fallbackLocale,
-          render("/_shop/[[...locale]]"),
-          unit({ rootParams: {}, headers: header("de") }),
-          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
-        ),
+      const evalEscapedManifest = () => {
+        const context: Record<string, unknown> = { process: { env: {} } };
+        vm.runInNewContext(readFileSync(manifestPath, "utf8"), context);
+        const bind = context.__PALAMEDES_CLIENT_CATALOG_BIND as (
+          fn: (
+            locales: readonly string[],
+            fallback: string,
+            optionalRootLocale?: boolean,
+          ) => string,
+        ) => void;
+        bind((availableLocales, fallbackLocale, optionalRootLocale) =>
+          resolveRenderLocale(
+            availableLocales,
+            fallbackLocale,
+            render("/_shop/[[...locale]]"),
+            unit({ rootParams: {}, headers: header("de") }),
+            typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
+          ),
+        );
+        return (
+          context.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
+        )["/_shop/[[...locale]]/page"]!.entryJSFiles[
+          "[project]/app/%5Fshop/[[...locale]]/page"
+        ]![0]!;
+      };
+
+      const insideEntry = evalEscapedManifest();
+      expect(insideEntry).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+      expect(readFileSync(path.join(distDir, insideEntry), "utf8")).toContain('"Hello"');
+
+      // 2. Root layout sits above `[[...locale]]` in `app/%5Fshop/layout.tsx`:
+      // classifier returns `false` and omitted segment honors `x-palamedes-locale: de`.
+      writeCompiledTree(
+        `["",{children:["_shop",{children:["[[...locale]]",{children:["__PAGE__",{},{page:[p,"[project]/app/%5Fshop/[[...locale]]/page.tsx"]},[]]},{},[]]},{layout:[l,"[project]/app/%5Fshop/layout.tsx"]},[]]},{"global-error":[g,"builtin"]},[]]`,
       );
-      const entryFiles = (
-        context.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
-      )["/_shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/%5Fshop/[[...locale]]/page"]!;
-      expect(entryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
-      expect(readFileSync(path.join(distDir, entryFiles[0]!), "utf8")).toContain('"Hello"');
+      expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+      const aboveReport = await emitClientCatalogPermutations({
+        distDir,
+        projectRoot,
+        failOnMissing: false,
+      });
+      expect(aboveReport.inconclusiveOptionalLocaleRoutes).toEqual([]);
+      const aboveEntry = evalEscapedManifest();
+      expect(aboveEntry).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
+      expect(readFileSync(path.join(distDir, aboveEntry), "utf8")).toContain('"Hallo"');
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -1620,11 +1671,24 @@ globalThis.__RSC_MANIFEST["/generated/[[...locale]]/page"] = ${JSON.stringify({
             },
           })};`,
         );
-        await emitClientCatalogPermutations({
-          distDir: missingDist,
-          projectRoot: missingSourceRoot,
-          failOnMissing: false,
-        });
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          const inconclusiveReport = await emitClientCatalogPermutations({
+            distDir: missingDist,
+            projectRoot: missingSourceRoot,
+            failOnMissing: false,
+          });
+          expect(inconclusiveReport.inconclusiveOptionalLocaleRoutes).toEqual([
+            "/generated/[[...locale]]/page",
+          ]);
+          expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringMatching(
+              /could not verify the compiled root-layout boundary for \/generated\/\[\[\.\.\.locale\]\]\/page.*localeSource: "header", headerSecret/u,
+            ),
+          );
+        } finally {
+          warnSpy.mockRestore();
+        }
         const ctx: Record<string, unknown> = { process: { env: {} } };
         vm.runInNewContext(readFileSync(missingManifest, "utf8"), ctx);
         const bindFn = ctx.__PALAMEDES_CLIENT_CATALOG_BIND as (

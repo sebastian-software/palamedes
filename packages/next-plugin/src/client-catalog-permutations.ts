@@ -4608,6 +4608,11 @@ export type ClientCatalogPermutationReport = {
   manifests: string[];
   /** Hints removed from react-loadable-manifest.json files. */
   removedLoadableHints: number;
+  /**
+   * Optional `[[...locale]]` routes whose compiled root-layout boundary could
+   * not be verified and therefore defaulted to fail-closed route-owned mode.
+   */
+  inconclusiveOptionalLocaleRoutes: string[];
 };
 
 export async function emitClientCatalogPermutations(
@@ -4684,6 +4689,7 @@ export async function emitClientCatalogPermutations(
     { optionalRootLocale: true },
   );
   const turbopackChunkCache: TurbopackChunkModuleCache = new Map();
+  const inconclusiveOptionalLocaleRoutes: string[] = [];
   for (const file of manifests) {
     const manifestRelativePath = path.relative(serverAppDir, file).split(path.sep).join("/");
     const hasOptionalLocaleSegment = manifestRelativePath
@@ -4693,10 +4699,21 @@ export async function emitClientCatalogPermutations(
     // Rely strictly on the compiled route tree from this build; never read the
     // mutable app/ source directory on disk to authorize header selection. Fail
     // closed (`true`) when an optional `[[...locale]]` route cannot be verified
-    // as having a compiled root layout above `[[...locale]]`.
-    const optionalRootLocale = hasOptionalLocaleSegment
-      ? (compiledRouteHasOptionalRootLocale(distDir, file, turbopackChunkCache) ?? true)
-      : false;
+    // as having a compiled root layout above `[[...locale]]`, and surface the
+    // affected route at build time so header-driven layouts do not silently ship
+    // source-locale chunks.
+    let optionalRootLocale = false;
+    if (hasOptionalLocaleSegment) {
+      const detected = compiledRouteHasOptionalRootLocale(distDir, file, turbopackChunkCache);
+      if (detected === undefined) {
+        inconclusiveOptionalLocaleRoutes.push(
+          `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`,
+        );
+        optionalRootLocale = true;
+      } else {
+        optionalRootLocale = detected;
+      }
+    }
     const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
     const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;
     // Next may construct paths from shared prefixes, so inspect the evaluated
@@ -4729,11 +4746,17 @@ export async function emitClientCatalogPermutations(
     await writeFile(file, `${source}${adapter}`);
   }
   assertChunkCoverage(affected, covered);
+  if (inconclusiveOptionalLocaleRoutes.length > 0) {
+    console.warn(
+      `Palamedes client catalog permutations: could not verify the compiled root-layout boundary for ${inconclusiveOptionalLocaleRoutes.join(", ")}. Defaulting to fail-closed route-owned locale handling (ignoring x-palamedes-locale when [[...locale]] is omitted). If this route's root layout sits above [[...locale]] and relies on a Proxy header, pass { localeSource: "header", headerSecret } to bindClientCatalogPermutations().`,
+    );
+  }
   return {
     locales: compiler.locales,
     fallbackLocale: compiler.sourceLocale,
     variants,
     manifests: manifests.map(toKey),
     removedLoadableHints,
+    inconclusiveOptionalLocaleRoutes,
   };
 }
