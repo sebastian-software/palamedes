@@ -2306,6 +2306,7 @@ mod platform {
         Ok(unsafe { stat.assume_init() })
     }
 
+    #[cfg(not(any(target_os = "solaris", target_os = "illumos")))]
     fn flock_exclusive(fd: std::os::fd::RawFd) -> io::Result<()> {
         loop {
             // SAFETY: `fd` is an open file descriptor.
@@ -2320,6 +2321,7 @@ mod platform {
         }
     }
 
+    #[cfg(not(any(target_os = "solaris", target_os = "illumos")))]
     fn flock_shared(fd: std::os::fd::RawFd) -> io::Result<()> {
         loop {
             // SAFETY: `fd` is an open file descriptor.
@@ -2332,6 +2334,44 @@ mod platform {
             }
             return Err(error);
         }
+    }
+
+    #[cfg(not(any(target_os = "solaris", target_os = "illumos")))]
+    fn try_flock_exclusive(fd: std::os::fd::RawFd) -> io::Result<bool> {
+        // SAFETY: `fd` is an open file descriptor.
+        if unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+            return Ok(true);
+        }
+        let error = io::Error::last_os_error();
+        let raw = error.raw_os_error();
+        if raw == Some(libc::EWOULDBLOCK) || raw == Some(libc::EAGAIN) || raw == Some(libc::EINTR) {
+            return Ok(false);
+        }
+        Err(error)
+    }
+
+    #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+    fn flock_exclusive(_fd: std::os::fd::RawFd) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "advisory flock directory locking is not supported on this Unix target",
+        ))
+    }
+
+    #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+    fn flock_shared(_fd: std::os::fd::RawFd) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "advisory flock directory locking is not supported on this Unix target",
+        ))
+    }
+
+    #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+    fn try_flock_exclusive(_fd: std::os::fd::RawFd) -> io::Result<bool> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "advisory flock directory locking is not supported on this Unix target",
+        ))
     }
 
     #[derive(Debug)]
@@ -2712,19 +2752,8 @@ mod platform {
             }
 
             if !opened_read_only {
-                // SAFETY: `existing_fd` is an open file descriptor.
-                if unsafe { libc::flock(existing_fd.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) }
-                    == 0
-                {
+                if try_flock_exclusive(existing_fd.as_raw_fd()).map_err(ContainedFsError::Io)? {
                     return Ok(MandatoryLockOutcome::AcquiredExclusive);
-                }
-                let err = io::Error::last_os_error();
-                let raw = err.raw_os_error();
-                if raw != Some(libc::EWOULDBLOCK)
-                    && raw != Some(libc::EAGAIN)
-                    && raw != Some(libc::EINTR)
-                {
-                    return Err(ContainedFsError::Io(err));
                 }
             } else {
                 // Retry reading the lock signature so a read-only SMB waiter
@@ -4939,22 +4968,7 @@ mod platform {
                 )
             };
             if rc != 0 {
-                let error = io::Error::last_os_error();
-                if name.as_bytes().starts_with(b"com.apple.")
-                    && matches!(
-                        error.raw_os_error(),
-                        Some(
-                            libc::EPERM
-                                | libc::EACCES
-                                | libc::ENOTSUP
-                                | libc::EOPNOTSUPP
-                                | libc::EINVAL
-                        )
-                    )
-                {
-                    continue;
-                }
-                return Err(error);
+                return Err(io::Error::last_os_error());
             }
         }
         Ok(())
@@ -5616,6 +5630,14 @@ mod platform {
     const SE_SACL_PROTECTED: u16 = 0x2000;
     const STATUS_ACCESS_DENIED: NtStatus = 0xC000_0022_u32 as i32;
     const STATUS_PRIVILEGE_NOT_HELD: NtStatus = 0xC000_0061_u32 as i32;
+    const STATUS_TRANSACTIONAL_CONFLICT: NtStatus = 0xC019_0001_u32 as i32;
+    const STATUS_TRANSACTION_INVALID_STATE: NtStatus = 0xC019_0006_u32 as i32;
+    const STATUS_RM_NOT_ACTIVE: NtStatus = 0xC019_0008_u32 as i32;
+    const STATUS_TRANSACTIONS_UNSUPPORTED_REMOTE: NtStatus = 0xC019_001D_u32 as i32;
+    const STATUS_TRANSACTIONAL_OPEN_NOT_ALLOWED: NtStatus = 0xC019_0037_u32 as i32;
+    const STATUS_EFS_NOT_ALLOWED_IN_TRANSACTION: NtStatus = 0xC019_003E_u32 as i32;
+    const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 0x0000_0800;
+    const INVALID_HANDLE_VALUE: *mut c_void = -1_isize as *mut c_void;
 
     #[repr(C)]
     struct FileBasicInformation {
@@ -5760,6 +5782,123 @@ mod platform {
             bytes_returned: *mut u32,
             overlapped: *mut c_void,
         ) -> i32;
+        fn LoadLibraryExW(lib_file_name: *const u16, file: *mut c_void, flags: u32) -> *mut c_void;
+        fn GetModuleHandleW(module_name: *const u16) -> *mut c_void;
+        fn GetProcAddress(module: *mut c_void, proc_name: *const u8) -> *mut c_void;
+    }
+
+    type CreateTransactionFn = unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        u32,
+        u32,
+        *mut u16,
+    ) -> *mut c_void;
+    type CommitTransactionFn = unsafe extern "system" fn(*mut c_void) -> i32;
+    type RollbackTransactionFn = unsafe extern "system" fn(*mut c_void) -> i32;
+    type RtlGetCurrentTransactionFn = unsafe extern "system" fn() -> *mut c_void;
+    type RtlSetCurrentTransactionFn = unsafe extern "system" fn(*mut c_void) -> u8;
+
+    #[derive(Clone, Copy)]
+    struct WindowsTxfApi {
+        create_transaction: CreateTransactionFn,
+        commit_transaction: CommitTransactionFn,
+        rollback_transaction: RollbackTransactionFn,
+        rtl_get_current_transaction: RtlGetCurrentTransactionFn,
+        rtl_set_current_transaction: RtlSetCurrentTransactionFn,
+    }
+
+    static WINDOWS_TXF_API: std::sync::OnceLock<Option<WindowsTxfApi>> = std::sync::OnceLock::new();
+
+    fn load_windows_txf_api() -> Option<WindowsTxfApi> {
+        *WINDOWS_TXF_API.get_or_init(|| {
+            let ktmw32: Vec<u16> = "ktmw32.dll\0".encode_utf16().collect();
+            let ntdll: Vec<u16> = "ntdll.dll\0".encode_utf16().collect();
+            // SAFETY: NUL-terminated UTF-16 system DLL names and ASCII symbol
+            // names; `LOAD_LIBRARY_SEARCH_SYSTEM32` restricts loading strictly
+            // to `%SystemRoot%\System32`.
+            unsafe {
+                let ktm_mod = LoadLibraryExW(
+                    ktmw32.as_ptr(),
+                    std::ptr::null_mut(),
+                    LOAD_LIBRARY_SEARCH_SYSTEM32,
+                );
+                let nt_mod = GetModuleHandleW(ntdll.as_ptr());
+                if ktm_mod.is_null() || nt_mod.is_null() {
+                    return None;
+                }
+                let create_ptr = GetProcAddress(ktm_mod, b"CreateTransaction\0".as_ptr());
+                let commit_ptr = GetProcAddress(ktm_mod, b"CommitTransaction\0".as_ptr());
+                let rollback_ptr = GetProcAddress(ktm_mod, b"RollbackTransaction\0".as_ptr());
+                let get_tx_ptr = GetProcAddress(nt_mod, b"RtlGetCurrentTransaction\0".as_ptr());
+                let set_tx_ptr = GetProcAddress(nt_mod, b"RtlSetCurrentTransaction\0".as_ptr());
+                if create_ptr.is_null()
+                    || commit_ptr.is_null()
+                    || rollback_ptr.is_null()
+                    || get_tx_ptr.is_null()
+                    || set_tx_ptr.is_null()
+                {
+                    return None;
+                }
+                Some(WindowsTxfApi {
+                    create_transaction: std::mem::transmute::<*mut c_void, CreateTransactionFn>(
+                        create_ptr,
+                    ),
+                    commit_transaction: std::mem::transmute::<*mut c_void, CommitTransactionFn>(
+                        commit_ptr,
+                    ),
+                    rollback_transaction: std::mem::transmute::<*mut c_void, RollbackTransactionFn>(
+                        rollback_ptr,
+                    ),
+                    rtl_get_current_transaction: std::mem::transmute::<
+                        *mut c_void,
+                        RtlGetCurrentTransactionFn,
+                    >(get_tx_ptr),
+                    rtl_set_current_transaction: std::mem::transmute::<
+                        *mut c_void,
+                        RtlSetCurrentTransactionFn,
+                    >(set_tx_ptr),
+                })
+            }
+        })
+    }
+
+    enum TransactedOverwriteOutcome {
+        Committed,
+        Unsupported,
+    }
+
+    struct TransactionGuard {
+        handle: OwnedHandle,
+        rollback: RollbackTransactionFn,
+        committed: bool,
+    }
+
+    impl Drop for TransactionGuard {
+        fn drop(&mut self) {
+            if !self.committed {
+                // SAFETY: `self.handle` is an open KTM transaction handle.
+                unsafe {
+                    let _ = (self.rollback)(self.handle.as_raw_handle());
+                }
+            }
+        }
+    }
+
+    struct ThreadTransactionGuard {
+        previous: *mut c_void,
+        set_tx: RtlSetCurrentTransactionFn,
+    }
+
+    impl Drop for ThreadTransactionGuard {
+        fn drop(&mut self) {
+            // SAFETY: restores the calling thread's prior TEB transaction handle.
+            unsafe {
+                let _ = (self.set_tx)(self.previous);
+            }
+        }
     }
 
     #[link(name = "advapi32")]
@@ -6420,13 +6559,29 @@ mod platform {
             if let Some((expected_identity, existing_security)) =
                 self.inspect_entry(file_name, true)?
             {
+                let has_security_descriptors = existing_security.as_ref().is_some_and(|security| {
+                    security.owner_sd.is_some()
+                        || security.dacl_sd.is_some()
+                        || security.label_sd.is_some()
+                });
                 let can_atomic_replace = existing_security.as_ref().is_none_or(|security| {
-                    security.sacl_accessible
+                    (!has_security_descriptors || security.sacl_accessible)
                         && !security.is_encrypted
                         && !security.has_named_streams
                         && (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) == 0
                 });
                 if !can_atomic_replace {
+                    if matches!(
+                        self.try_overwrite_existing_transacted(
+                            file_name,
+                            expected_identity,
+                            bytes,
+                            ContainedWriteDurability::Rename,
+                        )?,
+                        TransactedOverwriteOutcome::Committed
+                    ) {
+                        return Ok(());
+                    }
                     return self
                         .overwrite_existing_exclusively(
                             file_name,
@@ -6448,20 +6603,22 @@ mod platform {
 
         /// Atomically writes `bytes` to `file_name` inside this directory
         /// handle, verifying write access on any existing file and preserving
-        /// its owner, DACL, security labels/attributes, audit SACL (when
-        /// accessible), compression, and basic attributes before syncing and
-        /// renaming into place.
+        /// its owner, DACL, security labels/attributes, audit SACL,
+        /// compression, and basic attributes.
         ///
-        /// Never truncates the live destination file in place, so a disk-full
-        /// error or abrupt process exit always leaves the previous catalog
-        /// intact. Fails closed before publication when the destination carries
-        /// EFS encryption, NTFS named streams, or special storage attributes
-        /// that cannot be preserved across atomic replacement.
+        /// When the destination carries metadata that cannot be copied across a
+        /// temp-file rename (such as an audit SACL without `SeSecurityPrivilege`,
+        /// NTFS named data streams, or special NTFS storage attributes), opens
+        /// the verified existing single-link file inside a local KTM/TxF
+        /// transaction so updates remain both crash-atomic and metadata-preserving.
+        /// Fails closed before modifying the destination when neither
+        /// temp-file replacement nor NTFS TxF can guarantee both properties.
         ///
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Containment`] if `file_name` is a
-        /// symlink/reparse point, or [`ContainedFsError::Io`] on OS errors.
+        /// symlink/reparse point or hard-linked target during transacted
+        /// update, or [`ContainedFsError::Io`] on OS errors.
         pub fn write_file_atomically(
             &self,
             file_name: &OsStr,
@@ -6476,31 +6633,54 @@ mod platform {
                 let existing_identity = existing_entry.as_ref().map(|(identity, _)| *identity);
                 let target_existed = existing_identity.is_some();
                 let mut existing_security = existing_entry.and_then(|(_, security)| security);
-                if existing_security
-                    .as_ref()
-                    .is_some_and(|security| security.is_encrypted)
-                {
-                    return Err(ContainedFsError::Io(io::Error::new(
-                        io::ErrorKind::Unsupported,
-                        "cannot safely preserve Windows EFS encryption recipients across atomic replacement",
-                    )));
-                }
-                if existing_security
-                    .as_ref()
-                    .is_some_and(|security| security.has_named_streams)
-                {
-                    return Err(ContainedFsError::Io(io::Error::new(
-                        io::ErrorKind::Unsupported,
-                        "cannot safely preserve Windows NTFS named data streams across atomic replacement",
-                    )));
-                }
-                if existing_security.as_ref().is_some_and(|security| {
-                    (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) != 0
-                }) {
-                    return Err(ContainedFsError::Io(io::Error::new(
-                        io::ErrorKind::Unsupported,
-                        "cannot safely preserve per-file Windows NTFS storage attributes across atomic replacement",
-                    )));
+                let has_security_descriptors = existing_security.as_ref().is_some_and(|security| {
+                    security.owner_sd.is_some()
+                        || security.dacl_sd.is_some()
+                        || security.label_sd.is_some()
+                });
+                let needs_transacted_update = existing_security.as_ref().is_some_and(|security| {
+                    (has_security_descriptors && !security.sacl_accessible)
+                        || security.is_encrypted
+                        || security.has_named_streams
+                        || (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) != 0
+                });
+                if needs_transacted_update {
+                    if let Some(expected_identity) = existing_identity {
+                        match self.try_overwrite_existing_transacted(
+                            file_name,
+                            expected_identity,
+                            bytes,
+                            durability,
+                        )? {
+                            TransactedOverwriteOutcome::Committed => {
+                                return Ok(ContainedWriteOutcome::Committed);
+                            }
+                            TransactedOverwriteOutcome::Unsupported => {
+                                let reason = if existing_security
+                                    .as_ref()
+                                    .is_some_and(|security| security.is_encrypted)
+                                {
+                                    "cannot safely preserve Windows EFS encryption recipients across atomic replacement"
+                                } else if existing_security
+                                    .as_ref()
+                                    .is_some_and(|security| security.has_named_streams)
+                                {
+                                    "cannot safely preserve Windows NTFS named data streams across atomic replacement"
+                                } else if existing_security.as_ref().is_some_and(|security| {
+                                    (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES)
+                                        != 0
+                                }) {
+                                    "cannot safely preserve per-file Windows NTFS storage attributes across atomic replacement"
+                                } else {
+                                    "cannot atomically replace existing Windows file without SeSecurityPrivilege or NTFS TxF because audit SACL preservation cannot be guaranteed"
+                                };
+                                return Err(ContainedFsError::Io(io::Error::new(
+                                    io::ErrorKind::Unsupported,
+                                    reason,
+                                )));
+                            }
+                        }
+                    }
                 }
                 let initial_dacl = existing_security
                     .as_mut()
@@ -6729,6 +6909,149 @@ mod platform {
                 },
                 security,
             )))
+        }
+
+        fn try_overwrite_existing_transacted(
+            &self,
+            file_name: &OsStr,
+            expected_identity: FileIdentity,
+            bytes: &[u8],
+            durability: ContainedWriteDurability,
+        ) -> Result<TransactedOverwriteOutcome, ContainedFsError> {
+            let Some(api) = load_windows_txf_api() else {
+                return Ok(TransactedOverwriteOutcome::Unsupported);
+            };
+            // SAFETY: `api.create_transaction` is a valid KTM entry point; null
+            // optional parameters create a default local transaction.
+            let raw_tx = unsafe {
+                (api.create_transaction)(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    std::ptr::null_mut(),
+                )
+            };
+            if raw_tx.is_null() || raw_tx == INVALID_HANDLE_VALUE {
+                return Ok(TransactedOverwriteOutcome::Unsupported);
+            }
+            // SAFETY: `CreateTransaction` returned a newly owned kernel handle.
+            let mut tx_guard = TransactionGuard {
+                handle: unsafe { OwnedHandle::from_raw_handle(raw_tx) },
+                rollback: api.rollback_transaction,
+                committed: false,
+            };
+
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            let mut backoff_ms: u64 = 2;
+            let handle = loop {
+                // SAFETY: `rtl_get_current_transaction` and
+                // `rtl_set_current_transaction` are valid ntdll entry points.
+                let previous_tx = unsafe { (api.rtl_get_current_transaction)() };
+                let bound =
+                    unsafe { (api.rtl_set_current_transaction)(tx_guard.handle.as_raw_handle()) };
+                if bound == 0 {
+                    return Ok(TransactedOverwriteOutcome::Unsupported);
+                }
+                let _thread_tx = ThreadTransactionGuard {
+                    previous: previous_tx,
+                    set_tx: api.rtl_set_current_transaction,
+                };
+                let open_result = nt_create_relative(
+                    self.handle.as_raw_handle(),
+                    file_name,
+                    FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_ATTRIBUTE_NORMAL,
+                    FILE_SHARE_READ,
+                    FILE_OPEN,
+                    FILE_NON_DIRECTORY_FILE
+                        | FILE_OPEN_REPARSE_POINT
+                        | FILE_SYNCHRONOUS_IO_NONALERT,
+                    std::ptr::null_mut(),
+                );
+                drop(_thread_tx);
+                match open_result {
+                    Ok(handle) => break handle,
+                    Err(status) if is_not_found_status(status) => {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            format!(
+                                "destination \"{}\" was removed concurrently before update",
+                                file_name.to_string_lossy()
+                            ),
+                        )));
+                    }
+                    Err(status @ (STATUS_SHARING_VIOLATION | STATUS_TRANSACTIONAL_CONFLICT)) => {
+                        if std::time::Instant::now() >= deadline {
+                            return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                        backoff_ms = (backoff_ms * 2).min(50);
+                    }
+                    Err(
+                        STATUS_TRANSACTIONAL_OPEN_NOT_ALLOWED
+                        | STATUS_NOT_SUPPORTED
+                        | STATUS_INVALID_DEVICE_REQUEST
+                        | STATUS_NOT_IMPLEMENTED
+                        | STATUS_RM_NOT_ACTIVE
+                        | STATUS_TRANSACTION_INVALID_STATE
+                        | STATUS_TRANSACTIONS_UNSUPPORTED_REMOTE
+                        | STATUS_EFS_NOT_ALLOWED_IN_TRANSACTION,
+                    ) => {
+                        return Ok(TransactedOverwriteOutcome::Unsupported);
+                    }
+                    Err(status) => {
+                        return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
+                    }
+                }
+            };
+
+            let info = file_information(handle.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to write through symlink \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
+            if info.number_of_links > 1 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to overwrite hard-linked file \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
+            let live_identity = FileIdentity {
+                volume_serial: info.volume_serial_number,
+                file_index_high: info.file_index_high,
+                file_index_low: info.file_index_low,
+            };
+            if live_identity != expected_identity {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!(
+                        "destination \"{}\" was replaced concurrently before update",
+                        file_name.to_string_lossy()
+                    ),
+                )));
+            }
+
+            let mut file = File::from(handle);
+            file.set_len(0)?;
+            file.write_all(bytes)?;
+            file.flush()?;
+            if durability.syncs_file() {
+                file.sync_all()?;
+            }
+            drop(file);
+
+            // SAFETY: `tx_guard.handle` is a valid open KTM transaction handle
+            // and all transacted file handles have been closed.
+            if unsafe { (api.commit_transaction)(tx_guard.handle.as_raw_handle()) } == 0 {
+                return Err(ContainedFsError::Io(io::Error::last_os_error()));
+            }
+            tx_guard.committed = true;
+            Ok(TransactedOverwriteOutcome::Committed)
         }
 
         fn overwrite_existing_exclusively(
@@ -8634,7 +8957,7 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
     #[test]
     fn unix_readonly_lock_recovery_reclaims_abandoned_lock_and_waits_for_live_holder() {
         use std::os::fd::{AsRawFd, OwnedFd};
@@ -9077,7 +9400,7 @@ mod tests {
         assert_eq!(&buf[..len], attr_val);
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
     #[test]
     fn unix_readonly_lock_recovery_serializes_foreign_uid_sticky_lock_without_deleting_it() {
         use std::os::fd::{AsRawFd, OwnedFd};

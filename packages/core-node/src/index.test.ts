@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { createRequire } from "node:module";
 import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -492,6 +493,59 @@ describe("@palamedes/core-node", () => {
       ],
     });
     expect(unsafePaths).toStrictEqual([]);
+
+    const parityFixture = JSON.parse(
+      readFileSync(
+        path.resolve(import.meta.dirname, "../../../test-fixtures/config-path-safety-parity.json"),
+        "utf8",
+      ),
+    ) as { invalidCatalogPaths: string[]; invalidLocales: string[] };
+
+    for (const invalidPath of [
+      ...parityFixture.invalidCatalogPaths,
+      "locales/\u0085/{locale}",
+      "   \t  ",
+    ]) {
+      expect(
+        translationPatchTargetPaths({
+          config: {
+            rootDir,
+            locales: ["en"],
+            sourceLocale: "en",
+            catalogs: [{ path: invalidPath, include: ["src"] }],
+          },
+          patches: [
+            {
+              id: { catalog: invalidPath, locale: "en", message: "Hello" },
+              fingerprint: "p1",
+              translation: { kind: "Singular", value: "Hallo" },
+            },
+          ],
+        }),
+        `expected invalid catalog path ${JSON.stringify(invalidPath)} to be rejected before queueing`,
+      ).toStrictEqual([]);
+    }
+
+    for (const invalidLocale of parityFixture.invalidLocales) {
+      expect(
+        translationPatchTargetPaths({
+          config: {
+            rootDir,
+            locales: ["en"],
+            sourceLocale: "en",
+            catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+          },
+          patches: [
+            {
+              id: { catalog: "locales/{locale}/messages", locale: invalidLocale, message: "Hello" },
+              fingerprint: "p2",
+              translation: { kind: "Singular", value: "Hallo" },
+            },
+          ],
+        }),
+        `expected invalid locale ${JSON.stringify(invalidLocale)} to be rejected before queueing`,
+      ).toStrictEqual([]);
+    }
   });
 
   it("rejects a mismatched platform binding before exposing the native surface", () => {

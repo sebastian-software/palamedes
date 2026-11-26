@@ -27,25 +27,28 @@ function isAsciiAlnum(code: number): boolean {
 }
 
 function isSafeRelativeCatalogPath(value: string): boolean {
+  if (value.trim().length === 0) {
+    return false;
+  }
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
+      return false;
+    }
+  }
   if (
-    value.length === 0 ||
+    path.isAbsolute(value) ||
     value.startsWith("/") ||
     value.startsWith("\\") ||
+    /^[A-Za-z]:/.test(value) ||
+    /^[A-Za-z]:/.test(value.replaceAll("{locale}", "a")) ||
     value.endsWith("/") ||
     value.endsWith("\\")
   ) {
     return false;
   }
-  if (/^[A-Za-z]:/.test(value)) {
-    return false;
-  }
-  for (let i = 0; i < value.length; i += 1) {
-    const code = value.charCodeAt(i);
-    if (code < 0x20 || code === 0x7f) {
-      return false;
-    }
-  }
   const segments = value.split(/[\\/]/);
+  let firstNormal: string | undefined;
   let lastNonEmpty = "";
   let hasNormal = false;
   for (const segment of segments) {
@@ -53,14 +56,27 @@ function isSafeRelativeCatalogPath(value: string): boolean {
       continue;
     }
     lastNonEmpty = segment;
+    if (segment === ".") {
+      continue;
+    }
     if (segment === "..") {
       return false;
     }
-    if (segment !== ".") {
-      hasNormal = true;
+    if (firstNormal === undefined) {
+      firstNormal = segment;
     }
+    hasNormal = true;
   }
-  return hasNormal && lastNonEmpty !== ".";
+  if (!hasNormal || lastNonEmpty === ".") {
+    return false;
+  }
+  if (
+    firstNormal !== undefined &&
+    (/^[A-Za-z]:/.test(firstNormal) || /^[A-Za-z]:/.test(firstNormal.replaceAll("{locale}", "a")))
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function translationPatchTargetPaths(request: TranslationPatchRequest): string[] {
