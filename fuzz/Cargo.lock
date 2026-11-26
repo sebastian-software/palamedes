@@ -832,6 +832,7 @@ dependencies = [
  "ferrocat-icu",
  "ferrocat-po",
  "ferromark",
+ "libc",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",

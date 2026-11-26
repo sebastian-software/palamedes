@@ -2,6 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use ferrocat::{
     CatalogMessageKey, CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, Header, MsgStr,
@@ -284,7 +285,7 @@ struct LoadedCatalog {
     scope: String,
     locale: String,
     path: PathBuf,
-    parent_dir: ContainedDir,
+    parent_dir: Arc<ContainedDir>,
     file_name: OsString,
     format: PalamedesCatalogFormat,
     original: String,
@@ -308,7 +309,7 @@ struct PoItemIndexes {
 #[derive(Debug)]
 struct PreparedCatalog {
     path: PathBuf,
-    parent_dir: ContainedDir,
+    parent_dir: Arc<ContainedDir>,
     file_name: OsString,
     locale: String,
     patch_indexes: Vec<usize>,
@@ -552,10 +553,12 @@ where
         ));
     }
 
+    let mut pinned_dirs: HashMap<PathBuf, Arc<ContainedDir>> = HashMap::new();
     let mut prepared = Vec::new();
     for (batch, patch_indexes) in groups {
         let catalog = &request.config.catalogs[batch.catalog_index];
-        let mut loaded = load_catalog(&request.config, catalog, &batch.locale)?;
+        let mut loaded =
+            load_catalog_with_dir_cache(&request.config, catalog, &batch.locale, &mut pinned_dirs)?;
         for &patch_index in &patch_indexes {
             if rejected.contains(&patch_index) {
                 continue;
@@ -795,6 +798,15 @@ fn load_catalog(
     catalog: &CatalogConfig,
     locale: &str,
 ) -> PalamedesResult<LoadedCatalog> {
+    load_catalog_with_dir_cache(config, catalog, locale, &mut HashMap::new())
+}
+
+fn load_catalog_with_dir_cache(
+    config: &CatalogArtifactConfig,
+    catalog: &CatalogConfig,
+    locale: &str,
+    pinned_dirs: &mut HashMap<PathBuf, Arc<ContainedDir>>,
+) -> PalamedesResult<LoadedCatalog> {
     let root_dir = Path::new(&config.root_dir);
     let path = resolve_catalog_path(config, catalog, locale)?;
     let (relative_parent, file_name) =
@@ -804,24 +816,32 @@ fn load_catalog(
                 reason: error.to_string(),
             }
         })?;
-    let parent_dir = match ContainedDir::open_subpath(root_dir, &relative_parent, false) {
-        Ok(Some(dir)) => dir,
-        Ok(None) => {
-            return Err(PalamedesError::ReadFile {
-                path,
-                source: std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "catalog file does not exist",
-                ),
-            });
-        }
-        Err(ContainedFsError::Containment(reason)) => {
-            return Err(PalamedesError::UnsafeCatalogPath {
-                path: path.to_string_lossy().into_owned(),
-                reason,
-            });
-        }
-        Err(ContainedFsError::Io(source)) => return Err(PalamedesError::ReadFile { path, source }),
+    let parent_dir = if let Some(cached) = pinned_dirs.get(&relative_parent) {
+        Arc::clone(cached)
+    } else {
+        let opened = match ContainedDir::open_subpath(root_dir, &relative_parent, false) {
+            Ok(Some(dir)) => Arc::new(dir),
+            Ok(None) => {
+                return Err(PalamedesError::ReadFile {
+                    path,
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "catalog file does not exist",
+                    ),
+                });
+            }
+            Err(ContainedFsError::Containment(reason)) => {
+                return Err(PalamedesError::UnsafeCatalogPath {
+                    path: path.to_string_lossy().into_owned(),
+                    reason,
+                });
+            }
+            Err(ContainedFsError::Io(source)) => {
+                return Err(PalamedesError::ReadFile { path, source });
+            }
+        };
+        pinned_dirs.insert(relative_parent, Arc::clone(&opened));
+        opened
     };
     let original = match parent_dir.read_optional_file(&file_name) {
         Ok(Some(content)) => content,
@@ -1850,7 +1870,6 @@ fn diagnostic_sort_key(
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsString;
     use std::fs;
     use std::path::Path;
 
@@ -1868,7 +1887,6 @@ mod tests {
         find_po_item, list_translation_candidates, load_catalog, parse_catalog_as_po,
         po_item_indexes, reset_source_catalog_parse_count, source_catalog_parse_count,
     };
-    use crate::contained_fs::ContainedDir;
     use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError};
 
     const FIXTURE: &str = include_str!("../fixtures/translation-workflow.de.po");
@@ -3617,13 +3635,19 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn new_direct_replacement_keeps_secure_tempfile_permissions() {
+        use std::ffi::OsString;
         use std::os::unix::fs::PermissionsExt;
+        use std::sync::Arc;
+
+        use crate::contained_fs::ContainedDir;
 
         let fixture = tempfile::tempdir().expect("fixture directory");
         let path = fixture.path().join("new/messages.po");
-        let parent_dir = ContainedDir::open_subpath(fixture.path(), Path::new("new"), true)
-            .expect("open contained parent")
-            .expect("created parent");
+        let parent_dir = Arc::new(
+            ContainedDir::open_subpath(fixture.path(), Path::new("new"), true)
+                .expect("open contained parent")
+                .expect("created parent"),
+        );
         let prepared = PreparedCatalog {
             path: path.clone(),
             parent_dir,

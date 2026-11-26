@@ -4,7 +4,46 @@ import path from "node:path";
 import type { TranslationPatchRequest } from "./generated/palamedes-node-types";
 import { getCoreNodeProcessState } from "./processGlobalState";
 
+function isValidLocaleForQueue(locale: string): boolean {
+  if (locale.length === 0 || locale.includes("..")) {
+    return false;
+  }
+  const first = locale.charCodeAt(0);
+  const last = locale.charCodeAt(locale.length - 1);
+  if (!isAsciiAlnum(first) || !isAsciiAlnum(last)) {
+    return false;
+  }
+  for (let i = 0; i < locale.length; i += 1) {
+    const code = locale.charCodeAt(i);
+    if (!isAsciiAlnum(code) && code !== 45 && code !== 95 && code !== 46) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isAsciiAlnum(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function isSafeRelativeCatalogPath(value: string): boolean {
+  if (value.length === 0 || value.startsWith("/") || value.startsWith("\\")) {
+    return false;
+  }
+  if (/^[A-Za-z]:/.test(value)) {
+    return false;
+  }
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code < 0x20 || code === 0x7f) {
+      return false;
+    }
+  }
+  return !value.split(/[\\/]/).some((segment) => segment === "..");
+}
+
 export function translationPatchTargetPaths(request: TranslationPatchRequest): string[] {
+  const resolvedRoot = path.resolve(request.config.rootDir);
   return request.patches.flatMap((patch) => {
     const catalog = request.config.catalogs.find(
       (candidate) => candidate.path === patch.id.catalog,
@@ -12,14 +51,27 @@ export function translationPatchTargetPaths(request: TranslationPatchRequest): s
     if (!catalog) {
       return [];
     }
+    if (!isValidLocaleForQueue(patch.id.locale) || !isSafeRelativeCatalogPath(catalog.path)) {
+      return [];
+    }
 
     const extension = catalog.format === "Fcl" ? "fcl" : "po";
     const portableCatalogPath = catalog.path.replaceAll("\\", "/");
+    const expanded = portableCatalogPath.replaceAll("{locale}", patch.id.locale);
+    if (!isSafeRelativeCatalogPath(expanded)) {
+      return [];
+    }
     const configuredExtension = path.posix.extname(portableCatalogPath);
-    const configuredPath = path.resolve(
-      request.config.rootDir,
-      portableCatalogPath.replaceAll("{locale}", patch.id.locale),
-    );
+    const configuredPath = path.resolve(resolvedRoot, expanded);
+    const relativeToRoot = path.relative(resolvedRoot, configuredPath);
+    if (
+      relativeToRoot === "" ||
+      relativeToRoot === ".." ||
+      relativeToRoot.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeToRoot)
+    ) {
+      return [];
+    }
     if (configuredExtension === `.${extension}`) {
       return [configuredPath];
     }

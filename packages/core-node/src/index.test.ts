@@ -461,6 +461,37 @@ describe("@palamedes/core-node", () => {
       ],
     });
     expect(backslashPaths).toStrictEqual(paths);
+
+    const unsafePaths = translationPatchTargetPaths({
+      config: {
+        rootDir,
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [
+          { path: String.raw`..\outside\{locale}`, include: ["src"] },
+          { path: "locales/{locale}/messages", include: ["src"] },
+          { path: "{locale}:/outside", include: ["src"] },
+        ],
+      },
+      patches: [
+        {
+          id: { catalog: String.raw`..\outside\{locale}`, locale: "de", message: "Escape" },
+          fingerprint: "u1",
+          translation: { kind: "Singular", value: "Nein" },
+        },
+        {
+          id: { catalog: "locales/{locale}/messages", locale: "../outside", message: "Locale" },
+          fingerprint: "u2",
+          translation: { kind: "Singular", value: "Nein" },
+        },
+        {
+          id: { catalog: "{locale}:/outside", locale: "c", message: "Drive" },
+          fingerprint: "u3",
+          translation: { kind: "Singular", value: "Nein" },
+        },
+      ],
+    });
+    expect(unsafePaths).toStrictEqual([]);
   });
 
   it("rejects a mismatched platform binding before exposing the native surface", () => {

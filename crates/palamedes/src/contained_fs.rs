@@ -550,12 +550,13 @@ mod platform {
         /// atomically replaces `file_name`.
         ///
         /// When replacing an existing file, write permission on the existing
-        /// destination is verified without truncating it, the temporary file is
-        /// created as `0600`, populated, ownership/group, mode bits, and
-        /// extended ACLs are restored, and only then is the temporary file
-        /// synced (when requested) and atomically renamed into place. If the
-        /// original principals or ACLs cannot be preserved safely, replacement
-        /// fails without modifying the destination.
+        /// destination is verified without truncating it. The replacement is
+        /// staged inside a private `0700` temporary directory (with inherited
+        /// ACLs stripped) so no other principal can observe the temporary file
+        /// while its content, ownership/group, mode bits, and extended ACLs are
+        /// applied and synced before the single atomic `renameat` into place.
+        /// If the original principals or ACLs cannot be preserved safely,
+        /// replacement fails without modifying the destination.
         ///
         /// # Errors
         ///
@@ -572,53 +573,85 @@ mod platform {
             let existing = self.open_existing_for_replace(file_name)?;
             let c_target = os_str_to_cstring(file_name)?;
 
-            let create_mode: libc::c_uint = match (&existing, new_file_mode) {
-                (None, ContainedNewFileMode::RespectUmask) => 0o666,
-                _ => 0o600,
-            };
-            let (temp_name, mut temp_file) = self.create_temp_file(create_mode)?;
-            let write_result = (|| -> io::Result<()> {
-                if existing.is_some() {
-                    // Strip any ACL inherited from a parent directory default
-                    // ACL before writing content so the temporary file remains
-                    // strictly private while populated and cannot retain
-                    // inherited entries when the destination had no ACL.
-                    strip_inherited_acl(temp_file.as_raw_fd())?;
-                    // SAFETY: `temp_file` is an open file descriptor.
-                    if unsafe { libc::fchmod(temp_file.as_raw_fd(), 0o600) } != 0 {
-                        return Err(io::Error::last_os_error());
+            if let Some(existing) = existing.as_ref() {
+                let (stage_name, stage_dir) = self.create_staging_dir()?;
+                let result = (|| -> Result<(), ContainedFsError> {
+                    let (temp_name, mut temp_file) = stage_dir.create_temp_file(0o600)?;
+                    let write_result = (|| -> io::Result<()> {
+                        strip_inherited_acl(temp_file.as_raw_fd())?;
+                        // SAFETY: `temp_file` is an open file descriptor.
+                        if unsafe { libc::fchmod(temp_file.as_raw_fd(), 0o600) } != 0 {
+                            return Err(io::Error::last_os_error());
+                        }
+                        temp_file.write_all(bytes)?;
+                        temp_file.flush()?;
+                        restore_existing_metadata(temp_file.as_raw_fd(), existing)?;
+                        if durability.syncs_file() {
+                            temp_file.sync_all()?;
+                        }
+                        Ok(())
+                    })();
+                    drop(temp_file);
+
+                    if let Err(error) = write_result {
+                        let _ = stage_dir.unlink_temp(&temp_name);
+                        return Err(ContainedFsError::Io(error));
                     }
-                }
-                temp_file.write_all(bytes)?;
-                temp_file.flush()?;
-                if let Some(existing) = existing.as_ref() {
-                    restore_existing_metadata(temp_file.as_raw_fd(), existing)?;
-                }
-                if durability.syncs_file() {
-                    temp_file.sync_all()?;
-                }
-                Ok(())
-            })();
-            drop(temp_file);
 
-            if let Err(error) = write_result {
-                let _ = self.unlink_temp(&temp_name);
-                return Err(ContainedFsError::Io(error));
-            }
+                    // SAFETY: both directory descriptors and C strings are valid.
+                    let rc = unsafe {
+                        libc::renameat(
+                            stage_dir.fd.as_raw_fd(),
+                            temp_name.as_ptr(),
+                            self.fd.as_raw_fd(),
+                            c_target.as_ptr(),
+                        )
+                    };
+                    if rc != 0 {
+                        let error = io::Error::last_os_error();
+                        let _ = stage_dir.unlink_temp(&temp_name);
+                        return Err(ContainedFsError::Io(error));
+                    }
+                    Ok(())
+                })();
+                drop(stage_dir);
+                let _ = self.rmdir_stage(&stage_name);
+                result?;
+            } else {
+                let create_mode: libc::c_uint = match new_file_mode {
+                    ContainedNewFileMode::RespectUmask => 0o666,
+                    ContainedNewFileMode::Private => 0o600,
+                };
+                let (temp_name, mut temp_file) = self.create_temp_file(create_mode)?;
+                let write_result = (|| -> io::Result<()> {
+                    temp_file.write_all(bytes)?;
+                    temp_file.flush()?;
+                    if durability.syncs_file() {
+                        temp_file.sync_all()?;
+                    }
+                    Ok(())
+                })();
+                drop(temp_file);
 
-            // SAFETY: `self.fd` is an open directory descriptor and both C strings are valid.
-            let rc = unsafe {
-                libc::renameat(
-                    self.fd.as_raw_fd(),
-                    temp_name.as_ptr(),
-                    self.fd.as_raw_fd(),
-                    c_target.as_ptr(),
-                )
-            };
-            if rc != 0 {
-                let error = io::Error::last_os_error();
-                let _ = self.unlink_temp(&temp_name);
-                return Err(ContainedFsError::Io(error));
+                if let Err(error) = write_result {
+                    let _ = self.unlink_temp(&temp_name);
+                    return Err(ContainedFsError::Io(error));
+                }
+
+                // SAFETY: `self.fd` is an open directory descriptor and both C strings are valid.
+                let rc = unsafe {
+                    libc::renameat(
+                        self.fd.as_raw_fd(),
+                        temp_name.as_ptr(),
+                        self.fd.as_raw_fd(),
+                        c_target.as_ptr(),
+                    )
+                };
+                if rc != 0 {
+                    let error = io::Error::last_os_error();
+                    let _ = self.unlink_temp(&temp_name);
+                    return Err(ContainedFsError::Io(error));
+                }
             }
             if durability == ContainedWriteDurability::Full
                 && let Err(error) = self.sync_directory()
@@ -810,6 +843,69 @@ mod platform {
             )))
         }
 
+        fn create_staging_dir(&self) -> Result<(CString, Self), ContainedFsError> {
+            let pid = std::process::id();
+            for _ in 0..128 {
+                let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
+                let name = OsString::from(format!(".pmds-stage-{pid}-{nonce}"));
+                let c_name = os_str_to_cstring(&name)?;
+                // SAFETY: `self.fd` is an open directory descriptor and `c_name` is valid.
+                let rc = unsafe { libc::mkdirat(self.fd.as_raw_fd(), c_name.as_ptr(), 0o700) };
+                if rc != 0 {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() == Some(libc::EEXIST) {
+                        continue;
+                    }
+                    return Err(ContainedFsError::Io(error));
+                }
+                // SAFETY: `self.fd` is an open directory descriptor and `c_name` is valid.
+                let raw = unsafe {
+                    libc::openat(
+                        self.fd.as_raw_fd(),
+                        c_name.as_ptr(),
+                        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    )
+                };
+                if raw < 0 {
+                    let error = io::Error::last_os_error();
+                    let _ = self.rmdir_stage(&c_name);
+                    return Err(ContainedFsError::Io(error));
+                }
+                // SAFETY: `raw` is a newly opened valid directory descriptor.
+                let fd = unsafe { OwnedFd::from_raw_fd(raw) };
+                let harden = (|| -> io::Result<()> {
+                    strip_inherited_acl(fd.as_raw_fd())?;
+                    // SAFETY: `fd` is an open directory descriptor we just created.
+                    if unsafe { libc::fchmod(fd.as_raw_fd(), 0o700) } != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    Ok(())
+                })();
+                if let Err(error) = harden {
+                    drop(fd);
+                    let _ = self.rmdir_stage(&c_name);
+                    return Err(ContainedFsError::Io(error));
+                }
+                return Ok((c_name, Self { fd }));
+            }
+            Err(ContainedFsError::Io(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "could not allocate a unique private staging directory",
+            )))
+        }
+
+        fn rmdir_stage(&self, stage_name: &CString) -> io::Result<()> {
+            // SAFETY: `self.fd` is an open directory descriptor and `stage_name` is valid.
+            let rc = unsafe {
+                libc::unlinkat(self.fd.as_raw_fd(), stage_name.as_ptr(), libc::AT_REMOVEDIR)
+            };
+            if rc == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+
         fn unlink_temp(&self, temp_name: &CString) -> io::Result<()> {
             // SAFETY: `self.fd` is an open directory descriptor and `temp_name` is valid.
             let rc = unsafe { libc::unlinkat(self.fd.as_raw_fd(), temp_name.as_ptr(), 0) };
@@ -920,6 +1016,7 @@ mod platform {
     #[cfg(target_os = "linux")]
     fn strip_inherited_acl(temp_fd: std::os::fd::RawFd) -> io::Result<()> {
         remove_linux_xattr_if_present(temp_fd, c"system.posix_acl_access")?;
+        remove_linux_xattr_if_present(temp_fd, c"system.posix_acl_default")?;
         remove_linux_xattr_if_present(temp_fd, c"system.nfs4_acl")?;
         Ok(())
     }
@@ -1264,6 +1361,7 @@ mod platform {
     const FILE_TRAVERSE: u32 = 0x0000_0020;
     const DELETE: u32 = 0x0001_0000;
     const READ_CONTROL: u32 = 0x0002_0000;
+    const WRITE_DAC: u32 = 0x0004_0000;
     const WRITE_OWNER: u32 = 0x0008_0000;
     const SYNCHRONIZE: u32 = 0x0010_0000;
     const GENERIC_READ: u32 = 0x8000_0000;
@@ -1287,8 +1385,22 @@ mod platform {
     const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
     const FILE_DISPOSITION_INFORMATION_CLASS: u32 = 13;
     const OWNER_SECURITY_INFORMATION: u32 = 0x0000_0001;
-    const GROUP_SECURITY_INFORMATION: u32 = 0x0000_0002;
     const DACL_SECURITY_INFORMATION: u32 = 0x0000_0004;
+    const SE_DACL_PROTECTED: u16 = 0x1000;
+
+    #[repr(C)]
+    struct AclHeader {
+        acl_revision: u8,
+        sbz1: u8,
+        acl_size: u16,
+        ace_count: u16,
+        sbz2: u16,
+    }
+
+    struct ExistingWindowsSecurity {
+        owner_sd: Option<Vec<usize>>,
+        dacl_sd: Option<Vec<usize>>,
+    }
 
     #[repr(C)]
     struct UnicodeString {
@@ -1372,6 +1484,17 @@ mod platform {
             security_descriptor: *mut c_void,
             owner: *mut *mut c_void,
             owner_defaulted: *mut i32,
+        ) -> i32;
+        fn GetSecurityDescriptorControl(
+            security_descriptor: *mut c_void,
+            control: *mut u16,
+            revision: *mut u32,
+        ) -> i32;
+        fn GetSecurityDescriptorDacl(
+            security_descriptor: *mut c_void,
+            dacl_present: *mut i32,
+            dacl: *mut *mut c_void,
+            dacl_defaulted: *mut i32,
         ) -> i32;
         fn EqualSid(sid1: *mut c_void, sid2: *mut c_void) -> i32;
     }
@@ -1573,19 +1696,27 @@ mod platform {
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             validate_single_file_name(file_name)?;
-            let mut existing_sd = self
+            let mut existing_security = self
                 .inspect_entry(file_name, true)?
                 .and_then(|(_, security)| security);
-            let security_descriptor = existing_sd.as_mut().map_or(std::ptr::null_mut(), |buffer| {
-                buffer.as_mut_ptr().cast::<c_void>()
-            });
+            let initial_dacl = existing_security
+                .as_mut()
+                .and_then(|sec| sec.dacl_sd.as_mut())
+                .map_or(std::ptr::null_mut(), |buffer| {
+                    buffer.as_mut_ptr().cast::<c_void>()
+                });
 
-            let mut temp_file = self.create_temp_file(security_descriptor)?;
+            let mut temp_file = self.create_temp_file(initial_dacl, existing_security.is_some())?;
             let write_result = (|| -> io::Result<()> {
                 temp_file.write_all(bytes)?;
                 temp_file.flush()?;
-                if let Some(existing_sd) = existing_sd.as_mut() {
-                    restore_windows_owner(temp_file.as_raw_handle(), existing_sd)?;
+                if let Some(existing_security) = existing_security.as_mut() {
+                    if let Some(owner_sd) = existing_security.owner_sd.as_mut() {
+                        restore_windows_owner(temp_file.as_raw_handle(), owner_sd)?;
+                    }
+                    if let Some(dacl_sd) = existing_security.dacl_sd.as_mut() {
+                        restore_and_verify_windows_dacl(temp_file.as_raw_handle(), dacl_sd)?;
+                    }
                 }
                 if durability.syncs_file() {
                     temp_file.sync_all()?;
@@ -1612,7 +1743,8 @@ mod platform {
             &self,
             file_name: &OsStr,
             for_replace: bool,
-        ) -> Result<Option<(FileIdentity, Option<Vec<usize>>)>, ContainedFsError> {
+        ) -> Result<Option<(FileIdentity, Option<ExistingWindowsSecurity>)>, ContainedFsError>
+        {
             let access = if for_replace {
                 FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE
             } else {
@@ -1640,12 +1772,15 @@ mod platform {
                 )));
             }
             let security = if for_replace {
-                read_security_descriptor(
-                    handle.as_raw_handle(),
-                    OWNER_SECURITY_INFORMATION
-                        | GROUP_SECURITY_INFORMATION
-                        | DACL_SECURITY_INFORMATION,
-                )?
+                let owner_sd =
+                    read_security_descriptor(handle.as_raw_handle(), OWNER_SECURITY_INFORMATION)?;
+                let dacl_sd =
+                    read_security_descriptor(handle.as_raw_handle(), DACL_SECURITY_INFORMATION)?;
+                if owner_sd.is_none() && dacl_sd.is_none() {
+                    None
+                } else {
+                    Some(ExistingWindowsSecurity { owner_sd, dacl_sd })
+                }
             } else {
                 None
             };
@@ -1662,11 +1797,12 @@ mod platform {
         fn create_temp_file(
             &self,
             security_descriptor: *mut c_void,
+            preserving_security: bool,
         ) -> Result<File, ContainedFsError> {
-            let desired_access = if security_descriptor.is_null() {
-                GENERIC_WRITE | DELETE | SYNCHRONIZE
+            let desired_access = if preserving_security {
+                GENERIC_WRITE | READ_CONTROL | WRITE_DAC | WRITE_OWNER | DELETE | SYNCHRONIZE
             } else {
-                GENERIC_WRITE | READ_CONTROL | WRITE_OWNER | DELETE | SYNCHRONIZE
+                GENERIC_WRITE | DELETE | SYNCHRONIZE
             };
             let pid = std::process::id();
             for _ in 0..128 {
@@ -1927,6 +2063,100 @@ mod platform {
                     format!("cannot preserve original Windows file owner on replacement: {error}"),
                 ));
             }
+        }
+        Ok(())
+    }
+
+    fn extract_windows_dacl(sd: &mut [usize]) -> io::Result<(bool, bool, Option<&[u8]>)> {
+        let mut control: u16 = 0;
+        let mut revision: u32 = 0;
+        // SAFETY: `sd` is a valid security descriptor returned by `GetKernelObjectSecurity`.
+        if unsafe {
+            GetSecurityDescriptorControl(
+                sd.as_mut_ptr().cast::<c_void>(),
+                &mut control,
+                &mut revision,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let mut dacl_present: i32 = 0;
+        let mut dacl_ptr: *mut c_void = std::ptr::null_mut();
+        let mut dacl_defaulted: i32 = 0;
+        // SAFETY: `sd` is a valid security descriptor returned by `GetKernelObjectSecurity`.
+        if unsafe {
+            GetSecurityDescriptorDacl(
+                sd.as_mut_ptr().cast::<c_void>(),
+                &mut dacl_present,
+                &mut dacl_ptr,
+                &mut dacl_defaulted,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let protected = (control & SE_DACL_PROTECTED) != 0;
+        if dacl_present == 0 {
+            return Ok((protected, false, None));
+        }
+        if dacl_ptr.is_null() {
+            return Ok((protected, true, None));
+        }
+        // SAFETY: `dacl_ptr` points to a valid Windows `ACL` header inside `sd`.
+        let header = unsafe { &*dacl_ptr.cast::<AclHeader>() };
+        let acl_size = usize::from(header.acl_size);
+        // SAFETY: `acl_size` bytes starting at `dacl_ptr` belong to the valid ACL inside `sd`.
+        let bytes = unsafe { std::slice::from_raw_parts(dacl_ptr.cast::<u8>(), acl_size) };
+        Ok((protected, true, Some(bytes)))
+    }
+
+    fn windows_dacl_matches(
+        expected_sd: &mut [usize],
+        actual_sd: Option<&mut [usize]>,
+    ) -> io::Result<bool> {
+        let Some(actual_sd) = actual_sd else {
+            return Ok(false);
+        };
+        let expected = extract_windows_dacl(expected_sd)?;
+        let actual = extract_windows_dacl(actual_sd)?;
+        Ok(expected == actual)
+    }
+
+    fn restore_and_verify_windows_dacl(
+        temp_handle: *mut c_void,
+        existing_dacl_sd: &mut [usize],
+    ) -> io::Result<()> {
+        let mut current_dacl_sd = read_security_descriptor(temp_handle, DACL_SECURITY_INFORMATION)
+            .map_err(ContainedFsError::into_io_error)?;
+        if windows_dacl_matches(existing_dacl_sd, current_dacl_sd.as_deref_mut())? {
+            return Ok(());
+        }
+        // Apply the original DACL directly via `SetKernelObjectSecurity` (which
+        // does not run Win32 parent auto-inheritance) and re-verify the
+        // effective DACL before publishing the replacement.
+        // SAFETY: `temp_handle` was opened with `WRITE_DAC` and `existing_dacl_sd` is valid.
+        if unsafe {
+            SetKernelObjectSecurity(
+                temp_handle,
+                DACL_SECURITY_INFORMATION,
+                existing_dacl_sd.as_mut_ptr().cast::<c_void>(),
+            )
+        } == 0
+        {
+            let error = io::Error::last_os_error();
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("cannot preserve original Windows DACL on replacement: {error}"),
+            ));
+        }
+        let mut verified_dacl_sd = read_security_descriptor(temp_handle, DACL_SECURITY_INFORMATION)
+            .map_err(ContainedFsError::into_io_error)?;
+        if !windows_dacl_matches(existing_dacl_sd, verified_dacl_sd.as_deref_mut())? {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "cannot verify exact Windows DACL preservation on replacement",
+            ));
         }
         Ok(())
     }
