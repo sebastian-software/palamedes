@@ -3406,9 +3406,20 @@ const PODMAN_BUILD_VALUE_FLAGS = new Set([
 
 const GITHUB_WORKSPACE_PREFIX_PATTERN =
   /^(?:\$\{\{\s*github\.workspace\s*\}\}|\$(?:\{GITHUB_WORKSPACE\}|GITHUB_WORKSPACE|\{env:GITHUB_WORKSPACE\}|env:GITHUB_WORKSPACE)|%GITHUB_WORKSPACE%)(?:[\\/]+(?<rest>.*)|$)/iu;
+const GITHUB_ACTION_PATH_PREFIX_PATTERN =
+  /^(?:\$\{\{\s*github\.action_path\s*\}\}|\$(?:\{GITHUB_ACTION_PATH\}|GITHUB_ACTION_PATH|\{env:GITHUB_ACTION_PATH\}|env:GITHUB_ACTION_PATH)|%GITHUB_ACTION_PATH%)(?:[\\/]+(?<rest>.*)|$)/iu;
 const PWD_PREFIX_PATTERN = /^(?:\$(?:\{PWD\}|PWD))(?:[\\/]+(?<rest>.*)|$)/u;
 
-function resolveContainedPath(rawPath, baseDir, root, { windowsPath = false } = {}) {
+function referencesUnresolvedInput(value) {
+  return new RegExp(INPUTS_EXPRESSION_PATTERN.source, "iu").test(String(value ?? ""));
+}
+
+function resolveContainedPath(
+  rawPath,
+  baseDir,
+  root,
+  { windowsPath = false, actionDir = null } = {},
+) {
   if (!root || !rawPath) {
     return null;
   }
@@ -3421,9 +3432,15 @@ function resolveContainedPath(rawPath, baseDir, root, { windowsPath = false } = 
     trimmed = workspaceMatch.groups.rest ?? ".";
     effectiveBaseDir = resolvedRoot;
   } else {
-    const pwdMatch = PWD_PREFIX_PATTERN.exec(trimmed);
-    if (pwdMatch) {
-      trimmed = pwdMatch.groups.rest ?? ".";
+    const actionMatch = actionDir !== null ? GITHUB_ACTION_PATH_PREFIX_PATTERN.exec(trimmed) : null;
+    if (actionMatch) {
+      trimmed = actionMatch.groups.rest ?? ".";
+      effectiveBaseDir = path.resolve(actionDir);
+    } else {
+      const pwdMatch = PWD_PREFIX_PATTERN.exec(trimmed);
+      if (pwdMatch) {
+        trimmed = pwdMatch.groups.rest ?? ".";
+      }
     }
   }
 
@@ -3476,7 +3493,11 @@ function normalizeCheckoutSubdir(rawPath, { windowsPath = false } = {}) {
   return normalized.replace(/\/+$/u, "");
 }
 
-function resolveWorkspaceRelativePath(rawPath, currentWsRelDir, { windowsPath = false } = {}) {
+function resolveWorkspaceRelativePath(
+  rawPath,
+  currentWsRelDir,
+  { windowsPath = false, actionWsRelDir = null } = {},
+) {
   if (!rawPath) {
     return null;
   }
@@ -3488,9 +3509,16 @@ function resolveWorkspaceRelativePath(rawPath, currentWsRelDir, { windowsPath = 
     trimmed = workspaceMatch.groups.rest ?? ".";
     effectiveBase = "";
   } else {
-    const pwdMatch = PWD_PREFIX_PATTERN.exec(trimmed);
-    if (pwdMatch) {
-      trimmed = pwdMatch.groups.rest ?? ".";
+    const actionMatch =
+      actionWsRelDir !== null ? GITHUB_ACTION_PATH_PREFIX_PATTERN.exec(trimmed) : null;
+    if (actionMatch) {
+      trimmed = actionMatch.groups.rest ?? ".";
+      effectiveBase = actionWsRelDir;
+    } else {
+      const pwdMatch = PWD_PREFIX_PATTERN.exec(trimmed);
+      if (pwdMatch) {
+        trimmed = pwdMatch.groups.rest ?? ".";
+      }
     }
   }
 
@@ -4761,6 +4789,7 @@ function inspectShellText(
               )) {
                 const resolved = resolveWorkspaceRelativePath(candidate.text, baseDir, {
                   windowsPath: isWindowsShell,
+                  actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
                 });
                 if (resolved === null || seenDirs.has(resolved)) {
                   continue;
@@ -4823,6 +4852,7 @@ function inspectShellText(
             )) {
               const resolved = resolveWorkspaceRelativePath(candidate.text, baseDir, {
                 windowsPath: isWindowsShell,
+                actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
               });
               if (resolved === null || seenDirs.has(resolved)) {
                 continue;
@@ -5097,6 +5127,7 @@ function inspectShellText(
       const rawBuildContexts = [];
       const rawBuildArgs = [];
       const rawPlatforms = [];
+      const rawBuildImageOverrides = [];
       let contextArg = null;
       for (let index = buildArgStart; index < tokens.length; index += 1) {
         const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
@@ -5172,6 +5203,29 @@ function inspectShellText(
           rawPlatforms.push(token.slice("--platform=".length));
           continue;
         }
+        if (normalizedCli === "podman" || normalizedCli === "buildah") {
+          if (token === "--from" || token === "--sbom-scanner-image") {
+            if (tokens[index + 1] !== undefined) {
+              rawBuildImageOverrides.push({ flag: token, rawValue: tokens[index + 1] });
+            }
+            index += 1;
+            continue;
+          }
+          if (token.startsWith("--from=")) {
+            rawBuildImageOverrides.push({
+              flag: "--from",
+              rawValue: token.slice("--from=".length),
+            });
+            continue;
+          }
+          if (token.startsWith("--sbom-scanner-image=")) {
+            rawBuildImageOverrides.push({
+              flag: "--sbom-scanner-image",
+              rawValue: token.slice("--sbom-scanner-image=".length),
+            });
+            continue;
+          }
+        }
         if (token.startsWith("-") && token !== "-") {
           const buildValueFlags =
             normalizedCli === "podman" || normalizedCli === "buildah"
@@ -5233,6 +5287,45 @@ function inspectShellText(
           if (!seenContextProblems.has(message)) {
             seenContextProblems.add(message);
             problems.push(message);
+          }
+        }
+
+        for (const { flag, rawValue } of rawBuildImageOverrides) {
+          const expandedOverride = resolveImageTokenCandidates(
+            rawValue,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          if (expandedOverride.truncated) {
+            const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
+            if (!seenContextProblems.has(limitMsg)) {
+              seenContextProblems.add(limitMsg);
+              problems.push(limitMsg);
+            }
+          }
+          for (const varCandidate of expandedOverride.candidates) {
+            for (const candidate of expandMatrixReferences(
+              varCandidate.text,
+              rowList,
+              varCandidate.line,
+            )) {
+              const imageRef = candidate.text.trim();
+              if (!imageRef || isDynamicReference(imageRef, shellMode)) {
+                continue;
+              }
+              if (flag === "--from" && imageRef.toLowerCase() === "scratch") {
+                continue;
+              }
+              if (!isPinnedDigest(imageRef)) {
+                const msg = `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`;
+                if (!seenContextProblems.has(msg)) {
+                  seenContextProblems.add(msg);
+                  problems.push(msg);
+                }
+              }
+            }
           }
         }
 
@@ -5348,6 +5441,7 @@ function inspectShellText(
                   )) {
                     const wsRel = resolveWorkspaceRelativePath(candidate.text, activeWorkingDir, {
                       windowsPath: isWindowsShell,
+                      actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
                     });
                     const mappedTargets = resolveWorkspaceTargetsInRepo(
                       wsRel,
@@ -5356,6 +5450,12 @@ function inspectShellText(
                       buildFileContext.foreignCheckoutPrefixes,
                     ).filter((target) => target !== path.resolve(buildFileContext.root));
                     if (mappedTargets.length === 0) {
+                      if (
+                        buildFileContext.deferUnresolvedInputs &&
+                        referencesUnresolvedInput(candidate.text)
+                      ) {
+                        continue;
+                      }
                       pushStdinProblem(
                         `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
                       );
@@ -5481,6 +5581,7 @@ function inspectShellText(
               )) {
                 const wsRel = resolveWorkspaceRelativePath(candidate.text, activeWorkingDir, {
                   windowsPath: isWindowsShell,
+                  actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
                 });
                 const mappedTargets = resolveWorkspaceTargetsInRepo(
                   wsRel,
@@ -5489,6 +5590,12 @@ function inspectShellText(
                   buildFileContext.foreignCheckoutPrefixes,
                 ).filter((target) => target !== path.resolve(buildFileContext.root));
                 if (mappedTargets.length === 0) {
+                  if (
+                    buildFileContext.deferUnresolvedInputs &&
+                    referencesUnresolvedInput(candidate.text)
+                  ) {
+                    continue;
+                  }
                   const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
                   if (!seenContextProblems.has(unverifiableMsg)) {
                     seenContextProblems.add(unverifiableMsg);
@@ -5554,6 +5661,7 @@ function inspectShellText(
                   }
                   const wsCtx = resolveWorkspaceRelativePath(ctxText, activeWorkingDir, {
                     windowsPath: isWindowsShell,
+                    actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
                   });
                   const mappedCtxs = resolveWorkspaceTargetsInRepo(
                     wsCtx,
@@ -5570,6 +5678,12 @@ function inspectShellText(
                     }
                   } else if (ctxText) {
                     hadUnresolvableContext = true;
+                    if (
+                      buildFileContext.deferUnresolvedInputs &&
+                      referencesUnresolvedInput(ctxText)
+                    ) {
+                      continue;
+                    }
                     const unverifiableMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
                     if (!seenContextProblems.has(unverifiableMsg)) {
                       seenContextProblems.add(unverifiableMsg);
@@ -6195,6 +6309,7 @@ function resolveWorkingDirsForRow(
   row,
   root,
   windowsPath = false,
+  actionWsRelDir = null,
 ) {
   if (!root) {
     return [null];
@@ -6212,7 +6327,10 @@ function resolveWorkingDirsForRow(
   const seen = new Set();
   for (const envCandidate of resolveEnvExpressionCandidates(rawDir, stepEnv, line).candidates) {
     for (const candidate of expandMatrixReferences(envCandidate.text, rowList, envCandidate.line)) {
-      const resolved = resolveWorkspaceRelativePath(candidate.text, "", { windowsPath });
+      const resolved = resolveWorkspaceRelativePath(candidate.text, "", {
+        windowsPath,
+        actionWsRelDir,
+      });
       if (resolved !== null && !seen.has(resolved)) {
         seen.add(resolved);
         dirs.push(resolved);
@@ -6231,6 +6349,7 @@ function resolveStepExecutionGroups(
   applicableContexts,
   matrixRows,
   root,
+  actionWsRelDir = null,
 ) {
   const expandShellTemplate = (template, fallbackLine, row, rowStepEnv) => {
     const rowList = row ? [row] : [];
@@ -6278,6 +6397,7 @@ function resolveStepExecutionGroups(
       ctx.row,
       root,
       ctx.runnerOs === "Windows",
+      actionWsRelDir,
     );
     for (const mode of modes) {
       for (const workingDir of workingDirs) {
@@ -6756,6 +6876,12 @@ function checkStepsList(
                       resolvedContexts.push({ kind: "git", dir: resolvedDir });
                     }
                   } else if (ctxText) {
+                    if (
+                      buildFileContext.deferUnresolvedInputs &&
+                      referencesUnresolvedInput(ctxText)
+                    ) {
+                      continue;
+                    }
                     const unverifiableMsg = `${filePath}:${candidate.line}: build context ${ctxText} cannot be verified statically`;
                     if (!seenActionContextProblems.has(unverifiableMsg)) {
                       seenActionContextProblems.add(unverifiableMsg);
@@ -6772,7 +6898,9 @@ function checkStepsList(
                   }
                   continue;
                 }
-                const wsDir = resolveWorkspaceRelativePath(ctxText, "");
+                const wsDir = resolveWorkspaceRelativePath(ctxText, "", {
+                  actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                });
                 const mappedDirs = resolveWorkspaceTargetsInRepo(
                   wsDir,
                   buildFileContext.root,
@@ -6788,6 +6916,12 @@ function checkStepsList(
                     }
                   }
                 } else if (ctxText) {
+                  if (
+                    buildFileContext.deferUnresolvedInputs &&
+                    referencesUnresolvedInput(ctxText)
+                  ) {
+                    continue;
+                  }
                   const unverifiableMsg = `${filePath}:${candidate.line}: build context ${ctxText} cannot be verified statically`;
                   if (!seenActionContextProblems.has(unverifiableMsg)) {
                     seenActionContextProblems.add(unverifiableMsg);
@@ -6845,13 +6979,16 @@ function checkStepsList(
                       candidate.text,
                       fileMode.dir,
                       fileMode.dir,
+                      { actionDir: buildFileContext.actionRepoDir ?? null },
                     );
                     mappedPaths =
                       resolvedPath && resolvedPath !== path.resolve(fileMode.dir)
                         ? [resolvedPath]
                         : [];
                   } else {
-                    const wsFile = resolveWorkspaceRelativePath(candidate.text, "");
+                    const wsFile = resolveWorkspaceRelativePath(candidate.text, "", {
+                      actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                    });
                     mappedPaths = resolveWorkspaceTargetsInRepo(
                       wsFile,
                       buildFileContext.root,
@@ -6860,6 +6997,12 @@ function checkStepsList(
                     ).filter((target) => target !== path.resolve(buildFileContext.root));
                   }
                   if (mappedPaths.length === 0) {
+                    if (
+                      buildFileContext.deferUnresolvedInputs &&
+                      referencesUnresolvedInput(candidate.text)
+                    ) {
+                      continue;
+                    }
                     const unverifiableMsg = `${filePath}:${fileNode.line}: build file ${candidate.text} cannot be verified statically`;
                     if (!seenActionContextProblems.has(unverifiableMsg)) {
                       seenActionContextProblems.add(unverifiableMsg);
@@ -6978,7 +7121,9 @@ function checkStepsList(
           if (!localRef.startsWith("./")) {
             continue;
           }
-          const wsActionDir = resolveWorkspaceRelativePath(localRef, "");
+          const wsActionDir = resolveWorkspaceRelativePath(localRef, "", {
+            actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+          });
           const actionDirs = resolveWorkspaceTargetsInRepo(
             wsActionDir,
             buildFileContext.root,
@@ -6986,6 +7131,9 @@ function checkStepsList(
             rowForeignPrefixes,
           );
           if (actionDirs.length === 0) {
+            if (buildFileContext.deferUnresolvedInputs && referencesUnresolvedInput(localRef)) {
+              continue;
+            }
             pushCompositeProblem(
               `${filePath}:${usesNode.line}: local action ${localRef} cannot be verified statically`,
             );
@@ -6993,6 +7141,7 @@ function checkStepsList(
           }
           let foundManifestOrError = false;
           for (const actionDir of actionDirs) {
+            let foundYamlManifest = false;
             for (const manifestName of ["action.yml", "action.yaml"]) {
               const manifestPath = path.join(actionDir, manifestName);
               const targetProblems = [];
@@ -7002,6 +7151,7 @@ function checkStepsList(
                 targetProblems,
               );
               if (safeActionFile) {
+                foundYamlManifest = true;
                 foundManifestOrError = true;
                 if (!seenActionFiles.has(safeActionFile)) {
                   seenActionFiles.add(safeActionFile);
@@ -7010,11 +7160,39 @@ function checkStepsList(
                 break;
               }
               if (targetProblems.length > 0) {
+                foundYamlManifest = true;
                 foundManifestOrError = true;
                 for (const problem of targetProblems) {
                   pushCompositeProblem(problem);
                 }
                 break;
+              }
+            }
+            if (!foundYamlManifest) {
+              const dockerfilePath = findDefaultBuildFile(actionDir, ["Dockerfile", "dockerfile"]);
+              if (dockerfilePath) {
+                const targetProblems = [];
+                const safeDockerfile = resolveSafeContainerFile(
+                  dockerfilePath,
+                  buildFileContext.root,
+                  targetProblems,
+                );
+                if (safeDockerfile) {
+                  foundManifestOrError = true;
+                  buildFileContext.explicitBuildFiles.add(dockerfilePath);
+                  recordBuildInvocation(
+                    dockerfilePath,
+                    new Map(),
+                    new Set(),
+                    filePath,
+                    usesNode.line,
+                    buildFileContext.buildInvocations,
+                    [],
+                  );
+                } else if (targetProblems.length > 0) {
+                  foundManifestOrError = true;
+                  buildFileContext.explicitBuildFiles.add(dockerfilePath);
+                }
               }
             }
           }
@@ -7168,6 +7346,7 @@ function checkStepsList(
       applicableContexts,
       applicableMatrixRows,
       buildFileContext?.root ?? null,
+      buildFileContext?.actionWsRelDir ?? null,
     );
 
     const runNode = getMapField(stepNode, "run");
@@ -7732,18 +7911,21 @@ export function unpinnedWorkflowContainerReferences(
     for (const [key, entry] of inputOverrides) {
       mergedCallInputs.set(key.toLowerCase(), entry);
     }
-    workflowInputContexts.push(mergedCallInputs);
+    workflowInputContexts.push({ inputs: mergedCallInputs, deferUnresolvedInputs: false });
   } else {
+    const onNode = getMapField(doc, "on");
+    const hasWorkflowCallTrigger =
+      onNode?.kind === "map" && getMapField(onNode, "workflow_call") !== null;
     const wfCallDefaults = extractTriggerInputDefaults(doc, "workflow_call");
     const wfDispatchDefaults = extractTriggerInputDefaults(doc, "workflow_dispatch");
-    if (wfCallDefaults.size > 0) {
-      workflowInputContexts.push(wfCallDefaults);
+    if (wfCallDefaults.size > 0 || hasWorkflowCallTrigger) {
+      workflowInputContexts.push({ inputs: wfCallDefaults, deferUnresolvedInputs: true });
     }
     if (wfDispatchDefaults.size > 0) {
-      workflowInputContexts.push(wfDispatchDefaults);
+      workflowInputContexts.push({ inputs: wfDispatchDefaults, deferUnresolvedInputs: false });
     }
     if (workflowInputContexts.length === 0) {
-      workflowInputContexts.push(new Map());
+      workflowInputContexts.push({ inputs: new Map(), deferUnresolvedInputs: false });
     }
   }
 
@@ -7754,7 +7936,11 @@ export function unpinnedWorkflowContainerReferences(
   const seenDocProblems = new Set(problems);
 
   for (let ctxIndex = 0; ctxIndex < workflowInputContexts.length; ctxIndex += 1) {
-    const effectiveWorkflowInputs = workflowInputContexts[ctxIndex];
+    const { inputs: effectiveWorkflowInputs, deferUnresolvedInputs } =
+      workflowInputContexts[ctxIndex];
+    const ctxBuildFileContext = buildFileContext
+      ? { ...buildFileContext, deferUnresolvedInputs }
+      : null;
     const substitutionMemo = new Map();
     const applyWorkflowInputs = (node) =>
       effectiveWorkflowInputs.size > 0
@@ -7807,7 +7993,7 @@ export function unpinnedWorkflowContainerReferences(
       ctxProblems,
       workflowDefaultShell,
       [],
-      buildFileContext,
+      ctxBuildFileContext,
       workflowDefaultWorkingDir,
       emittedGithubEnv,
     );
@@ -7835,6 +8021,24 @@ export function unpinnedWorkflowContainerReferences(
           recordExplicitBuildFile(rawImage, actionDir, root, buildFileContext.explicitBuildFiles);
         }
       }
+      let actionBuildContext = buildFileContext;
+      if (buildFileContext) {
+        const actionRepoDir = path.dirname(path.resolve(root, filePath));
+        const relActionDir = path.posix.normalize(formatPortableRelativePath(root, actionRepoDir));
+        const normalizedActionDir = relActionDir === "." ? "" : relActionDir;
+        const primaryCheckout = buildFileContext.checkoutPrefixes?.[0] ?? "";
+        const actionWsRelDir = primaryCheckout
+          ? normalizedActionDir
+            ? `${primaryCheckout}/${normalizedActionDir}`
+            : primaryCheckout
+          : normalizedActionDir;
+        actionBuildContext = {
+          ...buildFileContext,
+          actionRepoDir,
+          actionWsRelDir,
+          deferUnresolvedInputs: !inputOverrides,
+        };
+      }
       checkStepsList(
         getMapField(effectiveRunsNode, "steps"),
         workflowEnv,
@@ -7843,7 +8047,7 @@ export function unpinnedWorkflowContainerReferences(
         ctxProblems,
         workflowDefaultShell,
         [],
-        buildFileContext,
+        actionBuildContext,
         workflowDefaultWorkingDir,
         emittedGithubEnv,
       );
@@ -7861,7 +8065,7 @@ export function unpinnedWorkflowContainerReferences(
         if (
           jobUsesNode?.kind === "scalar" &&
           String(jobUsesNode.value).trim().startsWith("./") &&
-          buildFileContext?.root
+          ctxBuildFileContext?.root
         ) {
           const rawJobUses = String(jobUsesNode.value).trim();
           const jobWithNode = getMapField(jobNode, "with");
@@ -7875,10 +8079,16 @@ export function unpinnedWorkflowContainerReferences(
           };
           const resolvedWorkflowPath = resolveContainedPath(
             rawJobUses,
-            buildFileContext.root,
-            buildFileContext.root,
+            ctxBuildFileContext.root,
+            ctxBuildFileContext.root,
           );
           if (!resolvedWorkflowPath) {
+            if (
+              ctxBuildFileContext.deferUnresolvedInputs &&
+              referencesUnresolvedInput(rawJobUses)
+            ) {
+              continue;
+            }
             pushCalleeProblem(
               `${filePath}:${jobUsesNode.line}: local reusable workflow ${rawJobUses} cannot be verified statically`,
             );
@@ -7887,7 +8097,7 @@ export function unpinnedWorkflowContainerReferences(
           const targetProblems = [];
           const safeWorkflowFile = resolveSafeContainerFile(
             resolvedWorkflowPath,
-            buildFileContext.root,
+            ctxBuildFileContext.root,
             targetProblems,
           );
           for (const targetProblem of targetProblems) {
@@ -7901,7 +8111,7 @@ export function unpinnedWorkflowContainerReferences(
             }
             continue;
           }
-          const activeCallStack = buildFileContext.actionCallStack ?? new Set();
+          const activeCallStack = ctxBuildFileContext.actionCallStack ?? new Set();
           if (activeCallStack.has(safeWorkflowFile)) {
             continue;
           }
@@ -7914,8 +8124,11 @@ export function unpinnedWorkflowContainerReferences(
           const nextCallStack = new Set(activeCallStack);
           nextCallStack.add(safeWorkflowFile);
           const calleeSource = readFileSync(safeWorkflowFile, "utf8");
-          const calleeRelPath = formatPortableRelativePath(buildFileContext.root, safeWorkflowFile);
-          const checkedLocalActionPins = buildFileContext.checkedLocalActionPins ?? new Set();
+          const calleeRelPath = formatPortableRelativePath(
+            ctxBuildFileContext.root,
+            safeWorkflowFile,
+          );
+          const checkedLocalActionPins = ctxBuildFileContext.checkedLocalActionPins ?? new Set();
           if (!checkedLocalActionPins.has(safeWorkflowFile)) {
             checkedLocalActionPins.add(safeWorkflowFile);
             for (const pinProblem of unpinnedActionReferences(calleeSource, calleeRelPath)) {
@@ -7937,9 +8150,9 @@ export function unpinnedWorkflowContainerReferences(
                 calleeSource,
                 calleeRelPath,
                 {
-                  root: buildFileContext.root,
-                  explicitBuildFiles: buildFileContext.explicitBuildFiles,
-                  buildInvocations: buildFileContext.buildInvocations,
+                  root: ctxBuildFileContext.root,
+                  explicitBuildFiles: ctxBuildFileContext.explicitBuildFiles,
+                  buildInvocations: ctxBuildFileContext.buildInvocations,
                   inputOverrides: calleeInputOverrides,
                   actionCallStack: nextCallStack,
                   checkedLocalActionPins,
@@ -7965,7 +8178,7 @@ export function unpinnedWorkflowContainerReferences(
           ctxProblems,
           jobExplicitShell,
           runnerContexts,
-          buildFileContext,
+          ctxBuildFileContext,
           jobDefaultWorkingDir,
         );
       }

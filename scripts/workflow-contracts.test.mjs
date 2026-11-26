@@ -2831,6 +2831,87 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r33Fixture, { recursive: true, force: true });
     }
+    // Podman/Buildah `--from` and `--sbom-scanner-image` image overrides,
+    // deferring required composite-action inputs to their callers, resolving
+    // `GITHUB_ACTION_PATH` / `github.action_path`, and Dockerfile-only local actions.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          "  - run: |",
+          "      podman build --from alpine:3.20 .",
+          `      podman build --from scratch --sbom-scanner-image=syft:1.0 .`,
+          `      buildah bud --from node:24@${digest} --sbom-scanner-image syft:1.0@${digest} .`,
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:3: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:4: syft:1.0 is not pinned to a sha256 digest",
+    ]);
+    const r34Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r34-"));
+    try {
+      await mkdir(join(r34Fixture, ".github", "workflows"), { recursive: true });
+      await mkdir(join(r34Fixture, ".github", "actions", "build-ctx"), { recursive: true });
+      await mkdir(join(r34Fixture, ".github", "actions", "self-build"), { recursive: true });
+      await mkdir(join(r34Fixture, "service"), { recursive: true });
+      await mkdir(join(r34Fixture, "docker-only-action"), { recursive: true });
+      await writeFile(join(r34Fixture, "service", "Dockerfile"), "FROM scratch\n");
+      await writeFile(
+        join(r34Fixture, ".github", "actions", "build-ctx", "action.yml"),
+        [
+          "inputs:",
+          "  context:",
+          "    required: true",
+          "runs:",
+          "  using: composite",
+          "  steps:",
+          "    - shell: bash",
+          '      run: docker build "${{ inputs.context }}"',
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r34Fixture, ".github", "actions", "self-build", "Dockerfile"),
+        `FROM node:24@${digest}\n`,
+      );
+      await writeFile(
+        join(r34Fixture, ".github", "actions", "self-build", "action.yml"),
+        [
+          "runs:",
+          "  using: composite",
+          "  steps:",
+          "    - shell: bash",
+          '      run: docker build "$GITHUB_ACTION_PATH"',
+          "    - shell: bash",
+          '      run: docker build -f "${{ github.action_path }}/Dockerfile" "$GITHUB_ACTION_PATH"',
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r34Fixture, "docker-only-action", "Dockerfile"),
+        `FROM node:24@${digest}\n`,
+      );
+      await writeFile(
+        join(r34Fixture, ".github", "workflows", "ci.yml"),
+        [
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - uses: ./.github/actions/build-ctx",
+          "        with:",
+          "          context: service",
+          "      - uses: ./.github/actions/self-build",
+          "      - uses: ./docker-only-action",
+          "",
+        ].join("\n"),
+      );
+      const r34Result = checkWorkflowPins(r34Fixture);
+      expect(r34Result.problems).toEqual([]);
+    } finally {
+      await rm(r34Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
