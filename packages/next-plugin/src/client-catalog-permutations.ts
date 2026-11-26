@@ -875,10 +875,1376 @@ function resolveIdentifierArrayInScope(
   return candidateValue;
 }
 
-function findTreeExpressionForPage(source: string, expectedPage: string): string | undefined {
+const ENTRYPOINT_EXPORTS = ["__next_app__", "routeModule", "handler"] as const;
+type EntrypointExportName = (typeof ENTRYPOINT_EXPORTS)[number];
+
+function isEntrypointExportName(value: string): value is EntrypointExportName {
+  return value === "__next_app__" || value === "routeModule" || value === "handler";
+}
+
+type EnclosingModuleContext = {
+  scopeStart: number;
+  scopeEnd: number;
+  isTopLevel: boolean;
+  moduleParam?: string;
+  moduleId?: string;
+};
+
+function findEnclosingModuleContext(
+  source: string,
+  targetOffset: number,
+): EnclosingModuleContext | undefined {
+  const braceStack: number[] = [];
+  let prevNonWsChar = "";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < targetOffset) {
+    const ch = source[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(source, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(source, index);
+      if (end === -1) return;
+      index = end;
+      prevNonWsChar = ch;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(source, index);
+      if (end === -1) return;
+      index = end;
+      prevNonWsChar = "`";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(source, index);
+      if (end !== -1) {
+        index = end;
+        prevNonWsChar = "/";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === "{") {
+      braceStack.push(index);
+      index += 1;
+      prevNonWsChar = "{";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "}") {
+      if (braceStack.length === 0) return;
+      braceStack.pop();
+      index += 1;
+      prevNonWsChar = "}";
+      regexAllowed = true;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < targetOffset && /[\w$]/u.test(source[index] ?? "")) index += 1;
+      const word = source.slice(wordStart, index);
+      prevNonWsChar = word.at(-1) ?? "";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < targetOffset && /[\w.]/u.test(source[index] ?? "")) index += 1;
+      prevNonWsChar = "0";
+      regexAllowed = false;
+      continue;
+    }
+    index += 1;
+    prevNonWsChar = ch ?? "";
+    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+
+  if (braceStack.length === 0) {
+    return { scopeStart: 0, scopeEnd: source.length, isTopLevel: true };
+  }
+  if (braceStack.length !== 1) return;
+
+  const openBrace = braceStack[0]!;
+  const closeBraceEnd = scanBalancedEnd(source, openBrace);
+  if (closeBraceEnd === -1) return;
+
+  const prefix = source.slice(0, openBrace);
+  const fnHeaderMatch =
+    /(?:^|[^\w$])(?:\(\s*([A-Za-z_$][\w$]*)\s*\)|([A-Za-z_$][\w$]*))\s*=>\s*$/u.exec(prefix) ??
+    /(?:^|[^\w$])function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*$/u.exec(prefix);
+  const moduleParam = fnHeaderMatch?.[1] ?? fnHeaderMatch?.[2];
+  if (!fnHeaderMatch || !moduleParam) return;
+
+  const fnStart =
+    fnHeaderMatch.index +
+    (fnHeaderMatch[0].startsWith("(") || /^[A-Za-z_$]/u.test(fnHeaderMatch[0]) ? 0 : 1);
+  const beforeFn = source.slice(0, fnStart);
+  const moduleIdMatch = /(?:^|[[,])\s*(\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*,\s*$/u.exec(
+    beforeFn,
+  );
+  return {
+    scopeStart: openBrace + 1,
+    scopeEnd: closeBraceEnd - 1,
+    isTopLevel: false,
+    moduleParam,
+    moduleId: moduleIdMatch?.[1],
+  };
+}
+
+function endsInitializerAt(source: string, exprEnd: number, limit = source.length): boolean {
+  const after = skipWhitespaceAndComments(source, exprEnd);
+  if (after >= limit) return true;
+  const nextChar = source[after];
+  if (nextChar === ";" || nextChar === "," || nextChar === "}") return true;
+  const hasNewline = /[\r\n]/u.test(source.slice(exprEnd, after));
+  return hasNewline && !/^[.[(?+\-*/%&|^=<>!:]/u.test(nextChar ?? "");
+}
+
+function extractEntrypointCallBinding(
+  scopeSource: string,
+  callParenOffset: number,
+  afterCloseParenOffset: number,
+): { entrypointVar: string; varStart: number; calleeText: string } | undefined {
+  if (!endsInitializerAt(scopeSource, afterCloseParenOffset)) return;
+
+  let declKind: "let" | "const" | "var" | undefined;
+  let exprDepth = 0;
+  let pendingCondition = false;
+  let conditionalStmt = false;
+  let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < callParenOffset) {
+    const ch = scopeSource[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (scopeSource[index + 1] === "/" || scopeSource[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(scopeSource, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(scopeSource, index);
+      if (end === -1) return;
+      index = end;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(scopeSource, index);
+      if (end === -1) return;
+      index = end;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(scopeSource, index);
+      if (end !== -1) {
+        index = end;
+        prevTokenKind = "other";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === "{") {
+      const end = scanBalancedEnd(scopeSource, index);
+      if (end === -1 || end > callParenOffset) return;
+      index = end;
+      prevTokenKind = "other";
+      conditionalStmt = false;
+      pendingCondition = false;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "(" || ch === "[") {
+      exprDepth += 1;
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ")" || ch === "]") {
+      if (exprDepth > 0) exprDepth -= 1;
+      if (ch === ")" && exprDepth === 0 && pendingCondition) {
+        pendingCondition = false;
+        conditionalStmt = true;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === ";") {
+      if (exprDepth === 0) {
+        declKind = undefined;
+        conditionalStmt = false;
+        pendingCondition = false;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ",") {
+      index += 1;
+      prevTokenKind = "comma";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ".") {
+      if (scopeSource[index + 1] === "." && scopeSource[index + 2] === ".") {
+        index += 3;
+        prevTokenKind = "other";
+        regexAllowed = true;
+        continue;
+      }
+      index += 1;
+      prevTokenKind = "dot";
+      regexAllowed = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < callParenOffset && /[\w$]/u.test(scopeSource[index] ?? "")) index += 1;
+      const word = scopeSource.slice(wordStart, index);
+      if (prevTokenKind !== "dot") {
+        if (exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
+          declKind = word;
+          prevTokenKind = "decl";
+          regexAllowed = false;
+          continue;
+        }
+        if (exprDepth === 0 && (CONTROL_FLOW_KEYWORDS.has(word) || word === "for")) {
+          pendingCondition = true;
+          prevTokenKind = "other";
+          regexAllowed = false;
+          continue;
+        }
+        if (exprDepth === 0 && (word === "else" || word === "do")) {
+          conditionalStmt = true;
+          prevTokenKind = "other";
+          regexAllowed = true;
+          continue;
+        }
+        const isDeclarator =
+          exprDepth === 0 &&
+          !conditionalStmt &&
+          (prevTokenKind === "decl" || (prevTokenKind === "comma" && declKind !== undefined));
+        if (isDeclarator) {
+          const afterWord = skipWhitespaceAndComments(scopeSource, index);
+          if (
+            afterWord < callParenOffset &&
+            scopeSource[afterWord] === "=" &&
+            scopeSource[afterWord + 1] !== "=" &&
+            scopeSource[afterWord + 1] !== ">"
+          ) {
+            const rhsStart = skipWhitespaceAndComments(scopeSource, afterWord + 1);
+            if (rhsStart < callParenOffset) {
+              let calleeEnd = -1;
+              if (scopeSource[rhsStart] === "(") {
+                const parenEnd = scanBalancedEnd(scopeSource, rhsStart);
+                if (
+                  parenEnd !== -1 &&
+                  skipWhitespaceAndComments(scopeSource, parenEnd) === callParenOffset
+                ) {
+                  calleeEnd = parenEnd;
+                }
+              } else if (/[A-Za-z_$]/u.test(scopeSource[rhsStart] ?? "")) {
+                let cursor = rhsStart;
+                while (cursor < callParenOffset) {
+                  while (cursor < callParenOffset && /[\w$]/u.test(scopeSource[cursor] ?? "")) {
+                    cursor += 1;
+                  }
+                  const afterPart = skipWhitespaceAndComments(scopeSource, cursor);
+                  if (afterPart === callParenOffset) {
+                    calleeEnd = cursor;
+                    break;
+                  }
+                  if (scopeSource[afterPart] !== ".") break;
+                  const nextPart = skipWhitespaceAndComments(scopeSource, afterPart + 1);
+                  if (
+                    nextPart >= callParenOffset ||
+                    !/[A-Za-z_$]/u.test(scopeSource[nextPart] ?? "")
+                  ) {
+                    break;
+                  }
+                  cursor = nextPart;
+                }
+              }
+              if (calleeEnd !== -1) {
+                return {
+                  entrypointVar: word,
+                  varStart: wordStart,
+                  calleeText: scopeSource.slice(rhsStart, calleeEnd).trim(),
+                };
+              }
+            }
+          }
+        }
+      }
+      prevTokenKind = "other";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < callParenOffset && /[\w.]/u.test(scopeSource[index] ?? "")) index += 1;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    index += 1;
+    prevTokenKind = "other";
+    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+  return;
+}
+
+function unwrapExportGetter(expr: string): string | undefined {
+  const trimmed = expr.trim();
+  const arrowSimple = /^\(\s*\)\s*=>\s*([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)?)$/u.exec(
+    trimmed,
+  );
+  if (arrowSimple) return arrowSimple[1]!.replace(/\s+/gu, "");
+  const blockReturn =
+    /^(?:function\s*\(\s*\)|\(\s*\)\s*=>)\s*\{\s*return\s+([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)?)\s*;?\s*\}$/u.exec(
+      trimmed,
+    );
+  return blockReturn?.[1]?.replace(/\s+/gu, "");
+}
+
+function isAssignmentOperatorAt(source: string, offset: number): boolean {
+  const ch = source[offset];
+  if (!ch) return false;
+  if (ch === "=" && source[offset + 1] !== "=" && source[offset + 1] !== ">") return true;
+  if ((ch === "+" && source[offset + 1] === "+") || (ch === "-" && source[offset + 1] === "-")) {
+    return true;
+  }
+  if (["+", "-", "*", "/", "%", "&", "|", "^"].includes(ch) && source[offset + 1] === "=") {
+    return true;
+  }
+  const three = source.slice(offset, offset + 3);
+  if (
+    three === "**=" ||
+    three === "<<=" ||
+    three === ">>=" ||
+    three === "&&=" ||
+    three === "||=" ||
+    three === "??="
+  ) {
+    return true;
+  }
+  return source.slice(offset, offset + 4) === ">>>=";
+}
+
+function isUniqueTopLevelImportedNamespace(
+  scopeSource: string,
+  ns: string,
+  moduleParam: string | undefined,
+): boolean {
+  const nsWord = new RegExp(`(?:(?<![\\w$.])|\\.\\.\\.)${escapeRegExpLiteral(ns)}(?![\\w$])`, "u");
+  let bindingKind: "valid" | "invalid" | undefined;
+  let declKind: "let" | "const" | "var" | undefined;
+  let exprDepth = 0;
+  let pendingCondition = false;
+  let conditionalStmt = false;
+  let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
+  let prevWord = "";
+  let prevNonWsChar = "";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < scopeSource.length) {
+    const ch = scopeSource[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (scopeSource[index + 1] === "/" || scopeSource[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(scopeSource, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(scopeSource, index);
+      if (end === -1) return false;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(scopeSource, index);
+      if (end === -1) return false;
+      const literal = scopeSource.slice(index, end);
+      if (literal.includes("${") && nsWord.test(literal)) return false;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = "`";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(scopeSource, index);
+      if (end !== -1) {
+        index = end;
+        prevTokenKind = "other";
+        prevWord = "";
+        prevNonWsChar = "/";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === "{") {
+      const end = scanBalancedEnd(scopeSource, index);
+      if (end === -1) return false;
+      if (nsWord.test(scopeSource.slice(index + 1, end - 1))) {
+        // Any nested write/shadowing of `ns` invalidates it; plain property reads
+        // like `{ ... }` inside an object literal are still checked below if not a block.
+        const inner = scopeSource.slice(index + 1, end - 1);
+        const mutation = new RegExp(
+          `(?:^|[^\\w$.])${escapeRegExpLiteral(ns)}\\s*(?:=|\\+\\+|--|\\+=|-=|\\*=|\\/=)|(?:let|const|var|function)\\s+${escapeRegExpLiteral(ns)}(?![\\w$])`,
+          "u",
+        );
+        if (mutation.test(inner)) return false;
+      }
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = "}";
+      conditionalStmt = false;
+      pendingCondition = false;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "(" || ch === "[") {
+      exprDepth += 1;
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ")" || ch === "]") {
+      if (exprDepth > 0) exprDepth -= 1;
+      if (ch === ")" && exprDepth === 0 && pendingCondition) {
+        pendingCondition = false;
+        conditionalStmt = true;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === ";") {
+      if (exprDepth === 0) {
+        declKind = undefined;
+        conditionalStmt = false;
+        pendingCondition = false;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ";";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ",") {
+      index += 1;
+      prevTokenKind = "comma";
+      prevWord = "";
+      prevNonWsChar = ",";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ".") {
+      if (scopeSource[index + 1] === "." && scopeSource[index + 2] === ".") {
+        index += 3;
+        prevTokenKind = "other";
+        prevWord = "";
+        prevNonWsChar = ".";
+        regexAllowed = true;
+        continue;
+      }
+      index += 1;
+      prevTokenKind = "dot";
+      prevWord = "";
+      prevNonWsChar = ".";
+      regexAllowed = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < scopeSource.length && /[\w$]/u.test(scopeSource[index] ?? "")) index += 1;
+      const word = scopeSource.slice(wordStart, index);
+      if (prevTokenKind !== "dot") {
+        if (exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
+          declKind = word;
+          prevTokenKind = "decl";
+          prevWord = word;
+          prevNonWsChar = word.at(-1) ?? "";
+          regexAllowed = false;
+          continue;
+        }
+        if (exprDepth === 0 && (CONTROL_FLOW_KEYWORDS.has(word) || word === "for")) {
+          pendingCondition = true;
+          prevTokenKind = "other";
+          prevWord = word;
+          prevNonWsChar = word.at(-1) ?? "";
+          regexAllowed = false;
+          continue;
+        }
+        if (exprDepth === 0 && (word === "else" || word === "do")) {
+          conditionalStmt = true;
+          prevTokenKind = "other";
+          prevWord = word;
+          prevNonWsChar = word.at(-1) ?? "";
+          regexAllowed = true;
+          continue;
+        }
+        if (exprDepth === 0 && word === "import" && moduleParam === undefined) {
+          const afterImport = skipWhitespaceAndComments(scopeSource, index);
+          const starMatch = /^\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\b/u.exec(
+            scopeSource.slice(afterImport),
+          );
+          if (starMatch?.[1] === ns) {
+            if (bindingKind !== undefined) return false;
+            bindingKind = "valid";
+          }
+          prevTokenKind = "other";
+          prevWord = word;
+          prevNonWsChar = word.at(-1) ?? "";
+          regexAllowed = false;
+          continue;
+        }
+        if (word === ns) {
+          const afterWord = skipWhitespaceAndComments(scopeSource, index);
+          const isDeclarator =
+            exprDepth === 0 &&
+            (prevTokenKind === "decl" || (prevTokenKind === "comma" && declKind !== undefined));
+          if (prevWord === "function" || prevWord === "class") return false;
+          if (isDeclarator) {
+            if (bindingKind !== undefined || conditionalStmt) return false;
+            if (
+              scopeSource[afterWord] !== "=" ||
+              scopeSource[afterWord + 1] === "=" ||
+              scopeSource[afterWord + 1] === ">"
+            ) {
+              return false;
+            }
+            const rhsStart = skipWhitespaceAndComments(scopeSource, afterWord + 1);
+            const expectedPrefix = moduleParam
+              ? new RegExp(`^${escapeRegExpLiteral(moduleParam)}\\s*\\.\\s*[ir]\\s*\\(`, "u")
+              : /^require\s*\(/u;
+            const callMatch = expectedPrefix.exec(scopeSource.slice(rhsStart));
+            if (!callMatch) return false;
+            const callParen = rhsStart + callMatch[0].length - 1;
+            const callEnd = scanBalancedEnd(scopeSource, callParen);
+            if (callEnd === -1 || !endsInitializerAt(scopeSource, callEnd)) return false;
+            bindingKind = "valid";
+            index = callEnd;
+          } else {
+            const isObjectKey =
+              (prevNonWsChar === "{" || prevNonWsChar === ",") && scopeSource[afterWord] === ":";
+            if (!isObjectKey && isAssignmentOperatorAt(scopeSource, afterWord)) {
+              return false;
+            }
+          }
+        }
+      }
+      prevTokenKind = "other";
+      prevWord = word;
+      prevNonWsChar = word.at(-1) ?? "";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < scopeSource.length && /[\w.]/u.test(scopeSource[index] ?? "")) index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = "0";
+      regexAllowed = false;
+      continue;
+    }
+    index += 1;
+    prevTokenKind = "other";
+    prevWord = "";
+    prevNonWsChar = ch ?? "";
+    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+
+  return bindingKind === "valid";
+}
+
+function isImportedDirectCreateAppPageEntrypoint(scopeSource: string): boolean {
+  let hasNamedImport = false;
+  let exprDepth = 0;
+  let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
+  let declKind: "let" | "const" | "var" | undefined;
+  let prevWord = "";
+  let prevNonWsChar = "";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < scopeSource.length) {
+    const ch = scopeSource[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (scopeSource[index + 1] === "/" || scopeSource[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(scopeSource, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(scopeSource, index);
+      if (end === -1) return false;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(scopeSource, index);
+      if (end === -1) return false;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = "`";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(scopeSource, index);
+      if (end !== -1) {
+        index = end;
+        prevTokenKind = "other";
+        prevWord = "";
+        prevNonWsChar = "/";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === "{") {
+      const end = scanBalancedEnd(scopeSource, index);
+      if (end === -1) return false;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = "}";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "(" || ch === "[") {
+      exprDepth += 1;
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ")" || ch === "]") {
+      if (exprDepth > 0) exprDepth -= 1;
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === ";") {
+      if (exprDepth === 0) declKind = undefined;
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ";";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ",") {
+      index += 1;
+      prevTokenKind = "comma";
+      prevWord = "";
+      prevNonWsChar = ",";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ".") {
+      index += 1;
+      prevTokenKind = "dot";
+      prevWord = "";
+      prevNonWsChar = ".";
+      regexAllowed = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < scopeSource.length && /[\w$]/u.test(scopeSource[index] ?? "")) index += 1;
+      const word = scopeSource.slice(wordStart, index);
+      if (prevTokenKind !== "dot") {
+        if (exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
+          declKind = word;
+          prevTokenKind = "decl";
+          prevWord = word;
+          prevNonWsChar = word.at(-1) ?? "";
+          regexAllowed = false;
+          continue;
+        }
+        if (exprDepth === 0 && word === "import") {
+          const afterImport = skipWhitespaceAndComments(scopeSource, index);
+          if (scopeSource[afterImport] === "{") {
+            const braceEnd = scanBalancedEnd(scopeSource, afterImport);
+            if (braceEnd === -1) return false;
+            const specifiers = scopeSource.slice(afterImport + 1, braceEnd - 1).split(",");
+            for (const rawSpec of specifiers) {
+              const spec = rawSpec.trim();
+              if (spec === "createAppPageEntrypoint") {
+                hasNamedImport = true;
+              } else if (/\bas\s+createAppPageEntrypoint$/u.test(spec)) {
+                return false;
+              }
+            }
+            index = braceEnd;
+            prevTokenKind = "other";
+            prevWord = "";
+            prevNonWsChar = "}";
+            regexAllowed = false;
+            continue;
+          }
+        }
+        if (word === "createAppPageEntrypoint") {
+          const isLocalDecl =
+            prevWord === "function" ||
+            prevWord === "class" ||
+            (exprDepth === 0 &&
+              (prevTokenKind === "decl" || (prevTokenKind === "comma" && declKind !== undefined)));
+          if (isLocalDecl) return false;
+          const afterWord = skipWhitespaceAndComments(scopeSource, index);
+          const isObjectKey =
+            (prevNonWsChar === "{" || prevNonWsChar === ",") && scopeSource[afterWord] === ":";
+          if (!isObjectKey && isAssignmentOperatorAt(scopeSource, afterWord)) return false;
+        }
+      }
+      prevTokenKind = "other";
+      prevWord = word;
+      prevNonWsChar = word.at(-1) ?? "";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    index += 1;
+    prevTokenKind = "other";
+    prevWord = "";
+    prevNonWsChar = ch ?? "";
+    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+
+  return hasNamedImport;
+}
+
+function verifyCalleeIsNextEntrypoint(
+  scopeSource: string,
+  calleeText: string,
+  moduleParam: string | undefined,
+): boolean {
+  const indirectMatch = /^\(\s*0\s*,\s*([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\)$/u.exec(
+    calleeText,
+  );
+  if (indirectMatch) {
+    const [, ns, prop] = indirectMatch;
+    if (moduleParam === undefined && prop !== "createAppPageEntrypoint") return false;
+    return isUniqueTopLevelImportedNamespace(scopeSource, ns!, moduleParam);
+  }
+  const memberMatch = /^([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)$/u.exec(calleeText);
+  if (memberMatch) {
+    const [, ns, prop] = memberMatch;
+    if (moduleParam === undefined && prop !== "createAppPageEntrypoint") return false;
+    return isUniqueTopLevelImportedNamespace(scopeSource, ns!, moduleParam);
+  }
+  if (moduleParam === undefined && calleeText === "createAppPageEntrypoint") {
+    return isImportedDirectCreateAppPageEntrypoint(scopeSource);
+  }
+  return false;
+}
+
+function verifyEntrypointExportsInScope(
+  scopeSource: string,
+  entrypointVar: string,
+  varStart: number,
+  moduleParam: string | undefined,
+  expectedModuleId: string | undefined,
+): boolean {
+  const exported = new Map<EntrypointExportName, string>();
+  const aliases = new Map<string, { prop: EntrypointExportName; declStart: number }>();
+  const exportReadSpans: Array<[number, number]> = [];
+
+  let declKind: "let" | "const" | "var" | undefined;
+  let exportDecl = false;
+  let exprDepth = 0;
+  let pendingCondition = false;
+  let conditionalStmt = false;
+  let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
+  let prevWord = "";
+  let prevNonWsChar = "";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < scopeSource.length) {
+    const ch = scopeSource[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (scopeSource[index + 1] === "/" || scopeSource[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(scopeSource, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(scopeSource, index);
+      if (end === -1) return false;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(scopeSource, index);
+      if (end === -1) return false;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = "`";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(scopeSource, index);
+      if (end !== -1) {
+        index = end;
+        prevTokenKind = "other";
+        prevWord = "";
+        prevNonWsChar = "/";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === "{") {
+      const end = scanBalancedEnd(scopeSource, index);
+      if (end === -1) return false;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = "}";
+      conditionalStmt = false;
+      pendingCondition = false;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "(" || ch === "[") {
+      exprDepth += 1;
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ")" || ch === "]") {
+      if (exprDepth > 0) exprDepth -= 1;
+      if (ch === ")" && exprDepth === 0 && pendingCondition) {
+        pendingCondition = false;
+        conditionalStmt = true;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ch;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === ";") {
+      if (exprDepth === 0) {
+        declKind = undefined;
+        exportDecl = false;
+        conditionalStmt = false;
+        pendingCondition = false;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = ";";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ",") {
+      index += 1;
+      prevTokenKind = "comma";
+      prevWord = "";
+      prevNonWsChar = ",";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ".") {
+      if (scopeSource[index + 1] === "." && scopeSource[index + 2] === ".") {
+        index += 3;
+        prevTokenKind = "other";
+        prevWord = "";
+        prevNonWsChar = ".";
+        regexAllowed = true;
+        continue;
+      }
+      index += 1;
+      prevTokenKind = "dot";
+      prevWord = "";
+      prevNonWsChar = ".";
+      regexAllowed = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < scopeSource.length && /[\w$]/u.test(scopeSource[index] ?? "")) index += 1;
+      const word = scopeSource.slice(wordStart, index);
+
+      if (prevTokenKind !== "dot" && exprDepth === 0) {
+        // Turbopack module export call: `<moduleParam>.s([...], <moduleId>?)`
+        if (moduleParam !== undefined && word === moduleParam) {
+          const afterParam = skipWhitespaceAndComments(scopeSource, index);
+          if (scopeSource[afterParam] === ".") {
+            const afterDot = skipWhitespaceAndComments(scopeSource, afterParam + 1);
+            if (scopeSource[afterDot] === "s") {
+              const afterS = skipWhitespaceAndComments(scopeSource, afterDot + 1);
+              if (scopeSource[afterS] === "(") {
+                const callEnd = scanBalancedEnd(scopeSource, afterS);
+                if (callEnd === -1) return false;
+                const firstArgStart = skipWhitespaceAndComments(scopeSource, afterS + 1);
+                if (scopeSource[firstArgStart] !== "[") return false;
+                const arrayEnd = scanBalancedEnd(scopeSource, firstArgStart);
+                if (arrayEnd === -1 || arrayEnd > callEnd - 1) return false;
+                const afterArray = skipWhitespaceAndComments(scopeSource, arrayEnd);
+                if (scopeSource[afterArray] === ",") {
+                  const secondArg = scopeSource.slice(afterArray + 1, callEnd - 1).trim();
+                  if (expectedModuleId !== undefined && secondArg !== expectedModuleId) {
+                    return false;
+                  }
+                }
+                const elements = splitTopLevelArrayElements(
+                  scopeSource.slice(firstArgStart, arrayEnd),
+                  0,
+                );
+                if (!elements) return false;
+                let elemIdx = 0;
+                while (elemIdx < elements.length) {
+                  const exportName = parseJsStringLiteral(elements[elemIdx]!);
+                  if (exportName === undefined) return false;
+                  let expr: string | undefined;
+                  if (elements[elemIdx + 1] === "0") {
+                    if (elemIdx + 2 >= elements.length) return false;
+                    expr = elements[elemIdx + 2]!.trim().replace(/\s+/gu, "");
+                    elemIdx += 3;
+                  } else {
+                    if (elemIdx + 1 >= elements.length) return false;
+                    expr = unwrapExportGetter(elements[elemIdx + 1]!);
+                    elemIdx += 2;
+                  }
+                  if (isEntrypointExportName(exportName)) {
+                    if (!expr || exported.has(exportName)) return false;
+                    exported.set(exportName, expr);
+                  }
+                }
+                exportReadSpans.push([afterS, callEnd]);
+                index = callEnd;
+                prevTokenKind = "other";
+                prevWord = "";
+                prevNonWsChar = ")";
+                regexAllowed = false;
+                continue;
+              }
+            }
+          }
+        }
+
+        // ESM `export ...`
+        if (moduleParam === undefined && word === "export") {
+          const afterExport = skipWhitespaceAndComments(scopeSource, index);
+          if (scopeSource[afterExport] === "{") {
+            const braceEnd = scanBalancedEnd(scopeSource, afterExport);
+            if (braceEnd === -1) return false;
+            const afterBrace = skipWhitespaceAndComments(scopeSource, braceEnd);
+            if (!scopeSource.slice(afterBrace).startsWith("from")) {
+              const specs = scopeSource.slice(afterExport + 1, braceEnd - 1).split(",");
+              for (const rawSpec of specs) {
+                const spec = rawSpec.trim();
+                if (!spec) continue;
+                const asMatch = /^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/u.exec(spec);
+                const local = asMatch ? asMatch[1]! : spec;
+                const expName = asMatch ? asMatch[2]! : spec;
+                if (isEntrypointExportName(expName)) {
+                  if (!/^[A-Za-z_$][\w$]*$/u.test(local) || exported.has(expName)) return false;
+                  exported.set(expName, local);
+                }
+              }
+              exportReadSpans.push([afterExport, braceEnd]);
+            }
+            index = braceEnd;
+            prevTokenKind = "other";
+            prevWord = "";
+            prevNonWsChar = "}";
+            regexAllowed = false;
+            continue;
+          }
+          exportDecl = true;
+          prevTokenKind = "other";
+          prevWord = word;
+          prevNonWsChar = word.at(-1) ?? "";
+          regexAllowed = false;
+          continue;
+        }
+
+        // CJS `_export(exports, { ... })`
+        if (moduleParam === undefined && word === "_export") {
+          const afterFn = skipWhitespaceAndComments(scopeSource, index);
+          if (scopeSource[afterFn] === "(") {
+            const callEnd = scanBalancedEnd(scopeSource, afterFn);
+            if (callEnd === -1) return false;
+            const args = scopeSource.slice(afterFn + 1, callEnd - 1);
+            const commaIdx = args.indexOf(",");
+            if (commaIdx !== -1 && args.slice(0, commaIdx).trim() === "exports") {
+              const objExpr = args.slice(commaIdx + 1).trim();
+              const props = parseTopLevelObjectProperties(objExpr);
+              if (!props) return false;
+              for (const [key, value] of props) {
+                if (isEntrypointExportName(key)) {
+                  const unwrapped = unwrapExportGetter(value);
+                  if (!unwrapped || exported.has(key)) return false;
+                  exported.set(key, unwrapped);
+                }
+              }
+              exportReadSpans.push([afterFn, callEnd]);
+              index = callEnd;
+              prevTokenKind = "other";
+              prevWord = "";
+              prevNonWsChar = ")";
+              regexAllowed = false;
+              continue;
+            }
+          }
+        }
+
+        // CJS `exports.<prop> = <expr>`
+        if (moduleParam === undefined && word === "exports") {
+          const afterExp = skipWhitespaceAndComments(scopeSource, index);
+          if (scopeSource[afterExp] === ".") {
+            const propStart = skipWhitespaceAndComments(scopeSource, afterExp + 1);
+            const propMatch =
+              /^([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)?)/u.exec(
+                scopeSource.slice(propStart),
+              );
+            if (propMatch && isEntrypointExportName(propMatch[1]!)) {
+              const rhsEnd = propStart + propMatch[0].length;
+              if (!endsInitializerAt(scopeSource, rhsEnd) || exported.has(propMatch[1]!)) {
+                return false;
+              }
+              exported.set(propMatch[1]!, propMatch[2]!.replace(/\s+/gu, ""));
+              exportReadSpans.push([propStart, rhsEnd]);
+              index = rhsEnd;
+              prevTokenKind = "other";
+              prevWord = "";
+              prevNonWsChar = propMatch[2]!.at(-1) ?? "";
+              regexAllowed = false;
+              continue;
+            }
+          }
+        }
+
+        // Reject top-level `module.exports = ...` overwrite in CJS/ESM modules.
+        if (moduleParam === undefined && word === "module") {
+          const afterMod = skipWhitespaceAndComments(scopeSource, index);
+          if (/^\.\s*exports\s*=(?!=)/u.test(scopeSource.slice(afterMod))) return false;
+        }
+
+        if (word === "let" || word === "const" || word === "var") {
+          declKind = word;
+          prevTokenKind = "decl";
+          prevWord = word;
+          prevNonWsChar = word.at(-1) ?? "";
+          regexAllowed = false;
+          continue;
+        }
+        if (CONTROL_FLOW_KEYWORDS.has(word) || word === "for") {
+          pendingCondition = true;
+          prevTokenKind = "other";
+          prevWord = word;
+          prevNonWsChar = word.at(-1) ?? "";
+          regexAllowed = false;
+          continue;
+        }
+        if (word === "else" || word === "do") {
+          conditionalStmt = true;
+          prevTokenKind = "other";
+          prevWord = word;
+          prevNonWsChar = word.at(-1) ?? "";
+          regexAllowed = true;
+          continue;
+        }
+
+        const isDeclarator =
+          !conditionalStmt &&
+          (prevTokenKind === "decl" || (prevTokenKind === "comma" && declKind !== undefined));
+        if (isDeclarator && word !== entrypointVar) {
+          const afterWord = skipWhitespaceAndComments(scopeSource, index);
+          if (
+            scopeSource[afterWord] === "=" &&
+            scopeSource[afterWord + 1] !== "=" &&
+            scopeSource[afterWord + 1] !== ">"
+          ) {
+            const rhsStart = skipWhitespaceAndComments(scopeSource, afterWord + 1);
+            const memberMatch = new RegExp(
+              `^${escapeRegExpLiteral(entrypointVar)}\\s*\\.\\s*(__next_app__|routeModule|handler)(?![\\w$])`,
+              "u",
+            ).exec(scopeSource.slice(rhsStart));
+            if (memberMatch) {
+              const rhsEnd = rhsStart + memberMatch[0].length;
+              if (endsInitializerAt(scopeSource, rhsEnd)) {
+                const prop = memberMatch[1] as EntrypointExportName;
+                if (aliases.has(word)) return false;
+                aliases.set(word, { prop, declStart: wordStart });
+                if (exportDecl && isEntrypointExportName(word)) {
+                  if (exported.has(word)) return false;
+                  exported.set(word, `${entrypointVar}.${prop}`);
+                }
+                index = rhsEnd;
+                prevTokenKind = "other";
+                prevWord = prop;
+                prevNonWsChar = prop.at(-1) ?? "";
+                regexAllowed = false;
+                continue;
+              }
+            } else if (exportDecl && isEntrypointExportName(word)) {
+              // Exporting one of the three names from a non-entrypoint expression.
+              return false;
+            }
+          }
+        }
+      }
+
+      prevTokenKind = "other";
+      prevWord = word;
+      prevNonWsChar = word.at(-1) ?? "";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < scopeSource.length && /[\w.]/u.test(scopeSource[index] ?? "")) index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = "0";
+      regexAllowed = false;
+      continue;
+    }
+    index += 1;
+    prevTokenKind = "other";
+    prevWord = "";
+    prevNonWsChar = ch ?? "";
+    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+
+  // Verify every required export (`__next_app__`, `routeModule`, `handler`)
+  // comes directly from `entrypointVar.<prop>` or from its alias.
+  const usedAliases = new Map<string, { prop: EntrypointExportName; declStart: number }>();
+  for (const prop of ENTRYPOINT_EXPORTS) {
+    const expr = exported.get(prop);
+    if (!expr) return false;
+    if (expr === `${entrypointVar}.${prop}`) continue;
+    const aliasInfo = aliases.get(expr);
+    if (!aliasInfo || aliasInfo.prop !== prop) return false;
+    usedAliases.set(expr, aliasInfo);
+  }
+
+  // Verify across the entire scope (including nested blocks/templates) that
+  // neither `entrypointVar` nor any exported alias is reassigned, redeclared,
+  // mutated, or aliased elsewhere.
+  const watchedIdents = new Set([entrypointVar, ...usedAliases.keys()]);
+  const watchedPattern = new RegExp(
+    `(?:(?<![\\w$.])|\\.\\.\\.)(?:${[...watchedIdents].map(escapeRegExpLiteral).join("|")})(?![\\w$])`,
+    "u",
+  );
+  const inExportReadSpan = (offset: number) =>
+    exportReadSpans.some(([start, end]) => offset >= start && offset < end);
+
+  let scanPrevToken: "dot" | "other" = "other";
+  let scanPrevWord = "";
+  let scanPrevChar = "";
+  let scanRegexAllowed = true;
+  let scanIdx = 0;
+
+  while (scanIdx < scopeSource.length) {
+    const ch = scopeSource[scanIdx];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      scanIdx += 1;
+      continue;
+    }
+    if (ch === "/" && (scopeSource[scanIdx + 1] === "/" || scopeSource[scanIdx + 1] === "*")) {
+      scanIdx = skipWhitespaceAndComments(scopeSource, scanIdx);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(scopeSource, scanIdx);
+      if (end === -1) return false;
+      scanIdx = end;
+      scanPrevToken = "other";
+      scanPrevWord = "";
+      scanPrevChar = ch;
+      scanRegexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(scopeSource, scanIdx);
+      if (end === -1) return false;
+      const literal = scopeSource.slice(scanIdx, end);
+      if (literal.includes("${") && watchedPattern.test(literal)) return false;
+      scanIdx = end;
+      scanPrevToken = "other";
+      scanPrevWord = "";
+      scanPrevChar = "`";
+      scanRegexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && scanRegexAllowed) {
+      const end = scanRegexLiteralEnd(scopeSource, scanIdx);
+      if (end !== -1) {
+        scanIdx = end;
+        scanPrevToken = "other";
+        scanPrevWord = "";
+        scanPrevChar = "/";
+        scanRegexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === ".") {
+      if (scopeSource[scanIdx + 1] === "." && scopeSource[scanIdx + 2] === ".") {
+        scanIdx += 3;
+        scanPrevToken = "other";
+        scanPrevWord = "";
+        scanPrevChar = ".";
+        scanRegexAllowed = true;
+        continue;
+      }
+      scanIdx += 1;
+      scanPrevToken = "dot";
+      scanPrevWord = "";
+      scanPrevChar = ".";
+      scanRegexAllowed = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = scanIdx;
+      scanIdx += 1;
+      while (scanIdx < scopeSource.length && /[\w$]/u.test(scopeSource[scanIdx] ?? "")) {
+        scanIdx += 1;
+      }
+      const word = scopeSource.slice(wordStart, scanIdx);
+      if (scanPrevToken !== "dot" && watchedIdents.has(word)) {
+        const afterWord = skipWhitespaceAndComments(scopeSource, scanIdx);
+        const isObjectKey =
+          (scanPrevChar === "{" || scanPrevChar === ",") && scopeSource[afterWord] === ":";
+        if (!isObjectKey) {
+          if (word === entrypointVar) {
+            if (wordStart !== varStart) {
+              if (scanPrevWord === "delete" || scanPrevChar === "+" || scanPrevChar === "-") {
+                return false;
+              }
+              if (scopeSource[afterWord] !== ".") return false;
+              const propStart = skipWhitespaceAndComments(scopeSource, afterWord + 1);
+              const propMatch = /^(__next_app__|routeModule|handler)(?![\w$])/u.exec(
+                scopeSource.slice(propStart),
+              );
+              if (!propMatch) return false;
+              const afterProp = skipWhitespaceAndComments(
+                scopeSource,
+                propStart + propMatch[0].length,
+              );
+              if (isAssignmentOperatorAt(scopeSource, afterProp)) return false;
+            }
+          } else {
+            const aliasInfo = usedAliases.get(word)!;
+            if (wordStart !== aliasInfo.declStart && !inExportReadSpan(wordStart)) {
+              return false;
+            }
+            if (
+              wordStart !== aliasInfo.declStart &&
+              isAssignmentOperatorAt(scopeSource, afterWord)
+            ) {
+              return false;
+            }
+          }
+        }
+      }
+      scanPrevToken = "other";
+      scanPrevWord = word;
+      scanPrevChar = word.at(-1) ?? "";
+      scanRegexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      scanIdx += 1;
+      while (scanIdx < scopeSource.length && /[\w.]/u.test(scopeSource[scanIdx] ?? "")) {
+        scanIdx += 1;
+      }
+      scanPrevToken = "other";
+      scanPrevWord = "";
+      scanPrevChar = "0";
+      scanRegexAllowed = false;
+      continue;
+    }
+    scanIdx += 1;
+    scanPrevToken = "other";
+    scanPrevWord = "";
+    scanPrevChar = ch ?? "";
+    scanRegexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+
+  return true;
+}
+
+function findTreeExpressionForPage(
+  source: string,
+  expectedPage: string,
+  expectedModuleId?: string,
+): string | undefined {
   const matches: Array<string | undefined> = [];
   let prevNonWsChar = "";
   let prevBeforeParenChar = "";
+  let lastOpenParen = -1;
   let regexAllowed = true;
   let index = 0;
 
@@ -920,6 +2286,7 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
     if (ch === "(") {
       prevBeforeParenChar = prevNonWsChar;
       prevNonWsChar = "(";
+      lastOpenParen = index;
       regexAllowed = true;
       index += 1;
       continue;
@@ -944,28 +2311,56 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
             props.has("loadChunk") &&
             props.has("interopDefault");
           if (isNextAppPageEntrypointArgs) {
-            const treeExpr = props.get("tree")!;
-            if (treeExpr.startsWith("[")) {
-              matches.push(treeExpr);
-            } else if (/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) {
-              const identWord = new RegExp(
-                `(?:(?<![\\w$.])|\\.\\.\\.)${escapeRegExpLiteral(treeExpr)}(?![\\w$])`,
-                "u",
+            const moduleCtx = findEnclosingModuleContext(source, objectStart);
+            if (
+              moduleCtx &&
+              (expectedModuleId === undefined || moduleCtx.moduleId === expectedModuleId)
+            ) {
+              const scopeSource = source.slice(moduleCtx.scopeStart, moduleCtx.scopeEnd);
+              const callBinding = extractEntrypointCallBinding(
+                scopeSource,
+                lastOpenParen - moduleCtx.scopeStart,
+                afterObject + 1 - moduleCtx.scopeStart,
               );
-              const referencedInSiblingProp = [...props.entries()].some(
-                ([propKey, propValue]) =>
-                  propKey !== "tree" &&
-                  propKey !== "page" &&
-                  propKey !== "pathname" &&
-                  identWord.test(propValue),
-              );
-              matches.push(
-                referencedInSiblingProp
-                  ? undefined
-                  : resolveIdentifierArrayInScope(source, objectStart, objectEnd, treeExpr),
-              );
-            } else {
-              matches.push(undefined);
+              if (
+                callBinding &&
+                verifyCalleeIsNextEntrypoint(
+                  scopeSource,
+                  callBinding.calleeText,
+                  moduleCtx.moduleParam,
+                ) &&
+                verifyEntrypointExportsInScope(
+                  scopeSource,
+                  callBinding.entrypointVar,
+                  callBinding.varStart,
+                  moduleCtx.moduleParam,
+                  expectedModuleId,
+                )
+              ) {
+                const treeExpr = props.get("tree")!;
+                if (treeExpr.startsWith("[")) {
+                  matches.push(treeExpr);
+                } else if (/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) {
+                  const identWord = new RegExp(
+                    `(?:(?<![\\w$.])|\\.\\.\\.)${escapeRegExpLiteral(treeExpr)}(?![\\w$])`,
+                    "u",
+                  );
+                  const referencedInSiblingProp = [...props.entries()].some(
+                    ([propKey, propValue]) =>
+                      propKey !== "tree" &&
+                      propKey !== "page" &&
+                      propKey !== "pathname" &&
+                      identWord.test(propValue),
+                  );
+                  matches.push(
+                    referencedInSiblingProp
+                      ? undefined
+                      : resolveIdentifierArrayInScope(source, objectStart, objectEnd, treeExpr),
+                  );
+                } else {
+                  matches.push(undefined);
+                }
+              }
             }
           }
         }
@@ -1007,8 +2402,9 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
 export function compiledLoaderTreeHasOptionalRootLocale(
   source: string,
   expectedPage: string,
+  expectedModuleId?: string,
 ): boolean | undefined {
-  const treeExpr = findTreeExpressionForPage(source, expectedPage);
+  const treeExpr = findTreeExpressionForPage(source, expectedPage, expectedModuleId);
   if (!treeExpr) return;
   return walkCompiledLoaderTree(treeExpr, 0, false);
 }
@@ -1042,6 +2438,10 @@ export function compiledRouteHasOptionalRootLocale(
   }
 
   const expectedPage = `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`;
+  const expectedModuleId =
+    /module\.exports\s*=\s*[A-Za-z_$][\w$]*\.m\(\s*(\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*\)\.exports/u.exec(
+      entrySource,
+    )?.[1];
   const templateChunks: string[] = [];
   for (const match of entrySource.matchAll(/\.c\(\s*["']([^"']+\.js)["']\s*\)/gu)) {
     const chunkRel = match[1];
@@ -1062,7 +2462,7 @@ export function compiledRouteHasOptionalRootLocale(
     } catch {
       return;
     }
-    return compiledLoaderTreeHasOptionalRootLocale(chunkSource, expectedPage);
+    return compiledLoaderTreeHasOptionalRootLocale(chunkSource, expectedPage, expectedModuleId);
   }
   return compiledLoaderTreeHasOptionalRootLocale(entrySource, expectedPage);
 }
@@ -1191,17 +2591,14 @@ function readRequiredServerFilesPageExtensions(distDir: string): readonly string
 function resolveEffectivePageExtensions(
   distDir: string,
   projectRoot: string,
-  fallbackPageExtensions?: readonly string[],
   options: { allowRequiredServerFiles?: boolean } = {},
-): readonly string[] {
+): readonly string[] | undefined {
+  // Only trust Next's authoritative build-time or emitted pageExtensions. Never
+  // guess using defaults or pre-wrapper config values to authorize header
+  // selection on an optional `[[...locale]]` route.
   return (
     readNextBuildContextPageExtensions(distDir, projectRoot) ??
-    (options.allowRequiredServerFiles
-      ? readRequiredServerFilesPageExtensions(distDir)
-      : undefined) ??
-    (isNonEmptyStringArray(fallbackPageExtensions)
-      ? fallbackPageExtensions
-      : DEFAULT_PAGE_EXTENSIONS)
+    (options.allowRequiredServerFiles ? readRequiredServerFilesPageExtensions(distDir) : undefined)
   );
 }
 
@@ -1413,7 +2810,6 @@ export type EmitClientCatalogPermutationsOptions = {
   distDir: string;
   projectRoot: string;
   configPath?: string;
-  pageExtensions?: readonly string[];
   /**
    * Set by `withPalamedes()` during `compiler.runAfterProductionCompile` so
    * stale `required-server-files.json` files retained from a previous build are
@@ -1499,12 +2895,9 @@ export async function emitClientCatalogPermutations(
       `Palamedes client catalog permutations: the source locale "${compiler.sourceLocale}" is not in the configured locales, so renders without a locale have no fallback chunk copy.`,
     );
   }
-  const pageExtensions = resolveEffectivePageExtensions(
-    distDir,
-    options.projectRoot,
-    options.pageExtensions,
-    { allowRequiredServerFiles: !options.fromProductionCompileHook },
-  );
+  const effectivePageExtensions = resolveEffectivePageExtensions(distDir, options.projectRoot, {
+    allowRequiredServerFiles: !options.fromProductionCompileHook,
+  });
   const standardAdapter = renderManifestAdapter(compiler.locales, compiler.sourceLocale, variants, {
     optionalRootLocale: false,
   });
@@ -1521,11 +2914,18 @@ export async function emitClientCatalogPermutations(
       .slice(0, -1)
       .includes("[[...locale]]");
     // Fail closed (`true`) when a route contains `[[...locale]]` and neither
-    // the compiled loader tree nor the source directory tree can confirm a
-    // layout above `[[...locale]]`, so an omitted segment ignores headers.
+    // the compiled loader tree nor the source directory tree (under Next's
+    // confirmed effective pageExtensions) can confirm a layout above
+    // `[[...locale]]`, so an omitted segment ignores headers.
     const optionalRootLocale = hasOptionalLocaleSegment
       ? (compiledRouteHasOptionalRootLocale(distDir, file) ??
-        routeHasOptionalRootLocale(options.projectRoot, manifestRelativePath, pageExtensions) ??
+        (effectivePageExtensions
+          ? routeHasOptionalRootLocale(
+              options.projectRoot,
+              manifestRelativePath,
+              effectivePageExtensions,
+            )
+          : undefined) ??
         true)
       : false;
     const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
