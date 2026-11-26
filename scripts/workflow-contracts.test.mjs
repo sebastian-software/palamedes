@@ -3739,6 +3739,106 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:14: alpine:3.20 is not pinned to a sha256 digest"]);
+    // Non-input triggers (`push`, `pull_request`) are analyzed per-event so
+    // push-only `GITHUB_ENV` writes are not polluted by the pull_request pass;
+    // boolean `false` and numeric `0` `inputs.*` remain falsy in `||`
+    // expressions while `github.event.inputs.*` stays string-valued; and
+    // reusable workflow `on.workflow_call.outputs` propagate to downstream jobs.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: [push, pull_request]",
+          "env:",
+          "  IMAGE: unset-placeholder",
+          "jobs:",
+          "  push-only-scoped:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - if: github.event_name == 'push'",
+          `        run: echo "IMAGE=alpine:3.20@${digest}" >> "$GITHUB_ENV"`,
+          "      - if: github.event_name == 'push'",
+          '        run: docker pull "$IMAGE"',
+          "  cross-event-leak:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - if: github.event_name == 'push'",
+          `        run: echo "IMAGE=alpine:3.20@${digest}" >> "$GITHUB_ENV"`,
+          '      - run: docker pull "$IMAGE"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:3: unset-placeholder is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      use_custom:",
+          "        type: boolean",
+          "        default: false",
+          "      count:",
+          "        type: number",
+          "        default: 0",
+          "jobs:",
+          "  typed-falsy:",
+          "    runs-on: ubuntu-latest",
+          `    container: \${{ inputs.use_custom || 'node:24@${digest}' }}`,
+          "    steps:",
+          `      - run: docker pull "\${{ inputs.count || 'alpine:3.20@${digest}' }}"`,
+          "      - run: docker pull \"${{ inputs.use_custom || 'busybox:1.36' }}\"",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:16: busybox:1.36 is not pinned to a sha256 digest"]);
+    const r48Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r48-"));
+    try {
+      await mkdir(join(r48Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(
+        join(r48Fixture, ".github", "workflows", "reusable-outputs.yml"),
+        [
+          "on:",
+          "  workflow_call:",
+          "    outputs:",
+          "      pinned_img:",
+          "        value: ${{ jobs.pick.outputs.pinned_img }}",
+          "      mutable_img:",
+          "        value: ${{ jobs.pick.outputs.mutable_img }}",
+          "jobs:",
+          "  pick:",
+          "    runs-on: ubuntu-latest",
+          "    outputs:",
+          `      pinned_img: node:24@${digest}`,
+          "      mutable_img: nginx:1.27",
+          "    steps:",
+          "      - run: echo ok",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r48Fixture, ".github", "workflows", "caller-outputs.yml"),
+        [
+          "on: push",
+          "jobs:",
+          "  source:",
+          "    uses: ./.github/workflows/reusable-outputs.yml",
+          "  consume-pinned:",
+          "    needs: source",
+          "    runs-on: ubuntu-latest",
+          "    container: ${{ needs.source.outputs.pinned_img || 'unset' }}",
+          "  consume-mutable:",
+          "    needs: source",
+          "    runs-on: ubuntu-latest",
+          "    container: ${{ needs.source.outputs.mutable_img }}",
+          "",
+        ].join("\n"),
+      );
+      expect(checkWorkflowPins(r48Fixture).problems).toEqual([
+        ".github/workflows/caller-outputs.yml:4: nginx:1.27 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r48Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

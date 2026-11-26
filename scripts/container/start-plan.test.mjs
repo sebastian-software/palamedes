@@ -136,16 +136,25 @@ describe("container publish contract", () => {
 
     expect(nonCommentLines).not.toContain("sh.rustup.rs");
     expect(nonCommentLines).not.toContain("npm install -g");
-    expect(nonCommentLines).not.toContain("/usr/local/rustup");
+    expect(nonCommentLines).not.toContain("RUSTUP_HOME");
+    expect(nonCommentLines).not.toContain("/usr/local/cargo");
     expect(containerfile).toMatch(
       new RegExp(
         `^FROM rust:${rustVersion.replaceAll(".", "\\.")}-bookworm@sha256:[0-9a-f]{64} AS rust-toolchain$`,
         "mu",
       ),
     );
+    expect(nonCommentLines).toMatch(
+      new RegExp(
+        `^FROM rust:${rustVersion.replaceAll(".", "\\.")}-bookworm@sha256:[0-9a-f]{64} AS rust-toolchain\\n+FROM node:24-bookworm@sha256:[0-9a-f]{64} AS build$`,
+        "mu",
+      ),
+    );
     expect(containerfile).toMatch(/^FROM node:24-bookworm@sha256:[0-9a-f]{64} AS build$/mu);
     expect(containerfile).toMatch(/^FROM node:24-bookworm-slim@sha256:[0-9a-f]{64} AS runtime$/mu);
-    expect(containerfile).toContain("COPY --from=rust-toolchain /usr/local/rust /usr/local/rust");
+    expect(containerfile).toContain(
+      "COPY --from=rust-toolchain /usr/local/rustup/toolchains /usr/local/rust-toolchains",
+    );
     expect(containerfile).toContain("pnpm_config_verify_deps_before_run=false");
     expect(containerfile).toContain("-exec chmod a+rX,go-w");
     expect(containerfile).toContain("-perm /022");

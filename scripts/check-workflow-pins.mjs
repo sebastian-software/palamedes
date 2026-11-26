@@ -38,7 +38,7 @@ const STEP_OUTPUT_EXPRESSION_PATTERN =
   /\$\{\{\s*steps(?:\.(?<stepDot>[A-Za-z0-9_-]+)|\[(?:'(?<stepSq>[^']+)'|"(?<stepDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])\s*\}\}/giu;
 const JOB_OUTPUT_KEY_PREFIX = "\0job_output:";
 const NEEDS_OUTPUT_EXPRESSION_PATTERN =
-  /\$\{\{\s*needs(?:\.(?<jobDot>[A-Za-z0-9_-]+)|\[(?:'(?<jobSq>[^']+)'|"(?<jobDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])\s*\}\}/giu;
+  /\$\{\{\s*(?:needs|jobs)(?:\.(?<jobDot>[A-Za-z0-9_-]+)|\[(?:'(?<jobSq>[^']+)'|"(?<jobDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])\s*\}\}/giu;
 const ACTIONS_EXPRESSION_BLOCK_PATTERN = /\$\{\{(?<expr>(?:'(?:''|[^'])*'|\}(?!\})|[^'}])*)\}\}/gu;
 const INPUTS_EXPRESSION_PATTERN =
   /\$\{\{\s*inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])\s*\}\}/giu;
@@ -1308,6 +1308,21 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
     return { known: true, values: [literal], mayBeEmpty: literal === "" };
   }
 
+  const lowerBranch = branch.toLowerCase();
+  if (lowerBranch === "false" || lowerBranch === "null") {
+    return { known: true, values: [], mayBeEmpty: true };
+  }
+  if (lowerBranch === "true") {
+    return { known: true, values: ["true"], mayBeEmpty: false };
+  }
+  if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(branch)) {
+    const numVal = Number(branch);
+    if (numVal === 0 || Number.isNaN(numVal)) {
+      return { known: true, values: [], mayBeEmpty: true };
+    }
+    return { known: true, values: [branch], mayBeEmpty: false };
+  }
+
   const envMatch =
     /^env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])$/iu.exec(
       branch,
@@ -1346,7 +1361,7 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
   }
 
   const needsOutMatch =
-    /^needs(?:\.(?<jobDot>[A-Za-z0-9_-]+)|\[(?:'(?<jobSq>[^']+)'|"(?<jobDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])$/iu.exec(
+    /^(?:needs|jobs)(?:\.(?<jobDot>[A-Za-z0-9_-]+)|\[(?:'(?<jobSq>[^']+)'|"(?<jobDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])$/iu.exec(
       branch,
     );
   if (needsOutMatch) {
@@ -1370,7 +1385,20 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
 
   const andParts = splitTopLevelLogicalOp(branch, "&&");
   if (andParts && andParts.length >= 2) {
+    let allPrefixTruthy = true;
+    for (let i = 0; i < andParts.length - 1; i += 1) {
+      const condResult = evaluateActionsFallbackBranch(andParts[i], stepEnv);
+      if (condResult.known && condResult.values.every((v) => v.length === 0)) {
+        return { known: true, values: [], mayBeEmpty: true };
+      }
+      if (!condResult.known || condResult.mayBeEmpty) {
+        allPrefixTruthy = false;
+      }
+    }
     const rhsResult = evaluateActionsFallbackBranch(andParts.at(-1), stepEnv);
+    if (allPrefixTruthy) {
+      return rhsResult;
+    }
     return {
       known: false,
       values: rhsResult.values.filter((v) => v.length > 0),
@@ -1398,8 +1426,8 @@ function evaluateActionsFallbackExpression(rawExpr, stepEnv, fallbackLine) {
     if (!andParts) {
       return null;
     }
-    const rhsResult = evaluateActionsFallbackBranch(andParts.at(-1), stepEnv);
-    const nonEmpty = rhsResult.values.filter((v) => v.length > 0);
+    const andResult = evaluateActionsFallbackBranch(expr, stepEnv);
+    const nonEmpty = andResult.values.filter((v) => v.length > 0);
     if (nonEmpty.length === 0) {
       return null;
     }
@@ -9441,6 +9469,21 @@ function extractActionInputDefaults(doc) {
 
 function substituteInputsInsideExpression(expr, inputValues, { includeEventInputs = false } = {}) {
   const quoteActionsString = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  const formatActionsInputLiteral = (entry) => {
+    if (entry.type === "boolean") {
+      const lower = String(entry.value).trim().toLowerCase();
+      if (lower === "true" || lower === "false") {
+        return lower;
+      }
+    }
+    if (entry.type === "number") {
+      const trimmed = String(entry.value).trim();
+      if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(trimmed)) {
+        return trimmed;
+      }
+    }
+    return quoteActionsString(entry.value);
+  };
   let out = "";
   let i = 0;
   while (i < expr.length) {
@@ -9478,7 +9521,7 @@ function substituteInputsInsideExpression(expr, inputValues, { includeEventInput
       /^inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])/iu.exec(rest);
     if (inMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
       const name = (inMatch.groups.dot ?? inMatch.groups.sq ?? inMatch.groups.dq).toLowerCase();
-      out += inputValues.has(name) ? quoteActionsString(inputValues.get(name).value) : inMatch[0];
+      out += inputValues.has(name) ? formatActionsInputLiteral(inputValues.get(name)) : inMatch[0];
       i += inMatch[0].length;
       continue;
     }
@@ -9925,6 +9968,10 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
       continue;
     }
     const lowerName = inputName.toLowerCase();
+    const typeNode = getMapField(defNode, "type");
+    const rawType =
+      typeNode?.kind === "scalar" ? String(typeNode.value).trim().toLowerCase() : "string";
+    const normalizedType = rawType === "boolean" || rawType === "number" ? rawType : "string";
     const values = [];
     const seenValues = new Set();
     const pushValue = (valueNode) => {
@@ -9934,7 +9981,7 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
       const text = String(valueNode.value);
       if (!seenValues.has(text)) {
         seenValues.add(text);
-        values.push({ value: text, line: valueNode.line });
+        values.push({ value: text, line: valueNode.line, type: normalizedType });
       }
     };
     const defaultNode = getMapField(defNode, "default");
@@ -9950,17 +9997,12 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
       const isRequired =
         requiredNode?.kind === "scalar" &&
         String(requiredNode.value).trim().toLowerCase() === "true";
-      if (!isRequired) {
-        const typeNode = getMapField(defNode, "type");
-        const inputType =
-          typeNode?.kind === "scalar" ? String(typeNode.value).trim().toLowerCase() : "string";
-        if (inputType !== "choice") {
-          const implicitDefault =
-            inputType === "boolean" ? "false" : inputType === "number" ? "0" : "";
-          if (!seenValues.has(implicitDefault)) {
-            seenValues.add(implicitDefault);
-            values.push({ value: implicitDefault, line: defNode.line });
-          }
+      if (!isRequired && rawType !== "choice") {
+        const implicitDefault =
+          normalizedType === "boolean" ? "false" : normalizedType === "number" ? "0" : "";
+        if (!seenValues.has(implicitDefault)) {
+          seenValues.add(implicitDefault);
+          values.push({ value: implicitDefault, line: defNode.line, type: normalizedType });
         }
       }
     }
@@ -10025,11 +10067,16 @@ function extractTriggerInputDefaults(doc, triggerName, { includeImplicitDefaults
     if (defNode?.kind !== "map") {
       continue;
     }
+    const typeNode = getMapField(defNode, "type");
+    const rawType =
+      typeNode?.kind === "scalar" ? String(typeNode.value).trim().toLowerCase() : "string";
+    const normalizedType = rawType === "boolean" || rawType === "number" ? rawType : "string";
     const defaultNode = getMapField(defNode, "default");
     if (defaultNode?.kind === "scalar") {
       defaults.set(inputName.toLowerCase(), {
         value: String(defaultNode.value),
         line: defaultNode.line,
+        type: normalizedType,
       });
     } else if (includeImplicitDefaults) {
       const requiredNode = getMapField(defNode, "required");
@@ -10037,14 +10084,12 @@ function extractTriggerInputDefaults(doc, triggerName, { includeImplicitDefaults
         requiredNode?.kind === "scalar" &&
         String(requiredNode.value).trim().toLowerCase() === "true";
       if (!isRequired) {
-        const typeNode = getMapField(defNode, "type");
-        const inputType =
-          typeNode?.kind === "scalar" ? String(typeNode.value).trim().toLowerCase() : "string";
         const implicitDefault =
-          inputType === "boolean" ? "false" : inputType === "number" ? "0" : "";
+          normalizedType === "boolean" ? "false" : normalizedType === "number" ? "0" : "";
         defaults.set(inputName.toLowerCase(), {
           value: implicitDefault,
           line: defNode.line,
+          type: normalizedType,
         });
       }
     }
@@ -10137,6 +10182,7 @@ export function unpinnedWorkflowContainerReferences(
     foreignCheckoutPrefixes = null,
     emittedGithubEnv = null,
     emittedActionOutputs = null,
+    emittedWorkflowOutputs = null,
     callerEventNames = null,
   } = {},
 ) {
@@ -10199,8 +10245,32 @@ export function unpinnedWorkflowContainerReferences(
     const mergedCallInputs = extractTriggerInputDefaults(doc, "workflow_call", {
       includeImplicitDefaults: true,
     });
+    const declaredCallTypes = new Map();
+    const onNodeForTypes = getMapField(doc, "on");
+    const wfCallForTypes =
+      onNodeForTypes?.kind === "map" ? getMapField(onNodeForTypes, "workflow_call") : null;
+    const wfInputsForTypes =
+      wfCallForTypes?.kind === "map" ? getMapField(wfCallForTypes, "inputs") : null;
+    if (wfInputsForTypes?.kind === "map") {
+      for (const [inputName, defNode] of wfInputsForTypes.value) {
+        if (defNode?.kind !== "map") {
+          continue;
+        }
+        const typeNode = getMapField(defNode, "type");
+        const rawType =
+          typeNode?.kind === "scalar" ? String(typeNode.value).trim().toLowerCase() : "string";
+        declaredCallTypes.set(
+          inputName.toLowerCase(),
+          rawType === "boolean" || rawType === "number" ? rawType : "string",
+        );
+      }
+    }
     for (const [key, entry] of inputOverrides) {
-      mergedCallInputs.set(key.toLowerCase(), entry);
+      const lowerKey = key.toLowerCase();
+      mergedCallInputs.set(lowerKey, {
+        ...entry,
+        type: entry.type ?? declaredCallTypes.get(lowerKey) ?? "string",
+      });
     }
     workflowInputContexts.push({
       inputs: mergedCallInputs,
@@ -10310,12 +10380,14 @@ export function unpinnedWorkflowContainerReferences(
           absentInputs.set(inputName, { value: "", line: onNode.line });
         }
       }
-      workflowInputContexts.push({
-        inputs: absentInputs,
-        deferUnresolvedInputs: false,
-        includeEventInputs: true,
-        eventNames: nonInputTriggers,
-      });
+      for (const trigger of nonInputTriggers) {
+        workflowInputContexts.push({
+          inputs: absentInputs,
+          deferUnresolvedInputs: false,
+          includeEventInputs: true,
+          eventNames: [trigger],
+        });
+      }
     }
     if (workflowInputContexts.length === 0) {
       workflowInputContexts.push({
@@ -10720,6 +10792,7 @@ export function unpinnedWorkflowContainerReferences(
             }
           }
           const sharedCalleeCache = ctxBuildFileContext.calleeResultCache ?? new Map();
+          const mergedCalleeOutputs = new Map();
           for (const row of callRows) {
             const rowList = row ? [row] : [];
             const calleeInputCombos = expandWithInputCombinations(
@@ -10740,29 +10813,44 @@ export function unpinnedWorkflowContainerReferences(
                 ? JSON.stringify([...eventNames].sort())
                 : "any";
               const cacheKey = `wf\0${safeWorkflowFile}\0${serializedEvents}\0${serializedInputs}`;
-              let calleeProblems = sharedCalleeCache.get(cacheKey);
-              if (!calleeProblems) {
-                calleeProblems = unpinnedWorkflowContainerReferences(calleeSource, calleeRelPath, {
-                  root: ctxBuildFileContext.root,
-                  explicitBuildFiles: ctxBuildFileContext.explicitBuildFiles,
-                  buildInvocations: ctxBuildFileContext.buildInvocations,
-                  inputOverrides: calleeInputOverrides,
-                  actionCallStack: nextCallStack,
-                  checkedLocalActionPins,
-                  calleeResultCache: sharedCalleeCache,
-                  callerEventNames: eventNames,
-                });
+              let cachedEntry = sharedCalleeCache.get(cacheKey);
+              if (!cachedEntry) {
+                const calleeOutputs = new Map();
+                const calleeProblems = unpinnedWorkflowContainerReferences(
+                  calleeSource,
+                  calleeRelPath,
+                  {
+                    root: ctxBuildFileContext.root,
+                    explicitBuildFiles: ctxBuildFileContext.explicitBuildFiles,
+                    buildInvocations: ctxBuildFileContext.buildInvocations,
+                    inputOverrides: calleeInputOverrides,
+                    actionCallStack: nextCallStack,
+                    checkedLocalActionPins,
+                    calleeResultCache: sharedCalleeCache,
+                    emittedWorkflowOutputs: calleeOutputs,
+                    callerEventNames: eventNames,
+                  },
+                );
+                cachedEntry = { problems: calleeProblems, outputs: calleeOutputs };
                 const hitDepthLimit = calleeProblems.some((msg) =>
                   msg.includes("exceeds maximum nesting depth"),
                 );
                 if (!hitDepthLimit) {
-                  sharedCalleeCache.set(cacheKey, calleeProblems);
+                  sharedCalleeCache.set(cacheKey, cachedEntry);
                 }
               }
-              for (const calleeProblem of calleeProblems) {
+              for (const calleeProblem of cachedEntry.problems) {
                 pushCalleeProblem(calleeProblem);
               }
+              for (const [outNameLower, entries] of cachedEntry.outputs) {
+                const remapped = entries.map((entry) => ({ ...entry, line: jobUsesNode.line }));
+                const existing = mergedCalleeOutputs.get(outNameLower) ?? [];
+                mergedCalleeOutputs.set(outNameLower, mergeVarEntries(existing, remapped));
+              }
             }
+          }
+          if (mergedCalleeOutputs.size > 0) {
+            jobOutputsById.set(jobId.toLowerCase(), mergedCalleeOutputs);
           }
           continue;
         }
@@ -10813,6 +10901,47 @@ export function unpinnedWorkflowContainerReferences(
           }
           if (outputsMap.size > 0) {
             jobOutputsById.set(jobId.toLowerCase(), outputsMap);
+          }
+        }
+      }
+
+      if (emittedWorkflowOutputs) {
+        const onNodeForOut = getMapField(doc, "on");
+        const wfCallForOut =
+          onNodeForOut?.kind === "map" ? getMapField(onNodeForOut, "workflow_call") : null;
+        const wfOutputsNode =
+          wfCallForOut?.kind === "map"
+            ? applyWorkflowInputs(getMapField(wfCallForOut, "outputs"))
+            : null;
+        if (wfOutputsNode?.kind === "map") {
+          const wfOutputEnv = cloneVarMap(workflowEnv);
+          for (const [depJobId, depOutputs] of jobOutputsById) {
+            for (const [outNameLower, entries] of depOutputs) {
+              wfOutputEnv.set(`${JOB_OUTPUT_KEY_PREFIX}${depJobId}\0${outNameLower}`, entries);
+            }
+          }
+          for (const [outName, outDefNode] of wfOutputsNode.value) {
+            if (outDefNode?.kind !== "map") {
+              continue;
+            }
+            const valueNode = getMapField(outDefNode, "value");
+            if (valueNode?.kind !== "scalar") {
+              continue;
+            }
+            const resolved = resolveEnvExpressionCandidates(
+              String(valueNode.value),
+              wfOutputEnv,
+              valueNode.line,
+            );
+            const sanitized = sanitizeGithubOutputEntries(
+              candidatesToVarEntries(resolved, valueNode.line),
+              "posix",
+            );
+            if (sanitized.length > 0) {
+              const lowerName = outName.toLowerCase();
+              const existing = emittedWorkflowOutputs.get(lowerName) ?? [];
+              emittedWorkflowOutputs.set(lowerName, mergeVarEntries(existing, sanitized));
+            }
           }
         }
       }

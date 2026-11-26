@@ -24,11 +24,9 @@
 
 # --- Rust toolchain stage ----------------------------------------------------
 # Digest-pinned official Rust toolchain image avoids remote shell installers.
-# Move its sysroot to a fixed path so the build stage invokes the exact
-# digest-pinned compiler binaries directly rather than letting rustup download
-# a separate toolchain from rust-toolchain.toml.
+# Keep this stage free of RUN layers so BuildKit's mode=max cache does not
+# duplicate the toolchain before copying its sysroot into the build stage.
 FROM rust:1.96-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 AS rust-toolchain
-RUN mv "$(rustc --print sysroot)" /usr/local/rust
 
 # --- Build stage -------------------------------------------------------------
 # glibc (Debian) base so the native @palamedes/core-node addon builds for
@@ -36,11 +34,16 @@ RUN mv "$(rustc --print sysroot)" /usr/local/rust
 FROM node:24-bookworm@sha256:49f7adaf9f1574bc45c20ea317139b39a59d7e758d0e93745e112fd85cb42623 AS build
 
 # Build essentials for compiling the native N-API addon plus the Rust toolchain
-# copied directly from the digest-pinned official image above.
+# sysroot copied directly from the digest-pinned official image above (without
+# rustup shims, so rust-toolchain.toml cannot trigger a network download).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends build-essential ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-COPY --from=rust-toolchain /usr/local/rust /usr/local/rust
+COPY --from=rust-toolchain /usr/local/rustup/toolchains /usr/local/rust-toolchains
+RUN set -- /usr/local/rust-toolchains/* \
+  && [ "$#" -eq 1 ] \
+  && [ -x "$1/bin/rustc" ] \
+  && ln -s "$1" /usr/local/rust
 ENV PATH="/usr/local/rust/bin:${PATH}"
 
 # Build the native addon in release mode (build-native.mjs reads this).
