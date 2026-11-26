@@ -1171,6 +1171,8 @@ mod windows_alias_spawn {
     const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
     const STARTF_USESTDHANDLES: u32 = 0x0000_0100;
     const CREATE_UNICODE_ENVIRONMENT: u32 = 0x0000_0400;
+    const EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
+    const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x0002_0002;
     const STD_ERROR_HANDLE: u32 = 0xFFFF_FFF4;
     const DUPLICATE_SAME_ACCESS: u32 = 0x0000_0002;
     const INVALID_HANDLE_VALUE: *mut c_void = (-1_isize) as *mut c_void;
@@ -1205,6 +1207,12 @@ mod windows_alias_spawn {
     }
 
     #[repr(C)]
+    struct StartupInfoExW {
+        startup_info: StartupInfoW,
+        lp_attribute_list: *mut c_void,
+    }
+
+    #[repr(C)]
     struct ProcessInformation {
         h_process: *mut c_void,
         h_thread: *mut c_void,
@@ -1212,8 +1220,98 @@ mod windows_alias_spawn {
         dw_thread_id: u32,
     }
 
+    struct ProcThreadAttributeList {
+        buffer: Vec<usize>,
+        _handles: Vec<*mut c_void>,
+    }
+
+    impl ProcThreadAttributeList {
+        fn new_handle_list(mut handles: Vec<*mut c_void>) -> io::Result<Self> {
+            let mut required_bytes: usize = 0;
+            // SAFETY: querying the required attribute list size with a null pointer.
+            unsafe {
+                let _ = InitializeProcThreadAttributeList(
+                    std::ptr::null_mut(),
+                    1,
+                    0,
+                    &mut required_bytes,
+                );
+            }
+            if required_bytes == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let word_len = required_bytes.div_ceil(std::mem::size_of::<usize>());
+            let mut buffer = vec![0_usize; word_len];
+            // SAFETY: `buffer` is aligned to `usize` and has at least `required_bytes` bytes.
+            if unsafe {
+                InitializeProcThreadAttributeList(
+                    buffer.as_mut_ptr().cast::<c_void>(),
+                    1,
+                    0,
+                    &mut required_bytes,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            let mut list = Self {
+                buffer,
+                _handles: Vec::new(),
+            };
+            let byte_len = handles.len() * std::mem::size_of::<*mut c_void>();
+            // SAFETY: `list.buffer` is initialized and `handles` stays owned by
+            // `list` until after `DeleteProcThreadAttributeList` runs in `Drop`.
+            if unsafe {
+                UpdateProcThreadAttribute(
+                    list.as_mut_ptr(),
+                    0,
+                    PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                    handles.as_mut_ptr().cast::<c_void>(),
+                    byte_len,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            list._handles = handles;
+            Ok(list)
+        }
+
+        fn as_mut_ptr(&mut self) -> *mut c_void {
+            self.buffer.as_mut_ptr().cast::<c_void>()
+        }
+    }
+
+    impl Drop for ProcThreadAttributeList {
+        fn drop(&mut self) {
+            // SAFETY: `self.buffer` was successfully initialized by
+            // `InitializeProcThreadAttributeList`.
+            unsafe {
+                DeleteProcThreadAttributeList(self.as_mut_ptr());
+            }
+        }
+    }
+
     #[link(name = "kernel32")]
     unsafe extern "system" {
+        fn InitializeProcThreadAttributeList(
+            lp_attribute_list: *mut c_void,
+            dw_attribute_count: u32,
+            dw_flags: u32,
+            lp_size: *mut usize,
+        ) -> i32;
+        fn UpdateProcThreadAttribute(
+            lp_attribute_list: *mut c_void,
+            dw_flags: u32,
+            attribute: usize,
+            lp_value: *mut c_void,
+            cb_size: usize,
+            lp_previous_value: *mut c_void,
+            lp_return_size: *mut usize,
+        ) -> i32;
+        fn DeleteProcThreadAttributeList(lp_attribute_list: *mut c_void);
         fn CreatePipe(
             h_read_pipe: *mut *mut c_void,
             h_write_pipe: *mut *mut c_void,
@@ -1343,28 +1441,37 @@ mod windows_alias_spawn {
         mark_not_inheritable(&stdout_read)?;
         let stderr_dup = duplicate_inheritable_stderr()?;
 
-        let startup_info = StartupInfoW {
-            cb: u32::try_from(std::mem::size_of::<StartupInfoW>())
-                .expect("StartupInfoW fits in u32"),
-            lp_reserved: std::ptr::null_mut(),
-            lp_desktop: std::ptr::null_mut(),
-            lp_title: std::ptr::null_mut(),
-            dw_x: 0,
-            dw_y: 0,
-            dw_x_size: 0,
-            dw_y_size: 0,
-            dw_x_count_chars: 0,
-            dw_y_count_chars: 0,
-            dw_fill_attribute: 0,
-            dw_flags: STARTF_USESTDHANDLES,
-            w_show_window: 0,
-            cb_reserved2: 0,
-            lp_reserved2: std::ptr::null_mut(),
-            h_std_input: stdin_read.as_raw_handle(),
-            h_std_output: stdout_write.as_raw_handle(),
-            h_std_error: stderr_dup
-                .as_ref()
-                .map_or(std::ptr::null_mut(), AsRawHandle::as_raw_handle),
+        let mut inherited_handles = vec![stdin_read.as_raw_handle(), stdout_write.as_raw_handle()];
+        if let Some(ref stderr) = stderr_dup {
+            inherited_handles.push(stderr.as_raw_handle());
+        }
+        let mut attr_list = ProcThreadAttributeList::new_handle_list(inherited_handles)?;
+
+        let startup_info = StartupInfoExW {
+            startup_info: StartupInfoW {
+                cb: u32::try_from(std::mem::size_of::<StartupInfoExW>())
+                    .expect("StartupInfoExW fits in u32"),
+                lp_reserved: std::ptr::null_mut(),
+                lp_desktop: std::ptr::null_mut(),
+                lp_title: std::ptr::null_mut(),
+                dw_x: 0,
+                dw_y: 0,
+                dw_x_size: 0,
+                dw_y_size: 0,
+                dw_x_count_chars: 0,
+                dw_y_count_chars: 0,
+                dw_fill_attribute: 0,
+                dw_flags: STARTF_USESTDHANDLES,
+                w_show_window: 0,
+                cb_reserved2: 0,
+                lp_reserved2: std::ptr::null_mut(),
+                h_std_input: stdin_read.as_raw_handle(),
+                h_std_output: stdout_write.as_raw_handle(),
+                h_std_error: stderr_dup
+                    .as_ref()
+                    .map_or(std::ptr::null_mut(), AsRawHandle::as_raw_handle),
+            },
+            lp_attribute_list: attr_list.as_mut_ptr(),
         };
         let mut proc_info = ProcessInformation {
             h_process: std::ptr::null_mut(),
@@ -1374,8 +1481,9 @@ mod windows_alias_spawn {
         };
 
         // SAFETY: `app_name`, `cmd_line`, `env_block`, `cwd_wide`,
-        // `startup_info`, and `proc_info` all remain valid and properly
-        // NUL-terminated for the duration of `CreateProcessW`.
+        // `startup_info` (with its `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` restricting
+        // inheritance strictly to stdio), and `proc_info` remain valid for the
+        // duration of `CreateProcessW`.
         let created = unsafe {
             CreateProcessW(
                 app_name.as_ptr(),
@@ -1383,13 +1491,14 @@ mod windows_alias_spawn {
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
                 1,
-                CREATE_UNICODE_ENVIRONMENT,
+                CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
                 env_block.as_ptr().cast::<c_void>(),
                 cwd_wide.as_ptr(),
-                &startup_info,
+                &startup_info.startup_info,
                 &mut proc_info,
             )
         };
+        drop(attr_list);
         drop(stdin_read);
         drop(stdout_write);
         drop(stderr_dup);

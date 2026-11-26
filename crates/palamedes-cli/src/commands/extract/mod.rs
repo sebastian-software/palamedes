@@ -931,7 +931,7 @@ fn process_catalog(
             path: catalog_path.clone(),
             source: error.into_io_error(),
         })?;
-    let request = CatalogUpdateRequest {
+    let make_request = || CatalogUpdateRequest {
         target_path: catalog_path.to_string_lossy().into_owned(),
         locale: locale.to_owned(),
         source_locale: config.source_locale.clone(),
@@ -945,40 +945,73 @@ fn process_catalog(
     let mut lines = Vec::new();
     let drift = match operation {
         CatalogOperation::Write => {
-            let parent_dir = ContainedDir::open_subpath(&config.root_dir, &relative_parent, true)
-                .map_err(|error| CliError::Io {
-                    path: catalog_path.clone(),
-                    source: error.into_io_error(),
-                })?
-                .expect("create_missing always opens the destination directory");
-            let _target_lock =
-                parent_dir
-                    .lock_target(&file_name)
-                    .map_err(|error| CliError::Io {
+            // Preview an existing catalog before acquiring a write lock so an
+            // already up-to-date catalog in a read-only directory succeeds
+            // without attempting to create a lock file.
+            let mut result = None;
+            if let Some(existing_dir) =
+                ContainedDir::open_subpath(&config.root_dir, &relative_parent, false).map_err(
+                    |error| CliError::Io {
                         path: catalog_path.clone(),
                         source: error.into_io_error(),
-                    })?;
-            let existing =
-                parent_dir
+                    },
+                )?
+            {
+                let existing = existing_dir
                     .read_optional_file(&file_name)
                     .map_err(|error| CliError::Io {
                         path: catalog_path.clone(),
                         source: error.into_io_error(),
                     })?;
-            let result = preview_catalog_update_from_content(request, existing.as_deref())?;
-            if result.created || result.updated {
-                parent_dir
-                    .write_file_atomically(
-                        &file_name,
-                        result.content.as_bytes(),
-                        ContainedNewFileMode::Private,
-                        ContainedWriteDurability::Rename,
-                    )
-                    .map_err(|error: ContainedFsError| CliError::Io {
-                        path: catalog_path.clone(),
-                        source: error.into_io_error(),
-                    })?;
+                let preview =
+                    preview_catalog_update_from_content(make_request(), existing.as_deref())?;
+                if !preview.created && !preview.updated {
+                    result = Some(preview);
+                }
             }
+            let result = match result {
+                Some(unchanged) => unchanged,
+                None => {
+                    let parent_dir =
+                        ContainedDir::open_subpath(&config.root_dir, &relative_parent, true)
+                            .map_err(|error| CliError::Io {
+                                path: catalog_path.clone(),
+                                source: error.into_io_error(),
+                            })?
+                            .expect("create_missing always opens the destination directory");
+                    let _target_lock =
+                        parent_dir
+                            .lock_target(&file_name)
+                            .map_err(|error| CliError::Io {
+                                path: catalog_path.clone(),
+                                source: error.into_io_error(),
+                            })?;
+                    // Re-read under the exclusive lock so concurrent updates
+                    // made after the unlocked preview are preserved.
+                    let existing = parent_dir.read_optional_file(&file_name).map_err(|error| {
+                        CliError::Io {
+                            path: catalog_path.clone(),
+                            source: error.into_io_error(),
+                        }
+                    })?;
+                    let locked_result =
+                        preview_catalog_update_from_content(make_request(), existing.as_deref())?;
+                    if locked_result.created || locked_result.updated {
+                        parent_dir
+                            .write_file_atomically(
+                                &file_name,
+                                locked_result.content.as_bytes(),
+                                ContainedNewFileMode::Private,
+                                ContainedWriteDurability::Rename,
+                            )
+                            .map_err(|error: ContainedFsError| CliError::Io {
+                                path: catalog_path.clone(),
+                                source: error.into_io_error(),
+                            })?;
+                    }
+                    locked_result
+                }
+            };
             if options.verbose {
                 lines.push(format!("  -> {}", catalog_path.display()));
                 for diagnostic in result.diagnostics {
@@ -1008,7 +1041,7 @@ fn process_catalog(
                     }
                     None => None,
                 };
-            let result = preview_catalog_update_from_content(request, existing.as_deref())?;
+            let result = preview_catalog_update_from_content(make_request(), existing.as_deref())?;
             if options.verbose {
                 lines.push(tr!("  -> checked {path}", path = catalog_path.display()));
                 for diagnostic in result.diagnostics {
@@ -1790,5 +1823,45 @@ catalogs:
             super::fold_os_segment(OsStr::new("caf\u{00e9}.po"), linux),
             super::fold_os_segment(OsStr::new("cafe\u{0301}.po"), linux)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_succeeds_without_changes_in_read_only_catalog_directory() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("extract-ro-noop");
+        let src_dir = root.join("src");
+        let locales_dir = root.join("locales");
+        fs::create_dir_all(&src_dir).expect("create src");
+        fs::create_dir_all(&locales_dir).expect("create locales");
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales:\n  - en\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include:\n      - src\n",
+        )
+        .expect("write config");
+        fs::write(
+            src_dir.join("app.ts"),
+            "import { t } from '@palamedes/core/macro';\nexport function msg() { return t`Hello`; }\n",
+        )
+        .expect("write source");
+
+        let config = load_config(&root, Some(&root.join("palamedes.yaml"))).expect("load config");
+        run_extraction(&config, &extract_options()).expect("initial extract");
+
+        fs::set_permissions(&locales_dir, fs::Permissions::from_mode(0o555))
+            .expect("chmod 0555 locales");
+        // Skip assertion when running as root (CAP_DAC_OVERRIDE allows writes in 0555).
+        let can_write = fs::write(locales_dir.join(".probe"), b"").is_ok();
+        if can_write {
+            let _ = fs::remove_file(locales_dir.join(".probe"));
+        } else {
+            run_extraction(&config, &extract_options())
+                .expect("up-to-date extract in read-only catalog directory must succeed");
+        }
+
+        fs::set_permissions(&locales_dir, fs::Permissions::from_mode(0o755))
+            .expect("restore locales permissions");
+        let _ = fs::remove_dir_all(&root);
     }
 }

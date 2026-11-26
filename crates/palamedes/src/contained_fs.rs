@@ -943,24 +943,28 @@ mod platform {
             Ok(self.inspect_entry(file_name)?.map(|entry| entry.identity))
         }
 
-        /// Reads `file_name` directly from this directory without following symlinks.
+        /// Reads `file_name` directly from this directory without following
+        /// symlinks or blocking on non-regular files (such as FIFOs).
         ///
         /// # Errors
         ///
-        /// Returns [`ContainedFsError::Containment`] if `file_name` is a symlink,
-        /// or [`ContainedFsError::Io`] on OS read failures.
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is a
+        /// symlink or non-regular file, or [`ContainedFsError::Io`] on OS read
+        /// failures.
         pub fn read_optional_file(
             &self,
             file_name: &OsStr,
         ) -> Result<Option<String>, ContainedFsError> {
             validate_single_file_name(file_name)?;
             let c_name = os_str_to_cstring(file_name)?;
+            // Open with `O_NONBLOCK` so a FIFO planted at `file_name` returns
+            // immediately instead of blocking while holding a directory lock.
             // SAFETY: `self.fd` is an open directory descriptor and `c_name` is valid.
             let raw = unsafe {
                 libc::openat(
                     self.fd.as_raw_fd(),
                     c_name.as_ptr(),
-                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
                 )
             };
             if raw < 0 {
@@ -977,7 +981,23 @@ mod platform {
                 return Err(ContainedFsError::Io(error));
             }
             // SAFETY: `raw` is a newly opened valid file descriptor.
-            let mut file = File::from(unsafe { OwnedFd::from_raw_fd(raw) });
+            let fd = unsafe { OwnedFd::from_raw_fd(raw) };
+            let stat = fstat_fd(fd.as_raw_fd())?;
+            match stat.st_mode & libc::S_IFMT {
+                libc::S_IFREG => {}
+                libc::S_IFDIR => {
+                    return Err(ContainedFsError::Io(io::Error::from_raw_os_error(
+                        libc::EISDIR,
+                    )));
+                }
+                _ => {
+                    return Err(ContainedFsError::Containment(format!(
+                        "refusing to read non-regular file \"{}\"",
+                        file_name.to_string_lossy()
+                    )));
+                }
+            }
+            let mut file = File::from(fd);
             let mut content = String::new();
             file.read_to_string(&mut content)?;
             Ok(Some(content))
@@ -2262,7 +2282,7 @@ mod platform {
                 libc::openat(
                     dir.fd.as_raw_fd(),
                     UNIX_DIR_LOCK_NAME.as_ptr(),
-                    libc::O_RDWR | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    libc::O_RDWR | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
                 )
             };
             if existing_raw < 0 {
@@ -3852,7 +3872,6 @@ mod platform {
             file_information_class: u32,
         ) -> NtStatus;
         fn RtlNtStatusToDosError(status: NtStatus) -> u32;
-        fn RtlUpcaseUnicodeChar(source_character: u16) -> u16;
     }
 
     #[derive(Debug)]
@@ -3893,18 +3912,7 @@ mod platform {
         _lock: std::rc::Rc<WindowsDirTargetLock>,
     }
 
-    fn windows_target_name_hash(file_name: &OsStr) -> u64 {
-        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-        for unit in file_name.encode_wide() {
-            // SAFETY: `RtlUpcaseUnicodeChar` is a pure code-unit lookup.
-            let up = unsafe { RtlUpcaseUnicodeChar(unit) };
-            for byte in up.to_le_bytes() {
-                hash ^= u64::from(byte);
-                hash = hash.wrapping_mul(0x0100_0000_01b3);
-            }
-        }
-        hash
-    }
+    const WINDOWS_DIR_LOCK_NAME: &str = ".pmds-lock";
 
     /// Open directory handle on Windows used for strictly handle-relative child
     /// operations via `NtCreateFile` and `NtSetInformationFile`.
@@ -4106,9 +4114,12 @@ mod platform {
             let dir_id = self.self_identity()?.ok_or_else(|| {
                 ContainedFsError::Io(io::Error::other("missing Windows directory identity"))
             })?;
+            // Coordinate directory-wide (matching Unix) so NTFS 8.3 short-name
+            // aliases, case variants, and long filenames targeting the same
+            // catalog always serialize under one lock key.
             Ok(super::TargetLockKey {
                 dir_id,
-                target_hash: windows_target_name_hash(file_name),
+                target_hash: 0,
             })
         }
 
@@ -4116,13 +4127,15 @@ mod platform {
         /// lock covering read-modify-write operations on `file_name` in this
         /// directory.
         ///
-        /// Uses create-only (`FILE_CREATE`) acquisition with atomic
-        /// `FILE_DELETE_ON_CLOSE` and `share_access = 0` inside this directory
-        /// so writers across all logon sessions (interactive, RDP, Windows
-        /// services, SMB shares) coordinate cleanly without ever modifying or
-        /// deleting a pre-existing unowned file and without leaving lock files
-        /// behind on normal drop or crash. Re-entrant on the same thread; the
-        /// OS lock remains held until the last live guard drops.
+        /// Uses create-only (`FILE_CREATE`) acquisition of a directory-wide
+        /// `.pmds-lock` file with atomic `FILE_DELETE_ON_CLOSE` and
+        /// `share_access = 0` inside this directory so writers across all logon
+        /// sessions (interactive, RDP, Windows services, SMB shares) and across
+        /// NTFS 8.3 short/long filename aliases coordinate cleanly without ever
+        /// modifying or deleting a pre-existing unowned file and without
+        /// leaving lock files behind on normal drop or crash. Re-entrant on the
+        /// same thread; the OS lock remains held until the last live guard
+        /// drops.
         ///
         /// # Errors
         ///
@@ -4140,13 +4153,13 @@ mod platform {
                 return Ok(ContainedTargetLock { _lock: existing });
             }
 
-            let lock_name = OsString::from(format!(".pmds-lock-{:016x}", key.target_hash));
+            let lock_name = OsStr::new(WINDOWS_DIR_LOCK_NAME);
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
             let mut backoff_ms: u64 = 2;
             let handle = loop {
                 match nt_create_relative(
                     self.handle.as_raw_handle(),
-                    &lock_name,
+                    lock_name,
                     FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
                     FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_TEMPORARY,
                     0,
@@ -4177,7 +4190,7 @@ mod platform {
                         // ever modifying or deleting the existing entry.
                         match nt_create_relative(
                             self.handle.as_raw_handle(),
-                            &lock_name,
+                            lock_name,
                             FILE_READ_DATA | SYNCHRONIZE,
                             FILE_ATTRIBUTE_NORMAL,
                             0,
@@ -5857,5 +5870,32 @@ mod tests {
                 initial
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_optional_file_rejects_fifo_without_blocking() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let fifo_path = root.path().join("en.po");
+        let c_fifo = CString::new(fifo_path.as_os_str().as_bytes()).expect("cstr");
+        // SAFETY: `c_fifo` is a valid NUL-terminated path inside our temp dir.
+        assert_eq!(
+            unsafe { libc::mkfifo(c_fifo.as_ptr(), 0o600) },
+            0,
+            "mkfifo failed: {}",
+            io::Error::last_os_error()
+        );
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        let error = dir
+            .read_optional_file(OsStr::new("en.po"))
+            .expect_err("FIFO catalog input must be rejected immediately");
+        assert!(
+            matches!(error, ContainedFsError::Containment(_)),
+            "expected containment error for FIFO, got {error:?}"
+        );
     }
 }

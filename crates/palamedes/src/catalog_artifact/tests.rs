@@ -2211,3 +2211,82 @@ fn compile_catalog_artifact_repeated_locale_mismatch_falls_through_to_later_cata
     );
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn compile_catalog_artifact_handles_adjacent_repeated_locales_and_dot_resource_paths() {
+    let root = create_fixture_dir("adjacent-repeated-and-dot");
+    let en_dir = root.join("en");
+    fs::create_dir_all(&en_dir).expect("create en dir");
+    fs::write(
+        en_dir.join("enen.po"),
+        "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+    )
+    .expect("write enen.po");
+
+    let adjacent = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: root.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "{locale}/{locale}{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: en_dir.join("enen.po").to_string_lossy().into_owned(),
+    })
+    .expect("adjacent repeated {locale}{locale} placeholder must match configured locale");
+    assert_eq!(
+        adjacent.messages.get(&compiled_key("Hello", None)),
+        Some(&"Hello".to_owned())
+    );
+
+    let locales_dir = root.join("locales");
+    fs::create_dir_all(&locales_dir).expect("create locales dir");
+    write_test_catalog(&locales_dir, "en", &[("Greeting", "Hi")]);
+
+    let dot_resource = format!("{}/./locales//en.po", root.display());
+    let dot_result = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: root.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "./locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: dot_resource,
+    })
+    .expect("harmless ./ and // segments in resource_path must normalize like catalog patterns");
+    assert_eq!(
+        dot_result.messages.get(&compiled_key("Greeting", None)),
+        Some(&"Hi".to_owned())
+    );
+
+    let traversal_resource = format!("{}/locales/../locales/en.po", root.display());
+    assert!(
+        compile_catalog_artifact(&CatalogArtifactRequest {
+            config: CatalogArtifactConfig {
+                root_dir: root.to_string_lossy().into_owned(),
+                locales: vec!["en".to_owned()],
+                source_locale: "en".to_owned(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![CatalogConfig {
+                    path: "./locales/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                }],
+            },
+            resource_path: traversal_resource,
+        })
+        .is_err(),
+        "traversal segments in resource_path must never collapse into a match"
+    );
+
+    let _ = fs::remove_dir_all(&root);
+}

@@ -153,9 +153,40 @@ fn resolve_catalog_request(
     resource_path: &Path,
 ) -> PalamedesResult<ResolvedCatalogRequest> {
     let normalized_resource = normalize_path(resource_path);
-    for (catalog_index, catalog) in config.catalogs.iter().enumerate() {
-        let matcher = catalog_locale_matcher(Path::new(&config.root_dir), catalog)?;
+    let root_dir = Path::new(&config.root_dir);
 
+    // Pass 1: validate every catalog pattern and compare against exact
+    // expansions for every configured locale. Expanding configured locales
+    // handles adjacent repeated placeholders (such as `{locale}/{locale}{locale}`)
+    // without relying on greedy regex splitting, and prevents an earlier
+    // nonmatching catalog from masking a later valid catalog.
+    for (catalog_index, catalog) in config.catalogs.iter().enumerate() {
+        validate_catalog_path_pattern(&catalog.path).map_err(|reason| {
+            PalamedesError::UnsafeCatalogPath {
+                path: catalog.path.clone(),
+                reason: reason.to_owned(),
+            }
+        })?;
+        for locale in &config.locales {
+            if !is_valid_locale(locale) {
+                continue;
+            }
+            let expected_primary =
+                try_resolve_catalog_file_path(root_dir, &catalog.path, locale, catalog.format)?;
+            if normalize_path(&expected_primary) == normalized_resource {
+                return Ok(ResolvedCatalogRequest {
+                    locale: locale.clone(),
+                    catalog_index,
+                    primary_file: expected_primary,
+                });
+            }
+        }
+    }
+
+    // Pass 2: no configured locale matched; use the pattern matcher to report
+    // whether the request targeted an invalid or unconfigured locale.
+    for catalog in &config.catalogs {
+        let matcher = catalog_locale_matcher(root_dir, catalog)?;
         if let Some(captures) = matcher.captures(&normalized_resource) {
             let locale = captures
                 .get(1)
@@ -163,43 +194,24 @@ fn resolve_catalog_request(
                 .ok_or_else(|| PalamedesError::CouldNotResolveLocale {
                     resource_path: resource_path.to_path_buf(),
                 })?;
-            // A pattern with multiple `{locale}` placeholders captures each
-            // occurrence independently. Verify every placeholder captured the
-            // same value before rejecting the locale, so a nonmatching earlier
-            // catalog cannot mask a valid later catalog.
-            if (2..captures.len()).any(|index| {
-                captures
-                    .get(index)
-                    .is_none_or(|value| value.as_str() != locale)
-            }) {
-                continue;
-            }
             if !is_valid_locale(&locale) {
+                if (2..captures.len()).any(|index| {
+                    captures
+                        .get(index)
+                        .is_none_or(|value| value.as_str() != locale)
+                }) {
+                    continue;
+                }
                 return Err(PalamedesError::InvalidCatalogLocale { locale });
             }
-            if !config
-                .locales
-                .iter()
-                .any(|configured| configured == &locale)
-            {
-                return Err(PalamedesError::ResolvedLocaleNotConfigured {
-                    locale,
-                    resource_path: resource_path.to_path_buf(),
-                });
-            }
-            let expected_primary = try_resolve_catalog_file_path(
-                Path::new(&config.root_dir),
-                &catalog.path,
-                &locale,
-                catalog.format,
-            )?;
+            let expected_primary =
+                try_resolve_catalog_file_path(root_dir, &catalog.path, &locale, catalog.format)?;
             if normalize_path(&expected_primary) != normalized_resource {
                 continue;
             }
-            return Ok(ResolvedCatalogRequest {
+            return Err(PalamedesError::ResolvedLocaleNotConfigured {
                 locale,
-                catalog_index,
-                primary_file: expected_primary,
+                resource_path: resource_path.to_path_buf(),
             });
         }
     }
@@ -265,7 +277,38 @@ pub(super) fn catalog_locale_matcher(
 }
 
 pub(super) fn normalize_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+    let portable = path.to_string_lossy().replace('\\', "/");
+    let (prefix, rest) = if let Some(after) = portable.strip_prefix("//") {
+        ("//", after)
+    } else if let Some(after) = portable.strip_prefix('/') {
+        ("/", after)
+    } else {
+        let bytes = portable.as_bytes();
+        if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+            if bytes.len() >= 3 && bytes[2] == b'/' {
+                (&portable[..3], &portable[3..])
+            } else {
+                (&portable[..2], &portable[2..])
+            }
+        } else {
+            ("", portable.as_str())
+        }
+    };
+    // Remove harmless repeated separators and `.` segments on both sides while
+    // keeping `..` intact so traversal paths never collapse into a valid match.
+    let segments: Vec<&str> = rest
+        .split('/')
+        .filter(|segment| !segment.is_empty() && *segment != ".")
+        .collect();
+    if segments.is_empty() {
+        if prefix.is_empty() {
+            portable
+        } else {
+            prefix.to_owned()
+        }
+    } else {
+        format!("{prefix}{}", segments.join("/"))
+    }
 }
 
 #[cfg(test)]
