@@ -1223,13 +1223,15 @@ describe("workflow contracts", () => {
     );
   });
 
-  it("pins every third-party action and container image to an immutable digest", async () => {
+  it("pins every third-party action and container image to an immutable digest", () => {
     const { checked, containerFilesChecked, problems } = checkWorkflowPins(repositoryRoot);
 
     expect(problems).toEqual([]);
     expect(checked).toBeGreaterThan(0);
     expect(containerFilesChecked).toBeGreaterThan(0);
+  });
 
+  it("validates action, YAML anchor, env, and matrix pin references", () => {
     // Local composite actions carry no reference to pin; everything else must
     // name a commit and say which release it is.
     expect(unpinnedActionReferences("      - uses: ./.github/actions/setup-workspace\n")).toEqual(
@@ -1555,6 +1557,10 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:8: node:24 is not pinned to a sha256 digest"]);
+  });
+
+  it("validates POSIX, PowerShell, and cmd shell container commands", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Actions `${{ env.* }}` evaluates before shell reassignment, shell heredocs
     // are executed while quoted data heredocs and multiline quoted strings are
     // inert, command substitutions evaluate with current shell variables (not in
@@ -1831,6 +1837,47 @@ describe("workflow contracts", () => {
       "<memory>:7: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:9: busybox:1.37 is not pinned to a sha256 digest",
     ]);
+    // PowerShell scoped/environment variables (`$env:IMAGE_ID`, `$global:IMAGE_ID`)
+    // are treated as opaque runtime image IDs rather than `:tag` suffixes, while
+    // literal tags after PowerShell variables (`$env:REGISTRY/app:latest`,
+    // `${env:REPO}:latest`) are still rejected; and print-only/list-only
+    // `docker buildx bake` invocations are allowed while real builds fail closed.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  windows:",
+          "    runs-on: windows-latest",
+          "    steps:",
+          "      - run: |",
+          "          docker run --rm $env:IMAGE_ID node -v",
+          '          docker run --rm "$global:IMAGE_ID" node -v',
+          '          docker run --rm "$env:REGISTRY/app:latest" node -v',
+          '          docker run --rm "${env:REPO}:v1.2" node -v',
+          "  bake:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: |",
+          "          docker buildx bake --print",
+          "          docker buildx bake -f docker-bake.hcl --print=true default",
+          "          docker buildx bake --list=targets",
+          "          docker buildx bake --print=false",
+          "          docker buildx bake --set app.args.FLAG=--print",
+          "          docker buildx bake -- --print",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:8: $env:REGISTRY/app:latest is not pinned to a sha256 digest",
+      "<memory>:9: ${env:REPO}:v1.2 is not pinned to a sha256 digest",
+      "<memory>:17: docker buildx bake target definitions cannot be verified statically for container image digests",
+      "<memory>:18: docker buildx bake target definitions cannot be verified statically for container image digests",
+      "<memory>:19: docker buildx bake target definitions cannot be verified statically for container image digests",
+    ]);
+  });
+
+  it("discovers and verifies Containerfiles, build contexts, build args, and symlinks", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     const fixtureRoot = await mkdtemp(join(tmpdir(), "palamedes-pins-lowercase-"));
     try {
       await mkdir(join(fixtureRoot, ".github", "actions", "local-docker"), { recursive: true });
@@ -2380,6 +2427,10 @@ describe("workflow contracts", () => {
       await rm(symlinkFixture, { recursive: true, force: true });
       await rm(outsideDir, { recursive: true, force: true });
     }
+  });
+
+  it("resolves composite actions, local reusable workflows, and checkout boundaries", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Composite-action call-site input & default resolution, Git build context
     // explicit Dockerfile resolution (`{{defaultContext}}:subdir` + `file:`),
     // real builder defaults with fail-closed missing-default reporting, and
@@ -2955,6 +3006,10 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r35Fixture, { recursive: true, force: true });
     }
+  });
+
+  it("evaluates workflow_dispatch inputs, event guards, SBOM attestations, and BuildKit/QEMU actions", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Unresolved `working-directory` stays unknown instead of falling back to
     // the repo root; non-dispatch triggers (`schedule` + `workflow_dispatch`)
     // evaluate absent inputs; `github.event.inputs.*` resolves dispatch choices;
@@ -3346,10 +3401,49 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual([
-      "<memory>:10: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:13: $REGISTRY/buildkit:v0.35.1 is not pinned to a sha256 digest",
       "<memory>:14: $REGISTRY/tools:1.0 is not pinned to a sha256 digest",
       "<memory>:14: $REGISTRY/syft:latest is not pinned to a sha256 digest",
+      "<memory>:10: alpine:3.20 is not pinned to a sha256 digest",
+    ]);
+    // Event guards (`if: github.event_name == 'workflow_dispatch'`) prevent
+    // push/schedule empty-input contexts from flagging dispatch-only jobs and
+    // steps whose dispatch choices are pinned, while still catching unpinned
+    // images in dispatch-only or unguarded jobs.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  push:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      digest:",
+          "        type: choice",
+          "        options:",
+          `          - ${digest}`,
+          "jobs:",
+          "  dispatch-only-pinned:",
+          "    if: github.event_name == 'workflow_dispatch'",
+          "    runs-on: ubuntu-latest",
+          "    container: node:24@${{ inputs.digest }}",
+          "  step-guarded-pinned:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - if: ${{ github.event_name == 'workflow_dispatch' }}",
+          "        run: docker pull node:24@${{ inputs.digest }}",
+          "  dispatch-only-unpinned:",
+          "    if: github.event_name == 'workflow_dispatch'",
+          "    runs-on: ubuntu-latest",
+          "    container: alpine:3.20",
+          "  unguarded-uses-dispatch-input:",
+          "    runs-on: ubuntu-latest",
+          "    container: node:24@${{ inputs.digest }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:22: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:25: node:24@ is not pinned to a sha256 digest",
     ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
@@ -3465,7 +3559,10 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:5: matrix exceeds 256 combinations and cannot be verified exhaustively"]);
+  });
 
+  it("tracks digest-pinned container images in Renovate without drifting major/minor tags", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Renovate custom manager extracts the digest-pinned musl action images and
     // the BuildKit daemon image pinned in `publish-examples-container.yml`.
     const [renovateConfig, verifyMuslAction, publishExamples] = await Promise.all([

@@ -361,6 +361,104 @@ function isDynamicReference(value, shellMode = "posix") {
   return false;
 }
 
+// Replace dynamic shell/expression variable spans (POSIX `$VAR`/`${...}`/`$(...)`,
+// PowerShell `$scope:VAR`/`${...}`/`$(...)`, cmd `%VAR%`, and GitHub Actions
+// `${{ ... }}`) with a null-delimited placeholder so syntax characters inside a
+// variable reference (such as the `:` in PowerShell `$env:IMAGE_ID` or POSIX
+// `${BASE:-alpine:3.20}`) are not mistaken for an image tag or digest separator.
+function maskDynamicReferenceSpans(imageRef, shellMode = "posix") {
+  let masked = "";
+  for (let i = 0; i < imageRef.length;) {
+    if (imageRef.startsWith("${{", i)) {
+      let end = i + 3;
+      let inSingle = false;
+      while (end < imageRef.length) {
+        if (inSingle) {
+          if (imageRef[end] === "'") {
+            if (imageRef[end + 1] === "'") {
+              end += 2;
+              continue;
+            }
+            inSingle = false;
+          }
+          end += 1;
+          continue;
+        }
+        if (imageRef[end] === "'") {
+          inSingle = true;
+          end += 1;
+          continue;
+        }
+        if (imageRef.startsWith("}}", end)) {
+          end += 2;
+          break;
+        }
+        end += 1;
+      }
+      masked += "\0VAR\0";
+      i = end;
+      continue;
+    }
+    if (imageRef.startsWith("${", i)) {
+      let depth = 1;
+      let end = i + 2;
+      while (end < imageRef.length && depth > 0) {
+        if (shellMode !== "pwsh" && imageRef[end] === "\\" && end + 1 < imageRef.length) {
+          end += 2;
+          continue;
+        }
+        if (imageRef[end] === "{") {
+          depth += 1;
+        } else if (imageRef[end] === "}") {
+          depth -= 1;
+        }
+        end += 1;
+      }
+      masked += "\0VAR\0";
+      i = end;
+      continue;
+    }
+    if (imageRef.startsWith("$(", i)) {
+      let depth = 1;
+      let end = i + 2;
+      while (end < imageRef.length && depth > 0) {
+        if (imageRef[end] === "(") {
+          depth += 1;
+        } else if (imageRef[end] === ")") {
+          depth -= 1;
+        }
+        end += 1;
+      }
+      masked += "\0VAR\0";
+      i = end;
+      continue;
+    }
+    if (imageRef[i] === "$") {
+      const rest = imageRef.slice(i);
+      const varMatch =
+        shellMode === "pwsh"
+          ? /^\$(?:[A-Za-z_][A-Za-z0-9_]*:)?[A-Za-z_][A-Za-z0-9_]*/u.exec(rest)
+          : /^\$[A-Za-z_][A-Za-z0-9_]*/u.exec(rest);
+      if (varMatch) {
+        masked += "\0VAR\0";
+        i += varMatch[0].length;
+        continue;
+      }
+    }
+    if (shellMode === "cmd" && imageRef[i] === "%") {
+      const cmdMatch = /^%[A-Za-z_][A-Za-z0-9_]*%/u.exec(imageRef.slice(i));
+      if (cmdMatch) {
+        masked += "\0VAR\0";
+        i += cmdMatch[0].length;
+        continue;
+      }
+    }
+    masked += imageRef[i];
+    i += 1;
+  }
+  return masked;
+}
+
 // Detect image references whose registry/repository path is dynamic (e.g.
 // `ghcr.io/${{ github.repository_owner }}/app:latest`) yet whose tag/digest
 // suffix is purely literal and not a sha256 digest, making the image provably
@@ -369,13 +467,15 @@ function hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode = "posix") {
   if (!imageRef || isPinnedDigest(imageRef)) {
     return false;
   }
-  const lastSlash = imageRef.lastIndexOf("/");
-  const tail = lastSlash === -1 ? imageRef : imageRef.slice(lastSlash + 1);
+  const masked = maskDynamicReferenceSpans(imageRef, shellMode);
+  const lastSlash = masked.lastIndexOf("/");
+  const tail = lastSlash === -1 ? masked : masked.slice(lastSlash + 1);
   const atIndex = tail.indexOf("@");
   if (atIndex !== -1) {
     const digestPart = tail.slice(atIndex + 1);
     return (
       digestPart.length > 0 &&
+      !digestPart.includes("\0") &&
       !isDynamicReference(digestPart, shellMode) &&
       !digestPart.includes("}}") &&
       !digestPart.includes("}")
@@ -388,6 +488,7 @@ function hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode = "posix") {
   const tagPart = tail.slice(colonIndex + 1);
   if (
     !tagPart ||
+    tagPart.includes("\0") ||
     isDynamicReference(tagPart, shellMode) ||
     tagPart.includes("}}") ||
     tagPart.includes("}")
@@ -595,6 +696,246 @@ function filterRunnerContextsForStep(stepIfNode, runnerContexts) {
       return verdict === null ? true : verdict;
     }),
   );
+}
+
+function stripOuterExpressionWrapper(expr) {
+  let trimmed = expr.trim();
+  while (trimmed.startsWith("${{") && trimmed.endsWith("}}")) {
+    let inSingle = false;
+    let closeIndex = -1;
+    for (let i = 3; i < trimmed.length - 1; i += 1) {
+      if (inSingle) {
+        if (trimmed[i] === "'") {
+          if (trimmed[i + 1] === "'") {
+            i += 1;
+          } else {
+            inSingle = false;
+          }
+        }
+        continue;
+      }
+      if (trimmed[i] === "'") {
+        inSingle = true;
+      } else if (trimmed[i] === "}" && trimmed[i + 1] === "}") {
+        closeIndex = i;
+        break;
+      }
+    }
+    if (closeIndex === trimmed.length - 2) {
+      trimmed = trimmed.slice(3, -2).trim();
+    } else {
+      break;
+    }
+  }
+  return trimmed;
+}
+
+function stripBalancedOuterParens(expr) {
+  let current = expr.trim();
+  while (current.startsWith("(") && current.endsWith(")")) {
+    let depth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    let closesAtEnd = false;
+    for (let i = 0; i < current.length; i += 1) {
+      const ch = current[i];
+      if (inSingle) {
+        if (ch === "'") {
+          if (current[i + 1] === "'") {
+            i += 1;
+          } else {
+            inSingle = false;
+          }
+        }
+        continue;
+      }
+      if (inDouble) {
+        if (ch === "\\" && i + 1 < current.length) {
+          i += 1;
+        } else if (ch === '"') {
+          inDouble = false;
+        }
+        continue;
+      }
+      if (ch === "'") {
+        inSingle = true;
+      } else if (ch === '"') {
+        inDouble = true;
+      } else if (ch === "(") {
+        depth += 1;
+      } else if (ch === ")") {
+        depth -= 1;
+        if (depth === 0) {
+          closesAtEnd = i === current.length - 1;
+          break;
+        }
+      }
+    }
+    if (!closesAtEnd) {
+      break;
+    }
+    current = current.slice(1, -1).trim();
+  }
+  return current;
+}
+
+function splitTopLevelLogicalOp(expr, operator) {
+  const parts = [];
+  let start = 0;
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < expr.length; i += 1) {
+    const ch = expr[i];
+    if (inSingle) {
+      if (ch === "'") {
+        if (expr[i + 1] === "'") {
+          i += 1;
+        } else {
+          inSingle = false;
+        }
+      }
+      continue;
+    }
+    if (inDouble) {
+      if (ch === "\\" && i + 1 < expr.length) {
+        i += 1;
+      } else if (ch === '"') {
+        inDouble = false;
+      }
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+    } else if (ch === '"') {
+      inDouble = true;
+    } else if (ch === "(") {
+      depth += 1;
+    } else if (ch === ")") {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0 && expr.startsWith(operator, i)) {
+      parts.push(expr.slice(start, i));
+      i += operator.length - 1;
+      start = i + 1;
+    }
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  parts.push(expr.slice(start));
+  return parts;
+}
+
+function evaluateEventExprForName(rawExpr, eventName) {
+  const expr = stripBalancedOuterParens(stripOuterExpressionWrapper(rawExpr));
+  if (!expr) {
+    return null;
+  }
+
+  const orParts = splitTopLevelLogicalOp(expr, "||");
+  if (orParts) {
+    let allFalse = true;
+    for (const part of orParts) {
+      const verdict = evaluateEventExprForName(part, eventName);
+      if (verdict === true) {
+        return true;
+      }
+      if (verdict !== false) {
+        allFalse = false;
+      }
+    }
+    return allFalse ? false : null;
+  }
+
+  const andParts = splitTopLevelLogicalOp(expr, "&&");
+  if (andParts) {
+    let allTrue = true;
+    for (const part of andParts) {
+      const verdict = evaluateEventExprForName(part, eventName);
+      if (verdict === false) {
+        return false;
+      }
+      if (verdict !== true) {
+        allTrue = false;
+      }
+    }
+    return allTrue ? true : null;
+  }
+
+  if (expr.startsWith("!") && !expr.startsWith("!=")) {
+    const inner = evaluateEventExprForName(expr.slice(1), eventName);
+    return inner === null ? null : !inner;
+  }
+
+  const lowerEvent = eventName.toLowerCase();
+  const lhsEq =
+    /^(?:github\.event_name|github\[(?:'event_name'|"event_name")\])\s*(?<op>==|!=)\s*(?:'(?<sq>[^']*)'|"(?<dq>[^"]*)")$/iu.exec(
+      expr,
+    );
+  if (lhsEq) {
+    const expected = (lhsEq.groups.sq ?? lhsEq.groups.dq ?? "").toLowerCase();
+    const equal = lowerEvent === expected;
+    return lhsEq.groups.op === "==" ? equal : !equal;
+  }
+
+  const rhsEq =
+    /^(?:'(?<sq>[^']*)'|"(?<dq>[^"]*)")\s*(?<op>==|!=)\s*(?:github\.event_name|github\[(?:'event_name'|"event_name")\])$/iu.exec(
+      expr,
+    );
+  if (rhsEq) {
+    const expected = (rhsEq.groups.sq ?? rhsEq.groups.dq ?? "").toLowerCase();
+    const equal = lowerEvent === expected;
+    return rhsEq.groups.op === "==" ? equal : !equal;
+  }
+
+  const fnMatch =
+    /^(?<fn>startsWith|endsWith|contains)\(\s*(?:github\.event_name|github\[(?:'event_name'|"event_name")\])\s*,\s*(?:'(?<sq>[^']*)'|"(?<dq>[^"]*)")\s*\)$/iu.exec(
+      expr,
+    );
+  if (fnMatch) {
+    const needle = (fnMatch.groups.sq ?? fnMatch.groups.dq ?? "").toLowerCase();
+    const fn = fnMatch.groups.fn.toLowerCase();
+    if (fn === "startswith") {
+      return lowerEvent.startsWith(needle);
+    }
+    if (fn === "endswith") {
+      return lowerEvent.endsWith(needle);
+    }
+    return lowerEvent.includes(needle);
+  }
+
+  const fromJsonContains =
+    /^contains\(\s*fromJSON\(\s*(?:'(?<sq>[^']*)'|"(?<dq>[^"]*)")\s*\)\s*,\s*(?:github\.event_name|github\[(?:'event_name'|"event_name")\])\s*\)$/iu.exec(
+      expr,
+    );
+  if (fromJsonContains) {
+    try {
+      const parsed = JSON.parse(fromJsonContains.groups.sq ?? fromJsonContains.groups.dq ?? "");
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+        return parsed.some((item) => item.toLowerCase() === lowerEvent);
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function isEventGuardSatisfiable(ifNode, eventNames) {
+  if (
+    !ifNode ||
+    ifNode.kind !== "scalar" ||
+    !Array.isArray(eventNames) ||
+    eventNames.length === 0
+  ) {
+    return true;
+  }
+  const rawIf = String(ifNode.value).trim();
+  if (!rawIf) {
+    return true;
+  }
+  return eventNames.some((eventName) => evaluateEventExprForName(rawIf, eventName) !== false);
 }
 
 function lookupVarEntries(varMap, name, caseInsensitive = false) {
@@ -5225,9 +5566,59 @@ function inspectShellText(
       stdinRedirectTargets,
     );
     if (buildCommand?.kind === "bake") {
-      problems.push(
-        `${filePath}:${lineNumber}: ${normalizedCli} buildx bake target definitions cannot be verified statically for container image digests`,
-      );
+      const bakeValueFlags = new Set([
+        "-f",
+        "--file",
+        "--set",
+        "--allow",
+        "--builder",
+        "--call",
+        "--metadata-file",
+        "--progress",
+        "--provenance",
+        "--sbom",
+        "--list",
+      ]);
+      let isPrintOnly = false;
+      let isListOrHelpOnly = false;
+      for (let index = buildCommand.argStart; index < tokens.length; index += 1) {
+        const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
+        if (redirConsumed > 0) {
+          index += redirConsumed - 1;
+          continue;
+        }
+        const token = tokens[index];
+        if (token === "--") {
+          break;
+        }
+        if (token === "--print" || /^--print=(?:true|1)$/iu.test(token)) {
+          isPrintOnly = true;
+          continue;
+        }
+        if (/^--print=(?:false|0)$/iu.test(token)) {
+          isPrintOnly = false;
+          continue;
+        }
+        if (token === "--list" || token.startsWith("--list=")) {
+          isListOrHelpOnly = true;
+          if (token === "--list") {
+            index += 1;
+          }
+          continue;
+        }
+        if (token === "--help" || token === "-h") {
+          isListOrHelpOnly = true;
+          continue;
+        }
+        if (token.startsWith("-") && flagConsumesNextArg(token, bakeValueFlags)) {
+          index += 1;
+        }
+      }
+      if (!isPrintOnly && !isListOrHelpOnly) {
+        problems.push(
+          `${filePath}:${lineNumber}: ${normalizedCli} buildx bake target definitions cannot be verified statically for container image digests`,
+        );
+      }
       continue;
     }
     if (buildCommand?.kind === "buildx-create") {
@@ -6839,10 +7230,12 @@ function checkStepsList(
   buildFileContext = null,
   defaultWorkingDir = null,
   emittedGithubEnv = null,
+  eventNames = null,
 ) {
   if (stepsNode?.kind !== "seq") {
     return;
   }
+  const effectiveEventNames = eventNames ?? buildFileContext?.eventNames ?? null;
   const allRows = matrixRows.length > 0 ? matrixRows : [null];
   const rowRunningEnvs = new Map();
   const rowCheckoutPaths = new Map();
@@ -6873,6 +7266,9 @@ function checkStepsList(
     const getRowForeignPrefixes = (row) =>
       rowForeignCheckoutPaths.get(row) ?? [...initialForeignPrefixes];
     const stepIfNode = getMapField(stepNode, "if");
+    if (!isEventGuardSatisfiable(stepIfNode, effectiveEventNames)) {
+      continue;
+    }
     const stepConditional = stepIfNode !== null;
     const stepShellNode = getMapField(stepNode, "shell");
     const stepWorkingDirNode = getMapField(stepNode, "working-directory");
@@ -8971,38 +9367,44 @@ export function unpinnedWorkflowContainerReferences(
       inputs: mergedCallInputs,
       deferUnresolvedInputs: false,
       includeEventInputs: false,
+      eventNames: ["workflow_call"],
     });
   } else {
     const onNode = getMapField(doc, "on");
-    const hasWorkflowCallTrigger =
-      onNode?.kind === "map" && getMapField(onNode, "workflow_call") !== null;
-    const hasNonInputTrigger = (() => {
+    const declaredTriggers = (() => {
+      const names = [];
+      const seen = new Set();
+      const pushTrigger = (raw) => {
+        const lower = String(raw).trim().toLowerCase();
+        if (lower && !seen.has(lower)) {
+          seen.add(lower);
+          names.push(lower);
+        }
+      };
       if (!onNode) {
-        return false;
+        return names;
       }
       if (onNode.kind === "scalar") {
-        const trigger = String(onNode.value).trim().toLowerCase();
-        return trigger !== "workflow_call" && trigger !== "workflow_dispatch";
-      }
-      if (onNode.kind === "seq") {
-        return onNode.value.some((item) => {
-          if (item?.kind !== "scalar") {
-            return false;
-          }
-          const trigger = String(item.value).trim().toLowerCase();
-          return trigger !== "workflow_call" && trigger !== "workflow_dispatch";
-        });
-      }
-      if (onNode.kind === "map") {
-        for (const triggerKey of onNode.value.keys()) {
-          const lower = triggerKey.toLowerCase();
-          if (lower !== "workflow_call" && lower !== "workflow_dispatch") {
-            return true;
+        pushTrigger(onNode.value);
+      } else if (onNode.kind === "seq") {
+        for (const item of onNode.value) {
+          if (item?.kind === "scalar") {
+            pushTrigger(item.value);
           }
         }
+      } else if (onNode.kind === "map") {
+        for (const triggerKey of onNode.value.keys()) {
+          pushTrigger(triggerKey);
+        }
       }
-      return false;
+      return names;
     })();
+    const hasWorkflowCallTrigger = declaredTriggers.includes("workflow_call");
+    const hasWorkflowDispatchTrigger = declaredTriggers.includes("workflow_dispatch");
+    const nonInputTriggers = declaredTriggers.filter(
+      (trigger) => trigger !== "workflow_call" && trigger !== "workflow_dispatch",
+    );
+    const hasNonInputTrigger = nonInputTriggers.length > 0;
     const wfCallDefaults = extractTriggerInputDefaults(doc, "workflow_call");
     const wfDispatchContexts = extractWorkflowDispatchInputContexts(doc, filePath, problems);
     if (wfCallDefaults.size > 0 || hasWorkflowCallTrigger) {
@@ -9010,13 +9412,24 @@ export function unpinnedWorkflowContainerReferences(
         inputs: wfCallDefaults,
         deferUnresolvedInputs: true,
         includeEventInputs: false,
+        eventNames: ["workflow_call"],
       });
     }
-    for (const dispatchInputs of wfDispatchContexts) {
+    if (wfDispatchContexts.length > 0) {
+      for (const dispatchInputs of wfDispatchContexts) {
+        workflowInputContexts.push({
+          inputs: dispatchInputs,
+          deferUnresolvedInputs: false,
+          includeEventInputs: true,
+          eventNames: ["workflow_dispatch"],
+        });
+      }
+    } else if (hasWorkflowDispatchTrigger) {
       workflowInputContexts.push({
-        inputs: dispatchInputs,
+        inputs: new Map(),
         deferUnresolvedInputs: false,
         includeEventInputs: true,
+        eventNames: ["workflow_dispatch"],
       });
     }
     if (hasNonInputTrigger) {
@@ -9058,19 +9471,19 @@ export function unpinnedWorkflowContainerReferences(
           absentInputs.set(inputName, { value: "", line: onNode.line });
         }
       }
-      if (absentInputs.size > 0 || workflowInputContexts.length === 0) {
-        workflowInputContexts.push({
-          inputs: absentInputs,
-          deferUnresolvedInputs: false,
-          includeEventInputs: true,
-        });
-      }
+      workflowInputContexts.push({
+        inputs: absentInputs,
+        deferUnresolvedInputs: false,
+        includeEventInputs: true,
+        eventNames: nonInputTriggers,
+      });
     }
     if (workflowInputContexts.length === 0) {
       workflowInputContexts.push({
         inputs: new Map(),
         deferUnresolvedInputs: false,
         includeEventInputs: false,
+        eventNames: null,
       });
     }
   }
@@ -9086,9 +9499,10 @@ export function unpinnedWorkflowContainerReferences(
       inputs: effectiveWorkflowInputs,
       deferUnresolvedInputs,
       includeEventInputs,
+      eventNames,
     } = workflowInputContexts[ctxIndex];
     const ctxBuildFileContext = buildFileContext
-      ? { ...buildFileContext, deferUnresolvedInputs }
+      ? { ...buildFileContext, deferUnresolvedInputs, eventNames }
       : null;
     const substitutionMemo = new Map();
     const applyWorkflowInputs = (node) =>
@@ -9147,6 +9561,7 @@ export function unpinnedWorkflowContainerReferences(
       ctxBuildFileContext,
       workflowDefaultWorkingDir,
       emittedGithubEnv,
+      eventNames,
     );
 
     if (ctxIndex === 0 && runsNode?.kind === "map") {
@@ -9223,6 +9638,9 @@ export function unpinnedWorkflowContainerReferences(
     if (jobsNode?.kind === "map") {
       for (const jobNode of jobsNode.value.values()) {
         if (jobNode?.kind !== "map") {
+          continue;
+        }
+        if (!isEventGuardSatisfiable(getMapField(jobNode, "if"), eventNames)) {
           continue;
         }
         const jobEnv = extractEnvMap(getMapField(jobNode, "env"), workflowEnv);
@@ -9360,6 +9778,8 @@ export function unpinnedWorkflowContainerReferences(
           runnerContexts,
           ctxBuildFileContext,
           jobDefaultWorkingDir,
+          null,
+          eventNames,
         );
       }
     }
