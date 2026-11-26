@@ -820,6 +820,66 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
         ),
       ).toBe(true);
 
+      // Nonliteral `children` references (e.g. a variable or shorthand) are
+      // inconclusive and return undefined so emitClientCatalogPermutations()
+      // falls back to inspecting the source tree instead of assuming false.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `const child = ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }]; const tree = ["", { children: child }, {}]; start({ tree, page: "/[[...locale]]/page" });`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `const children = ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }]; const tree = ["", { children }, {}]; start({ tree, page: "/[[...locale]]/page" });`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+
+      // End-to-end check: when the compiled loaderTree has a nonliteral child,
+      // emitClientCatalogPermutations() falls back to the source tree and still
+      // marks optionalRootLocale=true when app/[[...locale]]/layout.tsx exists.
+      writeFileSync(
+        path.join(projectRoot, "app/[[...locale]]/layout.tsx"),
+        "export default function Layout({ children }) { return children; }\n",
+      );
+      writeFileSync(
+        templateChunk,
+        `module.exports=[1,a=>{let child=["[[...locale]]",{},{layout:[l,"[project]/app/[[...locale]]/layout.tsx"]},[]];let j=["",{children:child},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]"});}];`,
+      );
+      writeFileSync(
+        manifestPath,
+        `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
+globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
+          entryCSSFiles: {},
+          entryJSFiles: { "[project]/app/[[...locale]]/page": ["static/chunks/page.js"] },
+        })};`,
+      );
+      expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+      await emitClientCatalogPermutations({
+        distDir,
+        projectRoot,
+        failOnMissing: false,
+      });
+      const fallbackContext: Record<string, unknown> = { process: { env: {} } };
+      vm.runInNewContext(readFileSync(manifestPath, "utf8"), fallbackContext);
+      const fallbackBind = fallbackContext.__PALAMEDES_CLIENT_CATALOG_BIND as (
+        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
+      ) => void;
+      fallbackBind((availableLocales, fallbackLocale, optionalRootLocale) =>
+        resolveRenderLocale(
+          availableLocales,
+          fallbackLocale,
+          render("/[[...locale]]"),
+          unit({ rootParams: {}, headers: header("de") }),
+          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
+        ),
+      );
+      const fallbackEntryFiles = (
+        fallbackContext.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
+      )["/[[...locale]]/page"]!.entryJSFiles["[project]/app/[[...locale]]/page"]!;
+      expect(fallbackEntryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+
       // If no entrypoint binds `tree` for this page, return undefined so the
       // source-tree fallback runs instead of trusting an unrelated array.
       writeFileSync(

@@ -415,8 +415,10 @@ function walkCompiledLoaderTree(
   const hasOptionalLocale = seenOptionalLocale || segment === "[[...locale]]";
   if (modules.has("layout")) return hasOptionalLocale;
   const childrenExpr = parallelRoutes.get("children");
-  if (!childrenExpr || !childrenExpr.startsWith("[")) return false;
-  return walkCompiledLoaderTree(childrenExpr, 0, hasOptionalLocale);
+  if (childrenExpr === undefined) return false;
+  const childStart = skipWhitespaceAndComments(childrenExpr, 0);
+  if (childrenExpr[childStart] !== "[") return;
+  return walkCompiledLoaderTree(childrenExpr, childStart, hasOptionalLocale);
 }
 
 function findTreeExpressionForPage(source: string, expectedPage: string): string | undefined {
