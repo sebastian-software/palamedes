@@ -27,6 +27,7 @@ use palamedes::{
     split_relative_catalog_path,
 };
 use serde::Serialize;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::command::{Command, Context, VersionedJson, render_json};
 use crate::config::{ConfigCatalog, LoadedConfig};
@@ -601,53 +602,82 @@ fn process_catalogs(
     Ok(drift)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DirectoryEquivalence {
+    case_insensitive: bool,
+    unicode_normalizing: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum ExtractTargetAnchor {
     Identity(FileIdentity),
     Path(PathBuf),
 }
 
-fn fold_os_segment(segment: &std::ffi::OsStr, case_insensitive: bool) -> OsString {
-    if !case_insensitive {
+fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirectoryEquivalence) -> OsString {
+    if !equivalence.case_insensitive && !equivalence.unicode_normalizing {
         return segment.to_os_string();
     }
     segment.to_str().map_or_else(
         || segment.to_os_string(),
-        |text| OsString::from(text.to_lowercase()),
+        |text| {
+            let mut normalized = if equivalence.unicode_normalizing {
+                text.nfd().collect::<String>()
+            } else {
+                text.to_owned()
+            };
+            if equivalence.case_insensitive {
+                normalized = normalized.to_lowercase();
+                if equivalence.unicode_normalizing {
+                    normalized = normalized.nfd().collect::<String>();
+                }
+            }
+            OsString::from(normalized)
+        },
     )
 }
 
-fn resolve_directory_case_insensitivity(
+fn resolve_directory_equivalence(
     dir: &ContainedDir,
     identity: Option<FileIdentity>,
-    parent: Option<(Option<FileIdentity>, bool)>,
-    cache: &mut HashMap<FileIdentity, bool>,
-) -> bool {
+    parent: Option<(Option<FileIdentity>, DirectoryEquivalence)>,
+    cache: &mut HashMap<FileIdentity, DirectoryEquivalence>,
+) -> DirectoryEquivalence {
     if let Some(id) = identity
         && let Some(&cached) = cache.get(&id)
     {
         return cached;
     }
-    let detected = dir.is_case_insensitive().unwrap_or_else(|| {
-        if let (Some(id), Some((Some(parent_id), parent_ci))) = (identity, parent)
-            && id.same_volume(parent_id)
-        {
-            parent_ci
-        } else {
-            cfg!(any(target_os = "macos", target_os = "windows"))
+    let same_vol_parent = match (identity, parent) {
+        (Some(id), Some((Some(parent_id), parent_eq))) if id.same_volume(parent_id) => {
+            Some(parent_eq)
         }
+        _ => None,
+    };
+    let case_insensitive = dir.is_case_insensitive().unwrap_or_else(|| {
+        same_vol_parent.map_or(
+            cfg!(any(target_os = "macos", target_os = "windows")),
+            |eq| eq.case_insensitive,
+        )
     });
+    let unicode_normalizing = dir.is_unicode_normalizing().unwrap_or_else(|| {
+        same_vol_parent.map_or(cfg!(target_os = "macos"), |eq| eq.unicode_normalizing)
+    });
+    let equivalence = DirectoryEquivalence {
+        case_insensitive,
+        unicode_normalizing,
+    };
     if let Some(id) = identity {
-        cache.insert(id, detected);
+        cache.insert(id, equivalence);
     }
-    detected
+    equivalence
 }
 
 fn reject_colliding_extract_targets(
     write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
     config: &LoadedConfig,
 ) -> Result<(), CliError> {
-    let mut dir_case_cache: HashMap<FileIdentity, bool> = HashMap::new();
+    let mut dir_eq_cache: HashMap<FileIdentity, DirectoryEquivalence> = HashMap::new();
     let mut seen_paths: HashMap<(ExtractTargetAnchor, Vec<OsString>, OsString), &str> =
         HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
@@ -672,8 +702,8 @@ fn reject_colliding_extract_targets(
             path: config.root_dir.clone(),
             source: error.into_io_error(),
         })?;
-        let mut current_ci =
-            resolve_directory_case_insensitivity(&current, current_id, None, &mut dir_case_cache);
+        let mut current_eq =
+            resolve_directory_equivalence(&current, current_id, None, &mut dir_eq_cache);
         let mut existing_prefix = PathBuf::new();
         let mut remaining_segments: Vec<OsString> = Vec::new();
         let mut hit_missing = false;
@@ -683,7 +713,7 @@ fn reject_colliding_extract_targets(
                 continue;
             };
             if hit_missing {
-                remaining_segments.push(fold_os_segment(segment, current_ci));
+                remaining_segments.push(fold_os_segment(segment, current_eq));
                 continue;
             }
             match current
@@ -697,20 +727,20 @@ fn reject_colliding_extract_targets(
                         path: catalog_path.clone(),
                         source: error.into_io_error(),
                     })?;
-                    let child_ci = resolve_directory_case_insensitivity(
+                    let child_eq = resolve_directory_equivalence(
                         &child,
                         child_id,
-                        Some((current_id, current_ci)),
-                        &mut dir_case_cache,
+                        Some((current_id, current_eq)),
+                        &mut dir_eq_cache,
                     );
                     current = child;
                     current_id = child_id;
-                    current_ci = child_ci;
+                    current_eq = child_eq;
                     existing_prefix.push(segment);
                 }
                 None => {
                     hit_missing = true;
-                    remaining_segments.push(fold_os_segment(segment, current_ci));
+                    remaining_segments.push(fold_os_segment(segment, current_eq));
                 }
             }
         }
@@ -719,7 +749,7 @@ fn reject_colliding_extract_targets(
             || ExtractTargetAnchor::Path(existing_prefix),
             ExtractTargetAnchor::Identity,
         );
-        let normalized_name = fold_os_segment(&file_name, current_ci);
+        let normalized_name = fold_os_segment(&file_name, current_eq);
         let key = (anchor, remaining_segments, normalized_name);
         if let Some(first_scope) = seen_paths.insert(key, catalog.path.as_str()) {
             return Err(CliError::Io {
@@ -1480,6 +1510,31 @@ catalogs:
             );
             assert!(!app.join("locales/en/messages.po").exists());
             assert!(!app.join("locales/en/Messages.po").exists());
+        }
+
+        // Unicode NFC vs NFD collision on clean checkout (for example APFS/HFS+).
+        let is_unicode_norm = super::ContainedDir::open_root(&app)
+            .expect("open root")
+            .is_unicode_normalizing()
+            .unwrap_or(cfg!(target_os = "macos"));
+        if is_unicode_norm {
+            fs::write(
+                app.join("palamedes.yaml"),
+                "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/caf\u{00e9}\n    include: [app/a]\n  - path: locales/{locale}/cafe\u{0301}\n    include: [app/b]\n",
+            )
+            .expect("write unicode-aliased config");
+            let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+            let error = run_extraction(&config, &extract_options()).expect_err(
+                "Unicode-equivalent extract scopes on a normalizing filesystem must fail",
+            );
+            assert!(
+                error
+                    .to_string()
+                    .contains("resolve to the same target file"),
+                "unexpected error: {error}"
+            );
+            assert!(!app.join("locales/en/caf\u{00e9}.po").exists());
+            assert!(!app.join("locales/en/cafe\u{0301}.po").exists());
         }
     }
 }

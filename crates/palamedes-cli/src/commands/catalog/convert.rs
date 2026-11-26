@@ -238,8 +238,12 @@ impl Command for ConvertOptions {
                 );
                 for (path, warning) in durability_warnings {
                     eprintln!(
-                        "Warning: {} was written, but syncing its containing directory failed: {warning}",
-                        path.display()
+                        "{}",
+                        tr!(
+                            "Warning: {path} was written, but syncing its containing directory failed: {error}",
+                            path = path.display(),
+                            error = warning
+                        )
                     );
                 }
                 println!(

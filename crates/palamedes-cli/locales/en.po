@@ -357,6 +357,9 @@ msgstr "Warning: catalog {catalog} matched no source files (include: {include});
 msgid "Warning: could not write the extraction cache to {path}: {error}"
 msgstr "Warning: could not write the extraction cache to {path}: {error}"
 
+msgid "Warning: {path} was written, but syncing its containing directory failed: {error}"
+msgstr "Warning: {path} was written, but syncing its containing directory failed: {error}"
+
 msgid "Note: no Palamedes config found from {cwd} upward; configured PO output options and source-locale are not applied. Pass --config for app-local settings; --path does not discover config files."
 msgstr "Note: no Palamedes config found from {cwd} upward; configured PO output options and source-locale are not applied. Pass --config for app-local settings; --path does not discover config files."
 
