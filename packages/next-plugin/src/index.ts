@@ -712,7 +712,6 @@ export function withPalamedes(
                 distDir: metadata.distDir,
                 projectRoot,
                 ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
-                fromProductionCompileHook: true,
                 failOnMissing,
               });
               installClientCatalogPreload(metadata.distDir);

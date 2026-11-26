@@ -1,14 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { createRequire } from "node:module";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
@@ -35,7 +26,6 @@ import {
   inlineMessageExpression,
   renderManifestAdapter,
   renderVariants,
-  routeHasOptionalRootLocale,
   variantPath,
 } from "./client-catalog-permutations";
 
@@ -337,102 +327,6 @@ describe("locale resolution", () => {
         { headerSecret: secret, optionalRootLocale: true },
       ),
     ).toBe("en");
-    // Route-tree layout detection distinguishes root vs nested optional locale
-    // layouts regardless of whether the layout has client JS/CSS entries.
-    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-root-layout-tree-"));
-    try {
-      const writeRouteFile = (project: string, relativePath: string) => {
-        const target = path.join(fixtureRoot, project, relativePath);
-        mkdirSync(path.dirname(target), { recursive: true });
-        writeFileSync(
-          target,
-          "export default function Component({ children }: { children?: unknown }) { return children ?? null; }\n",
-        );
-      };
-
-      // Server-only root layout at app/shop/[[...locale]]/layout.jsx (no app/layout.jsx).
-      writeRouteFile("nested-root", "app/shop/[[...locale]]/layout.jsx");
-      writeRouteFile("nested-root", "app/shop/[[...locale]]/page.jsx");
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "nested-root"),
-          "shop/[[...locale]]/page_client-reference-manifest.js",
-        ),
-      ).toBe(true);
-
-      // Root layout at app/layout.jsx above app/shop/[[...locale]]/page.jsx.
-      writeRouteFile("top-layout", "app/layout.jsx");
-      writeRouteFile("top-layout", "app/shop/[[...locale]]/layout.jsx");
-      writeRouteFile("top-layout", "app/shop/[[...locale]]/page.jsx");
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "top-layout"),
-          "shop/[[...locale]]/page_client-reference-manifest.js",
-        ),
-      ).toBe(false);
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "top-layout"),
-          "[[...locale]]/page_client-reference-manifest.js",
-        ),
-      ).toBe(false);
-
-      // Escaped underscore segment (`%5Fshop` emitted as `_shop`), ignoring any
-      // sibling private `_shop` folder that Next.js excludes from routing.
-      writeRouteFile("escaped-underscore", "app/_shop/layout.jsx");
-      writeRouteFile("escaped-underscore", "app/%5Fshop/[[...locale]]/layout.tsx");
-      writeRouteFile("escaped-underscore", "app/%5Fshop/[[...locale]]/page.tsx");
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "escaped-underscore"),
-          "_shop/[[...locale]]/page_client-reference-manifest.js",
-        ),
-      ).toBe(true);
-
-      // A colocated directory named `layout.tsx/` is not a layout file and must
-      // not mask the real root layout under `[[...locale]]`.
-      mkdirSync(path.join(fixtureRoot, "colocated-dir/app/layout.tsx"), { recursive: true });
-      writeRouteFile("colocated-dir", "app/[[...locale]]/layout.tsx");
-      writeRouteFile("colocated-dir", "app/[[...locale]]/page.tsx");
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "colocated-dir"),
-          "[[...locale]]/page_client-reference-manifest.js",
-        ),
-      ).toBe(true);
-
-      // Verbatim pageExtensions: Next.js does not strip a leading dot from
-      // `.mdx`, so `app/layout.mdx` must not be treated as a layout when
-      // `pageExtensions` is `["tsx", ".mdx"]`.
-      writeRouteFile("verbatim-ext", "app/layout.mdx");
-      writeRouteFile("verbatim-ext", "app/[[...locale]]/layout.tsx");
-      writeRouteFile("verbatim-ext", "app/[[...locale]]/page.tsx");
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "verbatim-ext"),
-          "[[...locale]]/page_client-reference-manifest.js",
-          ["tsx", ".mdx"],
-        ),
-      ).toBe(true);
-      writeRouteFile("src-custom-ext", "src/app/(marketing)/[[...locale]]/layout.page.tsx");
-      writeRouteFile("src-custom-ext", "src/app/(marketing)/[[...locale]]/page.page.tsx");
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "src-custom-ext"),
-          "(marketing)/[[...locale]]/page_client-reference-manifest.js",
-          ["page.tsx", "tsx"],
-        ),
-      ).toBe(true);
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "src-custom-ext"),
-          "(marketing)/[[...locale]]/page_client-reference-manifest.js",
-          ["tsx"],
-        ),
-      ).toBeUndefined();
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
     // When `rootParams.locale` already decides in default route-first mode,
     // `unit.headers` is not even read.
     const spyHeaders = header("en");
@@ -454,66 +348,14 @@ describe("locale resolution", () => {
     );
   });
 
-  it("follows layout file symlinks (and ignores symlinked directories) in the source-tree fallback", (context) => {
-    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-symlink-layout-tree-"));
-    try {
-      const writeLayout = (project: string, relativePath: string) => {
-        const target = path.join(fixtureRoot, project, relativePath);
-        mkdirSync(path.dirname(target), { recursive: true });
-        writeFileSync(
-          target,
-          "export default function Layout({ children }) { return children; }\n",
-        );
-      };
-
-      writeLayout("symlink-file", "shared/root-layout.tsx");
-      writeLayout("symlink-file", "app/[[...locale]]/layout.tsx");
-      try {
-        symlinkSync(
-          path.join(fixtureRoot, "symlink-file/shared/root-layout.tsx"),
-          path.join(fixtureRoot, "symlink-file/app/layout.tsx"),
-        );
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === "EPERM" || code === "EACCES") {
-          context.skip();
-          return;
-        }
-        throw error;
-      }
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "symlink-file"),
-          "[[...locale]]/page_client-reference-manifest.js",
-        ),
-      ).toBe(false);
-
-      mkdirSync(path.join(fixtureRoot, "symlink-dir/shared/dir"), { recursive: true });
-      writeLayout("symlink-dir", "app/[[...locale]]/layout.tsx");
-      writeLayout("symlink-dir", "app/[[...locale]]/page.tsx");
-      symlinkSync(
-        path.join(fixtureRoot, "symlink-dir/shared/dir"),
-        path.join(fixtureRoot, "symlink-dir/app/layout.tsx"),
-      );
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "symlink-dir"),
-          "[[...locale]]/page_client-reference-manifest.js",
-        ),
-      ).toBe(true);
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
-  });
-
-  it("embeds optional-root-locale route-tree detection into built manifests without relying on layout asset entries", async () => {
+  it("embeds optional-root-locale route-tree detection into built manifests from compiled output and never trusts live source edits", async () => {
     const projectRoot = realpathSync(
       mkdtempSync(path.join(os.tmpdir(), "palamedes-built-optional-locale-")),
     );
     try {
-      // Minimal Palamedes project with two locales and a server-only root layout
-      // at app/shop/[[...locale]]/layout.jsx (omitted from entryJSFiles/entryCSSFiles,
-      // matching Next 16.4.6 Turbopack output for server-only layouts).
+      // Minimal Palamedes project with two locales and a compiled Turbopack
+      // route entry (matching Next 16.4.6 output for server-only layouts that
+      // have no client JS/CSS entries).
       mkdirSync(path.join(projectRoot, "app/shop/[[...locale]]"), { recursive: true });
       mkdirSync(path.join(projectRoot, "locales"), { recursive: true });
       writeFileSync(
@@ -534,6 +376,7 @@ describe("locale resolution", () => {
       const distDir = path.join(projectRoot, ".next");
       mkdirSync(path.join(distDir, "static/chunks"), { recursive: true });
       mkdirSync(path.join(distDir, "server/app/shop/[[...locale]]"), { recursive: true });
+      mkdirSync(path.join(distDir, "server/chunks/ssr"), { recursive: true });
       const payload = Buffer.from(
         JSON.stringify({ source: "app/shop/[[...locale]]/page.jsx", ids: [HELLO_COMPILED_ID] }),
       ).toString("base64url");
@@ -559,102 +402,98 @@ globalThis.__RSC_MANIFEST["/shop/[[...locale]]/page"] = ${JSON.stringify({
           entryJSFiles: { "[project]/app/shop/[[...locale]]/page": ["static/chunks/page.js"] },
         })};`,
       );
+      const runtimeChunk = path.join(distDir, "server/chunks/ssr/next_app_page_runtime.js");
+      writeFileSync(
+        runtimeChunk,
+        `module.exports=[59745,a=>{"use strict";var b=a.i(19317),d=a.i(38525);a.s(["f",0,function({tree:O,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){let U={require:R,loadChunk:S},V=new b.AppPageRouteModule({definition:{kind:d.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:O},distDir:".next",relativeProjectDir:""});async function Z(){return null}return{__next_app__:U,routeModule:V,handler:Z}}])},19317,(a,b)=>{b.exports=a.r(18622)},18622,(a,b)=>{b.exports=a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",()=>require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js"))}];\n`,
+      );
+      const templateChunk = path.join(
+        distDir,
+        "server/chunks/ssr/next_dist_esm_build_templates_app-page_shop.js",
+      );
+      writeFileSync(
+        path.join(distDir, "server/app/shop/[[...locale]]/page.js"),
+        `var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/shop/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_app_page_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_shop.js")\nmodule.exports=R.m(1).exports\n`,
+      );
+      const writeShopTree = (treeExpr: string) => {
+        writeFileSync(
+          templateChunk,
+          `module.exports=[1,a=>{var c=a.i(59745);let j=${treeExpr},m=(0,c.f)({tree:j,page:"/shop/[[...locale]]/page",pathname:"/shop/[[...locale]]",require:r,loadChunk:lc,interopDefault:id}),mp=m.__next_app__,mq=m.routeModule,mr=m.handler;a.s(["__next_app__",0,mp,"handler",0,mr,"routeModule",0,mq],1);}];`,
+        );
+      };
+      const evalShopEntry = () => {
+        const ctx: Record<string, unknown> = { process: { env: {} } };
+        vm.runInNewContext(readFileSync(manifestPath, "utf8"), ctx);
+        const bindFn = ctx.__PALAMEDES_CLIENT_CATALOG_BIND as (
+          fn: (
+            locales: readonly string[],
+            fallback: string,
+            optionalRootLocale?: boolean,
+          ) => string,
+        ) => void;
+        bindFn((availableLocales, fallbackLocale, optionalRootLocale) =>
+          resolveRenderLocale(
+            availableLocales,
+            fallbackLocale,
+            render("/shop/[[...locale]]"),
+            unit({ rootParams: {}, headers: header("de") }),
+            typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
+          ),
+        );
+        return (ctx.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>)[
+          "/shop/[[...locale]]/page"
+        ]!.entryJSFiles["[project]/app/shop/[[...locale]]/page"]![0]!;
+      };
 
+      // Root layout inside app/shop/[[...locale]]/layout.jsx: omitted locale
+      // must fall back to "en" instead of trusting x-palamedes-locale.
+      writeShopTree(
+        `["",{children:["shop",{children:["[[...locale]]",{children:["__PAGE__",{},{page:[p,"[project]/app/shop/[[...locale]]/page.jsx"]},[]]},{layout:[l,"[project]/app/shop/[[...locale]]/layout.jsx"]},[]]},{},[]]},{"global-error":[g,"builtin"]},[]]`,
+      );
       await emitClientCatalogPermutations({
         distDir,
         projectRoot,
         failOnMissing: false,
       });
+      const rootInsideEntry = evalShopEntry();
+      expect(rootInsideEntry).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+      expect(readFileSync(path.join(distDir, rootInsideEntry), "utf8")).toContain('"Hello"');
 
-      const manifestSource = readFileSync(manifestPath, "utf8");
-      const context: Record<string, unknown> = { process: { env: {} } };
-      vm.runInNewContext(manifestSource, context);
-      const bind = context.__PALAMEDES_CLIENT_CATALOG_BIND as (
-        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
-      ) => void;
-      bind((availableLocales, fallbackLocale, optionalRootLocale) =>
-        resolveRenderLocale(
-          availableLocales,
-          fallbackLocale,
-          render("/shop/[[...locale]]"),
-          unit({ rootParams: {}, headers: header("de") }),
-          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
-        ),
-      );
-      const entryFiles = (
-        context.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
-      )["/shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/shop/[[...locale]]/page"]!;
-      // Because app/shop/[[...locale]]/layout.jsx is the root layout, an
-      // omitted locale on /shop must fall back to "en" instead of trusting the header.
-      expect(entryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
-      expect(readFileSync(path.join(distDir, entryFiles[0]!), "utf8")).toContain('"Hello"');
-
-      // Adding a top-level app/layout.jsx moves the root layout above /shop/[[...locale]],
-      // so the same route now accepts the Proxy header in route-first mode once
-      // Next's emitted required-server-files.json confirms the effective pageExtensions.
+      // When compiled-tree inspection is inconclusive (e.g. dynamic options),
+      // adding a live app/layout.jsx on disk (as a runAfterProductionCompile
+      // hook might do) MUST NOT authorize header selection; it fails closed.
       writeFileSync(
         path.join(projectRoot, "app/layout.jsx"),
         "export default function RootLayout({ children }) { return children; }\n",
       );
-      // Without confirmed effective pageExtensions (no compiled loaderTree, no
-      // NextBuildContext, and no required-server-files.json), emitClientCatalogPermutations
-      // must fail closed rather than guessing default extensions to trust a header.
-      await emitClientCatalogPermutations({
-        distDir,
-        projectRoot,
-        failOnMissing: false,
-      });
-      const unconfirmedContext: Record<string, unknown> = { process: { env: {} } };
-      vm.runInNewContext(readFileSync(manifestPath, "utf8"), unconfirmedContext);
-      const bindUnconfirmed = unconfirmedContext.__PALAMEDES_CLIENT_CATALOG_BIND as (
-        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
-      ) => void;
-      bindUnconfirmed((availableLocales, fallbackLocale, optionalRootLocale) =>
-        resolveRenderLocale(
-          availableLocales,
-          fallbackLocale,
-          render("/shop/[[...locale]]"),
-          unit({ rootParams: {}, headers: header("de") }),
-          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
-        ),
-      );
-      const unconfirmedEntryFiles = (
-        unconfirmedContext.__RSC_MANIFEST as Record<
-          string,
-          { entryJSFiles: Record<string, string[]> }
-        >
-      )["/shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/shop/[[...locale]]/page"]!;
-      expect(unconfirmedEntryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
-
       writeFileSync(
         path.join(distDir, "required-server-files.json"),
         JSON.stringify({ config: { pageExtensions: ["tsx", "ts", "jsx", "js"] } }),
       );
+      writeFileSync(
+        templateChunk,
+        `module.exports=[1,a=>{var c=a.i(59745);let m=(0,c.f)(dynamicOpts),mp=m.__next_app__,mq=m.routeModule,mr=m.handler;a.s(["__next_app__",0,mp,"handler",0,mr,"routeModule",0,mq],1);}];`,
+      );
       await emitClientCatalogPermutations({
         distDir,
         projectRoot,
         failOnMissing: false,
       });
-      const nestedManifestSource = readFileSync(manifestPath, "utf8");
-      const nestedContext: Record<string, unknown> = { process: { env: {} } };
-      vm.runInNewContext(nestedManifestSource, nestedContext);
-      const bindNested = nestedContext.__PALAMEDES_CLIENT_CATALOG_BIND as (
-        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
-      ) => void;
-      bindNested((availableLocales, fallbackLocale, optionalRootLocale) =>
-        resolveRenderLocale(
-          availableLocales,
-          fallbackLocale,
-          render("/shop/[[...locale]]"),
-          unit({ rootParams: {}, headers: header("de") }),
-          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
-        ),
+      expect(evalShopEntry()).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+
+      // Only when the compiled route tree itself places a root layout above
+      // /shop/[[...locale]] does the route accept the Proxy header.
+      writeShopTree(
+        `["",{children:["shop",{children:["[[...locale]]",{children:["__PAGE__",{},{page:[p,"[project]/app/shop/[[...locale]]/page.jsx"]},[]]},{},[]]},{},[]]},{layout:[l,"[project]/app/layout.jsx"],"global-error":[g,"builtin"]},[]]`,
       );
-      const nestedEntryFiles = (
-        nestedContext.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
-      )["/shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/shop/[[...locale]]/page"]!;
-      expect(nestedEntryFiles[0]).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
-      expect(readFileSync(path.join(distDir, nestedEntryFiles[0]!), "utf8")).toContain('"Hallo"');
+      await emitClientCatalogPermutations({
+        distDir,
+        projectRoot,
+        failOnMissing: false,
+      });
+      const rootAboveEntry = evalShopEntry();
+      expect(rootAboveEntry).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
+      expect(readFileSync(path.join(distDir, rootAboveEntry), "utf8")).toContain('"Hallo"');
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -1329,105 +1168,25 @@ const handler = entrypoint.handler;`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
-      // An ordinary file OR an empty colocated directory named `app/shop_front`
-      // must not shadow `app/shop%5Ffront/[[...locale]]/layout.tsx` in the
-      // filesystem fallback.
-      const escapedProject = mkdtempSync(path.join(os.tmpdir(), "palamedes-escaped-file-shadow-"));
-      try {
-        mkdirSync(path.join(escapedProject, "app/shop%5Ffront/[[...locale]]"), { recursive: true });
-        writeFileSync(path.join(escapedProject, "app/shop_front"), "not a directory\n");
-        writeFileSync(
-          path.join(escapedProject, "app/shop%5Ffront/[[...locale]]/layout.tsx"),
-          "export default function Layout({ children }) { return children; }\n",
-        );
-        writeFileSync(
-          path.join(escapedProject, "app/shop%5Ffront/[[...locale]]/page.tsx"),
-          "export default function Page() { return null; }\n",
-        );
-        expect(
-          routeHasOptionalRootLocale(
-            escapedProject,
-            "shop_front/[[...locale]]/page_client-reference-manifest.js",
-          ),
-        ).toBe(true);
-        rmSync(path.join(escapedProject, "app/shop_front"));
-        mkdirSync(path.join(escapedProject, "app/shop_front"), { recursive: true });
-        expect(
-          routeHasOptionalRootLocale(
-            escapedProject,
-            "shop_front/[[...locale]]/page_client-reference-manifest.js",
-          ),
-        ).toBe(true);
-        // Even if `app/shop_front/[[...locale]]` also exists without a page entry,
-        // matching the leaf `page.tsx` selects `app/shop%5Ffront/[[...locale]]`.
-        mkdirSync(path.join(escapedProject, "app/shop_front/[[...locale]]"), { recursive: true });
-        writeFileSync(
-          path.join(escapedProject, "app/shop_front/layout.tsx"),
-          "export default function ShadowLayout({ children }) { return children; }\n",
-        );
-        expect(
-          routeHasOptionalRootLocale(
-            escapedProject,
-            "shop_front/[[...locale]]/page_client-reference-manifest.js",
-          ),
-        ).toBe(true);
-        // If `app/shop%5Ffront/[[...locale]]/page.tsx` is removed so NO candidate
-        // directory contains `page.tsx`, a colocated `app/shop_front/layout.tsx`
-        // must NOT produce `false` — return undefined so the caller fails closed.
-        rmSync(path.join(escapedProject, "app/shop%5Ffront/[[...locale]]/page.tsx"));
-        expect(
-          routeHasOptionalRootLocale(
-            escapedProject,
-            "shop_front/[[...locale]]/page_client-reference-manifest.js",
-          ),
-        ).toBeUndefined();
-        // When a route's source directory chain cannot be located on disk,
-        // routeHasOptionalRootLocale() returns undefined (unknown boundary)
-        // rather than false so emitClientCatalogPermutations() fails closed.
-        expect(
-          routeHasOptionalRootLocale(
-            escapedProject,
-            "generated/[[...locale]]/page_client-reference-manifest.js",
-          ),
-        ).toBeUndefined();
-        // Lowercase `%5f` is NOT decoded by Next.js, so `app/shop%5ffront` must
-        // not participate when resolving `shop_front`.
-        const caseProject = mkdtempSync(path.join(os.tmpdir(), "palamedes-case-escape-"));
-        try {
-          mkdirSync(path.join(caseProject, "app/shop_front/[[...locale]]"), { recursive: true });
-          mkdirSync(path.join(caseProject, "app/shop%5ffront/[[...locale]]"), { recursive: true });
-          writeFileSync(
-            path.join(caseProject, "app/shop_front/layout.tsx"),
-            "export default function RootLayout({ children }) { return children; }\n",
-          );
-          writeFileSync(
-            path.join(caseProject, "app/shop_front/[[...locale]]/page.tsx"),
-            "export default function Page() { return null; }\n",
-          );
-          writeFileSync(
-            path.join(caseProject, "app/shop%5ffront/[[...locale]]/layout.tsx"),
-            "export default function OtherLayout({ children }) { return children; }\n",
-          );
-          writeFileSync(
-            path.join(caseProject, "app/shop%5ffront/[[...locale]]/page.tsx"),
-            "export default function OtherPage() { return null; }\n",
-          );
-          expect(
-            routeHasOptionalRootLocale(
-              caseProject,
-              "shop_front/[[...locale]]/page_client-reference-manifest.js",
-            ),
-          ).toBe(false);
-        } finally {
-          rmSync(caseProject, { recursive: true, force: true });
-        }
-      } finally {
-        rmSync(escapedProject, { recursive: true, force: true });
-      }
+      // Turbopack chunks can register grouped module IDs (`[3042, 77420, factory]`)
+      // and bundled factories containing regex literals with delimiters (`/\]/`,
+      // `/\}/`, `/\)/`, `/,/`). Verify that both grouped IDs and regex delimiters
+      // preceding the Next runtime module are decoded cleanly.
+      writeFileSync(
+        runtimeChunk,
+        `module.exports=[3042,77420,(a,b)=>{const re=/\\]\\}\\)/;if(re.test("x"))/\\],/.test(a);b.exports=re;},${runtimeModules}];\n`,
+      );
+      writeFileSync(
+        templateChunk,
+        `module.exports=[10,1,a=>{let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{}},[]]},{layout:[l,"[project]/app/layout.page.tsx"],"global-error":[g,"builtin"]},[]];${tpExports(1, "tree:j")}}];`,
+      );
+      expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
       // End-to-end fail-closed check: when compiled-tree inspection is
-      // inconclusive AND the optional route's source directory is missing,
-      // emitClientCatalogPermutations() still sets optionalRootLocale=true so
-      // an omitted segment ignores x-palamedes-locale.
+      // inconclusive (for example a missing page entry or nonliteral children),
+      // emitClientCatalogPermutations() always sets optionalRootLocale=true so
+      // an omitted segment ignores x-palamedes-locale — even if a hook or later
+      // edit created `app/layout.page.tsx` or `app/layout.tsx` on disk.
       const missingSourceRoot = realpathSync(
         mkdtempSync(path.join(os.tmpdir(), "palamedes-missing-src-root-")),
       );
@@ -1513,158 +1272,17 @@ globalThis.__RSC_MANIFEST["/generated/[[...locale]]/page"] = ${JSON.stringify({
       );
       writeFileSync(
         path.join(distDir, "server/app/[[...locale]]/page.js"),
-        `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nR.c("server/chunks/ssr/my_app-page_helper.js")\n`,
+        `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_app_page_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nR.c("server/chunks/ssr/my_app-page_helper.js")\nmodule.exports=R.m(1).exports\n`,
       );
-
-      // End-to-end check: when the compiled loaderTree has a nonliteral child AND
-      // a later config wrapper added `page.tsx` (so only `layout.page.tsx` exists,
-      // with no default-named `layout.tsx`), emitClientCatalogPermutations() reads
-      // Next's effective pageExtensions (from NextBuildContext during `next build`
-      // or required-server-files.json post-build) and still marks optionalRootLocale=true.
       writeFileSync(
         templateChunk,
         `module.exports=[1,a=>{let child=["[[...locale]]",{},{layout:[l,"[project]/app/[[...locale]]/layout.page.tsx"]},[]];let j=["",{children:child},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]"});}];`,
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
 
-      const resetManifest = () => {
-        writeFileSync(
-          manifestPath,
-          `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
-globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
-            entryCSSFiles: {},
-            entryJSFiles: { "[project]/app/[[...locale]]/page": ["static/chunks/page.js"] },
-          })};`,
-        );
-      };
-      const evalRenderedEntry = () => {
-        const ctx: Record<string, unknown> = { process: { env: {} } };
-        vm.runInNewContext(readFileSync(manifestPath, "utf8"), ctx);
-        const bindFn = ctx.__PALAMEDES_CLIENT_CATALOG_BIND as (
-          fn: (
-            locales: readonly string[],
-            fallback: string,
-            optionalRootLocale?: boolean,
-          ) => string,
-        ) => void;
-        bindFn((availableLocales, fallbackLocale, optionalRootLocale) =>
-          resolveRenderLocale(
-            availableLocales,
-            fallbackLocale,
-            render("/[[...locale]]"),
-            unit({ rootParams: {}, headers: header("de") }),
-            typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
-          ),
-        );
-        return (ctx.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>)[
-          "/[[...locale]]/page"
-        ]!.entryJSFiles["[project]/app/[[...locale]]/page"]![0]!;
-      };
-
-      const nextRequire = createRequire(import.meta.url);
-      const { NextBuildContext } = nextRequire("next/dist/build/build-context") as {
-        NextBuildContext: {
-          dir?: string;
-          distDir?: string;
-          config?: { pageExtensions?: string[] };
-        };
-      };
-      const prevDir = NextBuildContext.dir;
-      const prevDistDir = NextBuildContext.distDir;
-      const prevConfig = NextBuildContext.config;
-      try {
-        NextBuildContext.dir = projectRoot;
-        NextBuildContext.distDir = distDir;
-        NextBuildContext.config = { pageExtensions: ["page.tsx", "page.jsx"] };
-        resetManifest();
-        await emitClientCatalogPermutations({
-          distDir,
-          projectRoot,
-          failOnMissing: false,
-        });
-        expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
-
-        // Placing a top-level `app/layout.page.tsx` above `[[...locale]]` proves
-        // Next's effective pageExtensions actually govern the fallback:
-        // - With matching NextBuildContext.distDir (`page.tsx`), `app/layout.page.tsx`
-        //   is recognized as a root layout above `[[...locale]]` -> header allowed (`de`).
-        // - With an unrelated NextBuildContext.distDir (and even if a non-route
-        //   `app/layout.tsx` file exists on disk), the effective extensions cannot
-        //   be confirmed so the fallback fails closed (`en`).
-        const topCustomLayout = path.join(projectRoot, "app/layout.page.tsx");
-        const decoyDefaultLayout = path.join(projectRoot, "app/layout.tsx");
-        writeFileSync(
-          topCustomLayout,
-          "export default function TopLayout({ children }) { return children; }\n",
-        );
-        writeFileSync(
-          decoyDefaultLayout,
-          "export default function NonRouteLayout({ children }) { return children; }\n",
-        );
-        try {
-          resetManifest();
-          await emitClientCatalogPermutations({
-            distDir,
-            projectRoot,
-            failOnMissing: false,
-          });
-          expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
-
-          NextBuildContext.distDir = path.join(projectRoot, ".other-next");
-          resetManifest();
-          await emitClientCatalogPermutations({
-            distDir,
-            projectRoot,
-            failOnMissing: false,
-          });
-          expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
-        } finally {
-          rmSync(topCustomLayout, { force: true });
-          rmSync(decoyDefaultLayout, { force: true });
-        }
-      } finally {
-        NextBuildContext.dir = prevDir;
-        NextBuildContext.distDir = prevDistDir;
-        NextBuildContext.config = prevConfig;
-      }
-
-      // Post-build fallback: when NextBuildContext is absent, required-server-files.json
-      // provides Next's effective pageExtensions (confirmed by recognizing
-      // `app/layout.page.tsx` above `[[...locale]]`).
-      const postBuildTopLayout = path.join(projectRoot, "app/layout.page.tsx");
-      writeFileSync(
-        postBuildTopLayout,
-        "export default function TopLayout({ children }) { return children; }\n",
-      );
-      writeFileSync(
-        path.join(distDir, "required-server-files.json"),
-        JSON.stringify({ config: { pageExtensions: ["page.tsx", "page.jsx"] } }),
-      );
-      try {
-        resetManifest();
-        await emitClientCatalogPermutations({
-          distDir,
-          projectRoot,
-          failOnMissing: false,
-        });
-        expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
-
-        // During `runAfterProductionCompile`, a stale required-server-files.json
-        // from a previous build must NOT override current pageExtensions.
-        resetManifest();
-        await emitClientCatalogPermutations({
-          distDir,
-          projectRoot,
-          fromProductionCompileHook: true,
-          failOnMissing: false,
-        });
-        expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
-      } finally {
-        rmSync(postBuildTopLayout, { force: true });
-      }
-
-      // If no entrypoint binds `tree` for this page, return undefined so the
-      // source-tree fallback runs instead of trusting an unrelated array.
+      // If no entrypoint binds `tree` for this page, return undefined so
+      // emitClientCatalogPermutations() fails closed instead of trusting an
+      // unrelated array.
       writeFileSync(
         templateChunk,
         `module.exports=[1,a=>{let unrelated=["",{children:["other",{},{},[]]},{layout:[u,"other"]},[]];}];`,

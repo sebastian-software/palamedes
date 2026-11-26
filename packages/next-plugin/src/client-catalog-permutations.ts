@@ -1,14 +1,6 @@
 import { createHash } from "node:crypto";
-import {
-  type Dirent,
-  existsSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  statSync,
-} from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile, readdir, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
 import vm from "node:vm";
 
@@ -138,61 +130,6 @@ export function inlineMessageExpression(messages: Record<string, string>): strin
   return `(()=>{${declarations}return (${literal});})()`;
 }
 
-const DEFAULT_PAGE_EXTENSIONS = ["tsx", "ts", "jsx", "js"] as const;
-
-function resolveAppDirectory(projectRoot: string): string | undefined {
-  const rootApp = path.join(projectRoot, "app");
-  if (existsSync(rootApp)) return rootApp;
-  const srcApp = path.join(projectRoot, "src", "app");
-  if (existsSync(srcApp)) return srcApp;
-  return;
-}
-
-function isRegularFileTarget(entryPath: string): boolean {
-  try {
-    return statSync(entryPath).isFile();
-  } catch {
-    return false;
-  }
-}
-
-function isDirectoryTarget(entryPath: string): boolean {
-  try {
-    return statSync(entryPath).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-function directoryHasNamedFile(
-  directory: string,
-  stem: string,
-  extensions: readonly string[],
-): boolean {
-  // Construct filenames verbatim (`${stem}.${ext}`), matching Next.js's
-  // `createValidFileMatcher`, which does not strip a leading dot from `ext`.
-  const expectedNames = new Set(
-    extensions.filter((ext) => ext.length > 0).map((ext) => `${stem}.${ext}`),
-  );
-  if (expectedNames.size === 0) return false;
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(directory, { withFileTypes: true });
-  } catch {
-    return false;
-  }
-  return entries.some(
-    (entry) =>
-      expectedNames.has(entry.name) &&
-      (entry.isFile() ||
-        (entry.isSymbolicLink() && isRegularFileTarget(path.join(directory, entry.name)))),
-  );
-}
-
-function directoryHasLayout(directory: string, extensions: readonly string[]): boolean {
-  return directoryHasNamedFile(directory, "layout", extensions);
-}
-
 function skipWhitespaceAndComments(source: string, start: number): number {
   let index = start;
   while (index < source.length) {
@@ -251,23 +188,71 @@ function scanBalancedEnd(source: string, start: number): number {
   const open = source[start];
   const close = open === "[" ? "]" : open === "{" ? "}" : ")";
   let depth = 0;
+  let regexAllowed = true;
+  let prevWord = "";
+  const parenConditionStack: boolean[] = [];
   let index = start;
   while (index < source.length) {
     const ch = source[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(source, index);
+      continue;
+    }
     if (ch === '"' || ch === "'") {
       const end = scanQuotedStringEnd(source, index);
       if (end === -1) return -1;
       index = end;
+      prevWord = "";
+      regexAllowed = false;
       continue;
     }
     if (ch === "`") {
       const end = scanTemplateLiteralEnd(source, index);
       if (end === -1) return -1;
       index = end;
+      prevWord = "";
+      regexAllowed = false;
       continue;
     }
-    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
-      index = skipWhitespaceAndComments(source, index);
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(source, index);
+      if (end !== -1) {
+        index = end;
+        prevWord = "";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < source.length && /[\w$]/u.test(source[index] ?? "")) index += 1;
+      prevWord = source.slice(wordStart, index);
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(prevWord);
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < source.length && /[\w.]/u.test(source[index] ?? "")) index += 1;
+      prevWord = "";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "(") {
+      parenConditionStack.push(CONTROL_FLOW_KEYWORDS.has(prevWord) || prevWord === "for");
+    } else if (ch === ")") {
+      const wasCondition = parenConditionStack.pop() ?? false;
+      if (ch === close) {
+        depth -= 1;
+        if (depth === 0) return index + 1;
+      }
+      index += 1;
+      prevWord = "";
+      regexAllowed = wasCondition;
       continue;
     }
     if (ch === open) depth += 1;
@@ -276,6 +261,8 @@ function scanBalancedEnd(source: string, start: number): number {
       if (depth === 0) return index + 1;
     }
     index += 1;
+    prevWord = "";
+    regexAllowed = "([{=,:;!?&|^~+-*%<>}".includes(ch ?? "");
   }
   return -1;
 }
@@ -350,31 +337,68 @@ function splitTopLevelArrayElements(source: string, arrayStart: number): string[
   const elements: string[] = [];
   let index = arrayStart + 1;
   let elemStart = index;
+  let regexAllowed = true;
   while (index < arrayEnd - 1) {
     const ch = source[index];
-    if (ch === '"' || ch === "'") {
-      const end = scanQuotedStringEnd(source, index);
-      if (end === -1) return;
-      index = end;
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
       continue;
     }
     if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
       index = skipWhitespaceAndComments(source, index);
       continue;
     }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(source, index);
+      if (end === -1) return;
+      index = end;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(source, index);
+      if (end === -1) return;
+      index = end;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(source, index);
+      if (end !== -1) {
+        index = end;
+        regexAllowed = false;
+        continue;
+      }
+    }
     if (ch === "[" || ch === "{" || ch === "(") {
       const end = scanBalancedEnd(source, index);
       if (end === -1) return;
       index = end;
+      regexAllowed = ch === "{";
       continue;
     }
     if (ch === ",") {
       elements.push(source.slice(elemStart, index).trim());
       index += 1;
       elemStart = index;
+      regexAllowed = true;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < arrayEnd - 1 && /[\w$]/u.test(source[index] ?? "")) index += 1;
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(source.slice(wordStart, index));
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < arrayEnd - 1 && /[\w.]/u.test(source[index] ?? "")) index += 1;
+      regexAllowed = false;
       continue;
     }
     index += 1;
+    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
   }
   const trailing = source.slice(elemStart, arrayEnd - 1).trim();
   if (trailing.length > 0) elements.push(trailing);
@@ -413,26 +437,62 @@ function parseTopLevelObjectProperties(expr: string): Map<string, string> | unde
     if (trimmed[index] !== ":") return;
     index = skipWhitespaceAndComments(trimmed, index + 1);
     const valueStart = index;
+    let regexAllowed = true;
     while (index < objectEnd - 1) {
       const ch = trimmed[index];
-      if (ch === '"' || ch === "'") {
-        const end = scanQuotedStringEnd(trimmed, index);
-        if (end === -1) return;
-        index = end;
+      if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+        index += 1;
         continue;
       }
       if (ch === "/" && (trimmed[index + 1] === "/" || trimmed[index + 1] === "*")) {
         index = skipWhitespaceAndComments(trimmed, index);
         continue;
       }
+      if (ch === '"' || ch === "'") {
+        const end = scanQuotedStringEnd(trimmed, index);
+        if (end === -1) return;
+        index = end;
+        regexAllowed = false;
+        continue;
+      }
+      if (ch === "`") {
+        const end = scanTemplateLiteralEnd(trimmed, index);
+        if (end === -1) return;
+        index = end;
+        regexAllowed = false;
+        continue;
+      }
+      if (ch === "/" && regexAllowed) {
+        const end = scanRegexLiteralEnd(trimmed, index);
+        if (end !== -1) {
+          index = end;
+          regexAllowed = false;
+          continue;
+        }
+      }
       if (ch === "[" || ch === "{" || ch === "(") {
         const end = scanBalancedEnd(trimmed, index);
         if (end === -1) return;
         index = end;
+        regexAllowed = ch === "{";
         continue;
       }
       if (ch === ",") break;
+      if (/[A-Za-z_$]/u.test(ch ?? "")) {
+        const wordStart = index;
+        index += 1;
+        while (index < objectEnd - 1 && /[\w$]/u.test(trimmed[index] ?? "")) index += 1;
+        regexAllowed = REGEX_PRECEDING_KEYWORDS.has(trimmed.slice(wordStart, index));
+        continue;
+      }
+      if (/[0-9]/u.test(ch ?? "")) {
+        index += 1;
+        while (index < objectEnd - 1 && /[\w.]/u.test(trimmed[index] ?? "")) index += 1;
+        regexAllowed = false;
+        continue;
+      }
       index += 1;
+      regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
     }
     properties.set(key, trimmed.slice(valueStart, index).trim());
     if (trimmed[index] === ",") index += 1;
@@ -887,7 +947,7 @@ type EnclosingModuleContext = {
   scopeEnd: number;
   isTopLevel: boolean;
   moduleParam?: string;
-  moduleId?: string;
+  moduleIds?: string[];
 };
 
 function findEnclosingModuleContext(
@@ -989,16 +1049,26 @@ function findEnclosingModuleContext(
   const fnStart =
     fnHeaderMatch.index +
     (fnHeaderMatch[0].startsWith("(") || /^[A-Za-z_$]/u.test(fnHeaderMatch[0]) ? 0 : 1);
-  const beforeFn = source.slice(0, fnStart);
-  const moduleIdMatch = /(?:^|[[,])\s*(\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*,\s*$/u.exec(
-    beforeFn,
-  );
+  // Turbopack registers one or more consecutive module IDs before each factory
+  // (for example `[3042, 77420, (a, b) => { ... }]`). Collect the full group.
+  const moduleIds: string[] = [];
+  let cursorText = source.slice(0, fnStart);
+  while (true) {
+    const idMatch = /(?:^|[[,])\s*(\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*,\s*$/u.exec(
+      cursorText,
+    );
+    if (!idMatch) break;
+    moduleIds.unshift(idMatch[1]!);
+    const matched = idMatch[0];
+    const keepLeading = matched.startsWith("[") || matched.startsWith(",") ? 1 : 0;
+    cursorText = cursorText.slice(0, idMatch.index + keepLeading);
+  }
   return {
     scopeStart: openBrace + 1,
     scopeEnd: closeBraceEnd - 1,
     isTopLevel: false,
     moduleParam,
-    moduleId: moduleIdMatch?.[1],
+    moduleIds: moduleIds.length > 0 ? moduleIds : undefined,
   };
 }
 
@@ -1261,26 +1331,110 @@ const NEXT_APP_PAGE_EXTERNAL_SPECIFIER =
 
 type TurbopackModuleResolver = (moduleId: string) => string | undefined;
 
+const TURBOPACK_MODULE_ID_LITERAL = /^(?:\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')$/u;
+
 function extractTurbopackModulesFromSource(source: string): Map<string, string | null> {
   const modules = new Map<string, string | null>();
-  const marker = /module\.exports\s*=\s*\[/gu;
-  let match: RegExpExecArray | null;
-  while ((match = marker.exec(source)) !== null) {
-    const arrayStart = match.index + match[0].length - 1;
-    const arrayEnd = scanBalancedEnd(source, arrayStart);
-    if (arrayEnd === -1) continue;
-    const elements = splitTopLevelArrayElements(source.slice(arrayStart, arrayEnd), 0);
-    if (!elements || elements.length % 2 !== 0) continue;
-    for (let index = 0; index < elements.length; index += 2) {
-      const id = elements[index]!.trim();
-      const factory = elements[index + 1]!.trim();
-      const existing = modules.get(id);
-      if (existing === undefined) {
-        modules.set(id, factory);
-      } else if (existing !== factory) {
-        modules.set(id, null);
+  let regexAllowed = true;
+  let prevToken: "dot" | "other" = "other";
+  let index = 0;
+
+  while (index < source.length) {
+    const ch = source[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(source, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(source, index);
+      if (end === -1) break;
+      index = end;
+      prevToken = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(source, index);
+      if (end === -1) break;
+      index = end;
+      prevToken = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(source, index);
+      if (end !== -1) {
+        index = end;
+        prevToken = "other";
+        regexAllowed = false;
+        continue;
       }
     }
+    if (ch === ".") {
+      index += 1;
+      prevToken = "dot";
+      regexAllowed = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < source.length && /[\w$]/u.test(source[index] ?? "")) index += 1;
+      const word = source.slice(wordStart, index);
+      if (prevToken !== "dot" && word === "module") {
+        const assignMatch = /^\s*\.\s*exports\s*=\s*\[/u.exec(source.slice(index));
+        if (assignMatch) {
+          const arrayStart = index + assignMatch[0].length - 1;
+          const arrayEnd = scanBalancedEnd(source, arrayStart);
+          if (arrayEnd !== -1) {
+            const elements = splitTopLevelArrayElements(source.slice(arrayStart, arrayEnd), 0);
+            if (elements) {
+              // Turbopack registers one or more consecutive module IDs followed
+              // by their shared factory function: `[3042, 77420, (a, b) => ...]`.
+              let pendingIds: string[] = [];
+              for (const rawElement of elements) {
+                const elem = rawElement.trim();
+                if (TURBOPACK_MODULE_ID_LITERAL.test(elem)) {
+                  pendingIds.push(elem);
+                  continue;
+                }
+                if (pendingIds.length === 0) break;
+                for (const id of pendingIds) {
+                  const existing = modules.get(id);
+                  if (existing === undefined) {
+                    modules.set(id, elem);
+                  } else if (existing !== elem) {
+                    modules.set(id, null);
+                  }
+                }
+                pendingIds = [];
+              }
+            }
+            index = arrayEnd;
+            prevToken = "other";
+            regexAllowed = false;
+            continue;
+          }
+        }
+      }
+      prevToken = "other";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < source.length && /[\w.]/u.test(source[index] ?? "")) index += 1;
+      prevToken = "other";
+      regexAllowed = false;
+      continue;
+    }
+    index += 1;
+    prevToken = "other";
+    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
   }
   return modules;
 }
@@ -2802,7 +2956,8 @@ function findTreeExpressionForPage(
             const moduleCtx = findEnclosingModuleContext(source, objectStart);
             if (
               moduleCtx &&
-              (expectedModuleId === undefined || moduleCtx.moduleId === expectedModuleId)
+              (expectedModuleId === undefined ||
+                moduleCtx.moduleIds?.includes(expectedModuleId) === true)
             ) {
               const scopeSource = source.slice(moduleCtx.scopeStart, moduleCtx.scopeEnd);
               const callBinding = extractEntrypointCallBinding(
@@ -2982,204 +3137,6 @@ export function compiledRouteHasOptionalRootLocale(
   );
 }
 
-function directoryHasRouteEntry(
-  directory: string,
-  entryStem: string,
-  pageExtensions: readonly string[],
-): boolean {
-  return directoryHasNamedFile(directory, entryStem, pageExtensions);
-}
-
-function resolveSourceSegmentDirectories(parentDir: string, emittedSegment: string): string[] {
-  // Next.js treats folders starting with `_` as private non-route folders and
-  // decodes `%5F` back to `_` in emitted manifest paths. Never match a private
-  // `_` folder when resolving an emitted route segment.
-  const candidates: string[] = [];
-  if (!emittedSegment.startsWith("_")) {
-    const direct = path.join(parentDir, emittedSegment);
-    if (isDirectoryTarget(direct)) candidates.push(direct);
-  }
-  if (!emittedSegment.includes("_")) return candidates;
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(parentDir, { withFileTypes: true });
-  } catch {
-    return candidates;
-  }
-  for (const entry of entries) {
-    if (entry.name.startsWith("_") || entry.name === emittedSegment) continue;
-    // Match Next.js's case-sensitive `%5F` -> `_` decoding (lowercase `%5f` is not decoded).
-    if (entry.name.replaceAll("%5F", "_") !== emittedSegment) continue;
-    const candidate = path.join(parentDir, entry.name);
-    if (entry.isDirectory() || (entry.isSymbolicLink() && isDirectoryTarget(candidate))) {
-      candidates.push(candidate);
-    }
-  }
-  return candidates;
-}
-
-function collectRouteDirectoryChains(appDir: string, segments: readonly string[]): string[][] {
-  let chains: string[][] = [[appDir]];
-  for (const segment of segments) {
-    const nextChains: string[][] = [];
-    for (const chain of chains) {
-      const parent = chain.at(-1)!;
-      for (const dir of resolveSourceSegmentDirectories(parent, segment)) {
-        nextChains.push([...chain, dir]);
-      }
-    }
-    if (nextChains.length === 0) return [];
-    chains = nextChains;
-  }
-  return chains;
-}
-
-function canonicalPath(filePath: string): string {
-  try {
-    return realpathSync(filePath);
-  } catch {
-    return path.resolve(filePath);
-  }
-}
-
-function isNonEmptyStringArray(value: unknown): value is readonly string[] {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every((entry) => typeof entry === "string" && entry.length > 0)
-  );
-}
-
-function readNextBuildContextPageExtensions(
-  distDir: string,
-  projectRoot: string,
-): readonly string[] | undefined {
-  const targetDistDir = canonicalPath(distDir);
-  const anchors = [
-    path.join(projectRoot, "package.json"),
-    path.join(distDir, "package.json"),
-    path.join(process.cwd(), "package.json"),
-    import.meta.url,
-  ];
-  const seen = new Set<string>();
-  for (const anchor of anchors) {
-    try {
-      const nextRequire = createRequire(anchor);
-      const resolved = nextRequire.resolve("next/dist/build/build-context");
-      if (seen.has(resolved)) continue;
-      seen.add(resolved);
-      const buildContextModule = nextRequire(resolved) as {
-        NextBuildContext?: {
-          dir?: unknown;
-          distDir?: unknown;
-          config?: { pageExtensions?: unknown };
-        };
-      };
-      const ctx = buildContextModule.NextBuildContext;
-      if (!ctx || typeof ctx.distDir !== "string") continue;
-      const contextDistDir = path.isAbsolute(ctx.distDir)
-        ? ctx.distDir
-        : path.resolve(typeof ctx.dir === "string" ? ctx.dir : projectRoot, ctx.distDir);
-      if (canonicalPath(contextDistDir) !== targetDistDir) continue;
-      const extensions = ctx.config?.pageExtensions;
-      if (isNonEmptyStringArray(extensions)) return extensions;
-    } catch {
-      // Try the next resolution anchor or fall back to disk/options.
-    }
-  }
-  return;
-}
-
-function readRequiredServerFilesPageExtensions(distDir: string): readonly string[] | undefined {
-  try {
-    const manifest = JSON.parse(
-      readFileSync(path.join(distDir, "required-server-files.json"), "utf8"),
-    ) as { config?: { pageExtensions?: unknown } };
-    const extensions = manifest.config?.pageExtensions;
-    if (isNonEmptyStringArray(extensions)) return extensions;
-  } catch {
-    // required-server-files.json is written after runAfterProductionCompile.
-  }
-  return;
-}
-
-function resolveEffectivePageExtensions(
-  distDir: string,
-  projectRoot: string,
-  options: { allowRequiredServerFiles?: boolean } = {},
-): readonly string[] | undefined {
-  // Only trust Next's authoritative build-time or emitted pageExtensions. Never
-  // guess using defaults or pre-wrapper config values to authorize header
-  // selection on an optional `[[...locale]]` route.
-  return (
-    readNextBuildContextPageExtensions(distDir, projectRoot) ??
-    (options.allowRequiredServerFiles ? readRequiredServerFilesPageExtensions(distDir) : undefined)
-  );
-}
-
-/**
- * Determines from the App Router directory tree whether `manifestRelativePath`
- * (relative to `<distDir>/server/app`) has an optional catch-all
- * `[[...locale]]` segment at or above its root layout — matching Next.js's
- * `getRootParamsImpl()`, which stops at the first `layout` along `children`.
- */
-export function routeHasOptionalRootLocale(
-  projectRoot: string,
-  manifestRelativePath: string,
-  pageExtensions: readonly string[] = DEFAULT_PAGE_EXTENSIONS,
-): boolean | undefined {
-  const normalized = manifestRelativePath.replaceAll("\\", "/");
-  const routeDir = path.posix.dirname(normalized);
-  if (routeDir === "." || routeDir === "") return false;
-  const segments = routeDir.split("/").filter(Boolean);
-  const localeIndex = segments.indexOf("[[...locale]]");
-  if (localeIndex === -1) return false;
-
-  // Next's `getRootParamsImpl()` traverses only `parallelRoutes.children`, so
-  // any parallel-route slot above `[[...locale]]` cannot provide a root param.
-  for (let index = 0; index < localeIndex; index += 1) {
-    if (segments[index]!.startsWith("@")) return false;
-  }
-
-  const appDir = resolveAppDirectory(projectRoot);
-  if (!appDir) return;
-
-  // If `app/` itself defines a layout, that layout is the root layout and
-  // `[[...locale]]` is strictly below it.
-  if (directoryHasLayout(appDir, pageExtensions)) return false;
-
-  const allChains = collectRouteDirectoryChains(appDir, segments);
-  if (allChains.length === 0) return;
-
-  const entryStem = path.posix.basename(normalized).replace(/_client-reference-manifest\.js$/u, "");
-  if (!entryStem) return;
-  // Require at least one candidate directory chain to actually contain the
-  // emitted route entry file (`page.<ext>`, etc.) so a colocated non-route
-  // directory can never supply a layout when the real page is missing.
-  const chains = allChains.filter((chain) =>
-    directoryHasRouteEntry(chain.at(-1)!, entryStem, pageExtensions),
-  );
-  if (chains.length === 0) return;
-
-  const chainResults = chains.map((chain): boolean | undefined => {
-    for (let index = 0; index < localeIndex; index += 1) {
-      if (directoryHasLayout(chain[index + 1]!, pageExtensions)) return false;
-    }
-    if (directoryHasLayout(chain[localeIndex + 1]!, pageExtensions)) return true;
-    for (let index = localeIndex + 1; index < segments.length; index += 1) {
-      if (segments[index]!.startsWith("@")) return false;
-      if (directoryHasLayout(chain[index + 1]!, pageExtensions)) return true;
-    }
-    // No recognized layout file exists along this route chain, so the root
-    // layout boundary is unknown rather than confirmed non-root.
-    return;
-  });
-
-  if (chainResults.every((result) => result === false)) return false;
-  if (chainResults.some((result) => result === true)) return true;
-  return;
-}
-
 /*
  * Appended to a client reference manifest. It keeps Next's own JavaScript and
  * replaces every array that names an affected chunk with a non-enumerable
@@ -3325,12 +3282,6 @@ export type EmitClientCatalogPermutationsOptions = {
   distDir: string;
   projectRoot: string;
   configPath?: string;
-  /**
-   * Set by `withPalamedes()` during `compiler.runAfterProductionCompile` so
-   * stale `required-server-files.json` files retained from a previous build are
-   * never consulted before Next writes the current build's manifest.
-   */
-  fromProductionCompileHook?: boolean;
   failOnMissing: boolean;
 };
 
@@ -3410,9 +3361,6 @@ export async function emitClientCatalogPermutations(
       `Palamedes client catalog permutations: the source locale "${compiler.sourceLocale}" is not in the configured locales, so renders without a locale have no fallback chunk copy.`,
     );
   }
-  const effectivePageExtensions = resolveEffectivePageExtensions(distDir, options.projectRoot, {
-    allowRequiredServerFiles: !options.fromProductionCompileHook,
-  });
   const standardAdapter = renderManifestAdapter(compiler.locales, compiler.sourceLocale, variants, {
     optionalRootLocale: false,
   });
@@ -3428,20 +3376,12 @@ export async function emitClientCatalogPermutations(
       .split("/")
       .slice(0, -1)
       .includes("[[...locale]]");
-    // Fail closed (`true`) when a route contains `[[...locale]]` and neither
-    // the compiled loader tree nor the source directory tree (under Next's
-    // confirmed effective pageExtensions) can confirm a layout above
-    // `[[...locale]]`, so an omitted segment ignores headers.
+    // Rely strictly on the compiled route tree from this build; never read the
+    // mutable app/ source directory on disk to authorize header selection. Fail
+    // closed (`true`) when an optional `[[...locale]]` route cannot be verified
+    // as having a compiled root layout above `[[...locale]]`.
     const optionalRootLocale = hasOptionalLocaleSegment
-      ? (compiledRouteHasOptionalRootLocale(distDir, file) ??
-        (effectivePageExtensions
-          ? routeHasOptionalRootLocale(
-              options.projectRoot,
-              manifestRelativePath,
-              effectivePageExtensions,
-            )
-          : undefined) ??
-        true)
+      ? (compiledRouteHasOptionalRootLocale(distDir, file) ?? true)
       : false;
     const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
     const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;
