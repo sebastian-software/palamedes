@@ -1565,6 +1565,151 @@ function isArchiveOrBinaryFile(filePath) {
   }
 }
 
+const SUDO_VALUE_FLAGS = new Set([
+  "-C",
+  "--close-from",
+  "-D",
+  "--chdir",
+  "-g",
+  "--group",
+  "-h",
+  "--host",
+  "-p",
+  "--prompt",
+  "-R",
+  "--chroot",
+  "-r",
+  "--role",
+  "-T",
+  "--command-timeout",
+  "-t",
+  "--type",
+  "-U",
+  "--other-user",
+  "-u",
+  "--user",
+]);
+const ENV_VALUE_FLAGS = new Set([
+  "-C",
+  "--chdir",
+  "-S",
+  "--split-string",
+  "-u",
+  "--unset",
+  "--block-signal",
+  "--default-signal",
+  "--ignore-signal",
+]);
+const EXEC_VALUE_FLAGS = new Set(["-a"]);
+
+function extractDriverOptImages(rawText) {
+  const parts = [];
+  let current = "";
+  let quote = null;
+  for (let index = 0; index < rawText.length; index += 1) {
+    const ch = rawText[index];
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      }
+      current += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === ",") {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  parts.push(current);
+
+  const images = [];
+  for (const rawPart of parts) {
+    const part = stripQuotes(rawPart.trim());
+    const match = /^image=(?<image>.*)$/iu.exec(part);
+    if (match) {
+      images.push(stripQuotes(match.groups.image));
+    }
+  }
+  return images;
+}
+
+function advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets = null) {
+  const token = tokens[cursor];
+  if (!SHELL_COMMAND_PREFIXES.has(token)) {
+    return null;
+  }
+  const normalized = token.toLowerCase();
+  let next = cursor + 1;
+
+  if (normalized === "command") {
+    let inspectIndex = next;
+    while (inspectIndex < tokens.length) {
+      const redirConsumed = consumeShellRedirection(tokens, inspectIndex, stdinRedirectTargets);
+      if (redirConsumed > 0) {
+        inspectIndex += redirConsumed;
+        continue;
+      }
+      const flag = tokens[inspectIndex];
+      if (flag === "--") {
+        inspectIndex += 1;
+        break;
+      }
+      if (!flag.startsWith("-") || flag === "-") {
+        break;
+      }
+      // `command -v` / `command -V` only prints command resolution and does not execute it.
+      if (!flag.startsWith("--") && (flag.includes("v") || flag.includes("V"))) {
+        return null;
+      }
+      inspectIndex += 1;
+    }
+    return inspectIndex;
+  }
+
+  let valueFlags = null;
+  if (normalized === "sudo") {
+    valueFlags = SUDO_VALUE_FLAGS;
+  } else if (normalized === "env") {
+    valueFlags = ENV_VALUE_FLAGS;
+  } else if (normalized === "exec") {
+    valueFlags = EXEC_VALUE_FLAGS;
+  } else if (normalized === "time") {
+    valueFlags = new Set();
+  }
+
+  if (valueFlags !== null) {
+    while (next < tokens.length) {
+      const redirConsumed = consumeShellRedirection(tokens, next, stdinRedirectTargets);
+      if (redirConsumed > 0) {
+        next += redirConsumed;
+        continue;
+      }
+      const flag = tokens[next];
+      if (flag === "--") {
+        next += 1;
+        break;
+      }
+      if (normalized === "env" && flag === "-") {
+        next += 1;
+        continue;
+      }
+      if (!flag.startsWith("-") || flag === "-") {
+        break;
+      }
+      next += flagConsumesNextArg(flag, valueFlags) ? 2 : 1;
+    }
+  }
+
+  return next;
+}
+
 function isStdinContainerBuildCommand(tokens) {
   let cursor = 0;
   while (cursor < tokens.length) {
@@ -1573,8 +1718,12 @@ function isStdinContainerBuildCommand(tokens) {
       cursor += redirConsumed;
       continue;
     }
-    const token = tokens[cursor];
-    if (SHELL_COMMAND_PREFIXES.has(token) || ENV_PREFIX_ASSIGNMENT_PATTERN.test(token)) {
+    const afterWrapper = advanceWrapperPrefix(tokens, cursor);
+    if (afterWrapper !== null) {
+      cursor = afterWrapper;
+      continue;
+    }
+    if (ENV_PREFIX_ASSIGNMENT_PATTERN.test(tokens[cursor])) {
       cursor += 1;
       continue;
     }
@@ -2867,11 +3016,29 @@ const DOCKER_BUILD_VALUE_FLAGS = new Set([
   "--volume",
 ]);
 
+const GITHUB_WORKSPACE_PREFIX_PATTERN =
+  /^(?:\$\{\{\s*github\.workspace\s*\}\}|\$(?:\{GITHUB_WORKSPACE\}|GITHUB_WORKSPACE|\{env:GITHUB_WORKSPACE\}|env:GITHUB_WORKSPACE)|%GITHUB_WORKSPACE%)(?:[\\/]+(?<rest>.*)|$)/iu;
+const PWD_PREFIX_PATTERN = /^(?:\$(?:\{PWD\}|PWD))(?:[\\/]+(?<rest>.*)|$)/u;
+
 function resolveContainedPath(rawPath, baseDir, root, { windowsPath = false } = {}) {
   if (!root || !rawPath) {
     return null;
   }
   let trimmed = rawPath.trim();
+  let effectiveBaseDir = baseDir;
+  const resolvedRoot = path.resolve(root);
+
+  const workspaceMatch = GITHUB_WORKSPACE_PREFIX_PATTERN.exec(trimmed);
+  if (workspaceMatch) {
+    trimmed = workspaceMatch.groups.rest ?? ".";
+    effectiveBaseDir = resolvedRoot;
+  } else {
+    const pwdMatch = PWD_PREFIX_PATTERN.exec(trimmed);
+    if (pwdMatch) {
+      trimmed = pwdMatch.groups.rest ?? ".";
+    }
+  }
+
   if (!trimmed || trimmed === "-" || isDynamicReference(trimmed)) {
     return null;
   }
@@ -2881,8 +3048,7 @@ function resolveContainedPath(rawPath, baseDir, root, { windowsPath = false } = 
       return null;
     }
   }
-  const resolvedRoot = path.resolve(root);
-  const resolvedPath = path.resolve(baseDir, trimmed);
+  const resolvedPath = path.resolve(effectiveBaseDir, trimmed);
   const relative = path.relative(resolvedRoot, resolvedPath);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     return null;
@@ -3562,11 +3728,12 @@ function inspectShellText(
         cursor += redirConsumed;
         continue;
       }
-      const token = tokens[cursor];
-      if (SHELL_COMMAND_PREFIXES.has(token)) {
-        cursor += 1;
+      const afterWrapper = advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets);
+      if (afterWrapper !== null) {
+        cursor = afterWrapper;
         continue;
       }
+      const token = tokens[cursor];
       const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
       if (prefixAssign) {
         const resolved = candidatesToVarEntries(
@@ -3948,15 +4115,11 @@ function inspectShellText(
               rowList,
               varCandidate.line,
             )) {
-              for (const rawPart of candidate.text.split(",")) {
-                const part = stripQuotes(rawPart.trim());
-                const imageMatch = /^image=(?<image>.*)$/iu.exec(part);
-                if (imageMatch) {
-                  flagImages.push({
-                    text: stripQuotes(imageMatch.groups.image),
-                    line: candidate.line,
-                  });
-                }
+              for (const imageRef of extractDriverOptImages(candidate.text)) {
+                flagImages.push({
+                  text: imageRef,
+                  line: candidate.line,
+                });
               }
             }
           }
@@ -4909,59 +5072,60 @@ function checkStepsList(
           continue;
         }
 
-        const rawImageValues = [];
+        let effectiveImageCandidates = [];
         if (driverOptsNode?.kind === "scalar") {
           for (const rawLine of String(driverOptsNode.value).split(/\r?\n/u)) {
-            const trimmedLine = stripQuotes(rawLine.trim());
+            const trimmedLine = rawLine.trim();
             if (!trimmedLine || trimmedLine.startsWith("#")) {
               continue;
             }
-            const imageOptMatch = /^image=(?<image>.+)$/iu.exec(trimmedLine);
-            if (imageOptMatch) {
-              rawImageValues.push({
-                text: stripQuotes(imageOptMatch.groups.image),
-                line: driverOptsNode.line,
-              });
+            const expandedOpt = resolveEnvExpressionCandidates(
+              trimmedLine,
+              rowStepEnv,
+              driverOptsNode.line,
+            );
+            if (expandedOpt.truncated) {
+              pushBuildxProblem(
+                `${filePath}:${driverOptsNode.line}: ${trimmedLine} exceeds expansion limit and cannot be verified exhaustively`,
+              );
+            }
+            const lineImages = [];
+            for (const envCandidate of expandedOpt.candidates) {
+              for (const candidate of expandMatrixReferences(
+                envCandidate.text,
+                rowList,
+                envCandidate.line,
+              )) {
+                for (const imageRef of extractDriverOptImages(candidate.text)) {
+                  lineImages.push({ text: imageRef, line: candidate.line });
+                }
+              }
+            }
+            if (lineImages.length > 0) {
+              effectiveImageCandidates = lineImages;
             }
           }
         }
 
-        if (rawImageValues.length === 0) {
+        if (effectiveImageCandidates.length === 0) {
           pushBuildxProblem(
             `${filePath}:${usesNode.line}: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)`,
           );
           continue;
         }
 
-        const effectiveImage = rawImageValues.at(-1);
-        const expandedImage = resolveEnvExpressionCandidates(
-          effectiveImage.text,
-          rowStepEnv,
-          effectiveImage.line,
-        );
-        if (expandedImage.truncated) {
-          pushBuildxProblem(
-            `${filePath}:${effectiveImage.line}: ${effectiveImage.text} exceeds expansion limit and cannot be verified exhaustively`,
-          );
-        }
-        for (const envCandidate of expandedImage.candidates) {
-          for (const candidate of expandMatrixReferences(
-            envCandidate.text,
-            rowList,
-            envCandidate.line,
-          )) {
-            const imageRef = candidate.text.trim();
-            if (!imageRef) {
-              pushBuildxProblem(
-                `${filePath}:${usesNode.line}: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)`,
-              );
-              continue;
-            }
-            if (!isDynamicReference(imageRef) && !isPinnedDigest(imageRef)) {
-              pushBuildxProblem(
-                `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`,
-              );
-            }
+        for (const imageCandidate of effectiveImageCandidates) {
+          const imageRef = imageCandidate.text.trim();
+          if (!imageRef) {
+            pushBuildxProblem(
+              `${filePath}:${usesNode.line}: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)`,
+            );
+            continue;
+          }
+          if (!isDynamicReference(imageRef) && !isPinnedDigest(imageRef)) {
+            pushBuildxProblem(
+              `${filePath}:${imageCandidate.line}: ${imageRef} is not pinned to a sha256 digest`,
+            );
           }
         }
       }

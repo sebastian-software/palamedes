@@ -2052,13 +2052,16 @@ describe("workflow contracts", () => {
           `          docker buildx create --driver-opt network=host,image=moby/buildkit:v0.35.1@${digest}`,
           "          docker buildx create --driver docker",
           `          docker run --cpu-count 2 --cpu-percent 50 --io-maxbandwidth 1M --io-maxiops 100 node:24@${digest} node -v`,
+          "          sudo -E docker run --rm haproxy:3",
+          "          env -i -u HOME docker pull memcached:1.6",
+          "          command -v docker",
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "        with:",
           "          driver-opts: image=moby/buildkit:v0.35.1",
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "        with:",
-          `          driver-opts: image=moby/buildkit:v0.35.1@${digest}`,
+          `          driver-opts: network=host,image=moby/buildkit:v0.35.1@${digest}`,
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "        with:",
           "          driver: docker",
@@ -2108,13 +2111,15 @@ describe("workflow contracts", () => {
       "<memory>:22: traefik:3 is not pinned to a sha256 digest",
       "<memory>:23: docker buildx create uses unpinned default BuildKit image (pass --driver-opt image=...@sha256:...)",
       "<memory>:24: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
-      "<memory>:28: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
-      "<memory>:31: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
-      "<memory>:40: docker/dockerfile:1.10 is not pinned to a sha256 digest",
-      "<memory>:48: alpine:3.20 is not pinned to a sha256 digest",
-      "<memory>:52: busybox:1.37 is not pinned to a sha256 digest",
-      "<memory>:54: caddy:2 is not pinned to a sha256 digest",
-      "<memory>:56: debian:12 is not pinned to a sha256 digest",
+      "<memory>:28: haproxy:3 is not pinned to a sha256 digest",
+      "<memory>:29: memcached:1.6 is not pinned to a sha256 digest",
+      "<memory>:31: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
+      "<memory>:34: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
+      "<memory>:43: docker/dockerfile:1.10 is not pinned to a sha256 digest",
+      "<memory>:51: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:55: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:57: caddy:2 is not pinned to a sha256 digest",
+      "<memory>:59: debian:12 is not pinned to a sha256 digest",
     ]);
     const buildFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-builds-"));
     try {
@@ -2166,6 +2171,7 @@ describe("workflow contracts", () => {
       await writeFile(join(buildFixture, "ci", "cmdsub", "sub.recipe"), "FROM ruby:3.4\n");
       await writeFile(join(buildFixture, "ci", "popd.recipe"), "FROM perl:5.40\n");
       await writeFile(join(buildFixture, "ci", "short-eq.recipe"), "FROM elixir:1.18\n");
+      await writeFile(join(buildFixture, "ci", "workspace.recipe"), "FROM zig:0.14\n");
       await writeFile(
         join(buildFixture, ".github", "workflows", "cd-and-ctx.yml"),
         [
@@ -2207,6 +2213,9 @@ describe("workflow contracts", () => {
           "          docker build -f=ci/short-eq.recipe .",
           "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
           "        with:",
+          "          file: ${{ github.workspace }}/ci/workspace.recipe",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
           `          build-contexts: rootctx=docker-image://node:24@${digest}`,
           "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
           "",
@@ -2225,6 +2234,7 @@ describe("workflow contracts", () => {
         "ci/short-eq.recipe:1: elixir:1.18 is not pinned to a sha256 digest",
         "ci/stdin-attached.recipe:1: debian:12 is not pinned to a sha256 digest",
         "ci/win/win.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
+        "ci/workspace.recipe:1: zig:0.14 is not pinned to a sha256 digest",
         "ci/arg-env.recipe:2: redis:7 is not pinned to a sha256 digest",
         "ci/stdin.recipe:2: fedora:41 is not pinned to a sha256 digest",
         "ci/arg-empty.recipe:2: golang:1.24 is not pinned to a sha256 digest",
