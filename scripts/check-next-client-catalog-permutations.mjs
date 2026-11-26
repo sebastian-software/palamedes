@@ -455,8 +455,9 @@ export function Greeting() {
         `import { Greeting } from "./greeting";
 export const dynamic = "force-dynamic";
 const metrics = { with: (value: number) => value };
-export default function Page() {
+export default async function Page() {
   let counter = 1;
+  for await (const line of ["ok", "end]"]) /\\]$/.test(line) && counter++;
   const half = counter++ / 2 + metrics.with(4) / 2;
   return (
     <a href={"/shop/" + half}>

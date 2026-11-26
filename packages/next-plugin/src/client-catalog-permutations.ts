@@ -191,6 +191,7 @@ function scanBalancedEnd(source: string, start: number): number {
   let regexAllowed = true;
   let prevWasDot = false;
   let prevWord = "";
+  let prevPrevWord = "";
   const parenConditionStack: boolean[] = [];
   let index = start;
   while (index < source.length) {
@@ -207,6 +208,7 @@ function scanBalancedEnd(source: string, start: number): number {
       const end = scanQuotedStringEnd(source, index);
       if (end === -1) return -1;
       index = end;
+      prevPrevWord = "";
       prevWord = "";
       prevWasDot = false;
       regexAllowed = false;
@@ -216,6 +218,7 @@ function scanBalancedEnd(source: string, start: number): number {
       const end = scanTemplateLiteralEnd(source, index);
       if (end === -1) return -1;
       index = end;
+      prevPrevWord = "";
       prevWord = "";
       prevWasDot = false;
       regexAllowed = false;
@@ -225,6 +228,7 @@ function scanBalancedEnd(source: string, start: number): number {
       const end = scanRegexLiteralEnd(source, index);
       if (end !== -1) {
         index = end;
+        prevPrevWord = "";
         prevWord = "";
         prevWasDot = false;
         regexAllowed = false;
@@ -236,13 +240,15 @@ function scanBalancedEnd(source: string, start: number): number {
       // (`counter++ / 2`), `/` is division; in prefix position (`++x`), `/`
       // remains allowed.
       index += 2;
+      prevPrevWord = "";
       prevWord = "";
       prevWasDot = false;
       continue;
     }
-    if (ch === ".") {
-      const isSpread = source[index + 1] === "." && source[index + 2] === ".";
+    if (ch === "." || ch === "#") {
+      const isSpread = ch === "." && source[index + 1] === "." && source[index + 2] === ".";
       index += isSpread ? 3 : 1;
+      prevPrevWord = "";
       prevWord = "";
       prevWasDot = !isSpread;
       regexAllowed = isSpread;
@@ -253,8 +259,10 @@ function scanBalancedEnd(source: string, start: number): number {
       index += 1;
       while (index < source.length && /[\w$]/u.test(source[index] ?? "")) index += 1;
       const word = source.slice(wordStart, index);
-      // Property accesses like `metrics.with(params)` or `fiber.return` are not
-      // keywords, so clear `prevWord` and disallow regexes after them.
+      // Property accesses like `metrics.with(params)`, `fiber.return`, or
+      // private fields `#with` are not keywords, so clear `prevWord` and
+      // disallow regexes after them. Preserve `prevPrevWord` for `for await (`.
+      prevPrevWord = prevWasDot ? "" : prevWord;
       prevWord = prevWasDot ? "" : word;
       regexAllowed = !prevWasDot && REGEX_PRECEDING_KEYWORDS.has(word);
       prevWasDot = false;
@@ -263,13 +271,18 @@ function scanBalancedEnd(source: string, start: number): number {
     if (/[0-9]/u.test(ch ?? "")) {
       index += 1;
       while (index < source.length && /[\w.]/u.test(source[index] ?? "")) index += 1;
+      prevPrevWord = "";
       prevWord = "";
       prevWasDot = false;
       regexAllowed = false;
       continue;
     }
     if (ch === "(") {
-      parenConditionStack.push(CONTROL_FLOW_KEYWORDS.has(prevWord) || prevWord === "for");
+      parenConditionStack.push(
+        CONTROL_FLOW_KEYWORDS.has(prevWord) ||
+          prevWord === "for" ||
+          (prevWord === "await" && prevPrevWord === "for"),
+      );
     } else if (ch === ")") {
       const wasCondition = parenConditionStack.pop() ?? false;
       if (ch === close) {
@@ -277,6 +290,7 @@ function scanBalancedEnd(source: string, start: number): number {
         if (depth === 0) return index + 1;
       }
       index += 1;
+      prevPrevWord = "";
       prevWord = "";
       prevWasDot = false;
       regexAllowed = wasCondition;
@@ -288,6 +302,7 @@ function scanBalancedEnd(source: string, start: number): number {
       if (depth === 0) return index + 1;
     }
     index += 1;
+    prevPrevWord = "";
     prevWord = "";
     prevWasDot = false;
     regexAllowed = "([{=,:;!?&|^~+-*/%<>}".includes(ch ?? "");
@@ -595,8 +610,10 @@ const REGEX_PRECEDING_KEYWORDS = new Set([
   "return",
   "throw",
   "case",
+  "default",
   "in",
   "of",
+  "instanceof",
   "typeof",
   "void",
   "delete",
@@ -617,10 +634,20 @@ function scanRegexLiteralEnd(source: string, start: number): number {
   while (index < source.length) {
     const ch = source[index];
     if (ch === "\\") {
+      const escaped = source[index + 1];
+      if (
+        escaped === undefined ||
+        escaped === "\n" ||
+        escaped === "\r" ||
+        escaped === "\u2028" ||
+        escaped === "\u2029"
+      ) {
+        return -1;
+      }
       index += 2;
       continue;
     }
-    if (ch === "\n" || ch === "\r") return -1;
+    if (ch === "\n" || ch === "\r" || ch === "\u2028" || ch === "\u2029") return -1;
     if (ch === "[") inClass = true;
     else if (ch === "]") inClass = false;
     else if (ch === "/" && !inClass) {
@@ -786,14 +813,16 @@ function resolveIdentifierArrayInScope(
       }
       if (ch === ")" || ch === "]") {
         if (top.exprDepth > 0) top.exprDepth -= 1;
+        let closedCondition = false;
         if (ch === ")" && top.exprDepth === 0 && top.pendingCondition) {
           top.pendingCondition = false;
           top.conditionalStmt = true;
+          closedCondition = true;
         }
         index += 1;
         prevTokenKind = "other";
         prevNonWsChar = ch;
-        regexAllowed = false;
+        regexAllowed = closedCondition;
         continue;
       }
       if (ch === ";") {
@@ -1319,13 +1348,15 @@ function extractEntrypointCallBinding(
     }
     if (ch === ")" || ch === "]") {
       if (exprDepth > 0) exprDepth -= 1;
+      let closedCondition = false;
       if (ch === ")" && exprDepth === 0 && pendingCondition) {
         pendingCondition = false;
         conditionalStmt = true;
+        closedCondition = true;
       }
       index += 1;
       prevTokenKind = "other";
-      regexAllowed = false;
+      regexAllowed = closedCondition;
       continue;
     }
     if (ch === ";") {
@@ -1949,15 +1980,17 @@ function resolveUniqueTopLevelImportSource(
     }
     if (ch === ")" || ch === "]") {
       if (top.exprDepth > 0) top.exprDepth -= 1;
+      let closedCondition = false;
       if (ch === ")" && top.exprDepth === 0 && top.pendingCondition) {
         top.pendingCondition = false;
         top.conditionalStmt = true;
+        closedCondition = true;
       }
       index += 1;
       prevTokenKind = "other";
       prevWord = "";
       prevNonWsChar = ch;
-      regexAllowed = false;
+      regexAllowed = closedCondition;
       continue;
     }
     if (ch === ";") {
@@ -2970,14 +3003,16 @@ function resolveUniqueRouteModuleLocal(
     }
     if (ch === ")" || ch === "]") {
       if (exprDepth > 0) exprDepth -= 1;
+      let closedCondition = false;
       if (ch === ")" && exprDepth === 0 && pendingCondition) {
         pendingCondition = false;
         conditionalStmt = true;
+        closedCondition = true;
       }
       index += 1;
       prevTokenKind = "other";
       prevWord = "";
-      regexAllowed = false;
+      regexAllowed = closedCondition;
       continue;
     }
     if (ch === ";") {
@@ -3215,13 +3250,15 @@ function inspectTurbopackExportHop(
     }
     if (ch === ")" || ch === "]") {
       if (exprDepth > 0) exprDepth -= 1;
+      let closedCondition = false;
       if (ch === ")" && exprDepth === 0 && pendingCondition) {
         pendingCondition = false;
         conditionalStmt = true;
+        closedCondition = true;
       }
       index += 1;
       prevTokenKind = "other";
-      regexAllowed = false;
+      regexAllowed = closedCondition;
       continue;
     }
     if (ch === ";") {
@@ -3613,15 +3650,17 @@ function verifyEntrypointExportsInScope(
     }
     if (ch === ")" || ch === "]") {
       if (exprDepth > 0) exprDepth -= 1;
+      let closedCondition = false;
       if (ch === ")" && exprDepth === 0 && pendingCondition) {
         pendingCondition = false;
         conditionalStmt = true;
+        closedCondition = true;
       }
       index += 1;
       prevTokenKind = "other";
       prevWord = "";
       prevNonWsChar = ch;
-      regexAllowed = false;
+      regexAllowed = closedCondition;
       continue;
     }
     if (ch === ";") {
