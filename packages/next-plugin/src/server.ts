@@ -17,6 +17,7 @@ export {
   bindClientCatalogPermutations,
   CLIENT_CATALOG_LOCALE_HEADER,
   signClientCatalogLocaleHeader,
+  verifyClientCatalogLocaleHeader,
   type BindClientCatalogPermutationsOptions,
   type ClientCatalogLocaleSource,
 } from "./client-catalog-binding";

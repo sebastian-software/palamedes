@@ -74,6 +74,32 @@ export function signClientCatalogLocaleHeader(locale: string, secret: string): s
   return `${locale}.${mac}`;
 }
 
+/**
+ * Verifies a signed `x-palamedes-locale` header value produced by
+ * `signClientCatalogLocaleHeader()` using HMAC-SHA256 and returns the plain
+ * locale string, or `undefined` when the header is missing, unsigned, or fails
+ * verification.
+ */
+export function verifyClientCatalogLocaleHeader(
+  headerValue: string | null | undefined,
+  secret: string,
+): string | undefined {
+  if (!secret) {
+    throw new Error("verifyClientCatalogLocaleHeader() requires a non-empty secret.");
+  }
+  if (!headerValue) return;
+  const separator = headerValue.lastIndexOf(".");
+  if (separator <= 0) return;
+  const locale = headerValue.slice(0, separator);
+  const providedMac = headerValue.slice(separator + 1);
+  if (!locale || !providedMac) return;
+  const expectedMac = createHmac("sha256", secret).update(locale).digest("base64url");
+  const providedBytes = Buffer.from(providedMac, "utf8");
+  const expectedBytes = Buffer.from(expectedMac, "utf8");
+  if (providedBytes.length !== expectedBytes.length) return;
+  return timingSafeEqual(providedBytes, expectedBytes) ? locale : undefined;
+}
+
 function parseLocaleHeader(
   raw: string | null,
   options: { requireSignature: boolean; secret?: string },
@@ -81,16 +107,7 @@ function parseLocaleHeader(
   if (!raw) return;
   if (!options.requireSignature) return raw;
   if (typeof options.secret !== "string" || options.secret.length === 0) return;
-  const separator = raw.lastIndexOf(".");
-  if (separator <= 0) return;
-  const locale = raw.slice(0, separator);
-  const providedMac = raw.slice(separator + 1);
-  if (!locale || !providedMac) return;
-  const expectedMac = createHmac("sha256", options.secret).update(locale).digest("base64url");
-  const providedBytes = Buffer.from(providedMac, "utf8");
-  const expectedBytes = Buffer.from(expectedMac, "utf8");
-  if (providedBytes.length !== expectedBytes.length) return;
-  return timingSafeEqual(providedBytes, expectedBytes) ? locale : undefined;
+  return verifyClientCatalogLocaleHeader(raw, options.secret);
 }
 
 /*

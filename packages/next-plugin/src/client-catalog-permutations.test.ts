@@ -11,6 +11,7 @@ import {
   bindClientCatalogPermutationsAt,
   resolveRenderLocale,
   signClientCatalogLocaleHeader,
+  verifyClientCatalogLocaleHeader,
 } from "./client-catalog-binding";
 import {
   type ChunkGraph,
@@ -836,6 +837,15 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
+      // A compiled tree whose `children` chain ends without a layout (even
+      // after passing `[[...locale]]`) has no confirmed layout boundary and
+      // returns undefined so the source-tree / fail-closed fallback runs.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `const tree = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [p, "page.tsx"] }, []] }, {}, []] }, {}, []]; start({ tree, page: "/[[...locale]]/page" });`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
 
       // Lexical scoping: block-scoped `let`/`const` bindings inside sibling
       // functions or earlier modules do not override the outer scope's tree,
@@ -1357,6 +1367,14 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
       ),
     ).toBe("de");
     expect(() => signClientCatalogLocaleHeader("de", "")).toThrow(/non-empty secret/u);
+    expect(verifyClientCatalogLocaleHeader(signedDe, secret)).toBe("de");
+    expect(verifyClientCatalogLocaleHeader(signedEn, secret)).toBe("en");
+    expect(verifyClientCatalogLocaleHeader("de", secret)).toBeUndefined();
+    expect(verifyClientCatalogLocaleHeader("de.tampered", secret)).toBeUndefined();
+    expect(verifyClientCatalogLocaleHeader(signedDe, "other-secret")).toBeUndefined();
+    expect(verifyClientCatalogLocaleHeader(null, secret)).toBeUndefined();
+    expect(verifyClientCatalogLocaleHeader(undefined, secret)).toBeUndefined();
+    expect(() => verifyClientCatalogLocaleHeader(signedDe, "")).toThrow(/non-empty secret/u);
     expect(() => bindClientCatalogPermutationsAt("/nonexistent", { headerSecret: "" })).toThrow(
       /non-empty string/u,
     );

@@ -457,7 +457,7 @@ function walkCompiledLoaderTree(
   const hasOptionalLocale = seenOptionalLocale || segment === "[[...locale]]";
   if (modules.has("layout")) return hasOptionalLocale;
   const childrenExpr = parallelRoutes.get("children");
-  if (childrenExpr === undefined) return false;
+  if (childrenExpr === undefined) return;
   const childStart = skipWhitespaceAndComments(childrenExpr, 0);
   if (childrenExpr[childStart] !== "[") return;
   return walkCompiledLoaderTree(childrenExpr, childStart, hasOptionalLocale);

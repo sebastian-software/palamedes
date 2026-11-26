@@ -73,9 +73,10 @@ keep the in-graph fragments.
   the header does not change either requirement. Any app that consults an unsigned
   `x-palamedes-locale` header must ensure its Proxy matcher covers every render
   that can read it and strips or overwrites client-supplied values; otherwise
-  require HMAC-SHA256 verification via `headerSecret` and
-  `signClientCatalogLocaleHeader()` (an explicitly `undefined` or empty
-  `headerSecret` fails binding instead of disabling verification). Other param
+  require HMAC-SHA256 verification via `headerSecret`,
+  `signClientCatalogLocaleHeader()`, and `verifyClientCatalogLocaleHeader()` (an
+  explicitly `undefined` or empty `headerSecret` fails binding instead of
+  disabling verification). Other param
   names and locale-looking values are not guessed at, because a `[slug]` route
   with a cookie locale would otherwise get the cookie's HTML with the slug's
   chunks. Anything else, including an unknown locale, renders with the source

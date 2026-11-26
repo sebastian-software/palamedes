@@ -779,9 +779,9 @@ override route-segment chunks or poison route-keyed caches. Use
 should be ignored everywhere. Use `localeSource: "header"` when a Proxy should
 override route params; whenever an app consults `x-palamedes-locale`, either
 cover every renderable route in the Proxy matcher to strip/overwrite incoming
-headers or require HMAC-SHA256 verification via `signClientCatalogLocaleHeader()`
-and `headerSecret` (passing an explicitly `undefined` or empty `headerSecret`
-throws at binding time). For any URL whose locale can vary by header, do not
+headers or require HMAC-SHA256 verification via `signClientCatalogLocaleHeader()`,
+`verifyClientCatalogLocaleHeader()`, and `headerSecret` (passing an explicitly
+`undefined` or empty `headerSecret` throws at binding time). For any URL whose locale can vary by header, do not
 prerender the document shell (use `export const dynamic = "force-dynamic"` only
 when `cacheComponents` is disabled; with `cacheComponents: true`, routes that
 retain a prerendered shell must select chunks by `[locale]` route param rather

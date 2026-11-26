@@ -455,6 +455,35 @@ export async function register() {
 }
 ```
 
+When the layout also reads `x-palamedes-locale` to load its server catalog, verify
+and unwrap the signed header value with `verifyClientCatalogLocaleHeader()` so the
+layout receives the plain verified locale instead of the `<locale>.<mac>` token:
+
+```ts
+// app/layout.tsx
+import { headers } from "next/headers";
+import {
+  CLIENT_CATALOG_LOCALE_HEADER,
+  createNextServerI18n,
+  verifyClientCatalogLocaleHeader,
+} from "@palamedes/next-plugin/server";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
+  if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
+  const requestHeaders = await headers();
+  const locale =
+    verifyClientCatalogLocaleHeader(requestHeaders.get(CLIENT_CATALOG_LOCALE_HEADER), localeSecret) ??
+    "en";
+  await createNextServerI18n({ locale });
+  return (
+    <html lang={locale}>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
 A route that gets its locale from the header alone, such as a cookie strategy
 on fixed paths, has to render dynamically: declare
 `export const dynamic = "force-dynamic"` on the segment (or use another
