@@ -11,6 +11,7 @@ import { LineCounter, isAlias, isMap, isScalar, isSeq, parseDocument } from "yam
 // pinned to an immutable `@sha256:` digest.
 const PINNED_ACTION_PATTERN = /^[^\s@]+@[0-9a-f]{40}$/u;
 const PINNED_DIGEST_PATTERN = /@sha256:[0-9a-f]{64}$/u;
+const LOCAL_IMAGE_ID_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 const EMBEDDED_VAR_PATTERN =
   /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu;
 const PWSH_ENV_VAR_PATTERN =
@@ -327,6 +328,62 @@ function normalizeShellMode(shellValue) {
     return "cmd";
   }
   return "posix";
+}
+
+function isWindowsRunnerLabel(label) {
+  return /^windows(?:[-.\s]|$)/iu.test(label.trim());
+}
+
+function resolveRunnerDefaultShell(jobNode, jobEnv, jobMatrixRows) {
+  const runsOnNode = getMapField(jobNode, "runs-on");
+  if (!runsOnNode) {
+    return null;
+  }
+
+  const expandLabelNode = (labelNode) => {
+    if (labelNode?.kind !== "scalar") {
+      return [];
+    }
+    const raw = String(labelNode.value).trim();
+    const expanded = [];
+    for (const envCandidate of resolveEnvExpressionCandidates(raw, jobEnv, labelNode.line)
+      .candidates) {
+      for (const candidate of expandMatrixReferences(
+        envCandidate.text,
+        jobMatrixRows,
+        envCandidate.line,
+      )) {
+        if (candidate.text.trim()) {
+          expanded.push(candidate.text.trim());
+        }
+      }
+    }
+    return expanded;
+  };
+
+  let labelsNode = runsOnNode;
+  if (runsOnNode.kind === "map") {
+    labelsNode = getMapField(runsOnNode, "labels");
+  }
+
+  if (labelsNode?.kind === "scalar") {
+    const labels = expandLabelNode(labelsNode);
+    if (labels.length > 0 && labels.every((label) => isWindowsRunnerLabel(label))) {
+      return "pwsh";
+    }
+    return null;
+  }
+
+  if (labelsNode?.kind === "seq") {
+    for (const item of labelsNode.value) {
+      const labels = expandLabelNode(item);
+      if (labels.length > 0 && labels.every((label) => isWindowsRunnerLabel(label))) {
+        return "pwsh";
+      }
+    }
+  }
+
+  return null;
 }
 
 function extractDefaultShell(node) {
@@ -2143,12 +2200,29 @@ function inspectShellText(
         : subcommand === "pull"
           ? DOCKER_PULL_VALUE_FLAGS
           : DOCKER_RUN_VALUE_FLAGS;
-    let imageToken = null;
+    const allowMultipleImages = cli === "podman" && subcommand === "pull";
+    const imageTokens = [];
 
     for (let index = argIndex; index < tokens.length; index += 1) {
       const token = tokens[index];
       if (token === "--") {
-        imageToken = tokens[index + 1] ?? null;
+        if (allowMultipleImages) {
+          for (let restIndex = index + 1; restIndex < tokens.length; restIndex += 1) {
+            const restToken = tokens[restIndex];
+            if (
+              restToken === ">" ||
+              restToken === ">>" ||
+              restToken === ">&" ||
+              restToken === "<"
+            ) {
+              restIndex += 1;
+              continue;
+            }
+            imageTokens.push(restToken);
+          }
+        } else if (tokens[index + 1] !== undefined) {
+          imageTokens.push(tokens[index + 1]);
+        }
         break;
       }
       if (token === ">" || token === ">>" || token === ">&" || token === "<") {
@@ -2171,45 +2245,55 @@ function inspectShellText(
         }
         continue;
       }
-      imageToken = token;
-      break;
+      imageTokens.push(token);
+      if (!allowMultipleImages) {
+        break;
+      }
     }
 
-    if (!imageToken) {
+    if (imageTokens.length === 0) {
       continue;
     }
 
-    const fallbackLine = sourceLines
-      ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber)
-      : lineNumber;
-
-    const varExpanded = resolveImageTokenCandidates(
-      imageToken,
-      stepEnv,
-      frame.vars,
-      fallbackLine,
-      shellMode,
-    );
+    const allowLocalImageId = subcommand === "run";
     const seenProblems = new Set();
-    if (varExpanded.truncated) {
-      const limitMessage = `${filePath}:${fallbackLine}: ${imageToken} exceeds expansion limit and cannot be verified exhaustively`;
-      seenProblems.add(limitMessage);
-      problems.push(limitMessage);
-    }
-    for (const varCandidate of varExpanded.candidates) {
-      for (const candidate of expandMatrixReferences(
-        varCandidate.text,
-        matrixRows,
-        varCandidate.line,
-      )) {
-        if (isDynamicReference(candidate.text)) {
-          continue;
+    for (const imageToken of imageTokens) {
+      const fallbackLine = sourceLines
+        ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber)
+        : lineNumber;
+
+      const varExpanded = resolveImageTokenCandidates(
+        imageToken,
+        stepEnv,
+        frame.vars,
+        fallbackLine,
+        shellMode,
+      );
+      if (varExpanded.truncated) {
+        const limitMessage = `${filePath}:${fallbackLine}: ${imageToken} exceeds expansion limit and cannot be verified exhaustively`;
+        if (!seenProblems.has(limitMessage)) {
+          seenProblems.add(limitMessage);
+          problems.push(limitMessage);
         }
-        if (!isPinnedDigest(candidate.text)) {
-          const message = `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`;
-          if (!seenProblems.has(message)) {
-            seenProblems.add(message);
-            problems.push(message);
+      }
+      for (const varCandidate of varExpanded.candidates) {
+        for (const candidate of expandMatrixReferences(
+          varCandidate.text,
+          matrixRows,
+          varCandidate.line,
+        )) {
+          if (isDynamicReference(candidate.text)) {
+            continue;
+          }
+          const isValid =
+            isPinnedDigest(candidate.text) ||
+            (allowLocalImageId && LOCAL_IMAGE_ID_PATTERN.test(candidate.text));
+          if (!isValid) {
+            const message = `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`;
+            if (!seenProblems.has(message)) {
+              seenProblems.add(message);
+              problems.push(message);
+            }
           }
         }
       }
@@ -2594,8 +2678,11 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
         continue;
       }
       const jobEnv = extractEnvMap(getMapField(jobNode, "env"), workflowEnv);
-      const jobDefaultShell = extractDefaultShell(jobNode) ?? workflowDefaultShell;
       const jobMatrixRows = extractJobMatrixRows(jobNode, filePath, problems);
+      const jobDefaultShell =
+        extractDefaultShell(jobNode) ??
+        workflowDefaultShell ??
+        resolveRunnerDefaultShell(jobNode, jobEnv, jobMatrixRows);
       checkContainerNode(getMapField(jobNode, "container"), jobEnv, jobMatrixRows);
       checkServicesNode(getMapField(jobNode, "services"), jobEnv, jobMatrixRows);
       checkStepsList(
@@ -2612,11 +2699,67 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
   return problems;
 }
 
-function resolveBuildArgs(token, buildArgs) {
-  return token.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
-    const name = groups.braced ?? groups.bare;
-    return buildArgs.has(name) ? buildArgs.get(name) : match;
-  });
+// Resolve Dockerfile `$ARG`, `${ARG}`, `${ARG:-default}`, `${ARG-default}`,
+// `${ARG:+alternate}`, and `${ARG+alternate}` expansions.
+function resolveBuildArgs(token, buildArgs, depth = 0) {
+  if (depth > 8) {
+    return token;
+  }
+  let output = "";
+  for (let index = 0; index < token.length; index += 1) {
+    if (token[index] !== "$") {
+      output += token[index];
+      continue;
+    }
+
+    if (token[index + 1] === "{") {
+      let braceDepth = 1;
+      let cursor = index + 2;
+      while (cursor < token.length && braceDepth > 0) {
+        if (token[cursor] === "{") {
+          braceDepth += 1;
+        } else if (token[cursor] === "}") {
+          braceDepth -= 1;
+        }
+        cursor += 1;
+      }
+      if (braceDepth === 0) {
+        const inner = token.slice(index + 2, cursor - 1);
+        const exprMatch =
+          /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:(?<op>:-|:\+|-|\+)(?<word>.*))?$/su.exec(inner);
+        if (exprMatch) {
+          const { name, op, word } = exprMatch.groups;
+          const isSet = buildArgs.has(name);
+          const value = isSet ? buildArgs.get(name) : "";
+          if (!op) {
+            output += isSet ? value : token.slice(index, cursor);
+          } else if (op === ":-") {
+            output +=
+              isSet && value.length > 0 ? value : resolveBuildArgs(word, buildArgs, depth + 1);
+          } else if (op === "-") {
+            output += isSet ? value : resolveBuildArgs(word, buildArgs, depth + 1);
+          } else if (op === ":+") {
+            output += isSet && value.length > 0 ? resolveBuildArgs(word, buildArgs, depth + 1) : "";
+          } else if (op === "+") {
+            output += isSet ? resolveBuildArgs(word, buildArgs, depth + 1) : "";
+          }
+          index = cursor - 1;
+          continue;
+        }
+      }
+    }
+
+    const bareMatch = /^(?<bare>[A-Za-z_][A-Za-z0-9_]*)/u.exec(token.slice(index + 1));
+    if (bareMatch) {
+      const name = bareMatch.groups.bare;
+      output += buildArgs.has(name) ? buildArgs.get(name) : `$${name}`;
+      index += name.length;
+      continue;
+    }
+
+    output += token[index];
+  }
+  return output;
 }
 
 function extractDockerfileHeredocDelimiters(instructionText) {
@@ -2761,7 +2904,7 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
   const pendingHeredocs = [];
   let inHeaderDirectives = true;
   let escapeChar = "\\";
-  let escapeDirectiveSeen = false;
+  const seenDirectives = new Set();
 
   for (let index = 0; index < rawLines.length; index += 1) {
     const line = rawLines[index];
@@ -2777,21 +2920,37 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
 
     const trimmed = line.trim();
     if (trimmed.length === 0) {
+      inHeaderDirectives = false;
       continue;
     }
     if (trimmed.startsWith("#")) {
       if (inHeaderDirectives) {
-        const syntaxMatch = /^#\s*syntax\s*=\s*(?<image>\S+)/iu.exec(trimmed);
-        if (syntaxMatch) {
-          const frontend = stripQuotes(syntaxMatch.groups.image);
-          if (!isDynamicReference(frontend) && !isPinnedDigest(frontend)) {
-            problems.push(`${filePath}:${index + 1}: ${frontend} is not pinned to a sha256 digest`);
+        const directiveMatch = /^#\s*(?<name>syntax|escape|check)\s*=\s*(?<value>.+)$/iu.exec(
+          trimmed,
+        );
+        if (directiveMatch) {
+          const directiveName = directiveMatch.groups.name.toLowerCase();
+          const directiveValue = directiveMatch.groups.value.trim();
+          if (seenDirectives.has(directiveName)) {
+            inHeaderDirectives = false;
+          } else {
+            seenDirectives.add(directiveName);
+            if (directiveName === "syntax") {
+              const frontend = stripQuotes(directiveValue.split(/\s+/u)[0] ?? "");
+              if (frontend && !isDynamicReference(frontend) && !isPinnedDigest(frontend)) {
+                problems.push(
+                  `${filePath}:${index + 1}: ${frontend} is not pinned to a sha256 digest`,
+                );
+              }
+            } else if (
+              directiveName === "escape" &&
+              (directiveValue === "\\" || directiveValue === "`")
+            ) {
+              escapeChar = directiveValue;
+            }
           }
-        }
-        const escapeMatch = /^#\s*escape\s*=\s*(?<char>[\\`])\s*$/iu.exec(trimmed);
-        if (escapeMatch && !escapeDirectiveSeen) {
-          escapeChar = escapeMatch.groups.char;
-          escapeDirectiveSeen = true;
+        } else {
+          inHeaderDirectives = false;
         }
       }
       continue;

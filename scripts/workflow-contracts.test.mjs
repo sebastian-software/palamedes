@@ -1659,6 +1659,36 @@ describe("workflow contracts", () => {
         `# escape=\`\nFROM \`\n  # windows base\n  node:24@${digest} AS runtime\n`,
       ),
     ).toEqual([]);
+    // Dockerfile parser directives stop after an ordinary comment or blank line,
+    // and `${ARG:-default}` fallbacks in `FROM` are resolved and checked.
+    expect(
+      unpinnedContainerfileReferences(
+        `# License header\n# syntax=docker/dockerfile:1\nARG BASE\nFROM \${BASE:-node:24}\n`,
+      ),
+    ).toEqual(["<memory>:4: node:24 is not pinned to a sha256 digest"]);
+    // Podman pulls check every image operand, local sha256 image IDs are accepted
+    // for `run`/`create` (not `pull`), and Windows runners default to PowerShell.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  podman-and-windows:",
+          "    runs-on: windows-latest",
+          "    steps:",
+          "      - run: |",
+          "          docker run --rm `",
+          `            node:24@${digest} \``,
+          "            node -v",
+          `          docker run --rm ${digest} node -v`,
+          `          docker pull ${digest}`,
+          `          podman pull node:24@${digest} alpine:3.20`,
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      `<memory>:10: ${digest} is not pinned to a sha256 digest`,
+      "<memory>:11: alpine:3.20 is not pinned to a sha256 digest",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
