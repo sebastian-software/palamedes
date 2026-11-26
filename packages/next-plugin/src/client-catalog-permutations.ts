@@ -459,6 +459,8 @@ type ScopeFrame = {
   tainted: boolean;
   declKind?: "let" | "const" | "var";
   exprDepth: number;
+  pendingCondition: boolean;
+  conditionalStmt: boolean;
 };
 
 const CONTROL_FLOW_KEYWORDS = new Set(["if", "while", "switch", "with"]);
@@ -580,7 +582,9 @@ function resolveIdentifierArrayInScope(
   objectStart: number,
   ident: string,
 ): string | undefined {
-  const scopeStack: ScopeFrame[] = [{ tainted: false, exprDepth: 0 }];
+  const scopeStack: ScopeFrame[] = [
+    { tainted: false, exprDepth: 0, pendingCondition: false, conditionalStmt: false },
+  ];
   const identWord = new RegExp(`(?<![\\w$.])${escapeRegExpLiteral(ident)}(?![\\w$])`, "u");
   let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
   let regexAllowed = true;
@@ -641,11 +645,15 @@ function resolveIdentifierArrayInScope(
         regexAllowed = false;
         continue;
       }
+      top.conditionalStmt = false;
+      top.pendingCondition = false;
       const shadowed = blockHeaderShadowsIdentifier(source, index, ident);
       scopeStack.push({
         ...(shadowed ? { binding: { value: null, blockScoped: true } } : {}),
         tainted: false,
         exprDepth: 0,
+        pendingCondition: false,
+        conditionalStmt: false,
       });
       index += 1;
       prevTokenKind = "other";
@@ -690,13 +698,21 @@ function resolveIdentifierArrayInScope(
     }
     if (ch === ")" || ch === "]") {
       if (top.exprDepth > 0) top.exprDepth -= 1;
+      if (ch === ")" && top.exprDepth === 0 && top.pendingCondition) {
+        top.pendingCondition = false;
+        top.conditionalStmt = true;
+      }
       index += 1;
       prevTokenKind = "other";
       regexAllowed = false;
       continue;
     }
     if (ch === ";") {
-      if (top.exprDepth === 0) top.declKind = undefined;
+      if (top.exprDepth === 0) {
+        top.declKind = undefined;
+        top.conditionalStmt = false;
+        top.pendingCondition = false;
+      }
       index += 1;
       prevTokenKind = "other";
       regexAllowed = true;
@@ -727,6 +743,18 @@ function resolveIdentifierArrayInScope(
           regexAllowed = false;
           continue;
         }
+        if (top.exprDepth === 0 && (CONTROL_FLOW_KEYWORDS.has(word) || word === "for")) {
+          top.pendingCondition = true;
+          prevTokenKind = "other";
+          regexAllowed = false;
+          continue;
+        }
+        if (top.exprDepth === 0 && (word === "else" || word === "do")) {
+          top.conditionalStmt = true;
+          prevTokenKind = "other";
+          regexAllowed = true;
+          continue;
+        }
         if (word === ident) {
           const isDeclarator =
             top.exprDepth === 0 &&
@@ -741,8 +769,16 @@ function resolveIdentifierArrayInScope(
             const blockScoped =
               isDeclarator && (top.declKind === "let" || top.declKind === "const");
             const rhsStart = skipWhitespaceAndComments(source, afterWord + 1);
+            // Accept only a single, unconditional declaration initializer with
+            // no prior or later writes to `ident` in this scope.
             let value: string | null = null;
-            if (rhsStart < objectStart && source[rhsStart] === "[") {
+            if (
+              isDeclarator &&
+              !top.conditionalStmt &&
+              top.binding === undefined &&
+              rhsStart < objectStart &&
+              source[rhsStart] === "["
+            ) {
               const arrayEnd = scanBalancedEnd(source, rhsStart);
               if (arrayEnd !== -1 && arrayEnd <= objectStart) {
                 value = source.slice(rhsStart, arrayEnd);
@@ -788,57 +824,94 @@ function resolveIdentifierArrayInScope(
 }
 
 function findTreeExpressionForPage(source: string, expectedPage: string): string | undefined {
-  const pagePropertyPattern = /(?:\bpage|"page"|'page')\s*:\s*(?=["'])/gu;
-  const matches: string[] = [];
-  for (const match of source.matchAll(pagePropertyPattern)) {
-    const quoteStart = match.index + match[0].length;
-    const quoteEnd = scanQuotedStringEnd(source, quoteStart);
-    if (quoteEnd === -1) continue;
-    if (parseJsStringLiteral(source.slice(quoteStart, quoteEnd)) !== expectedPage) continue;
-    // Walk backward to the enclosing object literal `{ ... tree: ..., page: "<expectedPage>" ... }`.
-    let objectStart = -1;
-    let depth = 0;
-    let quote: '"' | "'" | undefined;
-    for (let index = match.index - 1; index >= 0; index -= 1) {
-      const ch = source[index];
-      if (quote) {
-        if (ch === quote) {
-          let backslashes = 0;
-          for (let bs = index - 1; bs >= 0 && source[bs] === "\\"; bs -= 1) backslashes += 1;
-          if (backslashes % 2 === 0) quote = undefined;
-        }
-        continue;
-      }
-      if (ch === '"' || ch === "'") {
-        quote = ch;
-        continue;
-      }
-      if (ch === "}") depth += 1;
-      else if (ch === "{") {
-        if (depth === 0) {
-          objectStart = index;
-          break;
-        }
-        depth -= 1;
-      }
-    }
-    if (objectStart === -1) continue;
-    const objectEnd = scanBalancedEnd(source, objectStart);
-    if (objectEnd === -1 || objectEnd < match.index) continue;
-    const props = parseTopLevelObjectProperties(source.slice(objectStart, objectEnd));
-    if (!props) continue;
-    const pageValue = props.get("page");
-    if (!pageValue || parseJsStringLiteral(pageValue) !== expectedPage) continue;
-    const treeExpr = props.get("tree");
-    if (!treeExpr) continue;
-    if (treeExpr.startsWith("[")) {
-      matches.push(treeExpr);
+  const matches: Array<string | undefined> = [];
+  let prevNonWsChar = "";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < source.length) {
+    const ch = source[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
       continue;
     }
-    if (!/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) continue;
-    const resolved = resolveIdentifierArrayInScope(source, objectStart, treeExpr);
-    if (resolved !== undefined) matches.push(resolved);
+    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(source, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(source, index);
+      if (end === -1) return;
+      index = end;
+      prevNonWsChar = ch;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(source, index);
+      if (end === -1) return;
+      index = end;
+      prevNonWsChar = "`";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(source, index);
+      if (end !== -1) {
+        index = end;
+        prevNonWsChar = "/";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === "{" && prevNonWsChar === "(") {
+      const objectStart = index;
+      const objectEnd = scanBalancedEnd(source, objectStart);
+      if (objectEnd !== -1) {
+        const afterObject = skipWhitespaceAndComments(source, objectEnd);
+        if (source[afterObject] === ")") {
+          const props = parseTopLevelObjectProperties(source.slice(objectStart, objectEnd));
+          const pageValue = props?.get("page");
+          if (props && pageValue && parseJsStringLiteral(pageValue) === expectedPage) {
+            const treeExpr = props.get("tree");
+            if (treeExpr !== undefined) {
+              if (treeExpr.startsWith("[")) {
+                matches.push(treeExpr);
+              } else if (/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) {
+                matches.push(resolveIdentifierArrayInScope(source, objectStart, treeExpr));
+              } else {
+                matches.push(undefined);
+              }
+            }
+          }
+        }
+      }
+      index += 1;
+      prevNonWsChar = "{";
+      regexAllowed = true;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < source.length && /[\w$]/u.test(source[index] ?? "")) index += 1;
+      const word = source.slice(wordStart, index);
+      prevNonWsChar = word.at(-1) ?? "";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < source.length && /[\w.]/u.test(source[index] ?? "")) index += 1;
+      prevNonWsChar = "0";
+      regexAllowed = false;
+      continue;
+    }
+    index += 1;
+    prevNonWsChar = ch ?? "";
+    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
   }
+
   return matches.length === 1 ? matches[0] : undefined;
 }
 
@@ -883,28 +956,29 @@ export function compiledRouteHasOptionalRootLocale(
   }
 
   const expectedPage = `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`;
-  const chunkPaths: string[] = [];
+  const templateChunks: string[] = [];
   for (const match of entrySource.matchAll(/\.c\(\s*["']([^"']+\.js)["']\s*\)/gu)) {
     const chunkRel = match[1];
-    if (chunkRel) chunkPaths.push(path.join(distDir, chunkRel));
-  }
-  // Prioritize Next's app-page template chunk, which carries the route's loaderTree,
-  // and read candidate chunks lazily so unrelated bundles are never read.
-  chunkPaths.sort((a, b) => {
-    const aIsTemplate = a.includes("app-page") ? 0 : 1;
-    const bIsTemplate = b.includes("app-page") ? 0 : 1;
-    return aIsTemplate - bIsTemplate;
-  });
-
-  for (const chunkPath of chunkPaths) {
-    let chunkSource: string;
-    try {
-      chunkSource = readFileSync(chunkPath, "utf8");
-    } catch {
-      continue;
+    if (chunkRel && path.basename(chunkRel).includes("app-page")) {
+      templateChunks.push(path.join(distDir, chunkRel));
     }
-    const result = compiledLoaderTreeHasOptionalRootLocale(chunkSource, expectedPage);
-    if (result !== undefined) return result;
+  }
+
+  // Inspect only Next's app-page template chunk(s) so unrelated user/runtime
+  // chunks can never masquerade as the route entrypoint when the template is
+  // inconclusive. Fall back to entrySource only when no template chunk exists.
+  if (templateChunks.length > 0) {
+    for (const chunkPath of templateChunks) {
+      let chunkSource: string;
+      try {
+        chunkSource = readFileSync(chunkPath, "utf8");
+      } catch {
+        continue;
+      }
+      const result = compiledLoaderTreeHasOptionalRootLocale(chunkSource, expectedPage);
+      if (result !== undefined) return result;
+    }
+    return;
   }
   return compiledLoaderTreeHasOptionalRootLocale(entrySource, expectedPage);
 }
@@ -918,7 +992,7 @@ function resolveSourceSegmentDirectory(
   // `_` folder when resolving an emitted route segment.
   if (!emittedSegment.startsWith("_")) {
     const direct = path.join(parentDir, emittedSegment);
-    if (existsSync(direct)) return direct;
+    if (isDirectoryTarget(direct)) return direct;
   }
   if (!emittedSegment.includes("_")) return;
   let entries: Dirent[];

@@ -877,6 +877,68 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
+      // Conditional or subsequent assignments in the same scope are inconclusive.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["[[...locale]]",{},{layout:root}]; if (flag) t=["",{},{layout:otherRoot}]; start({tree:t,page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `if (flag) var t=["",{},{layout:otherRoot}]; start({tree:t,page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      // Serialized route data inside string literals, template literals, or
+      // comments must never be treated as a real entrypoint call.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `const serialized = 'start({tree:["",{},{layout:root}],page:"/[[...locale]]/page"})';`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          'const serialized = `start({tree:["",{},{layout:root}],page:"/[[...locale]]/page"})`;',
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `// start({tree:["",{},{layout:root}],page:"/[[...locale]]/page"})`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      // An ordinary file colocated with an escaped `%5F` segment directory must
+      // not shadow the escaped route directory in the filesystem fallback.
+      const escapedProject = mkdtempSync(path.join(os.tmpdir(), "palamedes-escaped-file-shadow-"));
+      try {
+        mkdirSync(path.join(escapedProject, "app/shop%5Ffront/[[...locale]]"), { recursive: true });
+        writeFileSync(path.join(escapedProject, "app/shop_front"), "not a directory\n");
+        writeFileSync(
+          path.join(escapedProject, "app/shop%5Ffront/[[...locale]]/layout.tsx"),
+          "export default function Layout({ children }) { return children; }\n",
+        );
+        expect(
+          routeHasOptionalRootLocale(
+            escapedProject,
+            "shop_front/[[...locale]]/page_client-reference-manifest.js",
+          ),
+        ).toBe(true);
+      } finally {
+        rmSync(escapedProject, { recursive: true, force: true });
+      }
+      // When the app-page template chunk is inconclusive, unrelated non-template
+      // chunks referenced by page.js must not supply a false positive/negative.
+      writeFileSync(
+        path.join(distDir, "server/chunks/ssr/unrelated_user_chunk.js"),
+        `const example = start({ tree: ["", {}, { layout: [l, "root"] }], page: "/[[...locale]]/page" });`,
+      );
+      writeFileSync(
+        path.join(distDir, "server/app/[[...locale]]/page.js"),
+        `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nR.c("server/chunks/ssr/unrelated_user_chunk.js")\n`,
+      );
 
       // End-to-end check: when the compiled loaderTree has a nonliteral child AND
       // a later config wrapper added `page.tsx` (so only `layout.page.tsx` exists,
