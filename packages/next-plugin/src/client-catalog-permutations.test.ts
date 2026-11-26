@@ -837,6 +837,47 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
         ),
       ).toBeUndefined();
 
+      // Lexical scoping: block-scoped `let`/`const` bindings inside sibling
+      // functions or earlier modules do not override the outer scope's tree,
+      // while mutations, `var` redeclarations, or parameter shadowing return
+      // undefined so the caller falls back to the source tree.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["[[...locale]]",{},{layout:root}]; function other(){let t=["",{},{layout:otherRoot}]; return t} start({tree:t,page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBe(true);
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `module.exports=[1,a=>{let j=["",{},{layout:a}]; start({tree:j,page:"/other/page"});},2,a=>{let x=1,j=["",{children:["[[...locale]]",{},{layout:b}]},{}]; start({tree:j,page:"/[[...locale]]/page"});}];`,
+          "/[[...locale]]/page",
+        ),
+      ).toBe(true);
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["[[...locale]]",{},{layout:root}]; if (t) { start({tree:t,page:"/[[...locale]]/page"}); }`,
+          "/[[...locale]]/page",
+        ),
+      ).toBe(true);
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["[[...locale]]",{},{layout:root}]; function mutate(){t=["",{},{layout:otherRoot}];} start({tree:t,page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["[[...locale]]",{},{layout:root}]; if (cond) { var t=["",{},{layout:otherRoot}]; } start({tree:t,page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["",{},{layout:otherRoot}]; function run(t){ start({tree:t,page:"/[[...locale]]/page"}); }`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+
       // End-to-end check: when the compiled loaderTree has a nonliteral child AND
       // a later config wrapper added `page.tsx` (so only `layout.page.tsx` exists,
       // with no default-named `layout.tsx`), emitClientCatalogPermutations() reads

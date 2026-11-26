@@ -221,6 +221,25 @@ function scanQuotedStringEnd(source: string, start: number): number {
   return -1;
 }
 
+function scanTemplateLiteralEnd(source: string, start: number): number {
+  let index = start + 1;
+  while (index < source.length) {
+    const ch = source[index];
+    if (ch === "\\") {
+      index += 2;
+    } else if (ch === "`") {
+      return index + 1;
+    } else if (ch === "$" && source[index + 1] === "{") {
+      const end = scanBalancedEnd(source, index + 1);
+      if (end === -1) return -1;
+      index = end;
+    } else {
+      index += 1;
+    }
+  }
+  return -1;
+}
+
 function scanBalancedEnd(source: string, start: number): number {
   const open = source[start];
   const close = open === "[" ? "]" : open === "{" ? "}" : ")";
@@ -230,6 +249,12 @@ function scanBalancedEnd(source: string, start: number): number {
     const ch = source[index];
     if (ch === '"' || ch === "'") {
       const end = scanQuotedStringEnd(source, index);
+      if (end === -1) return -1;
+      index = end;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(source, index);
       if (end === -1) return -1;
       index = end;
       continue;
@@ -429,6 +454,339 @@ function walkCompiledLoaderTree(
   return walkCompiledLoaderTree(childrenExpr, childStart, hasOptionalLocale);
 }
 
+type ScopeFrame = {
+  binding?: { value: string | null; blockScoped: boolean };
+  tainted: boolean;
+  declKind?: "let" | "const" | "var";
+  exprDepth: number;
+};
+
+const CONTROL_FLOW_KEYWORDS = new Set(["if", "while", "switch", "with"]);
+const REGEX_PRECEDING_KEYWORDS = new Set([
+  "return",
+  "throw",
+  "case",
+  "in",
+  "of",
+  "typeof",
+  "void",
+  "delete",
+  "new",
+  "yield",
+  "await",
+  "else",
+  "do",
+]);
+
+function escapeRegExpLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function scanRegexLiteralEnd(source: string, start: number): number {
+  let index = start + 1;
+  let inClass = false;
+  while (index < source.length) {
+    const ch = source[index];
+    if (ch === "\\") {
+      index += 2;
+      continue;
+    }
+    if (ch === "\n" || ch === "\r") return -1;
+    if (ch === "[") inClass = true;
+    else if (ch === "]") inClass = false;
+    else if (ch === "/" && !inClass) {
+      index += 1;
+      while (index < source.length && /[a-z]/iu.test(source[index] ?? "")) index += 1;
+      return index;
+    }
+    index += 1;
+  }
+  return -1;
+}
+
+function findMatchingOpenParenBackward(source: string, closeParenIndex: number): number {
+  let depth = 0;
+  let quote: '"' | "'" | undefined;
+  for (let index = closeParenIndex; index >= 0; index -= 1) {
+    const ch = source[index];
+    if (quote) {
+      if (ch === quote) {
+        let backslashes = 0;
+        for (let bs = index - 1; bs >= 0 && source[bs] === "\\"; bs -= 1) backslashes += 1;
+        if (backslashes % 2 === 0) quote = undefined;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === ")") depth += 1;
+    else if (ch === "(") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function readPrecedingWord(source: string, beforeIndex: number): string {
+  let end = beforeIndex;
+  while (end >= 0 && /\s/u.test(source[end] ?? "")) end -= 1;
+  let start = end;
+  while (start >= 0 && /[\w$]/u.test(source[start] ?? "")) start -= 1;
+  return source.slice(start + 1, end + 1);
+}
+
+function blockHeaderShadowsIdentifier(source: string, braceIndex: number, ident: string): boolean {
+  const identWord = new RegExp(`(?<![\\w$.])${escapeRegExpLiteral(ident)}(?![\\w$])`, "u");
+  let index = braceIndex - 1;
+  while (index >= 0 && /\s/u.test(source[index] ?? "")) index -= 1;
+  if (index < 0) return false;
+  if (source[index] === ">" && source[index - 1] === "=") {
+    let arrowBefore = index - 2;
+    while (arrowBefore >= 0 && /\s/u.test(source[arrowBefore] ?? "")) arrowBefore -= 1;
+    if (arrowBefore < 0) return false;
+    if (source[arrowBefore] === ")") {
+      const openParen = findMatchingOpenParenBackward(source, arrowBefore);
+      if (openParen === -1) return true;
+      return identWord.test(source.slice(openParen + 1, arrowBefore));
+    }
+    return readPrecedingWord(source, arrowBefore) === ident;
+  }
+  if (source[index] === ")") {
+    const openParen = findMatchingOpenParenBackward(source, index);
+    if (openParen === -1) return true;
+    const headWord = readPrecedingWord(source, openParen - 1);
+    if (CONTROL_FLOW_KEYWORDS.has(headWord)) return false;
+    const headerSlice = source.slice(openParen + 1, index);
+    if (headWord === "for") {
+      return /\b(?:let|const|var)\b/u.test(headerSlice) && identWord.test(headerSlice);
+    }
+    return identWord.test(headerSlice);
+  }
+  return false;
+}
+
+/**
+ * Resolves an identifier bound to an array literal in the lexical scope chain
+ * enclosing `objectStart`. Ignores `let`/`const` bindings confined to closed
+ * sibling blocks (such as helper functions or earlier modules in the same
+ * chunk) and returns `undefined` whenever scope identity or mutation is
+ * uncertain so callers fall back to inspecting the source tree.
+ */
+function resolveIdentifierArrayInScope(
+  source: string,
+  objectStart: number,
+  ident: string,
+): string | undefined {
+  const scopeStack: ScopeFrame[] = [{ tainted: false, exprDepth: 0 }];
+  const identWord = new RegExp(`(?<![\\w$.])${escapeRegExpLiteral(ident)}(?![\\w$])`, "u");
+  let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < objectStart) {
+    const ch = source[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(source, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(source, index);
+      if (end === -1) return;
+      index = end;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(source, index);
+      if (end === -1) return;
+      index = end;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(source, index);
+      if (end !== -1) {
+        index = end;
+        prevTokenKind = "other";
+        regexAllowed = false;
+        continue;
+      }
+    }
+
+    const top = scopeStack.at(-1)!;
+    if (ch === "{") {
+      const isDestructuringDecl =
+        top.exprDepth === 0 &&
+        (prevTokenKind === "decl" || (prevTokenKind === "comma" && top.declKind !== undefined));
+      if (isDestructuringDecl) {
+        const end = scanBalancedEnd(source, index);
+        if (end === -1 || end > objectStart) return;
+        if (identWord.test(source.slice(index + 1, end - 1))) {
+          top.binding = {
+            value: null,
+            blockScoped: top.declKind === "let" || top.declKind === "const",
+          };
+        }
+        index = end;
+        prevTokenKind = "other";
+        regexAllowed = false;
+        continue;
+      }
+      const shadowed = blockHeaderShadowsIdentifier(source, index, ident);
+      scopeStack.push({
+        ...(shadowed ? { binding: { value: null, blockScoped: true } } : {}),
+        tainted: false,
+        exprDepth: 0,
+      });
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "}") {
+      if (scopeStack.length <= 1) return;
+      const closed = scopeStack.pop()!;
+      if (closed.tainted || (closed.binding !== undefined && !closed.binding.blockScoped)) {
+        scopeStack.at(-1)!.tainted = true;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "(" || ch === "[") {
+      const isArrayDestructuringDecl =
+        ch === "[" &&
+        top.exprDepth === 0 &&
+        (prevTokenKind === "decl" || (prevTokenKind === "comma" && top.declKind !== undefined));
+      if (isArrayDestructuringDecl) {
+        const end = scanBalancedEnd(source, index);
+        if (end === -1 || end > objectStart) return;
+        if (identWord.test(source.slice(index + 1, end - 1))) {
+          top.binding = {
+            value: null,
+            blockScoped: top.declKind === "let" || top.declKind === "const",
+          };
+        }
+        index = end;
+        prevTokenKind = "other";
+        regexAllowed = false;
+        continue;
+      }
+      top.exprDepth += 1;
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ")" || ch === "]") {
+      if (top.exprDepth > 0) top.exprDepth -= 1;
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === ";") {
+      if (top.exprDepth === 0) top.declKind = undefined;
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ",") {
+      index += 1;
+      prevTokenKind = "comma";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ".") {
+      index += 1;
+      prevTokenKind = "dot";
+      regexAllowed = false;
+      continue;
+    }
+
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < objectStart && /[\w$]/u.test(source[index] ?? "")) index += 1;
+      const word = source.slice(wordStart, index);
+      if (prevTokenKind !== "dot") {
+        if (top.exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
+          top.declKind = word;
+          prevTokenKind = "decl";
+          regexAllowed = false;
+          continue;
+        }
+        if (word === ident) {
+          const isDeclarator =
+            top.exprDepth === 0 &&
+            (prevTokenKind === "decl" || (prevTokenKind === "comma" && top.declKind !== undefined));
+          const afterWord = skipWhitespaceAndComments(source, index);
+          if (
+            afterWord < objectStart &&
+            source[afterWord] === "=" &&
+            source[afterWord + 1] !== "=" &&
+            source[afterWord + 1] !== ">"
+          ) {
+            const blockScoped =
+              isDeclarator && (top.declKind === "let" || top.declKind === "const");
+            const rhsStart = skipWhitespaceAndComments(source, afterWord + 1);
+            let value: string | null = null;
+            if (rhsStart < objectStart && source[rhsStart] === "[") {
+              const arrayEnd = scanBalancedEnd(source, rhsStart);
+              if (arrayEnd !== -1 && arrayEnd <= objectStart) {
+                value = source.slice(rhsStart, arrayEnd);
+                index = arrayEnd;
+              }
+            }
+            top.binding = {
+              value,
+              blockScoped: blockScoped || Boolean(top.binding?.blockScoped),
+            };
+          } else if (isDeclarator) {
+            top.binding = {
+              value: null,
+              blockScoped: top.declKind === "let" || top.declKind === "const",
+            };
+          }
+        }
+      }
+      prevTokenKind = "other";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < objectStart && /[\w.]/u.test(source[index] ?? "")) index += 1;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+
+    index += 1;
+    prevTokenKind = "other";
+    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+
+  for (let frameIndex = scopeStack.length - 1; frameIndex >= 0; frameIndex -= 1) {
+    const frame = scopeStack[frameIndex]!;
+    if (frame.tainted) return;
+    if (frame.binding !== undefined) return frame.binding.value ?? undefined;
+  }
+  return;
+}
+
 function findTreeExpressionForPage(source: string, expectedPage: string): string | undefined {
   const pagePropertyPattern = /(?:\bpage|"page"|'page')\s*:\s*(?=["'])/gu;
   const matches: string[] = [];
@@ -478,20 +836,8 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
       continue;
     }
     if (!/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) continue;
-    // Locate the lexical binding `<ident> = [...]` preceding this entrypoint call.
-    const prefix = source.slice(0, objectStart);
-    const bindingPattern = new RegExp(
-      `(?:^|[;,{(\\s])${treeExpr.replaceAll("$", "\\$")}\\s*=\\s*\\[`,
-      "gu",
-    );
-    let lastArrayStart = -1;
-    for (const bindingMatch of prefix.matchAll(bindingPattern)) {
-      lastArrayStart = bindingMatch.index + bindingMatch[0].length - 1;
-    }
-    if (lastArrayStart === -1) continue;
-    const arrayEnd = scanBalancedEnd(prefix, lastArrayStart);
-    if (arrayEnd === -1) continue;
-    matches.push(prefix.slice(lastArrayStart, arrayEnd));
+    const resolved = resolveIdentifierArrayInScope(source, objectStart, treeExpr);
+    if (resolved !== undefined) matches.push(resolved);
   }
   return matches.length === 1 ? matches[0] : undefined;
 }

@@ -358,8 +358,9 @@ The server picks the locale before any layout runs, in this order by default
    layout needs no Proxy and an untrusted incoming `x-palamedes-locale` request
    header cannot override that route-segment locale or poison route-keyed
    caches;
-2. otherwise the `x-palamedes-locale` request header, which the app's Proxy sets
-   from its own strategy (cookie, subdomain, domain, or anything else);
+2. otherwise — on routes without a root `locale` segment — the
+   `x-palamedes-locale` request header, which the app's Proxy sets from its own
+   strategy (cookie, subdomain, domain, or anything else);
 3. otherwise the source locale from `palamedes.yaml`.
 
 Next.js populates `rootParams` only up to the root layout: if your app places
@@ -368,6 +369,22 @@ is absent, so default `route-first` mode still consults `x-palamedes-locale` and
 `localeSource: "route"` always falls back to the source locale. Other param
 names are not guessed at: put `[locale]` at or above the root layout, or set the
 header from `proxy.ts`.
+
+Catch-all root segments (`[...locale]` and optional `[[...locale]]`) are also
+treated as route-owned in default `route-first` mode and never fall back to
+`x-palamedes-locale`:
+
+- When a root optional catch-all `[[...locale]]` segment is omitted (leaving
+  `rootParams.locale` absent), `route-first` ignores `x-palamedes-locale` and
+  selects the source locale so an untrusted header cannot override the
+  unprefixed root route.
+- When a catch-all `[...locale]` or `[[...locale]]` segment is populated,
+  Next.js provides `rootParams.locale` as an array rather than a single locale
+  string, so `route-first` also selects the source locale instead of consulting
+  `x-palamedes-locale`.
+
+Apps with a catch-all root `locale` segment that want their Proxy to decide the
+locale instead must opt in with `bindClientCatalogPermutations({ localeSource: "header" })`.
 
 Apps whose routes all live under a root `[locale]` layout can pass
 `bindClientCatalogPermutations({ localeSource: "route" })` to ignore
