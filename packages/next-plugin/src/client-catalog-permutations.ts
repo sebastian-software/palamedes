@@ -249,12 +249,57 @@ function parseJsStringLiteral(expr: string): string | undefined {
   if (quote === '"') {
     try {
       const parsed: unknown = JSON.parse(trimmed);
-      return typeof parsed === "string" ? parsed : undefined;
+      if (typeof parsed === "string") return parsed;
     } catch {
-      return;
+      // Fall through to full JS escape decoding (for example `\'` or `\xNN`).
     }
   }
-  return trimmed.slice(1, -1).replace(/\\(.)/gu, "$1");
+  const inner = trimmed.slice(1, -1);
+  let decoded = "";
+  for (let index = 0; index < inner.length; index += 1) {
+    const ch = inner[index]!;
+    if (ch !== "\\") {
+      decoded += ch;
+      continue;
+    }
+    index += 1;
+    if (index >= inner.length) return;
+    const esc = inner[index]!;
+    if (esc === "n") decoded += "\n";
+    else if (esc === "r") decoded += "\r";
+    else if (esc === "t") decoded += "\t";
+    else if (esc === "b") decoded += "\b";
+    else if (esc === "f") decoded += "\f";
+    else if (esc === "v") decoded += "\v";
+    else if (esc === "0") decoded += "\0";
+    else if (esc === "x") {
+      const hex = inner.slice(index + 1, index + 3);
+      if (!/^[0-9a-fA-F]{2}$/u.test(hex)) return;
+      decoded += String.fromCharCode(Number.parseInt(hex, 16));
+      index += 2;
+    } else if (esc === "u") {
+      if (inner[index + 1] === "{") {
+        const closeBrace = inner.indexOf("}", index + 2);
+        if (closeBrace === -1) return;
+        const hex = inner.slice(index + 2, closeBrace);
+        if (!/^[0-9a-fA-F]+$/u.test(hex)) return;
+        const codePoint = Number.parseInt(hex, 16);
+        if (codePoint > 0x10_ff_ff) return;
+        decoded += String.fromCodePoint(codePoint);
+        index = closeBrace;
+      } else {
+        const hex = inner.slice(index + 1, index + 5);
+        if (!/^[0-9a-fA-F]{4}$/u.test(hex)) return;
+        decoded += String.fromCharCode(Number.parseInt(hex, 16));
+        index += 4;
+      }
+    } else if (esc === "\r") {
+      if (inner[index + 1] === "\n") index += 1;
+    } else if (esc !== "\n") {
+      decoded += esc;
+    }
+  }
+  return decoded;
 }
 
 function splitTopLevelArrayElements(source: string, arrayStart: number): string[] | undefined {
@@ -375,14 +420,13 @@ function walkCompiledLoaderTree(
 }
 
 function findTreeExpressionForPage(source: string, expectedPage: string): string | undefined {
-  const escapedDouble = JSON.stringify(expectedPage).replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  const escapedSingle = `'${expectedPage.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&")}'`;
-  const pageLiteralPattern = new RegExp(
-    `(?:\\bpage|"page"|'page')\\s*:\\s*(?:${escapedDouble}|${escapedSingle})`,
-    "gu",
-  );
+  const pagePropertyPattern = /(?:\bpage|"page"|'page')\s*:\s*(?=["'])/gu;
   const matches: string[] = [];
-  for (const match of source.matchAll(pageLiteralPattern)) {
+  for (const match of source.matchAll(pagePropertyPattern)) {
+    const quoteStart = match.index + match[0].length;
+    const quoteEnd = scanQuotedStringEnd(source, quoteStart);
+    if (quoteEnd === -1) continue;
+    if (parseJsStringLiteral(source.slice(quoteStart, quoteEnd)) !== expectedPage) continue;
     // Walk backward to the enclosing object literal `{ ... tree: ..., page: "<expectedPage>" ... }`.
     let objectStart = -1;
     let depth = 0;

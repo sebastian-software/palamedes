@@ -754,6 +754,42 @@ const entrypoint = createAppPageEntrypoint({
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(true);
 
+      // Single-quoted JS string with escaped apostrophe and embedded quotes, as
+      // Next 16.4.6 emits for routes like `app/Bob's "recs"/[[...locale]]/layout.page.jsx`.
+      const specialDir = path.join(projectRoot, 'app/Bob\'s "recs"/[[...locale]]');
+      mkdirSync(specialDir, { recursive: true });
+      writeFileSync(
+        path.join(specialDir, "layout.page.jsx"),
+        "export default function Layout({ children }) { return children; }\n",
+      );
+      const specialManifestDir = path.join(distDir, 'server/app/Bob\'s "recs"/[[...locale]]');
+      mkdirSync(specialManifestDir, { recursive: true });
+      const specialManifestPath = path.join(
+        specialManifestDir,
+        "page_client-reference-manifest.js",
+      );
+      writeFileSync(
+        specialManifestPath,
+        `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
+globalThis.__RSC_MANIFEST[${JSON.stringify('/Bob\'s "recs"/[[...locale]]/page')}] = ${JSON.stringify(
+          {
+            entryCSSFiles: {},
+            entryJSFiles: {
+              '[project]/app/Bob\'s "recs"/[[...locale]]/page': ["static/chunks/page.js"],
+            },
+          },
+        )};`,
+      );
+      writeFileSync(
+        path.join(specialManifestDir, "page.js"),
+        `var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/Bob's \\"recs\\"/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_special.js")\n`,
+      );
+      writeFileSync(
+        path.join(distDir, "server/chunks/ssr/next_dist_esm_build_templates_app-page_special.js"),
+        `module.exports=[2,a=>{let j=["",{children:['Bob\\'s "recs"',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s "recs"/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s "recs"/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:'/Bob\\'s "recs"/[[...locale]]/page',pathname:'/Bob\\'s "recs"/[[...locale]]'});}];`,
+      );
+      expect(compiledRouteHasOptionalRootLocale(distDir, specialManifestPath)).toBe(true);
+
       // If no entrypoint binds `tree` for this page, return undefined so the
       // source-tree fallback runs instead of trusting an unrelated array.
       writeFileSync(

@@ -64,9 +64,10 @@ keep the in-graph fragments.
   take precedence can opt into `localeSource: "header"` in
   `bindClientCatalogPermutations()`. Whenever the header can vary the locale
   for one URL (including header-only routes and `localeSource: "header"`
-  overrides), the route must render dynamically and any shared response cache
-  must distinguish locales or be bypassed; signing the header does not change
-  either requirement. Any app that consults an unsigned
+  overrides), the document shell itself must not be prerendered (a dynamic child
+  inside `<Suspense>` under Cache Components is insufficient) and any shared
+  response cache must distinguish locales or be bypassed; signing the header
+  does not change either requirement. Any app that consults an unsigned
   `x-palamedes-locale` header must ensure its Proxy matcher covers every render
   that can read it and strips or overwrites client-supplied values; otherwise
   require HMAC-SHA256 verification via `headerSecret` and

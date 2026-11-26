@@ -770,6 +770,22 @@ their revalidation or `router.refresh()` calls. Locale changes navigate to a new
 document after persistence; global layout revalidation is not needed solely
 for that navigation, though cookie mutation can still trigger an action render.
 
+With `experimentalClientCatalogPermutations`, call `bindClientCatalogPermutations()`
+from `@palamedes/next-plugin/server` in `instrumentation.ts`. By default
+(`localeSource: "route-first"`), a `[locale]` segment at or above the root layout
+takes precedence so an untrusted incoming `x-palamedes-locale` header cannot
+override route-segment chunks or poison route-keyed caches. Use
+`localeSource: "route"` when all routes use a root `[locale]` layout and headers
+should be ignored everywhere. Use `localeSource: "header"` when a Proxy should
+override route params; whenever an app consults `x-palamedes-locale`, either
+cover every renderable route in the Proxy matcher to strip/overwrite incoming
+headers or require HMAC-SHA256 verification via `signClientCatalogLocaleHeader()`
+and `headerSecret` (passing an explicitly `undefined` or empty `headerSecret`
+throws at binding time). For any URL whose locale can vary by header, do not
+prerender the document shell (a dynamic child inside `<Suspense>` under Cache
+Components is insufficient) and ensure shared caches vary by locale or are
+bypassed. See `/docs/api/next-plugin.md#client-chunk-permutations-experimental`.
+
 ### Remix v3
 
 Use `@palamedes/remix`. Register it after `remix/node-tsx`. Share one
