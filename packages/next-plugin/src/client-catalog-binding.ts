@@ -21,7 +21,7 @@ export const CLIENT_CATALOG_LOCALE_HEADER = "x-palamedes-locale";
  */
 export type ClientCatalogLocaleSource = "route-first" | "route" | "header";
 
-export type ResolveRenderLocaleOptions = {
+export type ClientCatalogHeaderOptions = {
   /**
    * Precedence between `rootParams.locale` and `x-palamedes-locale`.
    * @default "route-first"
@@ -34,6 +34,15 @@ export type ResolveRenderLocaleOptions = {
    * are ignored.
    */
   headerSecret?: string;
+};
+
+export type ResolveRenderLocaleOptions = ClientCatalogHeaderOptions & {
+  /**
+   * Whether the route's root layout sits at or below an optional catch-all
+   * `[[...locale]]` segment. Derived from the Next.js client reference
+   * manifest by `bindClientCatalogPermutationsAt()`.
+   */
+  optionalRootLocale?: boolean;
 };
 
 /**
@@ -85,21 +94,58 @@ export const CLIENT_CATALOG_PERMUTATIONS_DIST_ENV = "__PALAMEDES_NEXT_CATALOG_PE
 const BIND_GLOBAL = "__PALAMEDES_CLIENT_CATALOG_BIND";
 
 type LocaleResolver = (locales: readonly string[], fallback: string) => string;
-type BindableManifest = { [BIND_GLOBAL]?: (resolve: LocaleResolver) => void };
+type RouteManifestShape = {
+  entryJSFiles?: Record<string, unknown>;
+  entryCSSFiles?: Record<string, unknown>;
+};
+type BindableManifest = {
+  [BIND_GLOBAL]?: (resolve: LocaleResolver) => void;
+  __RSC_MANIFEST?: Record<string, RouteManifestShape | undefined>;
+};
 
 type RenderStore = ReturnType<typeof workAsyncStorageType.getStore>;
 type UnitStore = ReturnType<typeof workUnitAsyncStorageType.getStore>;
 
 const localeByRender = new WeakMap<object, string>();
+const ROOT_OPTIONAL_CATCH_ALL_LOCALE_ROUTE = /^\/(?:\([^/]+\)\/)*\[\[\.\.\.locale\]\](?:\/|$)/u;
+const LAYOUT_ENTRY_KEY_PATTERN = /(?:^|\/)layout$/u;
+const OPTIONAL_CATCH_ALL_LOCALE_DIR_PATTERN = /(?:^|\/)\[\[\.\.\.locale\]\]\//u;
 
-const OPTIONAL_CATCH_ALL_LOCALE_SEGMENT = /(?:^|\/)\[\[\.\.\.locale\]\](?:\/|$)/u;
-
-function hasDeclaredOptionalLocaleRoute(render: RenderStore): boolean {
+function hasRootOptionalLocaleRoute(render: RenderStore): boolean {
   if (!render) return false;
-  if (typeof render.route === "string" && OPTIONAL_CATCH_ALL_LOCALE_SEGMENT.test(render.route)) {
+  if (typeof render.route === "string" && ROOT_OPTIONAL_CATCH_ALL_LOCALE_ROUTE.test(render.route)) {
     return true;
   }
-  return typeof render.page === "string" && OPTIONAL_CATCH_ALL_LOCALE_SEGMENT.test(render.page);
+  return typeof render.page === "string" && ROOT_OPTIONAL_CATCH_ALL_LOCALE_ROUTE.test(render.page);
+}
+
+/**
+ * Inspects a Next.js client reference manifest's layout keys without invoking
+ * any chunk getters to determine whether the route's root layout sits at or
+ * below an optional catch-all `[[...locale]]` segment.
+ */
+export function manifestHasOptionalRootLocale(context: BindableManifest): boolean | undefined {
+  const rscManifest = context.__RSC_MANIFEST;
+  if (!rscManifest || typeof rscManifest !== "object") return;
+  const layoutPaths: string[] = [];
+  for (const routeKey of Object.getOwnPropertyNames(rscManifest)) {
+    const entry = rscManifest[routeKey];
+    if (!entry || typeof entry !== "object") continue;
+    for (const field of ["entryJSFiles", "entryCSSFiles"] as const) {
+      const table = entry[field];
+      if (!table || typeof table !== "object") continue;
+      for (const key of Object.getOwnPropertyNames(table)) {
+        const normalized = key.replaceAll("\\", "/");
+        if (LAYOUT_ENTRY_KEY_PATTERN.test(normalized)) {
+          layoutPaths.push(normalized);
+        }
+      }
+    }
+  }
+  if (layoutPaths.length === 0) return;
+  const minDepth = Math.min(...layoutPaths.map((entry) => entry.split("/").length));
+  const rootLayouts = layoutPaths.filter((entry) => entry.split("/").length === minDepth);
+  return rootLayouts.some((entry) => OPTIONAL_CATCH_ALL_LOCALE_DIR_PATTERN.test(entry));
 }
 
 /*
@@ -132,7 +178,11 @@ export function resolveRenderLocale(
       ? unit.rootParams
       : undefined;
   const hasRootLocaleParam = rootParams !== undefined && Object.hasOwn(rootParams, "locale");
-  const hasRootLocale = hasRootLocaleParam || hasDeclaredOptionalLocaleRoute(render);
+  const hasOptionalRootLocale =
+    options.optionalRootLocale !== undefined
+      ? options.optionalRootLocale
+      : hasRootOptionalLocaleRoute(render);
+  const hasRootLocale = hasRootLocaleParam || hasOptionalRootLocale;
   const rootLocale = hasRootLocaleParam ? rootParams.locale : undefined;
   const readHeaderLocale = () =>
     unit && "headers" in unit && unit.headers
@@ -176,7 +226,7 @@ function manifestFiles(directory: string): string[] {
  */
 export function bindClientCatalogPermutationsAt(
   distDir: string,
-  options: ResolveRenderLocaleOptions = {},
+  options: ClientCatalogHeaderOptions = {},
 ): string[] {
   const hasHeaderSecret = "headerSecret" in options;
   if (
@@ -210,19 +260,9 @@ export function bindClientCatalogPermutationsAt(
     storages = loaded;
     return loaded;
   }
-  const resolveOptions: ResolveRenderLocaleOptions = {
+  const resolveOptions: ClientCatalogHeaderOptions = {
     ...(options.localeSource ? { localeSource: options.localeSource } : {}),
     ...(hasHeaderSecret ? { headerSecret: options.headerSecret } : {}),
-  };
-  const resolve: LocaleResolver = (locales, fallback) => {
-    const { workAsyncStorage, workUnitAsyncStorage } = loadStorages();
-    return resolveRenderLocale(
-      locales,
-      fallback,
-      workAsyncStorage.getStore(),
-      workUnitAsyncStorage.getStore(),
-      resolveOptions,
-    );
   };
 
   const bound: string[] = [];
@@ -230,13 +270,25 @@ export function bindClientCatalogPermutationsAt(
     const context = evalManifest(file) as BindableManifest;
     const bind = context[BIND_GLOBAL];
     if (typeof bind !== "function") continue;
-    bind(resolve);
+    const optionalRootLocale = manifestHasOptionalRootLocale(context);
+    const manifestOptions: ResolveRenderLocaleOptions =
+      optionalRootLocale === undefined ? resolveOptions : { ...resolveOptions, optionalRootLocale };
+    bind((locales, fallback) => {
+      const { workAsyncStorage, workUnitAsyncStorage } = loadStorages();
+      return resolveRenderLocale(
+        locales,
+        fallback,
+        workAsyncStorage.getStore(),
+        workUnitAsyncStorage.getStore(),
+        manifestOptions,
+      );
+    });
     bound.push(file);
   }
   return bound;
 }
 
-export type BindClientCatalogPermutationsOptions = ResolveRenderLocaleOptions & {
+export type BindClientCatalogPermutationsOptions = ClientCatalogHeaderOptions & {
   /** The Next project directory that holds `distDir`. Defaults to `process.cwd()`. */
   dir?: string;
 };

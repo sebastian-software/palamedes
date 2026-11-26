@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   bindClientCatalogPermutationsAt,
+  manifestHasOptionalRootLocale,
   resolveRenderLocale,
   signClientCatalogLocaleHeader,
 } from "./client-catalog-binding";
@@ -284,6 +285,102 @@ describe("locale resolution", () => {
         unit({ rootParams: {}, headers: header("de") }),
       ),
     ).toBe("en");
+    // A nested optional locale segment below the root layout (for example
+    // `app/layout.tsx` + `app/shop/[[...locale]]/page.tsx`) is not a root
+    // param, so `route-first` still falls back to the Proxy header.
+    const secret = "nested-route-secret";
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        render("/shop/[[...locale]]"),
+        unit({ rootParams: {}, headers: header(signClientCatalogLocaleHeader("de", secret)) }),
+        { headerSecret: secret },
+      ),
+    ).toBe("de");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        render("/[[...locale]]"),
+        unit({ rootParams: {}, headers: header(signClientCatalogLocaleHeader("de", secret)) }),
+        { headerSecret: secret, optionalRootLocale: false },
+      ),
+    ).toBe("de");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        render("/shop/[[...locale]]"),
+        unit({ rootParams: {}, headers: header(signClientCatalogLocaleHeader("de", secret)) }),
+        { headerSecret: secret, optionalRootLocale: true },
+      ),
+    ).toBe("en");
+    // Manifest inspection distinguishes root vs nested optional locale layouts
+    // without triggering any chunk array getters.
+    expect(
+      manifestHasOptionalRootLocale({
+        __RSC_MANIFEST: {
+          "/[[...locale]]/page": {
+            entryJSFiles: {
+              "[project]/src/app/[[...locale]]/layout": [],
+              "[project]/src/app/[[...locale]]/page": [],
+            },
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      manifestHasOptionalRootLocale({
+        __RSC_MANIFEST: {
+          "/shop/[[...locale]]/page": {
+            entryJSFiles: {
+              "[project]/src/app/layout": [],
+              "[project]/src/app/shop/[[...locale]]/layout": [],
+              "[project]/src/app/shop/[[...locale]]/page": [],
+            },
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      manifestHasOptionalRootLocale({
+        __RSC_MANIFEST: {
+          "/[[...locale]]/page": {
+            entryJSFiles: {
+              "[project]/src/app/layout": [],
+              "[project]/src/app/[[...locale]]/page": [],
+            },
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      manifestHasOptionalRootLocale({
+        __RSC_MANIFEST: {
+          "/shop/[[...locale]]/page": {
+            entryJSFiles: {
+              "[project]/src/app/shop/[[...locale]]/layout": [],
+              "[project]/src/app/shop/[[...locale]]/page": [],
+            },
+          },
+        },
+      }),
+    ).toBe(true);
+    const throwingEntryJSFiles: Record<string, unknown> = {};
+    Object.defineProperty(throwingEntryJSFiles, "[project]/src/app/[[...locale]]/layout", {
+      enumerable: false,
+      get() {
+        throw new Error("chunk getter must not be invoked during manifest inspection");
+      },
+    });
+    expect(
+      manifestHasOptionalRootLocale({
+        __RSC_MANIFEST: {
+          "/[[...locale]]/page": { entryJSFiles: throwingEntryJSFiles },
+        },
+      }),
+    ).toBe(true);
     // When `rootParams.locale` already decides in default route-first mode,
     // `unit.headers` is not even read.
     const spyHeaders = header("en");

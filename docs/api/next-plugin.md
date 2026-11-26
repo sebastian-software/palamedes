@@ -373,7 +373,13 @@ Apps whose routes all live under a root `[locale]` layout can pass
 `bindClientCatalogPermutations({ localeSource: "route" })` to ignore
 `x-palamedes-locale` on every route (including routes outside `[locale]`). Apps
 whose Proxy should take precedence over route params can opt in with
-`bindClientCatalogPermutations({ localeSource: "header" })`.
+`bindClientCatalogPermutations({ localeSource: "header" })`. Whenever the header
+can select different locales for the same URL (for example, overriding `/en`
+with German via `localeSource: "header"`), that route must render dynamically
+(`export const dynamic = "force-dynamic"` or another dynamic API) so a
+prerendered response for the route locale is not served, and any shared response
+cache (CDN, reverse proxy, or ISR) must distinguish locales or be bypassed;
+signing the header does not change either requirement.
 
 If your app can consult an unsigned `x-palamedes-locale` header — either in
 `localeSource: "header"` mode, or in `route-first` mode on any route without a

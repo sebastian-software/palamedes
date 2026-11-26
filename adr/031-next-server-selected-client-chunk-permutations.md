@@ -62,7 +62,11 @@ keep the in-graph fragments.
   the `x-palamedes-locale` request header set by the app's Proxy decides (unless
   `localeSource: "route"` disables headers). Applications whose Proxy should
   take precedence can opt into `localeSource: "header"` in
-  `bindClientCatalogPermutations()`. Any app that consults an unsigned
+  `bindClientCatalogPermutations()`. Whenever the header can vary the locale
+  for one URL (including header-only routes and `localeSource: "header"`
+  overrides), the route must render dynamically and any shared response cache
+  must distinguish locales or be bypassed; signing the header does not change
+  either requirement. Any app that consults an unsigned
   `x-palamedes-locale` header must ensure its Proxy matcher covers every render
   that can read it and strips or overwrites client-supplied values; otherwise
   require HMAC-SHA256 verification via `headerSecret` and
