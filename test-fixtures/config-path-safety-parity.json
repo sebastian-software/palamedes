@@ -52,6 +52,18 @@
       "expectedRelative": "locales/en/messages.po"
     },
     {
+      "path": ".\\locales\\{locale}",
+      "locale": "en",
+      "format": "po",
+      "expectedRelative": "locales/en.po"
+    },
+    {
+      "path": "./locales//{locale}/messages",
+      "locale": "de",
+      "format": "po",
+      "expectedRelative": "locales/de/messages.po"
+    },
+    {
       "path": "locales\\{locale}\\messages.PO",
       "locale": "de",
       "format": "po",

@@ -673,6 +673,46 @@ fn unicode_full_casefold_nfd(text: &str) -> String {
     folded.nfd().collect()
 }
 
+#[cfg(windows)]
+fn ntfs_casefold(text: &str) -> String {
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn RtlUpcaseUnicodeChar(source_character: u16) -> u16;
+    }
+
+    let upcased: Vec<u16> = text
+        .encode_utf16()
+        .map(|unit| {
+            // SAFETY: `RtlUpcaseUnicodeChar` is a pure code-unit table lookup.
+            unsafe { RtlUpcaseUnicodeChar(unit) }
+        })
+        .collect();
+    String::from_utf16_lossy(&upcased)
+}
+
+#[cfg(not(windows))]
+fn ntfs_casefold(text: &str) -> String {
+    // NTFS `$UpCase` is a 1-to-1 code-unit uppercase mapping (`σ` and `ς` both
+    // map to `Σ`, while multi-character expansions such as `ß` -> `SS` stay
+    // distinct, and dotless `ı` does not fold to `I`).
+    let mut folded = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if ch == '\u{0131}' {
+            folded.push(ch);
+            continue;
+        }
+        let mut upper = ch.to_uppercase();
+        if let Some(first) = upper.next()
+            && upper.next().is_none()
+        {
+            folded.push(first);
+        } else {
+            folded.push(ch);
+        }
+    }
+    folded
+}
+
 fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirectoryEquivalence) -> OsString {
     if !equivalence.case_insensitive && !equivalence.unicode_normalizing {
         return segment.to_os_string();
@@ -686,7 +726,7 @@ fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirectoryEquivalence)
             ) {
                 (true, true) => unicode_full_casefold_nfd(text),
                 (false, true) => text.nfd().collect(),
-                (true, false) => text.to_lowercase(),
+                (true, false) => ntfs_casefold(text),
                 (false, false) => text.to_owned(),
             };
             OsString::from(normalized)
@@ -1615,5 +1655,93 @@ catalogs:
             assert!(!app.join("locales/en/stra\u{00df}e.po").exists());
             assert!(!app.join("locales/en/strasse.po").exists());
         }
+
+        // Greek sigma/final-sigma collision (`σ` vs `ς`) on case-insensitive
+        // filesystems (both NTFS `$UpCase` and APFS full case folding).
+        if is_ci {
+            fs::write(
+                app.join("palamedes.yaml"),
+                "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/\u{03c3}\n    include: [app/a]\n  - path: locales/{locale}/\u{03c2}\n    include: [app/b]\n",
+            )
+            .expect("write sigma-aliased config");
+            let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+            let error = run_extraction(&config, &extract_options()).expect_err(
+                "sigma/final-sigma extract scopes on case-insensitive filesystem must fail",
+            );
+            assert!(
+                error
+                    .to_string()
+                    .contains("resolve to the same target file"),
+                "unexpected error: {error}"
+            );
+            assert!(!app.join("locales/en/\u{03c3}.po").exists());
+            assert!(!app.join("locales/en/\u{03c2}.po").exists());
+        }
+    }
+
+    #[test]
+    fn fold_os_segment_matches_filesystem_equivalence_rules() {
+        use std::ffi::OsStr;
+
+        let ntfs = super::DirectoryEquivalence {
+            case_insensitive: true,
+            unicode_normalizing: false,
+        };
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("\u{03c3}.po"), ntfs),
+            super::fold_os_segment(OsStr::new("\u{03c2}.po"), ntfs),
+            "NTFS uppercase folding must equate Greek sigma and final sigma"
+        );
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("stra\u{00df}e.po"), ntfs),
+            super::fold_os_segment(OsStr::new("strasse.po"), ntfs),
+            "NTFS 1-to-1 uppercase folding keeps ß and ss distinct"
+        );
+
+        let apfs = super::DirectoryEquivalence {
+            case_insensitive: true,
+            unicode_normalizing: true,
+        };
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("stra\u{00df}e.po"), apfs),
+            super::fold_os_segment(OsStr::new("strasse.po"), apfs),
+            "APFS full case folding must equate ß and ss"
+        );
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("caf\u{00e9}.po"), apfs),
+            super::fold_os_segment(OsStr::new("cafe\u{0301}.po"), apfs),
+            "APFS normalization must equate NFC and NFD"
+        );
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("\u{03c3}.po"), apfs),
+            super::fold_os_segment(OsStr::new("\u{03c2}.po"), apfs),
+            "APFS full case folding must equate Greek sigma and final sigma"
+        );
+
+        let apfs_cs = super::DirectoryEquivalence {
+            case_insensitive: false,
+            unicode_normalizing: true,
+        };
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("caf\u{00e9}.po"), apfs_cs),
+            super::fold_os_segment(OsStr::new("cafe\u{0301}.po"), apfs_cs)
+        );
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("Messages.po"), apfs_cs),
+            super::fold_os_segment(OsStr::new("messages.po"), apfs_cs)
+        );
+
+        let linux = super::DirectoryEquivalence {
+            case_insensitive: false,
+            unicode_normalizing: false,
+        };
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("Messages.po"), linux),
+            super::fold_os_segment(OsStr::new("messages.po"), linux)
+        );
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("caf\u{00e9}.po"), linux),
+            super::fold_os_segment(OsStr::new("cafe\u{0301}.po"), linux)
+        );
     }
 }

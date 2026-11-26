@@ -382,6 +382,34 @@ fn compile_catalog_artifact_reuses_selected_catalog_for_fallbacks_and_portable_s
     assert_eq!(result.missing.len(), 1);
     assert_eq!(result.missing[0].requested_locale, "de");
     assert_eq!(result.missing[0].resolved_locale.as_deref(), Some("en"));
+
+    // Leading `./` / `.\` and repeated separators in portable patterns must
+    // normalize so the JS-produced resource path matches native compilation.
+    let dot_prefixed = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: fixture.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: r".\locales\en\{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        },
+        resource_path: fixture
+            .join("locales/en/de.po")
+            .to_string_lossy()
+            .into_owned(),
+    })
+    .expect("dot-prefixed portable catalog pattern should match normalized JS resource path");
+    assert_eq!(
+        dot_prefixed
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Hello from second")
+    );
 }
 
 #[test]

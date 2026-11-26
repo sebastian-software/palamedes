@@ -309,7 +309,24 @@ pub fn resolve_catalog_file_path(
     locale: &str,
     format: PalamedesCatalogFormat,
 ) -> PathBuf {
-    let portable_catalog_path = catalog_path.replace('\\', "/");
+    let portable_catalog_path = if catalog_path.starts_with('/')
+        || catalog_path.starts_with('\\')
+        || has_windows_drive_prefix(catalog_path)
+    {
+        catalog_path.replace('\\', "/")
+    } else {
+        let raw = catalog_path.replace('\\', "/");
+        let normalized = raw
+            .split('/')
+            .filter(|segment| !segment.is_empty() && *segment != ".")
+            .collect::<Vec<_>>()
+            .join("/");
+        if normalized.is_empty() {
+            raw
+        } else {
+            normalized
+        }
+    };
     let expanded = root_dir.join(portable_catalog_path.replace("{locale}", locale));
     let extension = format.extension();
     let configured_extension = Path::new(&portable_catalog_path)

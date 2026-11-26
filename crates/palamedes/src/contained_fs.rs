@@ -333,6 +333,12 @@ mod platform {
         acl: Option<ExistingAcl>,
     }
 
+    enum SnapshotMatch {
+        Unchanged,
+        MetadataChanged,
+        Replaced,
+    }
+
     #[cfg(target_os = "linux")]
     #[derive(PartialEq, Eq)]
     struct ExistingAcl {
@@ -388,6 +394,15 @@ mod platform {
         pub(super) const ACL_ENTRY_DIRECTORY_INHERIT: libc::c_int = 1 << 6;
         pub(super) const ACL_ENTRY_LIMIT_INHERIT: libc::c_int = 1 << 7;
         pub(super) const ACL_ENTRY_ONLY_INHERIT: libc::c_int = 1 << 8;
+        pub(super) const ACL_EXTENDED_ALLOW: libc::c_int = 1;
+        pub(super) const ACL_ADD_FILE: libc::c_int = 1 << 2;
+        pub(super) const ACL_DELETE: libc::c_int = 1 << 4;
+        pub(super) const ACL_ADD_SUBDIRECTORY: libc::c_int = 1 << 5;
+        pub(super) const ACL_DELETE_CHILD: libc::c_int = 1 << 6;
+        pub(super) const ACL_WRITE_ATTRIBUTES: libc::c_int = 1 << 8;
+        pub(super) const ACL_WRITE_EXTATTRIBUTES: libc::c_int = 1 << 10;
+        pub(super) const ACL_WRITE_SECURITY: libc::c_int = 1 << 12;
+        pub(super) const ACL_CHANGE_OWNER: libc::c_int = 1 << 13;
         pub(super) const RENAME_EXCL: libc::c_uint = 0x0000_0004;
 
         unsafe extern "C" {
@@ -402,6 +417,18 @@ mod platform {
                 acl: *mut libc::c_void,
                 entry_id: libc::c_int,
                 entry_p: *mut *mut libc::c_void,
+            ) -> libc::c_int;
+            pub(super) fn acl_get_tag_type(
+                entry_d: *mut libc::c_void,
+                tag_type_p: *mut libc::c_int,
+            ) -> libc::c_int;
+            pub(super) fn acl_get_permset(
+                entry_d: *mut libc::c_void,
+                permset_p: *mut *mut libc::c_void,
+            ) -> libc::c_int;
+            pub(super) fn acl_get_perm_np(
+                permset_d: *mut libc::c_void,
+                perm: libc::c_int,
             ) -> libc::c_int;
             pub(super) fn acl_create_entry(
                 acl_p: *mut *mut libc::c_void,
@@ -944,8 +971,21 @@ mod platform {
 
                         // Guard against concurrent destination replacement or
                         // mode/owner/ACL/SELinux tightening while staging.
-                        if !self.destination_matches_snapshot(file_name, existing)? {
-                            return Ok(StageOutcome::Retry);
+                        // Replacing or deleting the target returns a conflict so
+                        // callers can re-read and merge instead of discarding a
+                        // concurrent edit; only same-inode metadata changes retry.
+                        match self.check_destination_snapshot(file_name, existing)? {
+                            SnapshotMatch::Unchanged => {}
+                            SnapshotMatch::MetadataChanged => return Ok(StageOutcome::Retry),
+                            SnapshotMatch::Replaced => {
+                                return Err(ContainedFsError::Io(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    format!(
+                                        "destination \"{}\" was replaced concurrently before publication",
+                                        file_name.to_string_lossy()
+                                    ),
+                                )));
+                            }
                         }
 
                         // SAFETY: both directory descriptors and C strings are valid.
@@ -1347,6 +1387,18 @@ mod platform {
             // SAFETY: `geteuid` has no preconditions.
             let euid = unsafe { libc::geteuid() };
 
+            // `mkdirat` followed by `openat` is only safe when no other
+            // unprivileged writer can replace entries inside `self` between
+            // those two calls: either `self` is a sticky directory owned by
+            // `euid` or `root` (e.g. `/tmp`), or `self` is owned by `euid`
+            // with no group/other write bits and no foreign-write ACL.
+            if !self.parent_allows_safe_staging(&parent_stat, euid)? {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "refusing to stage inside a non-sticky shared writable directory",
+                )));
+            }
+
             let pid = std::process::id();
             for _ in 0..128 {
                 let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
@@ -1472,18 +1524,41 @@ mod platform {
             )))
         }
 
-        fn destination_matches_snapshot(
+        fn parent_allows_safe_staging(
+            &self,
+            parent_stat: &libc::stat,
+            euid: libc::uid_t,
+        ) -> io::Result<bool> {
+            // Sticky directory owned by the caller or root prevents other
+            // unprivileged users from unlinking or renaming our staging entry.
+            if (parent_stat.st_mode & libc::S_ISVTX) != 0
+                && (parent_stat.st_uid == euid || parent_stat.st_uid == 0)
+            {
+                return Ok(true);
+            }
+            if parent_stat.st_uid != euid || (parent_stat.st_mode & 0o0022) != 0 {
+                return Ok(false);
+            }
+            Ok(!parent_has_foreign_write_acl(self)?)
+        }
+
+        fn check_destination_snapshot(
             &self,
             file_name: &OsStr,
             expected: &ExistingTarget,
-        ) -> Result<bool, ContainedFsError> {
+        ) -> Result<SnapshotMatch, ContainedFsError> {
             let Some(current) = self.open_existing_for_replace(file_name)? else {
-                return Ok(false);
+                return Ok(SnapshotMatch::Replaced);
             };
-            if current.entry != expected.entry {
-                return Ok(false);
+            if current.entry.identity != expected.entry.identity {
+                return Ok(SnapshotMatch::Replaced);
             }
-            Ok(acl_equals(current.acl.as_ref(), expected.acl.as_ref())?)
+            if current.entry != expected.entry
+                || !acl_equals(current.acl.as_ref(), expected.acl.as_ref())?
+            {
+                return Ok(SnapshotMatch::MetadataChanged);
+            }
+            Ok(SnapshotMatch::Unchanged)
         }
 
         fn entry_identity(&self, c_name: &CString) -> Option<FileIdentity> {
@@ -2073,9 +2148,78 @@ mod platform {
     }
 
     #[cfg(target_os = "linux")]
-    fn read_inherited_new_file_acl(_parent_dir: &ContainedDir) -> io::Result<Option<ExistingAcl>> {
-        // On Linux, `O_TMPFILE` and preserved `system.posix_acl_default` on the
-        // staging directory apply inherited ACLs natively in the kernel.
+    fn read_linux_dir_xattr(
+        dir: &ContainedDir,
+        name: &std::ffi::CStr,
+    ) -> io::Result<Option<Vec<u8>>> {
+        if let Some(readable) = open_readable_self(dir) {
+            return read_linux_xattr(readable.as_raw_fd(), name);
+        }
+        let proc_fd = CString::new(format!("/proc/self/fd/{}", dir.fd.as_raw_fd()))
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid procfs fd path"))?;
+        for _ in 0..4 {
+            // SAFETY: querying xattr size on pinned procfs descriptor path.
+            let size =
+                unsafe { libc::getxattr(proc_fd.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
+            if size < 0 {
+                let error = io::Error::last_os_error();
+                if matches!(error.raw_os_error(), Some(libc::ENODATA | libc::EOPNOTSUPP)) {
+                    return Ok(None);
+                }
+                return Err(error);
+            }
+            if size == 0 {
+                return Ok(None);
+            }
+            let mut buffer = vec![0u8; usize::try_from(size).unwrap_or(0)];
+            // SAFETY: `buffer` has `buffer.len()` writable bytes.
+            let read = unsafe {
+                libc::getxattr(
+                    proc_fd.as_ptr(),
+                    name.as_ptr(),
+                    buffer.as_mut_ptr().cast::<libc::c_void>(),
+                    buffer.len(),
+                )
+            };
+            if read < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::ERANGE) {
+                    continue;
+                }
+                if error.raw_os_error() == Some(libc::ENODATA) {
+                    return Ok(None);
+                }
+                return Err(error);
+            }
+            buffer.truncate(usize::try_from(read).unwrap_or(0));
+            return Ok(Some(buffer));
+        }
+        Err(io::Error::other(
+            "extended attribute size changed repeatedly while reading directory ACL",
+        ))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn parent_has_foreign_write_acl(parent_dir: &ContainedDir) -> io::Result<bool> {
+        // For POSIX.1e ACLs, `(st_mode & 0o0022) == 0` already guarantees that
+        // `ACL_MASK` and `ACL_OTHER` have no write bit. For NFSv4 ACLs, treat
+        // any attached `system.nfs4_acl` conservatively as potentially writable.
+        Ok(read_linux_dir_xattr(parent_dir, c"system.nfs4_acl")?.is_some())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn read_inherited_new_file_acl(parent_dir: &ContainedDir) -> io::Result<Option<ExistingAcl>> {
+        // When `O_TMPFILE` is unavailable and staged creation is used,
+        // `system.posix_acl_default` is preserved on the staging directory,
+        // while `system.nfs4_acl` is stripped for staging privacy. Fail closed
+        // if the destination parent has a Linux NFSv4 ACL whose inheritable
+        // rules cannot be reproduced by staged creation.
+        if read_linux_dir_xattr(parent_dir, c"system.nfs4_acl")?.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cannot safely preserve Linux NFSv4 ACL inheritance during staged atomic creation without O_TMPFILE",
+            ));
+        }
         Ok(None)
     }
 
@@ -2227,6 +2371,91 @@ mod platform {
             ));
         }
         Ok(())
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    fn parent_has_foreign_write_acl(parent_dir: &ContainedDir) -> io::Result<bool> {
+        // SAFETY: `parent_dir.fd` is an open directory descriptor.
+        let mut raw = unsafe {
+            macos_acl::acl_get_fd_np(parent_dir.fd.as_raw_fd(), macos_acl::ACL_TYPE_EXTENDED)
+        };
+        if raw.is_null() {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EBADF)
+                && let Some(readable) = open_readable_self(parent_dir)
+            {
+                // SAFETY: `readable` is an open directory descriptor.
+                raw = unsafe {
+                    macos_acl::acl_get_fd_np(readable.as_raw_fd(), macos_acl::ACL_TYPE_EXTENDED)
+                };
+            } else if matches!(
+                error.raw_os_error(),
+                Some(libc::ENOENT | libc::ENOTSUP | libc::EOPNOTSUPP | libc::EINVAL)
+            ) {
+                return Ok(false);
+            } else {
+                return Err(error);
+            }
+        }
+        if raw.is_null() {
+            let error = io::Error::last_os_error();
+            if matches!(
+                error.raw_os_error(),
+                Some(libc::ENOENT | libc::ENOTSUP | libc::EOPNOTSUPP | libc::EINVAL)
+            ) {
+                return Ok(false);
+            }
+            return Err(error);
+        }
+        let parent_acl = ExistingAcl(raw);
+        let mut entry_id = macos_acl::ACL_FIRST_ENTRY;
+        let mut entry: *mut libc::c_void = std::ptr::null_mut();
+        loop {
+            // SAFETY: `parent_acl.0` is a valid `acl_t`.
+            if unsafe { macos_acl::acl_get_entry(parent_acl.0, entry_id, &mut entry) } != 0 {
+                return Ok(false);
+            }
+            entry_id = macos_acl::ACL_NEXT_ENTRY;
+            let mut tag_type: libc::c_int = 0;
+            // SAFETY: `entry` is a valid `acl_entry_t`.
+            if unsafe { macos_acl::acl_get_tag_type(entry, &mut tag_type) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if tag_type != macos_acl::ACL_EXTENDED_ALLOW {
+                continue;
+            }
+            let mut flags: *mut libc::c_void = std::ptr::null_mut();
+            // SAFETY: `entry` is a valid `acl_entry_t`.
+            if unsafe { macos_acl::acl_get_flagset_np(entry, &mut flags) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // `ONLY_INHERIT` entries do not grant any rights on the parent directory itself.
+            // SAFETY: `flags` is a valid `acl_flagset_t`.
+            if unsafe { macos_acl::acl_get_flag_np(flags, macos_acl::ACL_ENTRY_ONLY_INHERIT) } == 1
+            {
+                continue;
+            }
+            let mut permset: *mut libc::c_void = std::ptr::null_mut();
+            // SAFETY: `entry` is a valid `acl_entry_t`.
+            if unsafe { macos_acl::acl_get_permset(entry, &mut permset) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            for write_perm in [
+                macos_acl::ACL_ADD_FILE,
+                macos_acl::ACL_DELETE,
+                macos_acl::ACL_ADD_SUBDIRECTORY,
+                macos_acl::ACL_DELETE_CHILD,
+                macos_acl::ACL_WRITE_ATTRIBUTES,
+                macos_acl::ACL_WRITE_EXTATTRIBUTES,
+                macos_acl::ACL_WRITE_SECURITY,
+                macos_acl::ACL_CHANGE_OWNER,
+            ] {
+                // SAFETY: `permset` is a valid `acl_permset_t`.
+                if unsafe { macos_acl::acl_get_perm_np(permset, write_perm) } == 1 {
+                    return Ok(true);
+                }
+            }
+        }
     }
 
     #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -2488,6 +2717,49 @@ mod platform {
     }
 
     #[cfg(target_os = "freebsd")]
+    fn parent_has_foreign_write_acl(parent_dir: &ContainedDir) -> io::Result<bool> {
+        // For POSIX.1e ACLs, `(st_mode & 0o0022) == 0` guarantees `ACL_MASK` and
+        // `ACL_OTHER` have no write bit. For FreeBSD NFSv4 ACLs, any non-trivial
+        // ACL may grant directory modification rights to another principal.
+        // SAFETY: `parent_dir.fd` is an open directory descriptor.
+        let mut raw = unsafe {
+            freebsd_acl::acl_get_fd_np(parent_dir.fd.as_raw_fd(), freebsd_acl::ACL_TYPE_NFS4)
+        };
+        if raw.is_null() {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EBADF)
+                && let Some(readable) = open_readable_self(parent_dir)
+            {
+                // SAFETY: `readable` is an open directory descriptor.
+                raw = unsafe {
+                    freebsd_acl::acl_get_fd_np(readable.as_raw_fd(), freebsd_acl::ACL_TYPE_NFS4)
+                };
+            } else if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::EINVAL)) {
+                return Ok(false);
+            } else {
+                return Err(error);
+            }
+        }
+        if raw.is_null() {
+            let error = io::Error::last_os_error();
+            if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::EINVAL)) {
+                return Ok(false);
+            }
+            return Err(error);
+        }
+        let parent_acl = ExistingAcl {
+            acl_type: freebsd_acl::ACL_TYPE_NFS4,
+            ptr: raw,
+        };
+        let mut trivial: libc::c_int = 0;
+        // SAFETY: `parent_acl.ptr` is a valid FreeBSD `acl_t`.
+        if unsafe { freebsd_acl::acl_is_trivial_np(parent_acl.ptr, &mut trivial) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(trivial == 0)
+    }
+
+    #[cfg(target_os = "freebsd")]
     fn read_inherited_new_file_acl(parent_dir: &ContainedDir) -> io::Result<Option<ExistingAcl>> {
         // POSIX `ACL_TYPE_DEFAULT` is preserved on the staging directory. For
         // FreeBSD NFSv4 ACLs, check whether the destination parent has any
@@ -2604,6 +2876,11 @@ mod platform {
     }
 
     #[cfg(target_os = "netbsd")]
+    fn parent_has_foreign_write_acl(parent_dir: &ContainedDir) -> io::Result<bool> {
+        netbsd_fd_supports_acls(parent_dir.fd.as_raw_fd())
+    }
+
+    #[cfg(target_os = "netbsd")]
     fn read_inherited_new_file_acl(parent_dir: &ContainedDir) -> io::Result<Option<ExistingAcl>> {
         if netbsd_fd_supports_acls(parent_dir.fd.as_raw_fd())? {
             return Err(io::Error::new(
@@ -2644,6 +2921,11 @@ mod platform {
         _preserve_default_acl: bool,
     ) -> io::Result<()> {
         Ok(())
+    }
+
+    #[cfg(target_os = "openbsd")]
+    fn parent_has_foreign_write_acl(_parent_dir: &ContainedDir) -> io::Result<bool> {
+        Ok(false)
     }
 
     #[cfg(target_os = "openbsd")]
@@ -2690,6 +2972,19 @@ mod platform {
             io::ErrorKind::Unsupported,
             "cannot verify or clear inherited filesystem ACLs on this Unix target",
         ))
+    }
+
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    fn parent_has_foreign_write_acl(_parent_dir: &ContainedDir) -> io::Result<bool> {
+        // Conservatively require a sticky parent when ACLs cannot be inspected.
+        Ok(true)
     }
 
     #[cfg(not(any(
@@ -3422,14 +3717,27 @@ mod platform {
                 if let Some(expected_identity) = existing_identity {
                     let current = self.inspect_entry(file_name, true)?;
                     let Some((current_identity, mut current_security)) = current else {
-                        continue;
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            format!(
+                                "destination \"{}\" was removed concurrently before publication",
+                                file_name.to_string_lossy()
+                            ),
+                        )));
                     };
-                    if current_identity != expected_identity
-                        || !windows_security_matches(
-                            existing_security.as_mut(),
-                            current_security.as_mut(),
-                        )?
-                    {
+                    if current_identity != expected_identity {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            format!(
+                                "destination \"{}\" was replaced concurrently before publication",
+                                file_name.to_string_lossy()
+                            ),
+                        )));
+                    }
+                    if !windows_security_matches(
+                        existing_security.as_mut(),
+                        current_security.as_mut(),
+                    )? {
                         continue;
                     }
                 }
@@ -4602,5 +4910,47 @@ mod tests {
             #[cfg(target_os = "macos")]
             assert_eq!(child_dir.is_unicode_normalizing(), Some(true));
         }
+    }
+
+    #[test]
+    fn refuses_staged_replacement_in_non_sticky_shared_writable_parent_and_allows_sticky() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let shared = root.path().join("shared");
+        fs::create_dir(&shared).expect("create shared dir");
+        let target = shared.join("en.po");
+        fs::write(&target, "before").expect("seed target");
+
+        // Non-sticky group/world-writable directory: staging must fail closed.
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o777)).expect("chmod 0777");
+        let dir = ContainedDir::open_root(&shared).expect("open shared dir");
+        let error = dir
+            .write_file_atomically(
+                OsStr::new("en.po"),
+                b"after",
+                ContainedNewFileMode::Private,
+                ContainedWriteDurability::Rename,
+            )
+            .expect_err("non-sticky shared writable dir must fail closed");
+        assert!(
+            matches!(&error, ContainedFsError::Io(io_err) if io_err.kind() == io::ErrorKind::PermissionDenied),
+            "expected PermissionDenied, got {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&target).expect("read unchanged"),
+            "before"
+        );
+
+        // Adding the sticky bit protects staging entries against foreign replacement.
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o1777)).expect("chmod 1777");
+        dir.write_file_atomically(
+            OsStr::new("en.po"),
+            b"after",
+            ContainedNewFileMode::Private,
+            ContainedWriteDurability::Rename,
+        )
+        .expect("sticky shared writable dir owned by caller should succeed");
+        assert_eq!(fs::read_to_string(&target).expect("read updated"), "after");
+
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o755)).expect("restore");
     }
 }
