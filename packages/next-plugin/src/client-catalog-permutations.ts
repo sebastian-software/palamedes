@@ -543,7 +543,7 @@ function walkCompiledLoaderTree(
 }
 
 type ScopeFrame = {
-  binding?: { value: string | null; blockScoped: boolean };
+  binding?: { value: string | null; blockScoped: boolean; isConst: boolean };
   tainted: boolean;
   declKind?: "let" | "const" | "var";
   exprDepth: number;
@@ -606,6 +606,7 @@ function resolveIdentifierArrayInScope(
   objectStart: number,
   objectEnd: number,
   ident: string,
+  moduleParam?: string,
 ): string | undefined {
   const scopeStack: ScopeFrame[] = [
     { tainted: false, exprDepth: 0, pendingCondition: false, conditionalStmt: false },
@@ -651,7 +652,7 @@ function resolveIdentifierArrayInScope(
         if (literal.includes("${") && identWord.test(literal)) {
           const currentFrame = scopeStack.at(-1)!;
           if (currentFrame.binding?.blockScoped) {
-            currentFrame.binding = { value: null, blockScoped: true };
+            currentFrame.binding = { value: null, blockScoped: true, isConst: false };
           } else {
             currentFrame.tainted = true;
           }
@@ -798,6 +799,66 @@ function resolveIdentifierArrayInScope(
         while (index < limit && /[\w$]/u.test(source[index] ?? "")) index += 1;
         const word = source.slice(wordStart, index);
         if (prevTokenKind !== "dot") {
+          // With `experimental.turbopackModuleFragments: true`, Turbopack exports
+          // `const tree` after the entrypoint call via `ctx.s([..., "g", () => tree, a => tree = a])`.
+          // A `const` binding cannot be reassigned by the generated setter (calling
+          // it throws TypeError), so skip verified read-only/const-setter export calls.
+          if (
+            stopBelowDepth > 0 &&
+            moduleParam !== undefined &&
+            scopeStack.length === stopBelowDepth &&
+            top.exprDepth === 0 &&
+            top.binding?.isConst === true &&
+            word === moduleParam
+          ) {
+            const afterParam = skipWhitespaceAndComments(source, index);
+            if (source[afterParam] === ".") {
+              const afterDot = skipWhitespaceAndComments(source, afterParam + 1);
+              if (source[afterDot] === "s") {
+                const afterS = skipWhitespaceAndComments(source, afterDot + 1);
+                if (source[afterS] === "(") {
+                  const callEnd = scanBalancedEnd(source, afterS);
+                  const arrStart = skipWhitespaceAndComments(source, afterS + 1);
+                  const arrEnd =
+                    callEnd !== -1 && source[arrStart] === "["
+                      ? scanBalancedEnd(source, arrStart)
+                      : -1;
+                  if (callEnd !== -1 && arrEnd !== -1 && arrEnd <= callEnd - 1) {
+                    const elements = splitTopLevelArrayElements(source.slice(arrStart, arrEnd), 0);
+                    const bindings = elements
+                      ? parseTurbopackEsmExportBindings(elements)
+                      : undefined;
+                    if (
+                      bindings &&
+                      bindings.every((binding) => {
+                        const mentionsIdent =
+                          binding.kind === "value"
+                            ? identWord.test(binding.expr)
+                            : identWord.test(binding.getterExpr) ||
+                              (binding.setterExpr !== undefined &&
+                                identWord.test(binding.setterExpr));
+                        if (!mentionsIdent) return true;
+                        if (binding.kind === "value") {
+                          return stripOuterParens(binding.expr) === ident;
+                        }
+                        return (
+                          unwrapExportGetter(binding.getterExpr) === ident &&
+                          (binding.setterExpr === undefined ||
+                            isSimpleSetterForIdentifier(binding.setterExpr, ident))
+                        );
+                      })
+                    ) {
+                      index = callEnd;
+                      prevTokenKind = "other";
+                      prevNonWsChar = ")";
+                      regexAllowed = false;
+                      continue;
+                    }
+                  }
+                }
+              }
+            }
+          }
           if (top.exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
             top.declKind = word;
             prevTokenKind = "decl";
@@ -865,11 +926,13 @@ function resolveIdentifierArrayInScope(
               top.binding = {
                 value,
                 blockScoped: blockScoped || Boolean(top.binding?.blockScoped),
+                isConst: isDeclarator && top.declKind === "const" && value !== null,
               };
             } else if (isDeclarator) {
               top.binding = {
                 value: null,
                 blockScoped: top.declKind === "let" || top.declKind === "const",
+                isConst: false,
               };
             } else {
               const isObjectPropertyKey =
@@ -882,7 +945,7 @@ function resolveIdentifierArrayInScope(
                 // mutate the array in place; treat it as inconclusive unless
                 // confined to this block's own `let`/`const` binding.
                 if (top.binding?.blockScoped) {
-                  top.binding = { value: null, blockScoped: true };
+                  top.binding = { value: null, blockScoped: true, isConst: false };
                 } else {
                   top.tainted = true;
                 }
@@ -935,19 +998,7 @@ function resolveIdentifierArrayInScope(
   return candidateValue;
 }
 
-const ENTRYPOINT_EXPORTS = ["__next_app__", "routeModule", "handler"] as const;
-type EntrypointExportName = (typeof ENTRYPOINT_EXPORTS)[number];
-type EntrypointExportNames = Record<EntrypointExportName, string>;
-
-const DEFAULT_ENTRYPOINT_EXPORT_NAMES: EntrypointExportNames = {
-  __next_app__: "__next_app__",
-  routeModule: "routeModule",
-  handler: "handler",
-};
-
-function isEntrypointExportName(value: string): value is EntrypointExportName {
-  return value === "__next_app__" || value === "routeModule" || value === "handler";
-}
+type EntrypointExportName = "__next_app__" | "routeModule" | "handler";
 
 function normalizeTurbopackModuleId(rawLiteral: string): string | undefined {
   const trimmed = rawLiteral.trim();
@@ -1116,7 +1167,14 @@ function extractEntrypointCallBinding(
   scopeSource: string,
   callParenOffset: number,
   afterCloseParenOffset: number,
-): { entrypointVar: string; varStart: number; calleeText: string } | undefined {
+):
+  | {
+      entrypointVar: string;
+      varStart: number;
+      calleeText: string;
+      declKind: "let" | "const" | "var";
+    }
+  | undefined {
   if (!endsInitializerAt(scopeSource, afterCloseParenOffset)) return;
 
   let declKind: "let" | "const" | "var" | undefined;
@@ -1288,11 +1346,12 @@ function extractEntrypointCallBinding(
                   cursor = nextPart;
                 }
               }
-              if (calleeEnd !== -1) {
+              if (calleeEnd !== -1 && declKind !== undefined) {
                 return {
                   entrypointVar: word,
                   varStart: wordStart,
                   calleeText: scopeSource.slice(rhsStart, calleeEnd).trim(),
+                  declKind,
                 };
               }
             }
@@ -2173,24 +2232,12 @@ function extractTurbopackExportedFunction(
     if (arrEnd === -1 || arrEnd > callEnd - 1) continue;
     const elements = splitTopLevelArrayElements(body.slice(arrStart, arrEnd), 0);
     if (!elements) continue;
-    let idx = 0;
-    while (idx < elements.length) {
-      const name = parseJsStringLiteral(elements[idx]!);
-      if (name === undefined) break;
-      let expr: string | undefined;
-      if (elements[idx + 1] === "0") {
-        if (idx + 2 >= elements.length) break;
-        expr = elements[idx + 2]!.trim();
-        idx += 3;
-      } else {
-        if (idx + 1 >= elements.length) break;
-        expr = elements[idx + 1]!.trim();
-        idx += 2;
-      }
-      if (name === exportName) {
-        if (foundExpr !== undefined) return;
-        foundExpr = expr;
-      }
+    const bindings = parseTurbopackEsmExportBindings(elements);
+    if (!bindings) continue;
+    for (const binding of bindings) {
+      if (binding.name !== exportName) continue;
+      if (foundExpr !== undefined) return;
+      foundExpr = binding.kind === "value" ? binding.expr : binding.getterExpr;
     }
   }
   if (!foundExpr) return;
@@ -2476,20 +2523,358 @@ function verifyCalleeIsNextEntrypoint(
   return false;
 }
 
-type TurbopackReexportStep =
+type TurbopackEsmBinding =
+  | { name: string; kind: "value"; expr: string }
+  | { name: string; kind: "getter"; getterExpr: string; setterExpr?: string };
+
+function parseTurbopackEsmExportBindings(
+  elements: readonly string[],
+): TurbopackEsmBinding[] | undefined {
+  const bindings: TurbopackEsmBinding[] = [];
+  let idx = 0;
+  while (idx < elements.length) {
+    const name = parseJsStringLiteral(elements[idx]!);
+    if (name === undefined) return;
+    idx += 1;
+    if (idx >= elements.length) return;
+    const second = elements[idx]!.trim();
+    if (second === "0") {
+      if (idx + 1 >= elements.length) return;
+      bindings.push({ name, kind: "value", expr: elements[idx + 1]!.trim() });
+      idx += 2;
+      continue;
+    }
+    const getterExpr = second;
+    idx += 1;
+    // Turbopack emits an optional live-binding setter function as a 3rd element
+    // (`"g", () => k, a => k = a`) whenever the next element is not a string name.
+    let setterExpr: string | undefined;
+    if (idx < elements.length && parseJsStringLiteral(elements[idx]!) === undefined) {
+      setterExpr = elements[idx]!.trim();
+      idx += 1;
+    }
+    bindings.push({ name, kind: "getter", getterExpr, setterExpr });
+  }
+  return bindings;
+}
+
+function isSimpleSetterForIdentifier(setterExpr: string, ident: string): boolean {
+  const trimmed = stripOuterParens(setterExpr);
+  const arrowMatch =
+    /^(?:\(\s*([A-Za-z_$][\w$]*)\s*\)|([A-Za-z_$][\w$]*))\s*=>\s*(?:\{\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;?\s*\}|\(?\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\)?)$/u.exec(
+      trimmed,
+    );
+  if (!arrowMatch) return false;
+  const param = arrowMatch[1] ?? arrowMatch[2];
+  const lhs = arrowMatch[3] ?? arrowMatch[5];
+  const rhs = arrowMatch[4] ?? arrowMatch[6];
+  return param !== undefined && lhs === ident && rhs === param;
+}
+
+function parseTurbopackTargetModuleArg(
+  source: string,
+  afterArray: number,
+  callEnd: number,
+): { status: "default" } | { status: "target"; moduleId: string } | { status: "invalid" } {
+  if (source[afterArray] !== ",") return { status: "default" };
+  const rest = source.slice(afterArray + 1, callEnd - 1).trim();
+  const args = splitTopLevelArrayElements(`[${rest}]`, 0);
+  if (!args || args.length === 0) return { status: "invalid" };
+  const idArg = args[0]!.trim();
+  if (idArg === "null" || idArg === "undefined" || idArg === "void 0") {
+    return { status: "default" };
+  }
+  const moduleId = normalizeTurbopackModuleId(idArg);
+  if (!moduleId) return { status: "invalid" };
+  return { status: "target", moduleId };
+}
+
+function parseRouteModuleMemberChain(
+  rhsExpr: string,
+  body: string,
+  moduleParam: string,
+): { targetModuleId: string; exportName: string } | undefined {
+  const trimmed = stripOuterParens(rhsExpr);
+  const routePropMatch =
+    /^([\s\S]+?)\s*(?:\.\s*routeModule|\[\s*(?:"routeModule"|'routeModule')\s*\])$/u.exec(trimmed);
+  if (!routePropMatch) return;
+  const base = stripOuterParens(routePropMatch[1]!);
+
+  // Case 1: `<ns>.<exportName>` or `<ns>["<exportName>"]` where `ns = a.i(targetId)`
+  const nsMember = parseCalleeMemberAccess(base);
+  if (nsMember) {
+    const targetModuleId = resolveUniqueTopLevelImportSource(body, nsMember.ns, moduleParam);
+    if (targetModuleId) {
+      return { targetModuleId, exportName: nsMember.prop };
+    }
+  }
+
+  // Case 2: inline `<moduleParam>.i(<targetId>).<exportName>` or `["<exportName>"]`
+  const inlineImportMatch = new RegExp(
+    `^${escapeRegExpLiteral(moduleParam)}\\s*\\.\\s*[ir]\\s*\\(\\s*(\\d+|"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\)\\s*(?:\\.\\s*([A-Za-z_$][\\w$]*)|\\[\\s*("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\])$`,
+    "u",
+  ).exec(base);
+  if (inlineImportMatch) {
+    const targetModuleId = normalizeTurbopackModuleId(inlineImportMatch[1]!);
+    const prop =
+      inlineImportMatch[2] ??
+      (inlineImportMatch[3] ? parseJsStringLiteral(inlineImportMatch[3]) : undefined);
+    if (targetModuleId && prop) {
+      return { targetModuleId, exportName: prop };
+    }
+  }
+
+  return;
+}
+
+function resolveUniqueRouteModuleLocal(
+  body: string,
+  localIdent: string,
+  moduleParam: string,
+  requireConst: boolean,
+  exportCallSpan: [number, number],
+): { targetModuleId: string; exportName: string } | undefined {
+  let found:
+    | { targetModuleId: string; exportName: string; declStart: number; isConst: boolean }
+    | undefined;
+  let declKind: "let" | "const" | "var" | undefined;
+  let exprDepth = 0;
+  let pendingCondition = false;
+  let conditionalStmt = false;
+  let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
+  let prevWord = "";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < body.length) {
+    const ch = body[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (body[index + 1] === "/" || body[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(body, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(body, index);
+      if (end === -1) return;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(body, index);
+      if (end === -1) return;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(body, index);
+      if (end !== -1) {
+        index = end;
+        prevTokenKind = "other";
+        prevWord = "";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === "{") {
+      const end = scanBalancedEnd(body, index);
+      if (end === -1) return;
+      index = end;
+      prevTokenKind = "other";
+      prevWord = "";
+      conditionalStmt = false;
+      pendingCondition = false;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "(" || ch === "[") {
+      exprDepth += 1;
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ")" || ch === "]") {
+      if (exprDepth > 0) exprDepth -= 1;
+      if (ch === ")" && exprDepth === 0 && pendingCondition) {
+        pendingCondition = false;
+        conditionalStmt = true;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === ";") {
+      if (exprDepth === 0) {
+        declKind = undefined;
+        conditionalStmt = false;
+        pendingCondition = false;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ",") {
+      index += 1;
+      prevTokenKind = "comma";
+      prevWord = "";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ".") {
+      index += 1;
+      prevTokenKind = "dot";
+      prevWord = "";
+      regexAllowed = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < body.length && /[\w$]/u.test(body[index] ?? "")) index += 1;
+      const word = body.slice(wordStart, index);
+      if (prevTokenKind !== "dot" && exprDepth === 0) {
+        if (word === "let" || word === "const" || word === "var") {
+          declKind = word;
+          prevTokenKind = "decl";
+          prevWord = word;
+          regexAllowed = false;
+          continue;
+        }
+        if (CONTROL_FLOW_KEYWORDS.has(word) || word === "for") {
+          pendingCondition = true;
+          prevTokenKind = "other";
+          prevWord = word;
+          regexAllowed = false;
+          continue;
+        }
+        if (word === "else" || word === "do") {
+          conditionalStmt = true;
+          prevTokenKind = "other";
+          prevWord = word;
+          regexAllowed = true;
+          continue;
+        }
+        if (word === localIdent) {
+          if (prevWord === "function" || prevWord === "class") return;
+          const isDeclarator =
+            prevTokenKind === "decl" || (prevTokenKind === "comma" && declKind !== undefined);
+          if (isDeclarator) {
+            if (found !== undefined || conditionalStmt) return;
+            const afterWord = skipWhitespaceAndComments(body, index);
+            if (
+              body[afterWord] !== "=" ||
+              body[afterWord + 1] === "=" ||
+              body[afterWord + 1] === ">"
+            ) {
+              return;
+            }
+            const rhsStart = skipWhitespaceAndComments(body, afterWord + 1);
+            // Scan the initializer expression until top-level `;`, `,`, `}`, or newline.
+            let cursor = rhsStart;
+            let rhsDepth = 0;
+            while (cursor < body.length) {
+              const rch = body[cursor];
+              if (rch === '"' || rch === "'") {
+                const end = scanQuotedStringEnd(body, cursor);
+                if (end === -1) return;
+                cursor = end;
+                continue;
+              }
+              if (rch === "`") {
+                const end = scanTemplateLiteralEnd(body, cursor);
+                if (end === -1) return;
+                cursor = end;
+                continue;
+              }
+              if (rch === "(" || rch === "[" || rch === "{") {
+                const end = scanBalancedEnd(body, cursor);
+                if (end === -1) return;
+                cursor = end;
+                continue;
+              }
+              if (
+                rhsDepth === 0 &&
+                (rch === ";" || rch === "," || rch === "}" || rch === "\n" || rch === "\r")
+              ) {
+                break;
+              }
+              if (rch === "(" || rch === "[") rhsDepth += 1;
+              else if (rch === ")" || rch === "]") rhsDepth = Math.max(0, rhsDepth - 1);
+              cursor += 1;
+            }
+            const rhs = body.slice(rhsStart, cursor).trim();
+            const parsedChain = parseRouteModuleMemberChain(rhs, body, moduleParam);
+            if (!parsedChain) return;
+            found = {
+              ...parsedChain,
+              declStart: wordStart,
+              isConst: declKind === "const",
+            };
+            index = cursor;
+            prevTokenKind = "other";
+            prevWord = "";
+            regexAllowed = false;
+            continue;
+          }
+        }
+      }
+      prevTokenKind = "other";
+      prevWord = word;
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    index += 1;
+    prevTokenKind = "other";
+    prevWord = "";
+    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+
+  if (!found) return;
+  if (requireConst && !found.isConst) return;
+  const [spanStart, spanEnd] = exportCallSpan;
+  const bodyWithoutExportCall = `${body.slice(0, spanStart)}${" ".repeat(spanEnd - spanStart)}${body.slice(spanEnd)}`;
+  if (hasWriteToIdentifier(bodyWithoutExportCall, localIdent, found.declStart)) return;
+  return { targetModuleId: found.targetModuleId, exportName: found.exportName };
+}
+
+type TurbopackRouteModuleTargetKind = "route-module-property" | "entrypoint-object";
+
+type TurbopackExportHop =
   | { status: "terminal" }
   | { status: "invalid" }
-  | { status: "forward"; targetModuleId: string; mapping: Map<string, string> };
+  | {
+      status: "forward";
+      targetModuleId: string;
+      exportName: string;
+      kind: TurbopackRouteModuleTargetKind;
+    };
 
-function extractTurbopackReexportsForModule(
+function inspectTurbopackExportHop(
   body: string,
   moduleParam: string,
   expectedModuleId: string,
-  wantedNames: ReadonlySet<string>,
-): TurbopackReexportStep {
+  wantedExportName: string,
+  kind: TurbopackRouteModuleTargetKind,
+): TurbopackExportHop {
   const unwrappedBody = unwrapTurbopackCompileTimeBranches(body);
-  const reexports = new Map<string, { targetModuleId: string; importedName: string }>();
-  const directExports = new Set<string>();
+  let forwarded:
+    | { targetModuleId: string; exportName: string; kind: TurbopackRouteModuleTargetKind }
+    | undefined;
+  let directExportFound = false;
   const nestedExportCallPattern = new RegExp(
     `(?:^|[^\\w$.])${escapeRegExpLiteral(moduleParam)}\\s*\\.\\s*[sS]\\s*\\(`,
     "u",
@@ -2617,16 +3002,13 @@ function extractTurbopackReexportsForModule(
                 const arrayEnd = scanBalancedEnd(unwrappedBody, firstArgStart);
                 if (arrayEnd === -1 || arrayEnd > callEnd - 1) return { status: "invalid" };
                 const afterArray = skipWhitespaceAndComments(unwrappedBody, arrayEnd);
-                if (unwrappedBody[afterArray] === ",") {
-                  const secondArg = unwrappedBody.slice(afterArray + 1, callEnd - 1).trim();
-                  const normalizedTarget = normalizeTurbopackModuleId(secondArg);
-                  if (!normalizedTarget) return { status: "invalid" };
-                  if (normalizedTarget !== expectedModuleId) {
-                    index = callEnd;
-                    prevTokenKind = "other";
-                    regexAllowed = false;
-                    continue;
-                  }
+                const targetArg = parseTurbopackTargetModuleArg(unwrappedBody, afterArray, callEnd);
+                if (targetArg.status === "invalid") return { status: "invalid" };
+                if (targetArg.status === "target" && targetArg.moduleId !== expectedModuleId) {
+                  index = callEnd;
+                  prevTokenKind = "other";
+                  regexAllowed = false;
+                  continue;
                 }
                 const elements = splitTopLevelArrayElements(
                   unwrappedBody.slice(firstArgStart, arrayEnd),
@@ -2667,55 +3049,95 @@ function extractTurbopackReexportsForModule(
                         pairs.push([expName, impName]);
                       }
                     }
-                    const relevantPairs = pairs.filter(([expName]) => wantedNames.has(expName));
+                    const relevantPairs = pairs.filter(([expName]) => expName === wantedExportName);
                     if (relevantPairs.length > 0) {
-                      if (conditionalStmt) return { status: "invalid" };
+                      if (
+                        conditionalStmt ||
+                        relevantPairs.length > 1 ||
+                        forwarded !== undefined ||
+                        directExportFound
+                      ) {
+                        return { status: "invalid" };
+                      }
                       const targetModuleId =
                         normalizeTurbopackModuleId(head) ??
                         (/^[A-Za-z_$][\w$]*$/u.test(head)
                           ? resolveUniqueTopLevelImportSource(unwrappedBody, head, moduleParam)
                           : undefined);
                       if (!targetModuleId) return { status: "invalid" };
-                      for (const [expName, impName] of relevantPairs) {
-                        if (reexports.has(expName) || directExports.has(expName)) {
-                          return { status: "invalid" };
-                        }
-                        reexports.set(expName, { targetModuleId, importedName: impName });
-                      }
+                      forwarded = { targetModuleId, exportName: relevantPairs[0]![1], kind };
                     }
                   }
                 } else {
-                  let elemIdx = 0;
-                  while (elemIdx < elements.length) {
-                    const expName = parseJsStringLiteral(elements[elemIdx]!);
-                    if (expName === undefined) return { status: "invalid" };
-                    let isValue = false;
-                    let rawExpr: string | undefined;
-                    if (elements[elemIdx + 1]?.trim() === "0") {
-                      if (elemIdx + 2 >= elements.length) return { status: "invalid" };
-                      isValue = true;
-                      rawExpr = elements[elemIdx + 2]!.trim();
-                      elemIdx += 3;
-                    } else {
-                      if (elemIdx + 1 >= elements.length) return { status: "invalid" };
-                      rawExpr = elements[elemIdx + 1]!.trim();
-                      elemIdx += 2;
+                  const bindings = parseTurbopackEsmExportBindings(elements);
+                  if (!bindings) return { status: "invalid" };
+                  for (const binding of bindings) {
+                    if (binding.name !== wantedExportName) continue;
+                    if (conditionalStmt || forwarded !== undefined || directExportFound) {
+                      return { status: "invalid" };
                     }
-                    if (wantedNames.has(expName)) {
-                      if (conditionalStmt || reexports.has(expName) || directExports.has(expName)) {
-                        return { status: "invalid" };
-                      }
-                      const getterBody = isValue ? undefined : unwrapExportGetterBody(rawExpr);
-                      const member = getterBody ? parseCalleeMemberAccess(getterBody) : undefined;
+                    const expr =
+                      binding.kind === "value"
+                        ? stripOuterParens(binding.expr)
+                        : unwrapExportGetterBody(binding.getterExpr);
+                    const hasSetter = binding.kind === "getter" && binding.setterExpr !== undefined;
+                    // 1. Direct namespace re-export getter: `() => ns.prop` or `() => ns["prop"]`
+                    if (!hasSetter && expr) {
+                      const member = parseCalleeMemberAccess(expr);
                       const targetModuleId = member
                         ? resolveUniqueTopLevelImportSource(unwrappedBody, member.ns, moduleParam)
                         : undefined;
                       if (member && targetModuleId) {
-                        reexports.set(expName, { targetModuleId, importedName: member.prop });
-                      } else {
-                        directExports.add(expName);
+                        forwarded = { targetModuleId, exportName: member.prop, kind };
+                        continue;
                       }
                     }
+                    // 2. Module-fragment property extractor:
+                    //    `const c = b.j.routeModule; a.s(["l", () => c, a => c = a])`
+                    //    or `const c = a.i(71829).j.routeModule; a.s(["l", () => c, a => c = a])`
+                    if (kind === "route-module-property" && expr) {
+                      if (!hasSetter) {
+                        const directChain = parseRouteModuleMemberChain(
+                          expr,
+                          unwrappedBody,
+                          moduleParam,
+                        );
+                        if (directChain) {
+                          forwarded = {
+                            targetModuleId: directChain.targetModuleId,
+                            exportName: directChain.exportName,
+                            kind: "entrypoint-object",
+                          };
+                          continue;
+                        }
+                      }
+                      if (/^[A-Za-z_$][\w$]*$/u.test(expr)) {
+                        const setterValid =
+                          !hasSetter ||
+                          isSimpleSetterForIdentifier(
+                            (binding as { setterExpr: string }).setterExpr,
+                            expr,
+                          );
+                        if (setterValid) {
+                          const extracted = resolveUniqueRouteModuleLocal(
+                            unwrappedBody,
+                            expr,
+                            moduleParam,
+                            hasSetter,
+                            [wordStart, callEnd],
+                          );
+                          if (extracted) {
+                            forwarded = {
+                              targetModuleId: extracted.targetModuleId,
+                              exportName: extracted.exportName,
+                              kind: "entrypoint-object",
+                            };
+                            continue;
+                          }
+                        }
+                      }
+                    }
+                    directExportFound = true;
                   }
                 }
                 index = callEnd;
@@ -2743,82 +3165,92 @@ function extractTurbopackReexportsForModule(
     regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
   }
 
-  if (reexports.size === 0) return { status: "terminal" };
-  if (hasNestedExportCall || directExports.size > 0 || reexports.size !== wantedNames.size) {
-    return { status: "invalid" };
-  }
-
-  let sharedTargetModuleId: string | undefined;
-  const importedNames = new Set<string>();
-  const mapping = new Map<string, string>();
-  for (const [expName, entry] of reexports) {
-    if (sharedTargetModuleId === undefined) {
-      sharedTargetModuleId = entry.targetModuleId;
-    } else if (sharedTargetModuleId !== entry.targetModuleId) {
-      return { status: "invalid" };
-    }
-    if (importedNames.has(entry.importedName)) return { status: "invalid" };
-    importedNames.add(entry.importedName);
-    mapping.set(expName, entry.importedName);
-  }
-  return sharedTargetModuleId
-    ? { status: "forward", targetModuleId: sharedTargetModuleId, mapping }
-    : { status: "invalid" };
+  if (forwarded === undefined) return { status: "terminal" };
+  if (hasNestedExportCall || directExportFound) return { status: "invalid" };
+  return {
+    status: "forward",
+    targetModuleId: forwarded.targetModuleId,
+    exportName: forwarded.exportName,
+    kind: forwarded.kind,
+  };
 }
 
-function resolveTurbopackForwardedEntrypoint(
+type ResolvedTurbopackRouteModuleTarget = {
+  moduleId: string;
+  exportName: string;
+  kind: TurbopackRouteModuleTargetKind;
+  forwarded: boolean;
+};
+
+function resolveTurbopackRouteModuleTarget(
   entryModuleId: string,
   resolveModule: TurbopackModuleResolver,
-): { moduleId: string; exportNames: EntrypointExportNames; forwarded: boolean } | undefined {
+): ResolvedTurbopackRouteModuleTarget | undefined {
   let currentModuleId = entryModuleId;
-  let exportNames: EntrypointExportNames = { ...DEFAULT_ENTRYPOINT_EXPORT_NAMES };
+  let currentExportName = "routeModule";
+  let kind: TurbopackRouteModuleTargetKind = "route-module-property";
   let forwarded = false;
-  const visited = new Set<string>([entryModuleId]);
+  const visited = new Set<string>([`${kind}:${entryModuleId}:${currentExportName}`]);
 
-  for (let depth = 0; depth <= 4; depth += 1) {
+  for (let depth = 0; depth <= 8; depth += 1) {
     const factory = resolveModule(currentModuleId);
-    if (!factory) return { moduleId: currentModuleId, exportNames, forwarded };
+    if (!factory)
+      return { moduleId: currentModuleId, exportName: currentExportName, kind, forwarded };
     const parsed = parseTurbopackFactory(factory);
-    if (!parsed) return { moduleId: currentModuleId, exportNames, forwarded };
-    const wantedNames = new Set<string>(Object.values(exportNames));
-    const step = extractTurbopackReexportsForModule(
+    if (!parsed)
+      return { moduleId: currentModuleId, exportName: currentExportName, kind, forwarded };
+    const step = inspectTurbopackExportHop(
       parsed.body,
       parsed.param,
       currentModuleId,
-      wantedNames,
+      currentExportName,
+      kind,
     );
     if (step.status === "invalid") return;
-    if (step.status === "terminal") return { moduleId: currentModuleId, exportNames, forwarded };
-    if (depth === 4 || visited.has(step.targetModuleId)) return;
-    visited.add(step.targetModuleId);
+    if (step.status === "terminal") {
+      return { moduleId: currentModuleId, exportName: currentExportName, kind, forwarded };
+    }
+    const visitKey = `${step.kind}:${step.targetModuleId}:${step.exportName}`;
+    if (depth === 8 || visited.has(visitKey)) return;
+    visited.add(visitKey);
     currentModuleId = step.targetModuleId;
-    exportNames = {
-      __next_app__: step.mapping.get(exportNames.__next_app__)!,
-      routeModule: step.mapping.get(exportNames.routeModule)!,
-      handler: step.mapping.get(exportNames.handler)!,
-    };
+    currentExportName = step.exportName;
+    kind = step.kind;
     forwarded = true;
   }
   return;
 }
 
+type ExpectedRouteModuleExportTarget = {
+  kind: TurbopackRouteModuleTargetKind;
+  exportName: string;
+};
+
+const DEFAULT_ROUTE_MODULE_EXPORT_TARGET: ExpectedRouteModuleExportTarget = {
+  kind: "route-module-property",
+  exportName: "routeModule",
+};
+
 function verifyEntrypointExportsInScope(
   scopeSource: string,
   entrypointVar: string,
   varStart: number,
+  entrypointDeclKind: "let" | "const" | "var",
   moduleParam: string | undefined,
   expectedModuleId: string | undefined,
-  expectedExportNames: EntrypointExportNames = DEFAULT_ENTRYPOINT_EXPORT_NAMES,
+  expectedTarget: ExpectedRouteModuleExportTarget = DEFAULT_ROUTE_MODULE_EXPORT_TARGET,
 ): boolean {
-  const exportNameToCanonical = new Map<string, EntrypointExportName>();
-  for (const canonical of ENTRYPOINT_EXPORTS) {
-    exportNameToCanonical.set(expectedExportNames[canonical], canonical);
-  }
-  if (exportNameToCanonical.size !== ENTRYPOINT_EXPORTS.length) return false;
-
-  const exported = new Map<EntrypointExportName, string>();
-  const aliases = new Map<string, { prop: EntrypointExportName; declStart: number }>();
+  let exportedExpr: string | undefined;
+  let exportedViaSetter = false;
+  const aliases = new Map<
+    string,
+    { prop: EntrypointExportName; declStart: number; isConst: boolean }
+  >();
   const exportReadSpans: Array<[number, number]> = [];
+  const turbopackExportBindings: Array<{
+    span: [number, number];
+    bindings: TurbopackEsmBinding[];
+  }> = [];
 
   let declKind: "let" | "const" | "var" | undefined;
   let exportDecl = false;
@@ -2951,7 +3383,7 @@ function verifyEntrypointExportsInScope(
       const word = scopeSource.slice(wordStart, index);
 
       if (prevTokenKind !== "dot" && exprDepth === 0) {
-        // Turbopack module export call: `<moduleParam>.s([...], <moduleId>?)`
+        // Turbopack module export call: `<moduleParam>.s([...], <moduleId>?, <dynamic>?)`
         if (moduleParam !== undefined && !conditionalStmt && word === moduleParam) {
           const afterParam = skipWhitespaceAndComments(scopeSource, index);
           if (scopeSource[afterParam] === ".") {
@@ -2966,45 +3398,45 @@ function verifyEntrypointExportsInScope(
                 const arrayEnd = scanBalancedEnd(scopeSource, firstArgStart);
                 if (arrayEnd === -1 || arrayEnd > callEnd - 1) return false;
                 const afterArray = skipWhitespaceAndComments(scopeSource, arrayEnd);
-                if (scopeSource[afterArray] === ",") {
-                  const secondArg = scopeSource.slice(afterArray + 1, callEnd - 1).trim();
-                  const normalizedSecondArg = normalizeTurbopackModuleId(secondArg);
-                  if (!normalizedSecondArg) return false;
-                  if (expectedModuleId !== undefined && normalizedSecondArg !== expectedModuleId) {
-                    index = callEnd;
-                    prevTokenKind = "other";
-                    prevWord = "";
-                    prevNonWsChar = ")";
-                    regexAllowed = false;
-                    continue;
-                  }
+                const targetArg = parseTurbopackTargetModuleArg(scopeSource, afterArray, callEnd);
+                if (targetArg.status === "invalid") return false;
+                if (
+                  targetArg.status === "target" &&
+                  expectedModuleId !== undefined &&
+                  targetArg.moduleId !== expectedModuleId
+                ) {
+                  index = callEnd;
+                  prevTokenKind = "other";
+                  prevWord = "";
+                  prevNonWsChar = ")";
+                  regexAllowed = false;
+                  continue;
                 }
                 const elements = splitTopLevelArrayElements(
                   scopeSource.slice(firstArgStart, arrayEnd),
                   0,
                 );
                 if (!elements) return false;
-                let elemIdx = 0;
-                while (elemIdx < elements.length) {
-                  const exportName = parseJsStringLiteral(elements[elemIdx]!);
-                  if (exportName === undefined) return false;
-                  let expr: string | undefined;
-                  if (elements[elemIdx + 1]?.trim() === "0") {
-                    if (elemIdx + 2 >= elements.length) return false;
-                    expr = elements[elemIdx + 2]!.trim().replace(/\s+/gu, "");
-                    elemIdx += 3;
+                const bindings = parseTurbopackEsmExportBindings(elements);
+                if (!bindings) return false;
+                for (const binding of bindings) {
+                  if (binding.name !== expectedTarget.exportName) continue;
+                  if (exportedExpr !== undefined) return false;
+                  if (binding.kind === "value") {
+                    const expr = stripOuterParens(binding.expr).replace(/\s+/gu, "");
+                    if (!expr) return false;
+                    exportedExpr = expr;
                   } else {
-                    if (elemIdx + 1 >= elements.length) return false;
-                    expr = unwrapExportGetter(elements[elemIdx + 1]!);
-                    elemIdx += 2;
-                  }
-                  const canonicalName = exportNameToCanonical.get(exportName);
-                  if (canonicalName !== undefined) {
-                    if (!expr || exported.has(canonicalName)) return false;
-                    exported.set(canonicalName, expr);
+                    const expr = unwrapExportGetter(binding.getterExpr);
+                    if (!expr) return false;
+                    if (binding.setterExpr !== undefined) {
+                      if (!isSimpleSetterForIdentifier(binding.setterExpr, expr)) return false;
+                      exportedViaSetter = true;
+                    }
+                    exportedExpr = expr;
                   }
                 }
-                exportReadSpans.push([afterS, callEnd]);
+                turbopackExportBindings.push({ span: [afterS, callEnd], bindings });
                 index = callEnd;
                 prevTokenKind = "other";
                 prevWord = "";
@@ -3031,9 +3463,11 @@ function verifyEntrypointExportsInScope(
                 const asMatch = /^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/u.exec(spec);
                 const local = asMatch ? asMatch[1]! : spec;
                 const expName = asMatch ? asMatch[2]! : spec;
-                if (isEntrypointExportName(expName)) {
-                  if (!/^[A-Za-z_$][\w$]*$/u.test(local) || exported.has(expName)) return false;
-                  exported.set(expName, local);
+                if (expName === expectedTarget.exportName) {
+                  if (!/^[A-Za-z_$][\w$]*$/u.test(local) || exportedExpr !== undefined) {
+                    return false;
+                  }
+                  exportedExpr = local;
                 }
               }
               exportReadSpans.push([afterExport, braceEnd]);
@@ -3066,10 +3500,10 @@ function verifyEntrypointExportsInScope(
               const props = parseTopLevelObjectProperties(objExpr);
               if (!props) return false;
               for (const [key, value] of props) {
-                if (isEntrypointExportName(key)) {
+                if (key === expectedTarget.exportName) {
                   const unwrapped = unwrapExportGetter(value);
-                  if (!unwrapped || exported.has(key)) return false;
-                  exported.set(key, unwrapped);
+                  if (!unwrapped || exportedExpr !== undefined) return false;
+                  exportedExpr = unwrapped;
                 }
               }
               exportReadSpans.push([afterFn, callEnd]);
@@ -3092,12 +3526,12 @@ function verifyEntrypointExportsInScope(
               /^([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)?)/u.exec(
                 scopeSource.slice(propStart),
               );
-            if (propMatch && isEntrypointExportName(propMatch[1]!)) {
+            if (propMatch && propMatch[1] === expectedTarget.exportName) {
               const rhsEnd = propStart + propMatch[0].length;
-              if (!endsInitializerAt(scopeSource, rhsEnd) || exported.has(propMatch[1]!)) {
+              if (!endsInitializerAt(scopeSource, rhsEnd) || exportedExpr !== undefined) {
                 return false;
               }
-              exported.set(propMatch[1]!, propMatch[2]!.replace(/\s+/gu, ""));
+              exportedExpr = propMatch[2]!.replace(/\s+/gu, "");
               exportReadSpans.push([propStart, rhsEnd]);
               index = rhsEnd;
               prevTokenKind = "other";
@@ -3160,10 +3594,10 @@ function verifyEntrypointExportsInScope(
               if (endsInitializerAt(scopeSource, rhsEnd)) {
                 const prop = memberMatch[1] as EntrypointExportName;
                 if (aliases.has(word)) return false;
-                aliases.set(word, { prop, declStart: wordStart });
-                if (exportDecl && isEntrypointExportName(word)) {
-                  if (exported.has(word)) return false;
-                  exported.set(word, `${entrypointVar}.${prop}`);
+                aliases.set(word, { prop, declStart: wordStart, isConst: declKind === "const" });
+                if (exportDecl && word === expectedTarget.exportName) {
+                  if (exportedExpr !== undefined) return false;
+                  exportedExpr = `${entrypointVar}.${prop}`;
                 }
                 index = rhsEnd;
                 prevTokenKind = "other";
@@ -3172,8 +3606,8 @@ function verifyEntrypointExportsInScope(
                 regexAllowed = false;
                 continue;
               }
-            } else if (exportDecl && isEntrypointExportName(word)) {
-              // Exporting one of the three names from a non-entrypoint expression.
+            } else if (exportDecl && word === expectedTarget.exportName) {
+              // Exporting the routeModule name from a non-entrypoint expression.
               return false;
             }
           }
@@ -3202,26 +3636,69 @@ function verifyEntrypointExportsInScope(
     regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
   }
 
-  // Verify every required export (`__next_app__`, `routeModule`, `handler`)
-  // comes directly from `entrypointVar.<prop>` or from its alias.
-  const usedAliases = new Map<string, { prop: EntrypointExportName; declStart: number }>();
-  for (const prop of ENTRYPOINT_EXPORTS) {
-    const expr = exported.get(prop);
-    if (!expr) return false;
-    if (expr === `${entrypointVar}.${prop}`) continue;
-    const aliasInfo = aliases.get(expr);
-    if (!aliasInfo || aliasInfo.prop !== prop) return false;
-    usedAliases.set(expr, aliasInfo);
+  // Verify the compiled `routeModule` export (or the entrypoint object whose
+  // `.routeModule` property is extracted by a downstream Turbopack fragment)
+  // comes directly from `entrypointVar` or its immutable alias.
+  if (!exportedExpr) return false;
+  let routeModuleAlias: { name: string; declStart: number; isConst: boolean } | undefined;
+  if (expectedTarget.kind === "entrypoint-object") {
+    if (exportedExpr !== entrypointVar) return false;
+    if (exportedViaSetter && entrypointDeclKind !== "const") return false;
+  } else if (exportedExpr !== `${entrypointVar}.routeModule`) {
+    const aliasInfo = aliases.get(exportedExpr);
+    if (!aliasInfo || aliasInfo.prop !== "routeModule") return false;
+    if (exportedViaSetter && !aliasInfo.isConst) return false;
+    routeModuleAlias = {
+      name: exportedExpr,
+      declStart: aliasInfo.declStart,
+      isConst: aliasInfo.isConst,
+    };
   }
 
   // Verify across the entire scope (including nested blocks/templates) that
-  // neither `entrypointVar` nor any exported alias is reassigned, redeclared,
-  // mutated, or aliased elsewhere.
-  const watchedIdents = new Set([entrypointVar, ...usedAliases.keys()]);
+  // neither `entrypointVar` nor the exported `routeModule` alias is reassigned,
+  // redeclared, mutated, or aliased elsewhere.
+  const watchedIdents = new Set([entrypointVar]);
+  if (routeModuleAlias) watchedIdents.add(routeModuleAlias.name);
   const watchedPattern = new RegExp(
     `(?:(?<![\\w$.])|\\.\\.\\.)(?:${[...watchedIdents].map(escapeRegExpLiteral).join("|")})(?![\\w$])`,
     "u",
   );
+  // Only treat a Turbopack `ctx.s([...])` call as an allowed read span when
+  // every binding in that call mentioning a watched identifier is a clean read
+  // (plus an optional simple setter on a `const` binding).
+  for (const { span, bindings } of turbopackExportBindings) {
+    const allClean = bindings.every((binding) => {
+      const mentionsWatched =
+        binding.kind === "value"
+          ? watchedPattern.test(binding.expr)
+          : watchedPattern.test(binding.getterExpr) ||
+            (binding.setterExpr !== undefined && watchedPattern.test(binding.setterExpr));
+      if (!mentionsWatched) return true;
+      const expr =
+        binding.kind === "value"
+          ? stripOuterParens(binding.expr).replace(/\s+/gu, "")
+          : unwrapExportGetter(binding.getterExpr);
+      if (!expr) return false;
+      const isAllowedExpr =
+        (expectedTarget.kind === "entrypoint-object" && expr === entrypointVar) ||
+        expr === `${entrypointVar}.__next_app__` ||
+        expr === `${entrypointVar}.routeModule` ||
+        expr === `${entrypointVar}.handler` ||
+        (routeModuleAlias !== undefined && expr === routeModuleAlias.name);
+      if (!isAllowedExpr) return false;
+      if (binding.kind === "getter" && binding.setterExpr !== undefined) {
+        const isConstTarget =
+          (expr === entrypointVar && entrypointDeclKind === "const") ||
+          (routeModuleAlias !== undefined &&
+            expr === routeModuleAlias.name &&
+            routeModuleAlias.isConst);
+        return isConstTarget && isSimpleSetterForIdentifier(binding.setterExpr, expr);
+      }
+      return true;
+    });
+    if (allClean) exportReadSpans.push(span);
+  }
   const inExportReadSpan = (offset: number) =>
     exportReadSpans.some(([start, end]) => offset >= start && offset < end);
 
@@ -3303,7 +3780,10 @@ function verifyEntrypointExportsInScope(
           (scanPrevChar === "{" || scanPrevChar === ",") && scopeSource[afterWord] === ":";
         if (!isObjectKey) {
           if (word === entrypointVar) {
-            if (wordStart !== varStart) {
+            if (
+              wordStart !== varStart &&
+              !(expectedTarget.kind === "entrypoint-object" && inExportReadSpan(wordStart))
+            ) {
               if (scanPrevWord === "delete" || scanPrevChar === "+" || scanPrevChar === "-") {
                 return false;
               }
@@ -3319,13 +3799,13 @@ function verifyEntrypointExportsInScope(
               );
               if (isAssignmentOperatorAt(scopeSource, afterProp)) return false;
             }
-          } else {
-            const aliasInfo = usedAliases.get(word)!;
-            if (wordStart !== aliasInfo.declStart && !inExportReadSpan(wordStart)) {
+          } else if (routeModuleAlias !== undefined && word === routeModuleAlias.name) {
+            if (wordStart !== routeModuleAlias.declStart && !inExportReadSpan(wordStart)) {
               return false;
             }
             if (
-              wordStart !== aliasInfo.declStart &&
+              wordStart !== routeModuleAlias.declStart &&
+              !routeModuleAlias.isConst &&
               isAssignmentOperatorAt(scopeSource, afterWord)
             ) {
               return false;
@@ -3364,7 +3844,7 @@ function findTreeExpressionsInSource(
   source: string,
   expectedPage: string,
   expectedModuleId: string | undefined,
-  expectedExportNames: EntrypointExportNames,
+  expectedTarget: ExpectedRouteModuleExportTarget,
   resolveTurbopackModule: TurbopackModuleResolver,
 ): Array<string | undefined> {
   const matches: Array<string | undefined> = [];
@@ -3461,9 +3941,10 @@ function findTreeExpressionsInSource(
                   scopeSource,
                   callBinding.entrypointVar,
                   callBinding.varStart,
+                  callBinding.declKind,
                   moduleCtx.moduleParam,
                   expectedModuleId,
-                  expectedExportNames,
+                  expectedTarget,
                 )
               ) {
                 const treeExpr = props.get("tree")!;
@@ -3484,7 +3965,13 @@ function findTreeExpressionsInSource(
                   matches.push(
                     referencedInSiblingProp
                       ? undefined
-                      : resolveIdentifierArrayInScope(source, objectStart, objectEnd, treeExpr),
+                      : resolveIdentifierArrayInScope(
+                          source,
+                          objectStart,
+                          objectEnd,
+                          treeExpr,
+                          moduleCtx.moduleParam,
+                        ),
                   );
                 } else {
                   matches.push(undefined);
@@ -3534,16 +4021,16 @@ function findTreeExpressionForPage(
   if (expectedModuleId !== undefined && normalizedExpectedModuleId === undefined) return;
 
   let targetModuleId = normalizedExpectedModuleId;
-  let targetExportNames: EntrypointExportNames = DEFAULT_ENTRYPOINT_EXPORT_NAMES;
+  let expectedTarget: ExpectedRouteModuleExportTarget = DEFAULT_ROUTE_MODULE_EXPORT_TARGET;
   let forwarded = false;
   if (normalizedExpectedModuleId !== undefined) {
-    const resolved = resolveTurbopackForwardedEntrypoint(
+    const resolved = resolveTurbopackRouteModuleTarget(
       normalizedExpectedModuleId,
       resolveTurbopackModule,
     );
     if (!resolved) return;
     targetModuleId = resolved.moduleId;
-    targetExportNames = resolved.exportNames;
+    expectedTarget = { kind: resolved.kind, exportName: resolved.exportName };
     forwarded = resolved.forwarded;
   }
 
@@ -3551,7 +4038,7 @@ function findTreeExpressionForPage(
     source,
     expectedPage,
     targetModuleId,
-    targetExportNames,
+    expectedTarget,
     resolveTurbopackModule,
   );
   if (matches.length === 0 && forwarded && targetModuleId !== undefined) {
@@ -3561,7 +4048,7 @@ function findTreeExpressionForPage(
         `module.exports=[${formatNormalizedTurbopackModuleIdLiteral(targetModuleId)},${forwardedFactory}];`,
         expectedPage,
         targetModuleId,
-        targetExportNames,
+        expectedTarget,
         resolveTurbopackModule,
       );
     }

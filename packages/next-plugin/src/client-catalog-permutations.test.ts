@@ -1360,12 +1360,67 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
         );
         expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
 
-        // Partial forward (e.g. `handler` forwarded to a different module) fails closed.
+        // Split exports (e.g. `handler` forwarded to a different module while
+        // `routeModule` comes from `<locals>`) still resolve `routeModule`
+        // independently.
         writeFileSync(
           templateChunk,
           `module.exports = [
 '${namedEntryId}', a => { "use strict"; a.S(['${namedLocalsId}', "__next_app__,O,routeModule,p", 0, '[project]/other', "handler,N"]); },
 '${namedLocalsId}', a => { "use strict"; let c = a.i('${namedRuntimeId}'); let j = ["", { children: ["[[...locale]]", {}, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []]; let m = (0, c.f)({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: k, loadChunk: lc, interopDefault: d.interopDefault }), n = m.__next_app__, o = m.routeModule, p = m.handler; a.s(["O", 0, n, "N", 0, p, "p", 0, o]); }
+];\n`,
+        );
+        expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+        // Turbopack module fragments (`experimental.turbopackModuleFragments: true`):
+        // entry -> reexport facade -> split handler / __next_app__ / routeModule
+        // fragments -> property extractor (`const c = b.j.routeModule`) ->
+        // entrypoint fragment exporting `const n = (0, c.f)({ tree: k, ... })`
+        // with 3-element getter+setter `a.s([..., "g", () => k, a => k = a, ..., "j", () => n, a => n = a])`.
+        writeFileSync(
+          templateChunk,
+          `module.exports = [
+'${namedEntryId}', a => { "use strict"; var b = a.i(28596); a.S([b, "__next_app__,__next_app__,handler,handler,routeModule,routeModule"]); },
+28596, a => { "use strict"; var b = a.i(85694), c = a.i(14822), d = a.i(94566); a.S([b, "handler,f", 0, c, "__next_app__,f", 0, d, "routeModule,f"]); },
+94566, a => { "use strict"; var b = a.i(62310); a.S([b, "f,l"]); },
+62310, a => { "use strict"; var b = a.i(71829); a.i(21162); const c = b.j.routeModule; a.s(["l", () => c, a => c = a]); },
+71829, a => { "use strict"; var c = a.i('${namedRuntimeId}'); const k = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []], l = a.r.bind(a), m = a.l.bind(a), n = (0, c.f)({ tree: k, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: l, loadChunk: m, interopDefault: d.interopDefault }); a.s(["g", () => k, a => k = a, "j", () => n, a => n = a]); }
+];\n`,
+        );
+        expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+        // Unminified module fragments (`turbopackModuleFragments: true, turbopackMinify: false`)
+        // with bracket access `mod["j"].routeModule` and inline `a.i(...)` chain.
+        writeFileSync(
+          templateChunk,
+          `module.exports = [
+'${namedEntryId}', ((__turbopack_context__) => { "use strict"; var b = __turbopack_context__.i(94566); __turbopack_context__.S([b, "routeModule,f"]); }),
+94566, ((__turbopack_context__) => { "use strict"; const routeModule = __turbopack_context__.i(71829)["j"].routeModule; __turbopack_context__.s(["f", () => routeModule, (new_rm) => routeModule = new_rm]); }),
+71829, ((__turbopack_context__) => { "use strict"; var rt = __turbopack_context__.i('${namedRuntimeId}'); const tree = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, { layout: [ly, "[project]/app/[[...locale]]/layout.tsx"] }, []] }, {}, []]; const entrypoint = (0, rt["f"])({ tree, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: __turbopack_context__.r.bind(__turbopack_context__), loadChunk: __turbopack_context__.l.bind(__turbopack_context__), interopDefault: d["interopDefault"] }); __turbopack_context__.s(["g", () => tree, (new_tree) => tree = new_tree, "j", () => entrypoint, (new_ep) => entrypoint = new_ep]); })
+];\n`,
+        );
+        expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(true);
+
+        // Mutable `let` binding exported with a live-binding setter in a fragment
+        // must fail closed (unlike `const`, a setter can reassign `let` at runtime).
+        writeFileSync(
+          templateChunk,
+          `module.exports = [
+'${namedEntryId}', a => { "use strict"; var b = a.i(62310); a.S([b, "routeModule,l"]); },
+62310, a => { "use strict"; var b = a.i(71829); let c = b.j.routeModule; a.s(["l", () => c, a => c = a]); },
+71829, a => { "use strict"; var c = a.i('${namedRuntimeId}'); const k = ["", { children: ["[[...locale]]", {}, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []], n = (0, c.f)({ tree: k, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: a.r.bind(a), loadChunk: a.l.bind(a), interopDefault: d.interopDefault }); a.s(["g", () => k, a => k = a, "j", () => n, a => n = a]); }
+];\n`,
+        );
+        expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
+        // Extracting a non-`routeModule` property (e.g. `.handler`) or conflicting
+        // duplicate `routeModule` forwards must fail closed.
+        writeFileSync(
+          templateChunk,
+          `module.exports = [
+'${namedEntryId}', a => { "use strict"; var b = a.i(62310); a.S([b, "routeModule,l"]); },
+62310, a => { "use strict"; var b = a.i(71829); const c = b.j.handler; a.s(["l", () => c, a => c = a]); },
+71829, a => { "use strict"; var c = a.i('${namedRuntimeId}'); const k = ["", { children: ["[[...locale]]", {}, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []], n = (0, c.f)({ tree: k, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: a.r.bind(a), loadChunk: a.l.bind(a), interopDefault: d.interopDefault }); a.s(["g", () => k, a => k = a, "j", () => n, a => n = a]); }
 ];\n`,
         );
         expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();

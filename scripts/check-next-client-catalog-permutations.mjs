@@ -315,6 +315,22 @@ async function verifyOptionalRootLocaleOwnership() {
         experimental: { turbopackModuleIds: "named", turbopackScopeHoisting: false },
       },
     },
+    {
+      name: "layout-above-optional-fragments",
+      layoutAbove: true,
+      expectedLocale: "de",
+      nextConfig: {
+        experimental: { turbopackModuleFragments: true },
+      },
+    },
+    {
+      name: "layout-inside-optional-fragments-unmin",
+      layoutAbove: false,
+      expectedLocale: "en",
+      nextConfig: {
+        experimental: { turbopackModuleFragments: true, turbopackMinify: false },
+      },
+    },
   ]) {
     // Create the fixture directly under `repoRoot` (outside `examples/nextjs-route`)
     // so Turbopack keeps `distDir` inside `outputFileTracingRoot` without
@@ -362,6 +378,10 @@ async function verifyOptionalRootLocaleOwnership() {
       writeFileSync(path.join(fixtureDir, "locales/en.po"), 'msgid "Greeting"\nmsgstr "Hello"\n');
       writeFileSync(path.join(fixtureDir, "locales/de.po"), 'msgid "Greeting"\nmsgstr "Hallo"\n');
       writeFileSync(
+        path.join(fixtureDir, "po.d.ts"),
+        'declare module "*.po" {\n  import type { CompiledCatalogMessages } from "@palamedes/core";\n  export const messages: CompiledCatalogMessages;\n}\n',
+      );
+      writeFileSync(
         path.join(fixtureDir, "next.config.mjs"),
         `import { withPalamedes } from "@palamedes/next-plugin";
 export default withPalamedes(
@@ -384,7 +404,26 @@ export default withPalamedes(
 }
 `,
       );
-      const layoutSource = `import type { ReactNode } from "react";
+      const usesFragments = Boolean(scenario.nextConfig.experimental?.turbopackModuleFragments);
+      const localeCatalogImport = `${scenario.layoutAbove ? "../locales" : "../../locales"}/${scenario.expectedLocale}.po`;
+      const layoutSource = usesFragments
+        ? `import type { ReactNode } from "react";
+import { createI18n } from "@palamedes/core";
+import { createNextServerI18nScope } from "@palamedes/next-plugin/server";
+import { messages } from ${JSON.stringify(localeCatalogImport)};
+const scope = createNextServerI18nScope();
+export default function RootLayout({ children }: { children: ReactNode }) {
+  const i18n = createI18n({ locale: ${JSON.stringify(scenario.expectedLocale)} });
+  i18n.load(${JSON.stringify(scenario.expectedLocale)}, messages);
+  scope.activate(i18n);
+  return (
+    <html lang=${JSON.stringify(scenario.expectedLocale)}>
+      <body>{children}</body>
+    </html>
+  );
+}
+`
+        : `import type { ReactNode } from "react";
 import { createNextServerI18n } from "@palamedes/next-plugin/server";
 export default async function RootLayout({ children }: { children: ReactNode }) {
   await createNextServerI18n({ locale: ${JSON.stringify(scenario.expectedLocale)} });

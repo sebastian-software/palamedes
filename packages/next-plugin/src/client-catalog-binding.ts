@@ -306,7 +306,10 @@ export type BindClientCatalogPermutationsOptions = ClientCatalogHeaderOptions & 
 export function bindClientCatalogPermutations(
   options: BindClientCatalogPermutationsOptions = {},
 ): string[] | undefined {
-  const distDir = process.env[CLIENT_CATALOG_PERMUTATIONS_ENV];
+  // Literal property access ensures Next's build-time `env` replacement still
+  // inlines `distDir` when `experimental.turbopackModuleFragments` splits
+  // `CLIENT_CATALOG_PERMUTATIONS_ENV` into a separate fragment.
+  const distDir = process.env.PALAMEDES_NEXT_CATALOG_PERMUTATIONS;
   if (!distDir) return;
   const absoluteDistDir = path.join(options.dir ?? process.cwd(), distDir);
   const bound = bindClientCatalogPermutationsAt(absoluteDistDir, options);
