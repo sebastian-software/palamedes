@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { type Dirent, existsSync, readFileSync, readdirSync } from "node:fs";
+import { type Dirent, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
@@ -140,6 +140,22 @@ function resolveAppDirectory(projectRoot: string): string | undefined {
   return;
 }
 
+function isRegularFileTarget(entryPath: string): boolean {
+  try {
+    return statSync(entryPath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isDirectoryTarget(entryPath: string): boolean {
+  try {
+    return statSync(entryPath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function directoryHasLayout(directory: string, extensions: readonly string[]): boolean {
   const expectedNames = new Set(
     extensions
@@ -154,7 +170,12 @@ function directoryHasLayout(directory: string, extensions: readonly string[]): b
   } catch {
     return false;
   }
-  return entries.some((entry) => entry.isFile() && expectedNames.has(entry.name));
+  return entries.some(
+    (entry) =>
+      expectedNames.has(entry.name) &&
+      (entry.isFile() ||
+        (entry.isSymbolicLink() && isRegularFileTarget(path.join(directory, entry.name)))),
+  );
 }
 
 function skipWhitespaceAndComments(source: string, start: number): number {
@@ -297,6 +318,12 @@ function parseTopLevelObjectProperties(expr: string): Map<string, string> | unde
     }
     if (!key) return;
     index = skipWhitespaceAndComments(trimmed, index);
+    if (trimmed[index] === "," || index >= objectEnd - 1) {
+      // Shorthand property, e.g. `{ tree, page: "...", interopDefault }` in unminified output.
+      properties.set(key, key);
+      if (trimmed[index] === ",") index += 1;
+      continue;
+    }
     if (trimmed[index] !== ":") return;
     index = skipWhitespaceAndComments(trimmed, index + 1);
     const valueStart = index;
@@ -494,9 +521,10 @@ function resolveSourceSegmentDirectory(
   }
   const match = entries.find(
     (entry) =>
-      entry.isDirectory() &&
       !entry.name.startsWith("_") &&
-      entry.name.replace(/%5F/giu, "_") === emittedSegment,
+      entry.name.replace(/%5F/giu, "_") === emittedSegment &&
+      (entry.isDirectory() ||
+        (entry.isSymbolicLink() && isDirectoryTarget(path.join(parentDir, entry.name)))),
   );
   return match ? path.join(parentDir, match.name) : undefined;
 }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
@@ -381,6 +381,34 @@ describe("locale resolution", () => {
         ),
       ).toBe(true);
 
+      // A symlink pointing to a regular layout file counts as a layout (like Next),
+      // while a symlink pointing to a directory does not.
+      writeLayout("symlink-file", "shared/root-layout.tsx");
+      writeLayout("symlink-file", "app/[[...locale]]/layout.tsx");
+      symlinkSync(
+        path.join(fixtureRoot, "symlink-file/shared/root-layout.tsx"),
+        path.join(fixtureRoot, "symlink-file/app/layout.tsx"),
+      );
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "symlink-file"),
+          "[[...locale]]/page_client-reference-manifest.js",
+        ),
+      ).toBe(false);
+
+      mkdirSync(path.join(fixtureRoot, "symlink-dir/shared/dir"), { recursive: true });
+      writeLayout("symlink-dir", "app/[[...locale]]/layout.tsx");
+      symlinkSync(
+        path.join(fixtureRoot, "symlink-dir/shared/dir"),
+        path.join(fixtureRoot, "symlink-dir/app/layout.tsx"),
+      );
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "symlink-dir"),
+          "[[...locale]]/page_client-reference-manifest.js",
+        ),
+      ).toBe(true);
+
       // src/app/(marketing)/[[...locale]]/layout.page.tsx with custom pageExtensions.
       writeLayout("src-custom-ext", "src/app/(marketing)/[[...locale]]/layout.page.tsx");
       expect(
@@ -699,6 +727,32 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
         `module.exports=[1,a=>{let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{}},[]]},{layout:[l,"[project]/app/layout.page.tsx"],"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]"});}];`,
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+      // Unminified Turbopack output (`experimental.turbopackMinify: false`) uses
+      // shorthand properties such as `{ tree, page: "...", interopDefault }`.
+      writeFileSync(
+        templateChunk,
+        `const tree = ["", {
+  "children": ["[[...locale]]", {
+    "children": ["__PAGE__", {}, {
+      metadata: {},
+      "page": [p, "[project]/app/[[...locale]]/page.page.tsx"],
+    }, []],
+  }, {
+    metadata: {},
+    "layout": [l, "[project]/app/[[...locale]]/layout.page.tsx"],
+  }, []],
+}, {
+  "global-error": [g, "builtin"],
+}, []]
+const entrypoint = createAppPageEntrypoint({
+  tree,
+  page: "/[[...locale]]/page",
+  pathname: "/[[...locale]]",
+  interopDefault
+});`,
+      );
+      expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(true);
 
       // If no entrypoint binds `tree` for this page, return undefined so the
       // source-tree fallback runs instead of trusting an unrelated array.
