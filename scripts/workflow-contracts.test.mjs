@@ -1940,23 +1940,39 @@ describe("workflow contracts", () => {
       "<memory>:4: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:5: busybox:1.37 is not pinned to a sha256 digest",
     ]);
-    // Stdin Dockerfiles (`docker build -f - . <<'EOF'`), matrix `cd`, name-only
-    // `--build-arg BASE` from command-local env, and parent-dir symlink escapes.
+    // Stdin Dockerfiles (`docker build -f - .` and positional `docker build -`,
+    // including conditional shell expansions), `docker/bake-action` fail-closed
+    // diagnostics, alternative `cd` targets, shell-local vs exported name-only
+    // `--build-arg`, and parent-dir symlink escapes.
     expect(
       unpinnedWorkflowContainerReferences(
         [
           "jobs:",
-          "  stdin-build:",
+          "  stdin-and-bake:",
           "    runs-on: ubuntu-24.04",
           "    steps:",
           "      - run: |",
           "          docker build -f - . <<'EOF'",
           "          FROM alpine:3.20",
           "          EOF",
+          `          BASE=node:24@${digest}`,
+          '          if [ "$USE_FLOATING" = "1" ]; then',
+          "            BASE=redis:7",
+          "          fi",
+          "          docker build - <<EOF",
+          "          FROM $BASE",
+          "          EOF",
+          "      - uses: docker/bake-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          files: docker-bake.hcl",
           "",
         ].join("\n"),
       ),
-    ).toEqual(["<memory>:7: alpine:3.20 is not pinned to a sha256 digest"]);
+    ).toEqual([
+      "<memory>:7: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:14: redis:7 is not pinned to a sha256 digest",
+      "<memory>:16: docker/bake-action target definitions cannot be verified statically for container image digests",
+    ]);
     const symlinkFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-symlink-"));
     const outsideDir = await mkdtemp(join(tmpdir(), "palamedes-pins-outside-"));
     try {
@@ -1976,19 +1992,28 @@ describe("workflow contracts", () => {
         join(symlinkFixture, "ci", "arg-env.recipe"),
         `ARG BASE=node:24@${digest}\nFROM \${BASE}\n`,
       );
+      await writeFile(
+        join(symlinkFixture, "ci", "arg-local.recipe"),
+        `ARG BASE=node:24@${digest}\nFROM \${BASE}\n`,
+      );
       await writeFile(join(symlinkFixture, "ci", "shared.recipe"), "FROM maybectx\n");
       await writeFile(
         join(symlinkFixture, ".github", "workflows", "cd-and-ctx.yml"),
         [
           "jobs:",
           "  build:",
-          "    strategy:",
-          "      matrix:",
-          "        dir: [ci/nested-a, ci/nested-b]",
           "    runs-on: ubuntu-24.04",
           "    steps:",
-          '      - run: cd "${{ matrix.dir }}" && docker build -f cd.recipe .',
-          `      - run: |`,
+          "      - run: |",
+          "          DIR=ci/nested-a",
+          '          if [ "$ALT" = "1" ]; then',
+          "            DIR=ci/nested-b",
+          "          fi",
+          '          cd "$DIR"',
+          "          docker build -f cd.recipe .",
+          "      - run: |",
+          "          BASE=ubuntu:24.04",
+          "          docker build --build-arg BASE -f ci/arg-local.recipe .",
           `          BASE=node:24@${digest}`,
           "          BASE=redis:7 docker build --build-arg BASE -f ci/arg-env.recipe .",
           `      - run: docker build --build-context maybectx=docker-image://node:24@${digest} -f ci/shared.recipe .`,

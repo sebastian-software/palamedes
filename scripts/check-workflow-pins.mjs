@@ -1410,7 +1410,7 @@ function isStdinContainerBuildCommand(tokens) {
     if (token === "--file=-" || token === "-f-") {
       return true;
     }
-    if (token.startsWith("-")) {
+    if (token.startsWith("-") && token !== "-") {
       if (flagConsumesNextArg(token, DOCKER_BUILD_VALUE_FLAGS)) {
         index += 1;
       }
@@ -2748,8 +2748,21 @@ function expandBuildArgSpec(
   }
   // Name-only `--build-arg BASE` reads `BASE` from Docker's child process
   // environment (`commandVars`), whereas explicit `--build-arg BASE=$value`
-  // expands `$value` in the outer shell (`varMap`).
+  // expands `$value` in the outer shell (`varMap`). When `BASE` is unset in the
+  // child environment (e.g. an unexported shell-local variable), Docker passes
+  // no override and keeps the Dockerfile default.
   const isNameOnly = eqIndex === -1;
+  if (isNameOnly) {
+    const envLookupName = shellMode === "pwsh" ? `env:${name}` : name;
+    const exportedEntries = lookupVarEntries(
+      commandVars,
+      envLookupName,
+      shellMode === "pwsh" || shellMode === "cmd",
+    );
+    if (!exportedEntries || exportedEntries.length === 0) {
+      return null;
+    }
+  }
   const lookupVars = isNameOnly ? commandVars : varMap;
   const rawValue = isNameOnly
     ? shellMode === "pwsh"
@@ -2808,20 +2821,38 @@ function inspectShellText(
   if (buildFileContext?.workingDir) {
     const rowsForCwd = matrixRows.length > 0 ? matrixRows : [null];
     for (const row of rowsForCwd) {
-      initialRowCwds.set(row, buildFileContext.workingDir);
+      initialRowCwds.set(row, [buildFileContext.workingDir]);
     }
   }
+  const initialExportedVars = new Set(
+    shellMode === "pwsh" ? [...stepEnv.keys()].map((key) => `env:${key}`) : stepEnv.keys(),
+  );
   const scopeStack = [
-    { vars: cloneVarMap(shellVars), branches: [], rowCwds: initialRowCwds, pendingStdinBuilds: [] },
+    {
+      vars: cloneVarMap(shellVars),
+      exportedVars: initialExportedVars,
+      branches: [],
+      rowCwds: initialRowCwds,
+      pendingStdinBuilds: [],
+    },
   ];
+
+  const cloneRowCwds = (rowCwds) => {
+    const copy = new Map();
+    for (const [key, dirs] of rowCwds) {
+      copy.set(key, [...dirs]);
+    }
+    return copy;
+  };
 
   for (const event of lexShellScript(scriptText, startLine, shellMode)) {
     if (event.kind === "enter-subshell") {
       const parent = scopeStack.at(-1);
       scopeStack.push({
         vars: cloneVarMap(parent.vars),
+        exportedVars: new Set(parent.exportedVars),
         branches: [],
-        rowCwds: new Map(parent.rowCwds),
+        rowCwds: cloneRowCwds(parent.rowCwds),
         pendingStdinBuilds: [],
       });
       continue;
@@ -2854,36 +2885,38 @@ function inspectShellText(
           : [{ buildArgs: null, namedContexts: null, rowList: matrixRows }];
 
       for (const inv of invocationList) {
-        let resolvedBody = rawBody;
-        if (!event.quoted) {
-          const envExpanded = resolveImageTokenCandidates(
-            rawBody,
-            stepEnv,
-            frame.vars,
-            event.startLine,
-            shellMode,
-          );
-          resolvedBody = envExpanded.candidates[0]?.text ?? rawBody;
-        } else {
-          const actionsEnvExpanded = resolveEnvExpressionCandidates(
-            rawBody,
-            stepEnv,
-            event.startLine,
-          );
-          resolvedBody = actionsEnvExpanded.candidates[0]?.text ?? rawBody;
+        const expandedBodies = event.quoted
+          ? resolveEnvExpressionCandidates(rawBody, stepEnv, event.startLine)
+          : resolveImageTokenCandidates(rawBody, stepEnv, frame.vars, event.startLine, shellMode);
+        if (expandedBodies.truncated) {
+          const limitMessage = `${filePath}:${event.startLine}: inline containerfile exceeds expansion limit and cannot be verified exhaustively`;
+          if (!seenStdinProblems.has(limitMessage)) {
+            seenStdinProblems.add(limitMessage);
+            problems.push(limitMessage);
+          }
         }
-        const matrixExpanded = expandMatrixReferences(resolvedBody, inv.rowList, event.startLine);
-        for (const bodyCandidate of matrixExpanded) {
-          for (const message of unpinnedContainerfileReferences(bodyCandidate.text, filePath, {
-            argOverrides: inv.buildArgs,
-            namedContexts: inv.namedContexts,
-            sourceFile: filePath,
-            sourceLine: stdinBuild?.lineNumber ?? event.startLine,
-            startLineOffset: event.startLine - 1,
-          })) {
-            if (!seenStdinProblems.has(message)) {
-              seenStdinProblems.add(message);
-              problems.push(message);
+        const seenBodies = new Set();
+        for (const bodyVarCandidate of expandedBodies.candidates) {
+          for (const bodyCandidate of expandMatrixReferences(
+            bodyVarCandidate.text,
+            inv.rowList,
+            event.startLine,
+          )) {
+            if (seenBodies.has(bodyCandidate.text)) {
+              continue;
+            }
+            seenBodies.add(bodyCandidate.text);
+            for (const message of unpinnedContainerfileReferences(bodyCandidate.text, filePath, {
+              argOverrides: inv.buildArgs,
+              namedContexts: inv.namedContexts,
+              sourceFile: filePath,
+              sourceLine: stdinBuild?.lineNumber ?? event.startLine,
+              startLineOffset: event.startLine - 1,
+            })) {
+              if (!seenStdinProblems.has(message)) {
+                seenStdinProblems.add(message);
+                problems.push(message);
+              }
             }
           }
         }
@@ -2974,6 +3007,9 @@ function inspectShellText(
           caseInsensitive: true,
           merge: conditional,
         });
+        if (pwshKey.startsWith("env:")) {
+          frame.exportedVars.add(pwshKey);
+        }
         continue;
       }
     }
@@ -2998,18 +3034,55 @@ function inspectShellText(
             caseInsensitive: true,
             merge: conditional,
           });
+          frame.exportedVars.add(match.groups.name);
           continue;
         }
       }
     }
 
-    // Pure variable assignment (`image=rust:1.96-alpine` or `export IMAGE=node:24`).
-    const assignStart = tokens[0] === "export" ? 1 : 0;
-    if (
-      assignStart < tokens.length &&
-      tokens.slice(assignStart).every((token) => ENV_PREFIX_ASSIGNMENT_PATTERN.test(token))
-    ) {
-      for (const token of tokens.slice(assignStart)) {
+    // `export VAR` / `export VAR=value` marks variables as exported to child processes.
+    if (tokens[0] === "export" && tokens.length > 1) {
+      const exportOperands = tokens.slice(1).filter((token) => !token.startsWith("-"));
+      if (
+        exportOperands.length > 0 &&
+        exportOperands.every(
+          (token) =>
+            ENV_PREFIX_ASSIGNMENT_PATTERN.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
+        )
+      ) {
+        for (const token of exportOperands) {
+          const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+          if (match) {
+            const resolved = candidatesToVarEntries(
+              resolveImageTokenCandidates(
+                match.groups.value,
+                stepEnv,
+                frame.vars,
+                lineNumber,
+                shellMode,
+              ),
+              lineNumber,
+            );
+            frame.exportedVars.add(match.groups.name);
+            if (conditional) {
+              const existing = frame.vars.has(match.groups.name)
+                ? frame.vars.get(match.groups.name)
+                : [{ value: "", line: 0, unset: true }];
+              frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
+            } else {
+              frame.vars.set(match.groups.name, resolved);
+            }
+          } else {
+            frame.exportedVars.add(token);
+          }
+        }
+        continue;
+      }
+    }
+
+    // Pure shell-local variable assignment (`image=rust:1.96-alpine`).
+    if (tokens.every((token) => ENV_PREFIX_ASSIGNMENT_PATTERN.test(token))) {
+      for (const token of tokens) {
         const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
         if (match) {
           const resolved = candidatesToVarEntries(
@@ -3036,10 +3109,16 @@ function inspectShellText(
     }
 
     // Keep argument-expansion scope (`frame.vars`) separate from the child
-    // process environment (`commandVars`): prefix assignments like
+    // process environment (`exportedCommandVars`): prefix assignments like
     // `IMAGE=new docker pull "$IMAGE"` only change the child environment, while
-    // the shell expands `"$IMAGE"` from `frame.vars`.
+    // shell-local unexported assignments stay out of `exportedCommandVars`.
     const commandVars = cloneVarMap(frame.vars);
+    const exportedCommandVars = new Map();
+    for (const [key, entries] of frame.vars) {
+      if (frame.exportedVars.has(key)) {
+        exportedCommandVars.set(key, [...entries]);
+      }
+    }
     let cursor = 0;
     while (cursor < tokens.length) {
       const token = tokens[cursor];
@@ -3060,6 +3139,7 @@ function inspectShellText(
           lineNumber,
         );
         commandVars.set(prefixAssign.groups.name, resolved);
+        exportedCommandVars.set(prefixAssign.groups.name, resolved);
         cursor += 1;
         continue;
       }
@@ -3128,26 +3208,33 @@ function inspectShellText(
           shellMode,
         );
         const rowsForCd = matrixRows.length > 0 ? matrixRows : [null];
+        const preserveExisting = conditional || frame.branches.length > 0;
         for (const row of rowsForCd) {
           const rowList = row ? [row] : [];
-          const baseDir = frame.rowCwds.get(row) ?? buildFileContext.workingDir;
-          for (const varCandidate of expandedDir.candidates) {
-            let updated = false;
-            for (const candidate of expandMatrixReferences(
-              varCandidate.text,
-              rowList,
-              varCandidate.line,
-            )) {
-              const resolved = resolveContainedPath(candidate.text, baseDir, buildFileContext.root);
-              if (resolved) {
-                frame.rowCwds.set(row, resolved);
-                updated = true;
-                break;
+          const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
+          const nextDirs = preserveExisting ? [...currentDirs] : [];
+          const seenDirs = new Set(nextDirs);
+          for (const baseDir of currentDirs) {
+            for (const varCandidate of expandedDir.candidates) {
+              for (const candidate of expandMatrixReferences(
+                varCandidate.text,
+                rowList,
+                varCandidate.line,
+              )) {
+                const resolved = resolveContainedPath(
+                  candidate.text,
+                  baseDir,
+                  buildFileContext.root,
+                );
+                if (resolved && !seenDirs.has(resolved)) {
+                  seenDirs.add(resolved);
+                  nextDirs.push(resolved);
+                }
               }
             }
-            if (updated) {
-              break;
-            }
+          }
+          if (nextDirs.length > 0) {
+            frame.rowCwds.set(row, nextDirs);
           }
         }
       }
@@ -3157,7 +3244,8 @@ function inspectShellText(
     if (SHELL_INTERPRETERS.has(normalizedCli)) {
       const dashCScript = extractShellDashCScript(tokens, cursor);
       if (dashCScript) {
-        const firstCwd = frame.rowCwds.values().next().value ?? buildFileContext?.workingDir;
+        const firstDirs = frame.rowCwds.values().next().value;
+        const firstCwd = firstDirs?.[0] ?? buildFileContext?.workingDir;
         inspectShellText(
           dashCScript,
           lineNumber,
@@ -3271,7 +3359,7 @@ function inspectShellText(
           rawBuildArgs.push(token.slice("--build-arg=".length));
           continue;
         }
-        if (token.startsWith("-")) {
+        if (token.startsWith("-") && token !== "-") {
           if (flagConsumesNextArg(token, DOCKER_BUILD_VALUE_FLAGS)) {
             index += 1;
           }
@@ -3317,7 +3405,7 @@ function inspectShellText(
             rawBuildArg,
             stepEnv,
             frame.vars,
-            commandVars,
+            exportedCommandVars,
             rowList,
             lineNumber,
             shellMode,
@@ -3335,77 +3423,91 @@ function inspectShellText(
           continue;
         }
 
-        const activeWorkingDir = frame.rowCwds.get(row) ?? buildFileContext?.workingDir ?? null;
-        if (!buildFileContext || !activeWorkingDir) {
+        const activeWorkingDirs =
+          frame.rowCwds.get(row) ??
+          (buildFileContext?.workingDir ? [buildFileContext.workingDir] : []);
+        if (!buildFileContext || activeWorkingDirs.length === 0) {
           continue;
         }
 
         const resolvedBuildFiles = [];
-        for (const rawFile of rawFiles) {
-          const expanded = resolveImageTokenCandidates(
-            rawFile,
-            stepEnv,
-            frame.vars,
-            lineNumber,
-            shellMode,
-          );
-          for (const varCandidate of expanded.candidates) {
-            for (const candidate of expandMatrixReferences(
-              varCandidate.text,
-              rowList,
-              varCandidate.line,
-            )) {
-              const recorded = recordExplicitBuildFile(
-                candidate.text,
-                activeWorkingDir,
-                buildFileContext.root,
-                buildFileContext.explicitBuildFiles,
-              );
-              if (recorded) {
-                resolvedBuildFiles.push(recorded);
-              }
-            }
+        const seenResolvedFiles = new Set();
+        const pushResolvedFile = (resolved) => {
+          if (resolved && !seenResolvedFiles.has(resolved)) {
+            seenResolvedFiles.add(resolved);
+            resolvedBuildFiles.push(resolved);
           }
-        }
+        };
 
-        if (resolvedBuildFiles.length === 0) {
-          const contextDirs = [];
-          const seenContextDirs = new Set();
-          if (contextArg) {
-            const expandedCtx = resolveImageTokenCandidates(
-              contextArg,
+        for (const activeWorkingDir of activeWorkingDirs) {
+          const dirResolvedFiles = [];
+          for (const rawFile of rawFiles) {
+            const expanded = resolveImageTokenCandidates(
+              rawFile,
               stepEnv,
               frame.vars,
               lineNumber,
               shellMode,
             );
-            for (const varCandidate of expandedCtx.candidates) {
+            for (const varCandidate of expanded.candidates) {
               for (const candidate of expandMatrixReferences(
                 varCandidate.text,
                 rowList,
                 varCandidate.line,
               )) {
-                const resolvedCtx = resolveContainedPath(
+                const recorded = recordExplicitBuildFile(
                   candidate.text,
                   activeWorkingDir,
                   buildFileContext.root,
+                  buildFileContext.explicitBuildFiles,
                 );
-                if (resolvedCtx && !seenContextDirs.has(resolvedCtx)) {
-                  seenContextDirs.add(resolvedCtx);
-                  contextDirs.push(resolvedCtx);
+                if (recorded) {
+                  dirResolvedFiles.push(recorded);
+                  pushResolvedFile(recorded);
                 }
               }
             }
           }
-          if (contextDirs.length === 0) {
-            contextDirs.push(activeWorkingDir);
-          }
-          for (const baseContext of contextDirs) {
-            for (const defaultName of ["Dockerfile", "Containerfile"]) {
-              const candidateFile = path.join(baseContext, defaultName);
-              if (existsSync(candidateFile)) {
-                resolvedBuildFiles.push(candidateFile);
-                break;
+
+          if (dirResolvedFiles.length === 0) {
+            const contextDirs = [];
+            const seenContextDirs = new Set();
+            if (contextArg) {
+              const expandedCtx = resolveImageTokenCandidates(
+                contextArg,
+                stepEnv,
+                frame.vars,
+                lineNumber,
+                shellMode,
+              );
+              for (const varCandidate of expandedCtx.candidates) {
+                for (const candidate of expandMatrixReferences(
+                  varCandidate.text,
+                  rowList,
+                  varCandidate.line,
+                )) {
+                  const resolvedCtx = resolveContainedPath(
+                    candidate.text,
+                    activeWorkingDir,
+                    buildFileContext.root,
+                  );
+                  if (resolvedCtx && !seenContextDirs.has(resolvedCtx)) {
+                    seenContextDirs.add(resolvedCtx);
+                    contextDirs.push(resolvedCtx);
+                  }
+                }
+              }
+            }
+            if (contextDirs.length === 0) {
+              contextDirs.push(activeWorkingDir);
+            }
+            for (const baseContext of contextDirs) {
+              for (const defaultName of ["Dockerfile", "Containerfile"]) {
+                const candidateFile = path.join(baseContext, defaultName);
+                if (existsSync(candidateFile)) {
+                  pushResolvedFile(candidateFile);
+                  break;
+                }
               }
             }
           }
@@ -3796,7 +3898,14 @@ function checkStepsList(
     const withNode = getMapField(stepNode, "with");
     if (
       usesNode?.kind === "scalar" &&
-      /^docker\/(?:build-push-action|bake-action)@/iu.test(String(usesNode.value).trim()) &&
+      /^docker\/bake-action@/iu.test(String(usesNode.value).trim())
+    ) {
+      problems.push(
+        `${filePath}:${usesNode.line}: docker/bake-action target definitions cannot be verified statically for container image digests`,
+      );
+    } else if (
+      usesNode?.kind === "scalar" &&
+      /^docker\/build-push-action@/iu.test(String(usesNode.value).trim()) &&
       withNode?.kind === "map"
     ) {
       const fileNode = getMapField(withNode, "file");
