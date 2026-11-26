@@ -18,9 +18,9 @@ const PWSH_ENV_VAR_PATTERN =
   /\$(?:\{env:(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|env:(?<bare>[A-Za-z_][A-Za-z0-9_]*))/giu;
 const CMD_VAR_PATTERN = /%(?<name>[A-Za-z_][A-Za-z0-9_]*)%/gu;
 const PWSH_ASSIGN_LHS_PATTERN =
-  /^\$(?:(?:env:|script:|global:|local:)?(?<bare>[A-Za-z_][A-Za-z0-9_]*)|\{(?:env:|script:|global:|local:)?(?<braced>[A-Za-z_][A-Za-z0-9_]*)\})$/iu;
+  /^\$(?:(?<envPrefix>env:)?(?:script:|global:|local:)?(?<bare>[A-Za-z_][A-Za-z0-9_]*)|\{(?<envPrefixBraced>env:)?(?:script:|global:|local:)?(?<braced>[A-Za-z_][A-Za-z0-9_]*)\})$/iu;
 const PWSH_INLINE_ASSIGN_PATTERN =
-  /^\$(?:(?:env:|script:|global:|local:)?(?<bare>[A-Za-z_][A-Za-z0-9_]*)|\{(?:env:|script:|global:|local:)?(?<braced>[A-Za-z_][A-Za-z0-9_]*)\})=(?<value>.*)$/iu;
+  /^\$(?:(?<envPrefix>env:)?(?:script:|global:|local:)?(?<bare>[A-Za-z_][A-Za-z0-9_]*)|\{(?<envPrefixBraced>env:)?(?:script:|global:|local:)?(?<braced>[A-Za-z_][A-Za-z0-9_]*)\})=(?<value>.*)$/iu;
 const ENV_EXPRESSION_PATTERN =
   /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/gu;
 const MATRIX_EXPRESSION_PATTERN =
@@ -671,9 +671,191 @@ function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
   );
 }
 
+function findNextShellParamExpansion(text) {
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== "$") {
+      continue;
+    }
+    if (text[index + 1] === "{" && text[index + 2] !== "{") {
+      let depth = 1;
+      let cursor = index + 2;
+      while (cursor < text.length && depth > 0) {
+        if (text[cursor] === "{") {
+          depth += 1;
+        } else if (text[cursor] === "}") {
+          depth -= 1;
+        }
+        cursor += 1;
+      }
+      if (depth === 0) {
+        const inner = text.slice(index + 2, cursor - 1);
+        const exprMatch =
+          /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:(?<op>:-|:=|:\+|-|=|\+)(?<word>.*))?$/su.exec(inner);
+        if (exprMatch) {
+          return {
+            start: index,
+            end: cursor,
+            name: exprMatch.groups.name,
+            op: exprMatch.groups.op ?? null,
+            word: exprMatch.groups.word ?? "",
+          };
+        }
+      }
+      continue;
+    }
+    const bareMatch = /^(?<bare>[A-Za-z_][A-Za-z0-9_]*)/u.exec(text.slice(index + 1));
+    if (bareMatch) {
+      const name = bareMatch.groups.bare;
+      return {
+        start: index,
+        end: index + 1 + name.length,
+        name,
+        op: null,
+        word: "",
+      };
+    }
+  }
+  return null;
+}
+
+function expandShellParamCandidates(candidates, shellVars, caseInsensitive, initialTruncated) {
+  let results = candidates;
+  let truncated = initialTruncated;
+  let guard = 0;
+
+  while (guard < 16) {
+    guard += 1;
+    let expandedAny = false;
+    const nextResults = [];
+    const seen = new Set();
+
+    const pushCandidate = (text, line) => {
+      const key = `${line}:${text}`;
+      if (seen.has(key)) {
+        return;
+      }
+      if (nextResults.length >= MAX_TOKEN_EXPANSIONS) {
+        truncated = true;
+        return;
+      }
+      seen.add(key);
+      nextResults.push({ text, line });
+    };
+
+    for (const candidate of results) {
+      const expr = findNextShellParamExpansion(candidate.text);
+      if (!expr) {
+        pushCandidate(candidate.text, candidate.line);
+        continue;
+      }
+
+      const entries = lookupVarEntries(shellVars, expr.name, caseInsensitive);
+      const isWholeToken = expr.start === 0 && expr.end === candidate.text.length;
+      const prefix = candidate.text.slice(0, expr.start);
+      const suffix = candidate.text.slice(expr.end);
+
+      if (!expr.op) {
+        if (!entries || entries.length === 0) {
+          pushCandidate(candidate.text, candidate.line);
+          continue;
+        }
+        expandedAny = true;
+        for (const entry of entries) {
+          if (entry.truncated) {
+            truncated = true;
+            continue;
+          }
+          pushCandidate(
+            `${prefix}${entry.value}${suffix}`,
+            isWholeToken ? entry.line : candidate.line,
+          );
+        }
+        continue;
+      }
+
+      // Parameter expansion with default/alternate operator (`:-`, `-`, `:=`, `=`, `:+`, `+`).
+      expandedAny = true;
+      const isDefaultOp =
+        expr.op === ":-" || expr.op === "-" || expr.op === ":=" || expr.op === "=";
+      const checksEmpty = expr.op.startsWith(":");
+
+      if (isDefaultOp) {
+        if (!entries || entries.length === 0) {
+          pushCandidate(`${prefix}${expr.word}${suffix}`, candidate.line);
+          continue;
+        }
+        let needsFallback = false;
+        for (const entry of entries) {
+          if (entry.truncated) {
+            truncated = true;
+            continue;
+          }
+          if (isDynamicReference(entry.value)) {
+            needsFallback = true;
+            pushCandidate(
+              `${prefix}${entry.value}${suffix}`,
+              isWholeToken ? entry.line : candidate.line,
+            );
+          } else if (checksEmpty && entry.value.length === 0) {
+            needsFallback = true;
+          } else {
+            pushCandidate(
+              `${prefix}${entry.value}${suffix}`,
+              isWholeToken ? entry.line : candidate.line,
+            );
+          }
+        }
+        if (needsFallback) {
+          pushCandidate(`${prefix}${expr.word}${suffix}`, candidate.line);
+        }
+        continue;
+      }
+
+      // Alternate value (`:+` / `+`): use `word` when set (and non-empty for `:+`).
+      if (!entries || entries.length === 0) {
+        pushCandidate(`${prefix}${suffix}`, candidate.line);
+        continue;
+      }
+      let sawSet = false;
+      let sawUnsetOrEmpty = false;
+      for (const entry of entries) {
+        if (entry.truncated) {
+          truncated = true;
+          continue;
+        }
+        if (isDynamicReference(entry.value)) {
+          sawSet = true;
+          sawUnsetOrEmpty = true;
+        } else if (checksEmpty && entry.value.length === 0) {
+          sawUnsetOrEmpty = true;
+        } else {
+          sawSet = true;
+        }
+      }
+      if (sawSet) {
+        pushCandidate(`${prefix}${expr.word}${suffix}`, candidate.line);
+      }
+      if (sawUnsetOrEmpty) {
+        pushCandidate(`${prefix}${suffix}`, candidate.line);
+      }
+    }
+
+    results = nextResults;
+    if (!expandedAny) {
+      break;
+    }
+    if (guard === 16) {
+      truncated = true;
+    }
+  }
+
+  return { candidates: results, truncated };
+}
+
 // GitHub Actions evaluates `${{ env.* }}` against the immutable step `env`
-// before the shell runs, whereas `$VAR`/`${VAR}`, PowerShell `$env:VAR`/`$var`,
-// and cmd `%VAR%` reflect reachable shell assignments.
+// before the shell runs, whereas `$VAR`/`${VAR}` (including `${VAR:-default}`),
+// PowerShell `$env:VAR` vs local `$var`, and cmd `%VAR%` reflect reachable
+// shell assignments in their respective namespaces.
 function resolveImageTokenCandidates(token, stepEnv, shellVars, fallbackLine, shellMode = "posix") {
   let current = resolveEnvExpressionCandidates(token, stepEnv, fallbackLine);
   if (shellMode === "cmd") {
@@ -690,21 +872,21 @@ function resolveImageTokenCandidates(token, stepEnv, shellVars, fallbackLine, sh
       new RegExp(PWSH_ENV_VAR_PATTERN.source, "iu"),
       (match) => {
         const name = match.groups.braced ?? match.groups.bare;
+        return lookupVarEntries(shellVars, `env:${name}`, true);
+      },
+      current.truncated,
+    );
+    return expandPatternCandidates(
+      current.candidates,
+      new RegExp(EMBEDDED_VAR_PATTERN.source, "u"),
+      (match) => {
+        const name = match.groups.braced ?? match.groups.bare;
         return lookupVarEntries(shellVars, name, true);
       },
       current.truncated,
     );
   }
-  const caseInsensitive = shellMode === "pwsh";
-  return expandPatternCandidates(
-    current.candidates,
-    new RegExp(EMBEDDED_VAR_PATTERN.source, "u"),
-    (match) => {
-      const name = match.groups.braced ?? match.groups.bare;
-      return lookupVarEntries(shellVars, name, caseInsensitive);
-    },
-    current.truncated,
-  );
+  return expandShellParamCandidates(current.candidates, shellVars, false, current.truncated);
 }
 
 function hasUnquotedComment(line) {
@@ -2164,6 +2346,23 @@ function peelControlKeywords(tokens, frame, lineNumber, stepEnv, shellMode) {
   return tokens.slice(start);
 }
 
+function recordExplicitBuildFile(rawPath, baseDir, root, explicitBuildFiles) {
+  if (!explicitBuildFiles || !root || !rawPath) {
+    return;
+  }
+  const trimmed = rawPath.trim();
+  if (!trimmed || trimmed === "-" || isDynamicReference(trimmed)) {
+    return;
+  }
+  const resolvedRoot = path.resolve(root);
+  const resolvedPath = path.resolve(baseDir, trimmed);
+  const relative = path.relative(resolvedRoot, resolvedPath);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return;
+  }
+  explicitBuildFiles.add(resolvedPath);
+}
+
 function inspectShellText(
   scriptText,
   startLine,
@@ -2176,6 +2375,7 @@ function inspectShellText(
   emittedGithubEnv = null,
   shellMode = "posix",
   depth = 0,
+  buildFileContext = null,
 ) {
   if (depth > MAX_SHELL_NESTING_DEPTH) {
     return;
@@ -2243,6 +2443,7 @@ function inspectShellText(
         emittedGithubEnv,
         shellMode,
         depth + 1,
+        buildFileContext,
       );
     }
 
@@ -2256,28 +2457,35 @@ function inspectShellText(
     }
 
     // PowerShell variable assignment (`$image = "node:24"`, `$env:IMAGE = ...`).
+    // Keep `$env:NAME` in a separate namespace from local `$name`.
     if (shellMode === "pwsh") {
-      let pwshName = null;
+      let pwshKey = null;
       let pwshRawValue = null;
       if (tokens.length >= 3 && tokens[1] === "=") {
         const lhsMatch = PWSH_ASSIGN_LHS_PATTERN.exec(tokens[0]);
         if (lhsMatch) {
-          pwshName = lhsMatch.groups.braced ?? lhsMatch.groups.bare;
+          const baseName = lhsMatch.groups.braced ?? lhsMatch.groups.bare;
+          const isEnvVar = Boolean(lhsMatch.groups.envPrefix ?? lhsMatch.groups.envPrefixBraced);
+          pwshKey = isEnvVar ? `env:${baseName}` : baseName;
           pwshRawValue = tokens.slice(2).join(" ");
         }
       } else if (tokens.length === 1) {
         const inlineMatch = PWSH_INLINE_ASSIGN_PATTERN.exec(tokens[0]);
         if (inlineMatch) {
-          pwshName = inlineMatch.groups.braced ?? inlineMatch.groups.bare;
+          const baseName = inlineMatch.groups.braced ?? inlineMatch.groups.bare;
+          const isEnvVar = Boolean(
+            inlineMatch.groups.envPrefix ?? inlineMatch.groups.envPrefixBraced,
+          );
+          pwshKey = isEnvVar ? `env:${baseName}` : baseName;
           pwshRawValue = inlineMatch.groups.value;
         }
       }
-      if (pwshName !== null) {
+      if (pwshKey !== null) {
         const resolved = candidatesToVarEntries(
           resolveImageTokenCandidates(pwshRawValue, stepEnv, frame.vars, lineNumber, shellMode),
           lineNumber,
         );
-        setVarEntries(frame.vars, pwshName, resolved, {
+        setVarEntries(frame.vars, pwshKey, resolved, {
           caseInsensitive: true,
           merge: conditional,
         });
@@ -2414,12 +2622,13 @@ function inspectShellText(
           emittedGithubEnv,
           "posix",
           depth + 1,
+          buildFileContext,
         );
       }
       continue;
     }
 
-    if (cli !== "docker" && cli !== "podman") {
+    if (cli !== "docker" && cli !== "podman" && cli !== "buildah") {
       continue;
     }
 
@@ -2439,6 +2648,60 @@ function inspectShellText(
     }
 
     let subcommand = tokens[argIndex];
+    if (
+      (cli === "buildah" && (subcommand === "bud" || subcommand === "build")) ||
+      (cli !== "buildah" &&
+        (subcommand === "build" ||
+          ((subcommand === "buildx" || subcommand === "image") &&
+            tokens[argIndex + 1] === "build")))
+    ) {
+      const buildArgStart =
+        subcommand === "buildx" || subcommand === "image" ? argIndex + 2 : argIndex + 1;
+      if (buildFileContext) {
+        for (let index = buildArgStart; index < tokens.length; index += 1) {
+          const token = tokens[index];
+          let rawFile = null;
+          if (token === "-f" || token === "--file") {
+            rawFile = tokens[index + 1] ?? null;
+            index += 1;
+          } else if (token.startsWith("--file=")) {
+            rawFile = token.slice("--file=".length);
+          } else if (token.startsWith("-f") && token.length > 2) {
+            rawFile = token.slice(2);
+          }
+          if (!rawFile) {
+            continue;
+          }
+          const expanded = resolveImageTokenCandidates(
+            rawFile,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          for (const varCandidate of expanded.candidates) {
+            for (const candidate of expandMatrixReferences(
+              varCandidate.text,
+              matrixRows,
+              varCandidate.line,
+            )) {
+              recordExplicitBuildFile(
+                candidate.text,
+                buildFileContext.root,
+                buildFileContext.root,
+                buildFileContext.explicitBuildFiles,
+              );
+            }
+          }
+        }
+      }
+      continue;
+    }
+
+    if (cli === "buildah") {
+      continue;
+    }
+
     if (subcommand === "image" && tokens[argIndex + 1] === "pull") {
       subcommand = "pull";
       argIndex += 2;
@@ -2572,6 +2835,7 @@ function inspectShellRunScript(
   problems,
   emittedGithubEnv = null,
   shellMode = "posix",
+  buildFileContext = null,
 ) {
   const scriptText =
     runNode.folded && Array.isArray(runNode.lines)
@@ -2581,17 +2845,27 @@ function inspectShellRunScript(
         : String(runNode.value);
   const sourceLines = runNode.folded && Array.isArray(runNode.lines) ? runNode.lines : null;
 
+  let initialShellVars = stepEnv;
+  if (shellMode === "pwsh") {
+    initialShellVars = new Map();
+    for (const [key, entries] of stepEnv) {
+      initialShellVars.set(`env:${key}`, [...entries]);
+    }
+  }
+
   inspectShellText(
     scriptText,
     runNode.line,
     sourceLines,
     stepEnv,
-    stepEnv,
+    initialShellVars,
     matrixRows,
     filePath,
     problems,
     emittedGithubEnv,
     shellMode,
+    0,
+    buildFileContext,
   );
 }
 
@@ -2651,6 +2925,63 @@ function checkImageField(
   }
 }
 
+function resolveShellModesForStep(
+  stepShellNode,
+  explicitDefaultShell,
+  stepEnv,
+  applicableContexts,
+  matrixRows,
+) {
+  const expandShellTemplate = (template, fallbackLine, row) => {
+    const rowList = row ? [row] : [];
+    const modes = [];
+    for (const envCandidate of resolveEnvExpressionCandidates(template, stepEnv, fallbackLine)
+      .candidates) {
+      for (const candidate of expandMatrixReferences(
+        envCandidate.text,
+        rowList,
+        envCandidate.line,
+      )) {
+        modes.push(normalizeShellMode(candidate.text));
+      }
+    }
+    return modes.length > 0 ? modes : ["posix"];
+  };
+
+  const modeToRows = new Map();
+  const addRowForMode = (mode, row) => {
+    if (!modeToRows.has(mode)) {
+      modeToRows.set(mode, []);
+    }
+    if (row !== null) {
+      modeToRows.get(mode).push(row);
+    }
+  };
+
+  const contexts =
+    applicableContexts.length > 0
+      ? applicableContexts
+      : matrixRows.length > 0
+        ? matrixRows.map((row) => ({ row, runnerOs: null, defaultShell: "posix" }))
+        : [{ row: null, runnerOs: null, defaultShell: "posix" }];
+
+  for (const ctx of contexts) {
+    let modes;
+    if (stepShellNode?.kind === "scalar") {
+      modes = expandShellTemplate(String(stepShellNode.value).trim(), stepShellNode.line, ctx.row);
+    } else if (explicitDefaultShell) {
+      modes = expandShellTemplate(explicitDefaultShell, 1, ctx.row);
+    } else {
+      modes = [ctx.defaultShell];
+    }
+    for (const mode of modes) {
+      addRowForMode(mode, ctx.row);
+    }
+  }
+
+  return modeToRows;
+}
+
 function checkStepsList(
   stepsNode,
   baseEnv,
@@ -2659,6 +2990,7 @@ function checkStepsList(
   problems,
   explicitDefaultShell = null,
   runnerContexts = [],
+  buildFileContext = null,
 ) {
   if (stepsNode?.kind !== "seq") {
     return;
@@ -2678,34 +3010,80 @@ function checkStepsList(
         ? applicableContexts.map((ctx) => ctx.row)
         : matrixRows;
 
-    let shellModes;
-    if (stepShellNode?.kind === "scalar") {
-      shellModes = [normalizeShellMode(stepShellNode.value)];
-    } else if (explicitDefaultShell) {
-      shellModes = [normalizeShellMode(explicitDefaultShell)];
-    } else if (applicableContexts.length > 0) {
-      const modeSet = new Set(applicableContexts.map((ctx) => ctx.defaultShell));
-      // When every applicable runner uses Windows, default to PowerShell; when
-      // both Linux and Windows runners can execute the step with no explicit
-      // shell, stay on POSIX unless narrowed by `if:`.
-      shellModes = modeSet.size === 1 ? [...modeSet] : ["posix"];
-    } else {
-      shellModes = ["posix"];
+    if (buildFileContext) {
+      const usesNode = getMapField(stepNode, "uses");
+      const withNode = getMapField(stepNode, "with");
+      const fileNode = getMapField(withNode, "file");
+      if (
+        usesNode?.kind === "scalar" &&
+        /^docker\/(?:build-push-action|bake-action)@/iu.test(String(usesNode.value).trim()) &&
+        fileNode?.kind === "scalar"
+      ) {
+        for (const envCandidate of resolveEnvExpressionCandidates(
+          String(fileNode.value).trim(),
+          stepEnv,
+          fileNode.line,
+        ).candidates) {
+          for (const candidate of expandMatrixReferences(
+            envCandidate.text,
+            applicableMatrixRows,
+            envCandidate.line,
+          )) {
+            recordExplicitBuildFile(
+              candidate.text,
+              buildFileContext.root,
+              buildFileContext.root,
+              buildFileContext.explicitBuildFiles,
+            );
+          }
+        }
+      }
     }
+
+    const modeToRows = resolveShellModesForStep(
+      stepShellNode,
+      explicitDefaultShell,
+      stepEnv,
+      applicableContexts,
+      applicableMatrixRows,
+    );
 
     const emittedGithubEnv = new Map();
     const runNode = getMapField(stepNode, "run");
     if (runNode?.kind === "scalar") {
-      for (const shellMode of shellModes) {
+      if (modeToRows.size === 1) {
+        const [[shellMode, rowsForMode]] = modeToRows;
         inspectShellRunScript(
           runNode,
           stepEnv,
-          applicableMatrixRows,
+          rowsForMode,
           filePath,
           problems,
           emittedGithubEnv,
           shellMode,
+          buildFileContext,
         );
+      } else {
+        const seenAcrossModes = new Set();
+        for (const [shellMode, rowsForMode] of modeToRows) {
+          const modeProblems = [];
+          inspectShellRunScript(
+            runNode,
+            stepEnv,
+            rowsForMode,
+            filePath,
+            modeProblems,
+            emittedGithubEnv,
+            shellMode,
+            buildFileContext,
+          );
+          for (const message of modeProblems) {
+            if (!seenAcrossModes.has(message)) {
+              seenAcrossModes.add(message);
+              problems.push(message);
+            }
+          }
+        }
       }
     }
     for (const [name, write] of emittedGithubEnv) {
@@ -2894,7 +3272,11 @@ export function unpinnedActionReferences(source, filePath = "<memory>") {
   return problems;
 }
 
-export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>") {
+export function unpinnedWorkflowContainerReferences(
+  source,
+  filePath = "<memory>",
+  { root = null, explicitBuildFiles = null } = {},
+) {
   const problems = [];
   const { doc, error } = parseWorkflowYaml(source);
   if (error) {
@@ -2904,8 +3286,10 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
     return problems;
   }
 
+  const buildFileContext = root && explicitBuildFiles ? { root, explicitBuildFiles } : null;
+
   if (doc.kind === "seq") {
-    checkStepsList(doc, new Map(), [], filePath, problems);
+    checkStepsList(doc, new Map(), [], filePath, problems, null, [], buildFileContext);
     return problems;
   }
 
@@ -2946,13 +3330,23 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
     filePath,
     problems,
     workflowDefaultShell,
+    [],
+    buildFileContext,
   );
 
   const runsNode = getMapField(doc, "runs");
   if (runsNode?.kind === "map") {
-    checkImageField(getMapField(runsNode, "image"), workflowEnv, [], filePath, problems, {
+    const runsImageNode = getMapField(runsNode, "image");
+    checkImageField(runsImageNode, workflowEnv, [], filePath, problems, {
       allowLocalDockerAction: true,
     });
+    if (buildFileContext && runsImageNode?.kind === "scalar") {
+      const rawImage = String(runsImageNode.value).trim();
+      if (isLocalDockerActionImage(rawImage)) {
+        const actionDir = path.dirname(path.resolve(root, filePath));
+        recordExplicitBuildFile(rawImage, actionDir, root, explicitBuildFiles);
+      }
+    }
     checkStepsList(
       getMapField(runsNode, "steps"),
       workflowEnv,
@@ -2960,6 +3354,8 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
       filePath,
       problems,
       workflowDefaultShell,
+      [],
+      buildFileContext,
     );
   }
 
@@ -2983,6 +3379,7 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
         problems,
         jobExplicitShell,
         runnerContexts,
+        buildFileContext,
       );
     }
   }
@@ -3366,6 +3763,7 @@ export function checkWorkflowPins(root = process.cwd()) {
     path.join(root, ".github", "actions"),
   ];
   const problems = [];
+  const explicitBuildFiles = new Set();
   let checked = 0;
 
   for (const directory of directories) {
@@ -3378,12 +3776,26 @@ export function checkWorkflowPins(root = process.cwd()) {
       const relativePath = path.relative(root, filePath);
       problems.push(
         ...unpinnedActionReferences(source, relativePath),
-        ...unpinnedWorkflowContainerReferences(source, relativePath),
+        ...unpinnedWorkflowContainerReferences(source, relativePath, {
+          root,
+          explicitBuildFiles,
+        }),
       );
     }
   }
 
-  const containerFiles = collectContainerFiles(root);
+  const containerFileSet = new Set(collectContainerFiles(root).map((file) => path.resolve(file)));
+  for (const candidatePath of explicitBuildFiles) {
+    if (!existsSync(candidatePath)) {
+      continue;
+    }
+    const stats = lstatSync(candidatePath);
+    if (!stats.isSymbolicLink() && stats.isFile()) {
+      containerFileSet.add(path.resolve(candidatePath));
+    }
+  }
+
+  const containerFiles = [...containerFileSet].sort();
   for (const filePath of containerFiles) {
     const source = readFileSync(filePath, "utf8");
     const relativePath = path.relative(root, filePath);

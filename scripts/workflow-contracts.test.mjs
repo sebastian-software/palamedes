@@ -1738,10 +1738,50 @@ describe("workflow contracts", () => {
       "<memory>:20: busybox:1.37 is not pinned to a sha256 digest",
       "<memory>:28: redis:7 is not pinned to a sha256 digest",
     ]);
-    // Lowercase `dockerfile` referenced by a local Docker action is discovered and checked.
+    // Lowercase `dockerfile` and explicitly referenced non-standard build files
+    // (`docker/build-push-action` `with.file` and `docker build -f`) are discovered
+    // and checked; shell `${VAR:-default}` fallbacks, PowerShell `$env:VAR` vs
+    // local `$var` isolation, and per-row `shell: ${{ matrix.shell }}` are enforced.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  param-pwsh-and-matrix-shell:",
+          "    strategy:",
+          "      matrix:",
+          "        include:",
+          "          - os: ubuntu-latest",
+          "            shell: bash",
+          "          - os: windows-latest",
+          "            shell: cmd",
+          "    runs-on: ${{ matrix.os }}",
+          "    steps:",
+          "      - shell: bash",
+          '        run: docker pull "${UNSET_IMAGE:-node:24}"',
+          "      - shell: pwsh",
+          "        env:",
+          "          IMAGE: alpine:3.20",
+          "        run: |",
+          `          $image = "alpine:3.20@${digest}"`,
+          "          docker pull $image",
+          "          docker pull $env:IMAGE",
+          "      - if: matrix.shell == 'cmd'",
+          "        shell: ${{ matrix.shell }}",
+          "        env:",
+          `          PINNED: node:24@${digest}`,
+          "        run: docker pull %PINNED%",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:13: node:24 is not pinned to a sha256 digest",
+      "<memory>:16: alpine:3.20 is not pinned to a sha256 digest",
+    ]);
     const fixtureRoot = await mkdtemp(join(tmpdir(), "palamedes-pins-lowercase-"));
     try {
       await mkdir(join(fixtureRoot, ".github", "actions", "local-docker"), { recursive: true });
+      await mkdir(join(fixtureRoot, ".github", "workflows"), { recursive: true });
+      await mkdir(join(fixtureRoot, "ci", "images"), { recursive: true });
       await writeFile(
         join(fixtureRoot, ".github", "actions", "local-docker", "action.yml"),
         "name: Local\nruns:\n  using: docker\n  image: ./dockerfile\n",
@@ -1750,10 +1790,28 @@ describe("workflow contracts", () => {
         join(fixtureRoot, ".github", "actions", "local-docker", "dockerfile"),
         "FROM node:24\n",
       );
+      await writeFile(
+        join(fixtureRoot, ".github", "workflows", "build.yml"),
+        [
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          file: ci/images/runtime.build",
+          "      - run: docker build -f ci/images/cli.recipe .",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(join(fixtureRoot, "ci", "images", "runtime.build"), "FROM alpine:3.20\n");
+      await writeFile(join(fixtureRoot, "ci", "images", "cli.recipe"), "FROM busybox:1.37\n");
       const fixtureResult = checkWorkflowPins(fixtureRoot);
-      expect(fixtureResult.containerFilesChecked).toBe(1);
+      expect(fixtureResult.containerFilesChecked).toBe(3);
       expect(fixtureResult.problems).toEqual([
         ".github/actions/local-docker/dockerfile:1: node:24 is not pinned to a sha256 digest",
+        "ci/images/cli.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
+        "ci/images/runtime.build:1: alpine:3.20 is not pinned to a sha256 digest",
       ]);
     } finally {
       await rm(fixtureRoot, { recursive: true, force: true });
