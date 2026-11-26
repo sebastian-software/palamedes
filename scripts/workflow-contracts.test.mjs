@@ -2380,6 +2380,156 @@ describe("workflow contracts", () => {
       await rm(symlinkFixture, { recursive: true, force: true });
       await rm(outsideDir, { recursive: true, force: true });
     }
+    // Composite-action call-site input & default resolution, Git build context
+    // explicit Dockerfile resolution (`{{defaultContext}}:subdir` + `file:`),
+    // real builder defaults with fail-closed missing-default reporting, and
+    // BuildKit automatic platform arguments (`TARGETARCH`, `TARGETPLATFORM`, etc.).
+    const multiarchDockerfile = [
+      `FROM alpine:3.20@${digest} AS build-amd64`,
+      `FROM alpine:3.20@${digest} AS build-arm64`,
+      "FROM build-${TARGETARCH} AS final",
+      "ARG TARGETARCH",
+      "COPY --from=build-${TARGETARCH} /out /out",
+      "",
+    ].join("\n");
+    expect(unpinnedContainerfileReferences(multiarchDockerfile)).toEqual([]);
+    expect(
+      unpinnedContainerfileReferences(multiarchDockerfile, "<memory>", {
+        platforms: ["linux/amd64", "linux/arm64"],
+      }),
+    ).toEqual([]);
+    expect(
+      unpinnedContainerfileReferences(multiarchDockerfile, "<memory>", {
+        platforms: ["linux/amd64", "linux/s390x"],
+      }),
+    ).toEqual([
+      "<memory>:3: build-s390x is not pinned to a sha256 digest",
+      "<memory>:5: build-s390x is not pinned to a sha256 digest",
+    ]);
+    const compositeAndContextFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r30-"));
+    try {
+      await mkdir(join(compositeAndContextFixture, ".github", "workflows"), { recursive: true });
+      await mkdir(join(compositeAndContextFixture, ".github", "actions", "pull-image"), {
+        recursive: true,
+      });
+      await mkdir(join(compositeAndContextFixture, ".github", "actions", "pull-pinned-default"), {
+        recursive: true,
+      });
+      await mkdir(join(compositeAndContextFixture, "service"), { recursive: true });
+      await mkdir(join(compositeAndContextFixture, "service-bad"), { recursive: true });
+      await mkdir(join(compositeAndContextFixture, "ci", "only-containerfile"), {
+        recursive: true,
+      });
+      await mkdir(join(compositeAndContextFixture, "ci", "empty-dir"), { recursive: true });
+      await mkdir(join(compositeAndContextFixture, "ci", "multiarch"), { recursive: true });
+      await writeFile(
+        join(compositeAndContextFixture, ".github", "actions", "pull-image", "action.yml"),
+        [
+          "name: Pull image",
+          "inputs:",
+          "  image:",
+          "    required: true",
+          "  fallback:",
+          "    default: busybox:1.37",
+          "runs:",
+          "  using: composite",
+          "  steps:",
+          "    - shell: bash",
+          "      run: |",
+          "        docker pull ${{ inputs.image }}",
+          "        docker pull ${{ inputs.fallback }}",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(compositeAndContextFixture, ".github", "actions", "pull-pinned-default", "action.yml"),
+        [
+          "name: Pull pinned default",
+          "inputs:",
+          "  image:",
+          `    default: node:24@${digest}`,
+          "runs:",
+          "  using: composite",
+          "  steps:",
+          "    - shell: bash",
+          "      run: docker pull ${{ inputs.image }}",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(join(compositeAndContextFixture, "Buildfile"), `FROM node:24@${digest}\n`);
+      await writeFile(
+        join(compositeAndContextFixture, "service", "Buildfile"),
+        `FROM node:24@${digest}\n`,
+      );
+      await writeFile(
+        join(compositeAndContextFixture, "service-bad", "Buildfile"),
+        "FROM ruby:3.4\n",
+      );
+      await writeFile(
+        join(compositeAndContextFixture, "ci", "only-containerfile", "Containerfile"),
+        `FROM node:24@${digest}\n`,
+      );
+      await writeFile(
+        join(compositeAndContextFixture, "ci", "multiarch", "Dockerfile"),
+        "FROM myrepo/app:${TARGETARCH}\n",
+      );
+      await writeFile(
+        join(compositeAndContextFixture, ".github", "workflows", "verify.yml"),
+        [
+          "jobs:",
+          "  test:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - uses: ./.github/actions/pull-image",
+          "        with:",
+          "          image: alpine:3.20",
+          "      - uses: ./.github/actions/pull-pinned-default",
+          "      - uses: ./.github/actions/pull-pinned-default",
+          "        with:",
+          "          image: redis:7",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          context: '{{defaultContext}}:service'",
+          "          file: Buildfile",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          context: '{{defaultContext}}:service-bad'",
+          "          file: Buildfile",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          context: ./service-bad",
+          "          file: Buildfile",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          context: ci/only-containerfile",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          context: ci/multiarch",
+          "          platforms: linux/amd64,linux/arm64",
+          "      - run: |",
+          "          docker build ci/only-containerfile",
+          "          podman build ci/only-containerfile",
+          "          docker build ci/empty-dir",
+          "          podman build ci/empty-dir",
+          "",
+        ].join("\n"),
+      );
+      const r30Result = checkWorkflowPins(compositeAndContextFixture);
+      expect(r30Result.problems).toEqual([
+        ".github/actions/pull-image/action.yml:12: alpine:3.20 is not pinned to a sha256 digest",
+        ".github/actions/pull-image/action.yml:13: busybox:1.37 is not pinned to a sha256 digest",
+        ".github/actions/pull-pinned-default/action.yml:9: redis:7 is not pinned to a sha256 digest",
+        ".github/workflows/verify.yml:24: default build file ci/only-containerfile/Dockerfile cannot be verified statically",
+        ".github/workflows/verify.yml:32: default build file ci/only-containerfile/Dockerfile cannot be verified statically",
+        ".github/workflows/verify.yml:34: default build file ci/empty-dir/Dockerfile cannot be verified statically",
+        ".github/workflows/verify.yml:35: default build file ci/empty-dir/Containerfile cannot be verified statically",
+        "service-bad/Buildfile:1: ruby:3.4 is not pinned to a sha256 digest",
+        "ci/multiarch/Dockerfile:1: myrepo/app:amd64 is not pinned to a sha256 digest",
+        "ci/multiarch/Dockerfile:1: myrepo/app:arm64 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(compositeAndContextFixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

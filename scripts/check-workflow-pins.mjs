@@ -33,8 +33,23 @@ const PWSH_INLINE_ASSIGN_PATTERN =
   /^\$(?:(?<envPrefix>env:)?(?:script:|global:|local:)?(?<bare>[A-Za-z_][A-Za-z0-9_]*)|\{(?<envPrefixBraced>env:)?(?:script:|global:|local:)?(?<braced>[A-Za-z_][A-Za-z0-9_]*)\})=(?<value>.*)$/iu;
 const ENV_EXPRESSION_PATTERN =
   /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/giu;
+const INPUTS_EXPRESSION_PATTERN =
+  /\$\{\{\s*inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])\s*\}\}/giu;
 const MATRIX_EXPRESSION_PATTERN =
   /\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}/giu;
+const BUILDKIT_TARGET_PLATFORM_ARGS = new Set([
+  "TARGETPLATFORM",
+  "TARGETOS",
+  "TARGETARCH",
+  "TARGETVARIANT",
+]);
+const BUILDKIT_AUTOMATIC_PLATFORM_ARGS = new Set([
+  ...BUILDKIT_TARGET_PLATFORM_ARGS,
+  "BUILDPLATFORM",
+  "BUILDOS",
+  "BUILDARCH",
+  "BUILDVARIANT",
+]);
 const SINGLE_MATRIX_EXPRESSION_PATTERN =
   /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}$/iu;
 const MATRIX_SEGMENT_PATTERN = /\.([A-Za-z0-9_-]+)|\[(?:'([^']+)'|"([^"]+)")\]/gu;
@@ -3481,6 +3496,46 @@ function flagConsumesNextArg(token, valueFlags) {
   return false;
 }
 
+function parseBuildkitPlatform(rawPlatform) {
+  const trimmed = String(rawPlatform ?? "").trim();
+  if (!trimmed || trimmed.toLowerCase() === "local" || isDynamicReference(trimmed)) {
+    return null;
+  }
+  const parts = trimmed.split("/");
+  if (parts.length !== 2 && parts.length !== 3) {
+    return null;
+  }
+  const [rawOs, rawArch, rawVariant = ""] = parts;
+  if (
+    !/^[A-Za-z0-9._-]+$/u.test(rawOs) ||
+    !/^[A-Za-z0-9._-]+$/u.test(rawArch) ||
+    (rawVariant && !/^[A-Za-z0-9._-]+$/u.test(rawVariant))
+  ) {
+    return null;
+  }
+  const os = rawOs.toLowerCase();
+  const arch = rawArch.toLowerCase();
+  const variant = arch === "arm64" && rawVariant.toLowerCase() === "v8" ? "" : rawVariant;
+  const platform = variant ? `${os}/${arch}/${variant}` : `${os}/${arch}`;
+  return {
+    TARGETPLATFORM: platform,
+    TARGETOS: os,
+    TARGETARCH: arch,
+    TARGETVARIANT: variant,
+  };
+}
+
+function splitPlatformEntries(rawSpec) {
+  const entries = [];
+  for (const part of String(rawSpec ?? "").split(/[\r\n,]+/u)) {
+    const trimmed = part.trim();
+    if (trimmed && !trimmed.startsWith("#")) {
+      entries.push(trimmed);
+    }
+  }
+  return entries;
+}
+
 function recordBuildInvocation(
   resolvedFilePath,
   buildArgsMap,
@@ -3488,6 +3543,7 @@ function recordBuildInvocation(
   sourceFile,
   sourceLine,
   buildInvocations,
+  platforms = [],
 ) {
   if (!buildInvocations || !resolvedFilePath) {
     return;
@@ -3496,6 +3552,7 @@ function recordBuildInvocation(
     filePath: resolvedFilePath,
     buildArgs: buildArgsMap ?? new Map(),
     namedContexts: namedContexts ? new Set(namedContexts) : new Set(),
+    platforms: Array.isArray(platforms) ? [...platforms] : [],
     sourceFile,
     sourceLine,
   });
@@ -3774,7 +3831,7 @@ function inspectShellText(
       const invocationList =
         stdinBuild?.invocations && stdinBuild.invocations.length > 0
           ? stdinBuild.invocations
-          : [{ buildArgs: null, namedContexts: null, rowList: matrixRows }];
+          : [{ buildArgs: null, namedContexts: null, platforms: [], rowList: matrixRows }];
 
       for (const inv of invocationList) {
         const expandedBodies = event.quoted
@@ -3801,6 +3858,7 @@ function inspectShellText(
             for (const message of unpinnedContainerfileReferences(bodyCandidate.text, filePath, {
               argOverrides: inv.buildArgs,
               namedContexts: inv.namedContexts,
+              platforms: inv.platforms,
               sourceFile: filePath,
               sourceLine: stdinBuild?.lineNumber ?? event.startLine,
               startLineOffset: event.startLine - 1,
@@ -4766,6 +4824,7 @@ function inspectShellText(
       const rawFiles = [];
       const rawBuildContexts = [];
       const rawBuildArgs = [];
+      const rawPlatforms = [];
       let contextArg = null;
       for (let index = buildArgStart; index < tokens.length; index += 1) {
         const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
@@ -4828,6 +4887,17 @@ function inspectShellText(
         }
         if (token.startsWith("--build-arg=")) {
           rawBuildArgs.push(token.slice("--build-arg=".length));
+          continue;
+        }
+        if (token === "--platform") {
+          if (tokens[index + 1] !== undefined) {
+            rawPlatforms.push(tokens[index + 1]);
+          }
+          index += 1;
+          continue;
+        }
+        if (token.startsWith("--platform=")) {
+          rawPlatforms.push(token.slice("--platform=".length));
           continue;
         }
         if (token.startsWith("-") && token !== "-") {
@@ -4929,6 +4999,32 @@ function inspectShellText(
           }
         }
 
+        const buildPlatforms = [];
+        const seenBuildPlatforms = new Set();
+        for (const rawPlatform of rawPlatforms) {
+          const expandedPlatform = resolveImageTokenCandidates(
+            rawPlatform,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          for (const varCandidate of expandedPlatform.candidates) {
+            for (const candidate of expandMatrixReferences(
+              varCandidate.text,
+              rowList,
+              varCandidate.line,
+            )) {
+              for (const platformEntry of splitPlatformEntries(candidate.text)) {
+                if (!seenBuildPlatforms.has(platformEntry)) {
+                  seenBuildPlatforms.add(platformEntry);
+                  buildPlatforms.push(platformEntry);
+                }
+              }
+            }
+          }
+        }
+
         if (usesStdinContextArchive) {
           continue;
         }
@@ -4938,7 +5034,12 @@ function inspectShellText(
 
         if (usesStdinDockerfile) {
           if (hasStdinHeredoc) {
-            stdinInvocations.push({ buildArgs: buildArgsMap, namedContexts, rowList });
+            stdinInvocations.push({
+              buildArgs: buildArgsMap,
+              namedContexts,
+              platforms: buildPlatforms,
+              rowList,
+            });
           }
           if (hasStdinRedirect) {
             const rawStdinTarget = stdinRedirectTargets.at(-1);
@@ -5021,6 +5122,7 @@ function inspectShellText(
                   filePath,
                   lineNumber,
                   buildFileContext.buildInvocations,
+                  buildPlatforms,
                 );
               }
             }
@@ -5141,6 +5243,7 @@ function inspectShellText(
             const contextDirs = [];
             const seenContextDirs = new Set();
             let hadRemoteContext = false;
+            let hadUnresolvableContext = false;
             if (contextArg) {
               const expandedCtx = resolveImageTokenCandidates(
                 contextArg,
@@ -5149,6 +5252,13 @@ function inspectShellText(
                 lineNumber,
                 shellMode,
               );
+              if (expandedCtx.truncated) {
+                const limitMsg = `${filePath}:${lineNumber}: ${contextArg} exceeds expansion limit and cannot be verified exhaustively`;
+                if (!seenContextProblems.has(limitMsg)) {
+                  seenContextProblems.add(limitMsg);
+                  problems.push(limitMsg);
+                }
+              }
               for (const varCandidate of expandedCtx.candidates) {
                 for (const candidate of expandMatrixReferences(
                   varCandidate.text,
@@ -5166,26 +5276,65 @@ function inspectShellText(
                     buildFileContext.root,
                     { windowsPath: isWindowsShell },
                   );
-                  if (resolvedCtx && !seenContextDirs.has(resolvedCtx)) {
-                    seenContextDirs.add(resolvedCtx);
-                    contextDirs.push(resolvedCtx);
+                  if (resolvedCtx) {
+                    if (!seenContextDirs.has(resolvedCtx)) {
+                      seenContextDirs.add(resolvedCtx);
+                      contextDirs.push(resolvedCtx);
+                    }
+                  } else if (ctxText) {
+                    hadUnresolvableContext = true;
+                    const unverifiableMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
+                    if (!seenContextProblems.has(unverifiableMsg)) {
+                      seenContextProblems.add(unverifiableMsg);
+                      problems.push(unverifiableMsg);
+                    }
                   }
                 }
               }
             }
-            if (!hadRemoteContext && contextDirs.length === 0) {
+            if (
+              !contextArg &&
+              !hadRemoteContext &&
+              !hadUnresolvableContext &&
+              contextDirs.length === 0
+            ) {
               contextDirs.push(activeWorkingDir);
             }
             const defaultNames =
               normalizedCli === "podman" || normalizedCli === "buildah"
                 ? ["Containerfile", "Dockerfile"]
-                : ["Dockerfile", "Containerfile"];
+                : ["Dockerfile"];
             for (const baseContext of contextDirs) {
+              let foundDefault = false;
               for (const defaultName of defaultNames) {
                 const candidateFile = path.join(baseContext, defaultName);
-                if (existsSync(candidateFile)) {
+                const targetProblems = [];
+                const safeFile = resolveSafeContainerFile(
+                  candidateFile,
+                  buildFileContext.root,
+                  targetProblems,
+                );
+                if (safeFile) {
+                  buildFileContext.explicitBuildFiles.add(candidateFile);
                   pushResolvedFile(candidateFile);
+                  foundDefault = true;
                   break;
+                }
+                if (targetProblems.length > 0) {
+                  buildFileContext.explicitBuildFiles.add(candidateFile);
+                  foundDefault = true;
+                  break;
+                }
+              }
+              if (!foundDefault) {
+                const expectedPath = formatPortableRelativePath(
+                  buildFileContext.root,
+                  path.join(baseContext, defaultNames[0]),
+                );
+                const unverifiableMsg = `${filePath}:${lineNumber}: default build file ${expectedPath} cannot be verified statically`;
+                if (!seenContextProblems.has(unverifiableMsg)) {
+                  seenContextProblems.add(unverifiableMsg);
+                  problems.push(unverifiableMsg);
                 }
               }
             }
@@ -5200,6 +5349,7 @@ function inspectShellText(
             filePath,
             lineNumber,
             buildFileContext.buildInvocations,
+            buildPlatforms,
           );
         }
       }
@@ -5937,6 +6087,7 @@ function checkStepsList(
       const contextNode = getMapField(withNode, "context");
       const buildArgsNode = getMapField(withNode, "build-args");
       const buildContextsNode = getMapField(withNode, "build-contexts");
+      const platformsNode = getMapField(withNode, "platforms");
       const actionRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
       const seenActionContextProblems = new Set();
       const seenActionSyntaxProblems = new Set();
@@ -5995,6 +6146,29 @@ function checkStepsList(
             }
           }
         }
+        const actionPlatforms = [];
+        const seenActionPlatforms = new Set();
+        if (platformsNode?.kind === "scalar") {
+          const expandedPlatforms = resolveEnvExpressionCandidates(
+            String(platformsNode.value),
+            rowStepEnv,
+            platformsNode.line,
+          );
+          for (const envCandidate of expandedPlatforms.candidates) {
+            for (const candidate of expandMatrixReferences(
+              envCandidate.text,
+              rowList,
+              envCandidate.line,
+            )) {
+              for (const platformEntry of splitPlatformEntries(candidate.text)) {
+                if (!seenActionPlatforms.has(platformEntry)) {
+                  seenActionPlatforms.add(platformEntry);
+                  actionPlatforms.push(platformEntry);
+                }
+              }
+            }
+          }
+        }
         const invocationLine = buildArgsNode?.line ?? buildContextsNode?.line ?? usesNode.line;
         if (actionBuildArgs.has("BUILDKIT_SYNTAX")) {
           const actionSyntaxProblems = [];
@@ -6014,7 +6188,97 @@ function checkStepsList(
         if (!buildFileContext) {
           continue;
         }
+
+        // Resolve build contexts before explicit/default files so Git contexts
+        // (`{{defaultContext}}:subdir`) resolve `with.file` relative to their
+        // subdirectory while local builds keep workspace-relative resolution.
+        const resolvedContexts = [];
+        const seenContexts = new Set();
+        let hadExplicitContext = false;
+        if (contextNode?.kind === "scalar") {
+          const rawContext = String(contextNode.value).trim();
+          if (rawContext) {
+            hadExplicitContext = true;
+            const expandedContext = resolveEnvExpressionCandidates(
+              rawContext,
+              rowStepEnv,
+              contextNode.line,
+            );
+            if (expandedContext.truncated) {
+              const limitMsg = `${filePath}:${contextNode.line}: ${rawContext} exceeds expansion limit and cannot be verified exhaustively`;
+              if (!seenActionContextProblems.has(limitMsg)) {
+                seenActionContextProblems.add(limitMsg);
+                problems.push(limitMsg);
+              }
+            }
+            for (const envCandidate of expandedContext.candidates) {
+              for (const candidate of expandMatrixReferences(
+                envCandidate.text,
+                rowList,
+                envCandidate.line,
+              )) {
+                const ctxText = candidate.text.trim();
+                const defaultCtxMatch = /^\{\{defaultContext\}\}(?::(?<subdir>.*))?$/iu.exec(
+                  ctxText,
+                );
+                if (defaultCtxMatch) {
+                  const localPath = defaultCtxMatch.groups.subdir?.trim() || ".";
+                  const resolvedDir = resolveContainedPath(
+                    localPath,
+                    buildFileContext.root,
+                    buildFileContext.root,
+                  );
+                  if (resolvedDir) {
+                    const ctxKey = `git\0${resolvedDir}`;
+                    if (!seenContexts.has(ctxKey)) {
+                      seenContexts.add(ctxKey);
+                      resolvedContexts.push({ kind: "git", dir: resolvedDir });
+                    }
+                  } else if (ctxText) {
+                    const unverifiableMsg = `${filePath}:${candidate.line}: build context ${ctxText} cannot be verified statically`;
+                    if (!seenActionContextProblems.has(unverifiableMsg)) {
+                      seenActionContextProblems.add(unverifiableMsg);
+                      problems.push(unverifiableMsg);
+                    }
+                  }
+                  continue;
+                }
+                if (isRemoteBuildContext(ctxText)) {
+                  const unverifiableMsg = `${filePath}:${candidate.line}: build context ${ctxText} cannot be verified statically`;
+                  if (!seenActionContextProblems.has(unverifiableMsg)) {
+                    seenActionContextProblems.add(unverifiableMsg);
+                    problems.push(unverifiableMsg);
+                  }
+                  continue;
+                }
+                const resolvedDir = resolveContainedPath(
+                  ctxText,
+                  buildFileContext.root,
+                  buildFileContext.root,
+                );
+                if (resolvedDir) {
+                  const ctxKey = `local\0${resolvedDir}`;
+                  if (!seenContexts.has(ctxKey)) {
+                    seenContexts.add(ctxKey);
+                    resolvedContexts.push({ kind: "local", dir: resolvedDir });
+                  }
+                } else if (ctxText) {
+                  const unverifiableMsg = `${filePath}:${candidate.line}: build context ${ctxText} cannot be verified statically`;
+                  if (!seenActionContextProblems.has(unverifiableMsg)) {
+                    seenActionContextProblems.add(unverifiableMsg);
+                    problems.push(unverifiableMsg);
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (!hadExplicitContext) {
+          resolvedContexts.push({ kind: "local", dir: path.resolve(buildFileContext.root) });
+        }
+
         const resolvedActionFiles = [];
+        const seenResolvedActionFiles = new Set();
         let hasExplicitActionFile = false;
         if (fileNode?.kind === "scalar") {
           const rawActionFile = String(fileNode.value).trim();
@@ -6032,83 +6296,54 @@ function checkStepsList(
                 problems.push(limitMsg);
               }
             }
-            for (const envCandidate of expandedActionFile.candidates) {
-              for (const candidate of expandMatrixReferences(
-                envCandidate.text,
-                rowList,
-                envCandidate.line,
-              )) {
-                const resolvedPath = resolveContainedPath(
-                  candidate.text,
-                  buildFileContext.root,
-                  buildFileContext.root,
-                );
-                if (!resolvedPath || resolvedPath === path.resolve(buildFileContext.root)) {
-                  const unverifiableMsg = `${filePath}:${fileNode.line}: build file ${candidate.text} cannot be verified statically`;
-                  if (!seenActionContextProblems.has(unverifiableMsg)) {
-                    seenActionContextProblems.add(unverifiableMsg);
-                    problems.push(unverifiableMsg);
-                  }
-                  continue;
-                }
-                const targetProblems = [];
-                const safeFile = resolveSafeContainerFile(
-                  resolvedPath,
-                  buildFileContext.root,
-                  targetProblems,
-                );
-                if (safeFile) {
-                  buildFileContext.explicitBuildFiles.add(resolvedPath);
-                  resolvedActionFiles.push(resolvedPath);
-                } else if (targetProblems.length > 0) {
-                  buildFileContext.explicitBuildFiles.add(resolvedPath);
-                } else {
-                  const unverifiableMsg = `${filePath}:${fileNode.line}: build file ${candidate.text} cannot be verified statically`;
-                  if (!seenActionContextProblems.has(unverifiableMsg)) {
-                    seenActionContextProblems.add(unverifiableMsg);
-                    problems.push(unverifiableMsg);
-                  }
-                }
+            const fileBases = [];
+            const seenFileBases = new Set();
+            for (const ctx of resolvedContexts) {
+              const baseDir = ctx.kind === "git" ? ctx.dir : path.resolve(buildFileContext.root);
+              const containmentRoot =
+                ctx.kind === "git" ? ctx.dir : path.resolve(buildFileContext.root);
+              const baseKey = `${baseDir}\0${containmentRoot}`;
+              if (!seenFileBases.has(baseKey)) {
+                seenFileBases.add(baseKey);
+                fileBases.push({ baseDir, containmentRoot });
               }
             }
-          }
-        }
-        if (!hasExplicitActionFile && resolvedActionFiles.length === 0) {
-          const contextDirs = [];
-          const seenDirs = new Set();
-          let hadExplicitContext = false;
-          if (contextNode?.kind === "scalar") {
-            const rawContext = String(contextNode.value).trim();
-            if (rawContext) {
-              hadExplicitContext = true;
-              for (const envCandidate of resolveEnvExpressionCandidates(
-                rawContext,
-                rowStepEnv,
-                contextNode.line,
-              ).candidates) {
+            for (const { baseDir, containmentRoot } of fileBases) {
+              for (const envCandidate of expandedActionFile.candidates) {
                 for (const candidate of expandMatrixReferences(
                   envCandidate.text,
                   rowList,
                   envCandidate.line,
                 )) {
-                  const ctxText = candidate.text.trim();
-                  const defaultCtxMatch = /^\{\{defaultContext\}\}(?::(?<subdir>.*))?$/iu.exec(
-                    ctxText,
+                  const resolvedPath = resolveContainedPath(
+                    candidate.text,
+                    baseDir,
+                    containmentRoot,
                   );
-                  const isRemoteContext = !defaultCtxMatch && isRemoteBuildContext(ctxText);
-                  const localPath = defaultCtxMatch
-                    ? defaultCtxMatch.groups.subdir?.trim() || "."
-                    : ctxText;
-                  const resolvedDir = isRemoteContext
-                    ? null
-                    : resolveContainedPath(localPath, buildFileContext.root, buildFileContext.root);
-                  if (resolvedDir) {
-                    if (!seenDirs.has(resolvedDir)) {
-                      seenDirs.add(resolvedDir);
-                      contextDirs.push(resolvedDir);
+                  if (!resolvedPath || resolvedPath === path.resolve(containmentRoot)) {
+                    const unverifiableMsg = `${filePath}:${fileNode.line}: build file ${candidate.text} cannot be verified statically`;
+                    if (!seenActionContextProblems.has(unverifiableMsg)) {
+                      seenActionContextProblems.add(unverifiableMsg);
+                      problems.push(unverifiableMsg);
                     }
-                  } else if (ctxText) {
-                    const unverifiableMsg = `${filePath}:${candidate.line}: build context ${ctxText} cannot be verified statically`;
+                    continue;
+                  }
+                  const targetProblems = [];
+                  const safeFile = resolveSafeContainerFile(
+                    resolvedPath,
+                    buildFileContext.root,
+                    targetProblems,
+                  );
+                  if (safeFile) {
+                    buildFileContext.explicitBuildFiles.add(resolvedPath);
+                    if (!seenResolvedActionFiles.has(resolvedPath)) {
+                      seenResolvedActionFiles.add(resolvedPath);
+                      resolvedActionFiles.push(resolvedPath);
+                    }
+                  } else if (targetProblems.length > 0) {
+                    buildFileContext.explicitBuildFiles.add(resolvedPath);
+                  } else {
+                    const unverifiableMsg = `${filePath}:${fileNode.line}: build file ${candidate.text} cannot be verified statically`;
                     if (!seenActionContextProblems.has(unverifiableMsg)) {
                       seenActionContextProblems.add(unverifiableMsg);
                       problems.push(unverifiableMsg);
@@ -6118,15 +6353,30 @@ function checkStepsList(
               }
             }
           }
-          if (!hadExplicitContext && contextDirs.length === 0) {
-            contextDirs.push(path.resolve(buildFileContext.root));
-          }
-          for (const contextDir of contextDirs) {
-            for (const defaultName of ["Dockerfile", "Containerfile"]) {
-              const candidateFile = path.join(contextDir, defaultName);
-              if (existsSync(candidateFile)) {
+        }
+        if (!hasExplicitActionFile && resolvedActionFiles.length === 0) {
+          for (const ctx of resolvedContexts) {
+            const candidateFile = path.join(ctx.dir, "Dockerfile");
+            const targetProblems = [];
+            const safeFile = resolveSafeContainerFile(
+              candidateFile,
+              buildFileContext.root,
+              targetProblems,
+            );
+            if (safeFile) {
+              buildFileContext.explicitBuildFiles.add(candidateFile);
+              if (!seenResolvedActionFiles.has(candidateFile)) {
+                seenResolvedActionFiles.add(candidateFile);
                 resolvedActionFiles.push(candidateFile);
-                break;
+              }
+            } else if (targetProblems.length > 0) {
+              buildFileContext.explicitBuildFiles.add(candidateFile);
+            } else {
+              const expectedPath = formatPortableRelativePath(buildFileContext.root, candidateFile);
+              const unverifiableMsg = `${filePath}:${usesNode.line}: default build file ${expectedPath} cannot be verified statically`;
+              if (!seenActionContextProblems.has(unverifiableMsg)) {
+                seenActionContextProblems.add(unverifiableMsg);
+                problems.push(unverifiableMsg);
               }
             }
           }
@@ -6139,7 +6389,170 @@ function checkStepsList(
             filePath,
             invocationLine,
             buildFileContext.buildInvocations,
+            actionPlatforms,
           );
+        }
+      }
+    } else if (
+      usesNode?.kind === "scalar" &&
+      String(usesNode.value).trim().startsWith("./") &&
+      buildFileContext?.root
+    ) {
+      const rawLocalUses = String(usesNode.value).trim();
+      const actionRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
+      const seenCompositeProblems = new Set();
+      const pushCompositeProblem = (message) => {
+        if (!seenCompositeProblems.has(message)) {
+          seenCompositeProblems.add(message);
+          problems.push(message);
+        }
+      };
+
+      for (const row of actionRows) {
+        const rowStepEnv = getRowStepEnv(row);
+        const rowList = row ? [row] : [];
+        const usesCandidates = resolveEnvExpressionCandidates(
+          rawLocalUses,
+          rowStepEnv,
+          usesNode.line,
+        ).candidates.flatMap((envCandidate) =>
+          expandMatrixReferences(envCandidate.text, rowList, envCandidate.line),
+        );
+
+        const resolvedActionFiles = [];
+        const seenActionFiles = new Set();
+        for (const usesCandidate of usesCandidates) {
+          const localRef = usesCandidate.text.trim();
+          if (!localRef.startsWith("./")) {
+            continue;
+          }
+          const actionDir = resolveContainedPath(
+            localRef,
+            buildFileContext.root,
+            buildFileContext.root,
+          );
+          if (!actionDir) {
+            continue;
+          }
+          for (const manifestName of ["action.yml", "action.yaml"]) {
+            const manifestPath = path.join(actionDir, manifestName);
+            const targetProblems = [];
+            const safeActionFile = resolveSafeContainerFile(
+              manifestPath,
+              buildFileContext.root,
+              targetProblems,
+            );
+            if (safeActionFile) {
+              if (!seenActionFiles.has(safeActionFile)) {
+                seenActionFiles.add(safeActionFile);
+                resolvedActionFiles.push(safeActionFile);
+              }
+              break;
+            }
+            if (targetProblems.length > 0) {
+              for (const problem of targetProblems) {
+                pushCompositeProblem(problem);
+              }
+              break;
+            }
+          }
+        }
+
+        if (resolvedActionFiles.length === 0) {
+          continue;
+        }
+
+        const withEntries = [];
+        if (withNode?.kind === "map") {
+          for (const [inputKey, inputNode] of withNode.value) {
+            if (inputNode?.kind !== "scalar") {
+              continue;
+            }
+            const rawInput = String(inputNode.value);
+            const expandedInput = resolveEnvExpressionCandidates(
+              rawInput,
+              rowStepEnv,
+              inputNode.line,
+            );
+            if (expandedInput.truncated) {
+              pushCompositeProblem(
+                `${filePath}:${inputNode.line}: ${rawInput} exceeds expansion limit and cannot be verified exhaustively`,
+              );
+            }
+            const values = [];
+            const seenValues = new Set();
+            for (const envCandidate of expandedInput.candidates) {
+              for (const candidate of expandMatrixReferences(
+                envCandidate.text,
+                rowList,
+                envCandidate.line,
+              )) {
+                if (!seenValues.has(candidate.text)) {
+                  seenValues.add(candidate.text);
+                  values.push({ value: candidate.text, line: candidate.line });
+                }
+              }
+            }
+            if (values.length > 0) {
+              withEntries.push([inputKey.toLowerCase(), values]);
+            }
+          }
+        }
+
+        let inputCombinations = [new Map()];
+        let inputComboTruncated = false;
+        for (const [inputKey, values] of withEntries) {
+          const nextCombos = [];
+          for (const combo of inputCombinations) {
+            for (const entry of values) {
+              if (nextCombos.length >= MAX_TOKEN_EXPANSIONS) {
+                inputComboTruncated = true;
+                break;
+              }
+              const clone = new Map(combo);
+              clone.set(inputKey, entry);
+              nextCombos.push(clone);
+            }
+            if (inputComboTruncated) {
+              break;
+            }
+          }
+          inputCombinations = nextCombos;
+        }
+        if (inputComboTruncated) {
+          pushCompositeProblem(
+            `${filePath}:${usesNode.line}: composite action ${rawLocalUses} input combinations exceed expansion limit and cannot be verified exhaustively`,
+          );
+        }
+
+        const activeCallStack = buildFileContext.actionCallStack ?? new Set();
+        for (const resolvedActionFile of resolvedActionFiles) {
+          if (activeCallStack.has(resolvedActionFile) || activeCallStack.size >= 8) {
+            continue;
+          }
+          const nextCallStack = new Set(activeCallStack);
+          nextCallStack.add(resolvedActionFile);
+          const actionSource = readFileSync(resolvedActionFile, "utf8");
+          const actionRelPath = formatPortableRelativePath(
+            buildFileContext.root,
+            resolvedActionFile,
+          );
+          for (const inputOverrides of inputCombinations) {
+            for (const actionProblem of unpinnedWorkflowContainerReferences(
+              actionSource,
+              actionRelPath,
+              {
+                root: buildFileContext.root,
+                explicitBuildFiles: buildFileContext.explicitBuildFiles,
+                buildInvocations: buildFileContext.buildInvocations,
+                inputOverrides,
+                callerEnv: rowStepEnv,
+                actionCallStack: nextCallStack,
+              },
+            )) {
+              pushCompositeProblem(actionProblem);
+            }
+          }
         }
       }
     }
@@ -6445,10 +6858,78 @@ export function unpinnedActionReferences(source, filePath = "<memory>") {
   return problems;
 }
 
+function extractActionInputDefaults(doc) {
+  const defaults = new Map();
+  const inputsNode = getMapField(doc, "inputs");
+  if (inputsNode?.kind !== "map") {
+    return defaults;
+  }
+  for (const [inputName, defNode] of inputsNode.value) {
+    if (defNode?.kind !== "map") {
+      continue;
+    }
+    const defaultNode = getMapField(defNode, "default");
+    if (defaultNode?.kind === "scalar") {
+      defaults.set(inputName.toLowerCase(), {
+        value: String(defaultNode.value),
+        line: defaultNode.line,
+      });
+    }
+  }
+  return defaults;
+}
+
+function substituteInputsInText(text, inputValues) {
+  return String(text).replace(
+    INPUTS_EXPRESSION_PATTERN,
+    (match, _p1, _p2, _p3, _offset, _str, groups) => {
+      const name = (groups.dot ?? groups.sq ?? groups.dq).toLowerCase();
+      return inputValues.has(name) ? inputValues.get(name).value : match;
+    },
+  );
+}
+
+function substituteInputsInAstNode(node, inputValues) {
+  if (!node || inputValues.size === 0) {
+    return node;
+  }
+  if (node.kind === "scalar") {
+    const nextValue = substituteInputsInText(node.value, inputValues);
+    const nextLines = Array.isArray(node.lines)
+      ? node.lines.map((entry) => ({
+          ...entry,
+          text: substituteInputsInText(entry.text, inputValues),
+        }))
+      : node.lines;
+    return { ...node, value: nextValue, lines: nextLines };
+  }
+  if (node.kind === "seq") {
+    return {
+      ...node,
+      value: node.value.map((item) => substituteInputsInAstNode(item, inputValues)),
+    };
+  }
+  if (node.kind === "map") {
+    const nextMap = new Map();
+    for (const [key, val] of node.value) {
+      nextMap.set(key, substituteInputsInAstNode(val, inputValues));
+    }
+    return { ...node, value: nextMap };
+  }
+  return node;
+}
+
 export function unpinnedWorkflowContainerReferences(
   source,
   filePath = "<memory>",
-  { root = null, explicitBuildFiles = null, buildInvocations = null } = {},
+  {
+    root = null,
+    explicitBuildFiles = null,
+    buildInvocations = null,
+    inputOverrides = null,
+    callerEnv = null,
+    actionCallStack = null,
+  } = {},
 ) {
   const problems = [];
   const { doc, error } = parseWorkflowYaml(source);
@@ -6459,10 +6940,21 @@ export function unpinnedWorkflowContainerReferences(
     return problems;
   }
 
-  const buildFileContext =
-    root && explicitBuildFiles
-      ? { root, workingDir: path.resolve(root), explicitBuildFiles, buildInvocations }
-      : null;
+  const initialCallStack = actionCallStack
+    ? new Set(actionCallStack)
+    : root
+      ? new Set([path.resolve(root, filePath)])
+      : new Set();
+
+  const buildFileContext = root
+    ? {
+        root,
+        workingDir: path.resolve(root),
+        explicitBuildFiles: explicitBuildFiles ?? new Set(),
+        buildInvocations,
+        actionCallStack: initialCallStack,
+      }
+    : null;
 
   if (doc.kind === "seq") {
     checkStepsList(doc, new Map(), [], filePath, problems, null, [], buildFileContext);
@@ -6473,7 +6965,8 @@ export function unpinnedWorkflowContainerReferences(
     return problems;
   }
 
-  const workflowEnv = extractEnvMap(getMapField(doc, "env"), new Map());
+  const baseEnv = callerEnv ? cloneVarMap(callerEnv) : new Map();
+  const workflowEnv = extractEnvMap(getMapField(doc, "env"), baseEnv);
   const workflowDefaultShell = extractDefaultShell(doc);
   const workflowDefaultWorkingDir = extractDefaultWorkingDirectory(doc);
 
@@ -6514,7 +7007,15 @@ export function unpinnedWorkflowContainerReferences(
 
   const runsNode = getMapField(doc, "runs");
   if (runsNode?.kind === "map") {
-    const runsImageNode = getMapField(runsNode, "image");
+    const effectiveInputs = extractActionInputDefaults(doc);
+    if (inputOverrides) {
+      for (const [key, entry] of inputOverrides) {
+        effectiveInputs.set(key.toLowerCase(), entry);
+      }
+    }
+    const effectiveRunsNode =
+      effectiveInputs.size > 0 ? substituteInputsInAstNode(runsNode, effectiveInputs) : runsNode;
+    const runsImageNode = getMapField(effectiveRunsNode, "image");
     checkImageField(runsImageNode, workflowEnv, [], filePath, problems, {
       allowLocalDockerAction: true,
     });
@@ -6522,11 +7023,11 @@ export function unpinnedWorkflowContainerReferences(
       const rawImage = String(runsImageNode.value).trim();
       if (isLocalDockerActionImage(rawImage)) {
         const actionDir = path.dirname(path.resolve(root, filePath));
-        recordExplicitBuildFile(rawImage, actionDir, root, explicitBuildFiles);
+        recordExplicitBuildFile(rawImage, actionDir, root, buildFileContext.explicitBuildFiles);
       }
     }
     checkStepsList(
-      getMapField(runsNode, "steps"),
+      getMapField(effectiveRunsNode, "steps"),
       workflowEnv,
       [],
       filePath,
@@ -6928,12 +7429,20 @@ export function unpinnedContainerfileReferences(
   {
     argOverrides = null,
     namedContexts = null,
+    platforms = null,
     sourceFile = null,
     sourceLine = null,
     startLineOffset = 0,
   } = {},
 ) {
   const problems = [];
+  const seenProblems = new Set();
+  const pushProblem = (message) => {
+    if (!seenProblems.has(message)) {
+      seenProblems.add(message);
+      problems.push(message);
+    }
+  };
   const rawLines = source.split(/\r?\n/u);
   const logicalLines = [];
   const pendingHeredocs = [];
@@ -6973,7 +7482,7 @@ export function unpinnedContainerfileReferences(
             if (directiveName === "syntax") {
               const frontend = stripQuotes(directiveValue.split(/\s+/u)[0] ?? "");
               if (frontend && !isDynamicReference(frontend) && !isPinnedDigest(frontend)) {
-                problems.push(
+                pushProblem(
                   `${filePath}:${index + 1 + startLineOffset}: ${frontend} is not pinned to a sha256 digest`,
                 );
               }
@@ -7010,15 +7519,18 @@ export function unpinnedContainerfileReferences(
   }
 
   if (argOverrides?.has("BUILDKIT_SYNTAX")) {
+    const syntaxProblems = [];
     checkBuildkitSyntaxOverride(
       argOverrides.get("BUILDKIT_SYNTAX"),
       sourceFile ?? filePath,
       sourceLine ?? 1,
-      problems,
+      syntaxProblems,
     );
+    for (const problem of syntaxProblems) {
+      pushProblem(problem);
+    }
   }
 
-  const stages = new Set();
   const allStages = new Set();
   for (const { text } of logicalLines) {
     const fromMatch = /^FROM\s+(?<rest>.+)$/iu.exec(text);
@@ -7034,251 +7546,258 @@ export function unpinnedContainerfileReferences(
       allStages.add(tokens[cursor + 2].toLowerCase());
     }
   }
-  const globalArgs = new Map();
-  let stageArgs = new Map();
-  let seenFrom = false;
-  const dynamicOverriddenArgs = new Set();
 
-  const resolveBuildArgValues = (token, argsMap) => {
-    const referencedNames = extractReferencedBuildArgNames(token);
-    const rawValues = new Map();
-    const multiArgs = [];
-    let truncated = false;
-
-    for (const name of referencedNames) {
-      if (!argsMap.has(name)) {
-        continue;
-      }
-      const entry = argsMap.get(name);
-      if (entry.truncated) {
-        truncated = true;
-      }
-      if (entry.values.length > 0) {
-        rawValues.set(name, entry.values[0]);
-      }
-      if (entry.values.length > 1) {
-        multiArgs.push([name, entry.values]);
-      }
-    }
-
-    if (multiArgs.length === 0) {
-      return { values: [resolveBuildArgs(token, rawValues, 0, dynamicOverriddenArgs)], truncated };
-    }
-
-    let combinations = [rawValues];
-    for (const [name, values] of multiArgs) {
-      const next = [];
-      for (const combo of combinations) {
-        for (const value of values) {
-          if (next.length >= MAX_TOKEN_EXPANSIONS) {
-            truncated = true;
-            break;
-          }
-          const clone = new Map(combo);
-          clone.set(name, value);
-          next.push(clone);
+  const platformBindingRuns = [];
+  if (Array.isArray(platforms) && platforms.length > 0) {
+    const seenPlatformKeys = new Set();
+    let hadUnknownPlatform = false;
+    for (const rawPlatform of platforms) {
+      const parsed = parseBuildkitPlatform(rawPlatform);
+      if (parsed) {
+        if (!seenPlatformKeys.has(parsed.TARGETPLATFORM)) {
+          seenPlatformKeys.add(parsed.TARGETPLATFORM);
+          platformBindingRuns.push(parsed);
         }
-        if (truncated) {
-          break;
-        }
-      }
-      combinations = next;
-    }
-
-    const seen = new Set();
-    const resolvedList = [];
-    for (const combo of combinations) {
-      const resolved = resolveBuildArgs(token, combo, 0, dynamicOverriddenArgs);
-      if (!seen.has(resolved)) {
-        seen.add(resolved);
-        resolvedList.push(resolved);
+      } else {
+        hadUnknownPlatform = true;
       }
     }
-    return { values: resolvedList, truncated };
-  };
-
-  const referencesDynamicOverride = (token) => {
-    if (dynamicOverriddenArgs.size === 0) {
-      return null;
+    if (hadUnknownPlatform || platformBindingRuns.length === 0) {
+      platformBindingRuns.push(null);
     }
-    const referenced = extractReferencedBuildArgNames(token);
-    for (const argName of dynamicOverriddenArgs) {
-      if (referenced.has(argName)) {
-        return argName;
+  } else {
+    platformBindingRuns.push(null);
+  }
+
+  const evaluateForPlatform = (platformBindings) => {
+    const stages = new Set();
+    const globalArgs = new Map();
+    const globalAutomaticDynamicArgs = new Set(BUILDKIT_AUTOMATIC_PLATFORM_ARGS);
+    if (platformBindings) {
+      for (const [key, value] of Object.entries(platformBindings)) {
+        globalArgs.set(key, { values: [value], truncated: false });
+        globalAutomaticDynamicArgs.delete(key);
       }
     }
-    return null;
-  };
+    let stageArgs = new Map();
+    let stageAutomaticDynamicArgs = new Set();
+    let seenFrom = false;
+    const dynamicOverriddenArgs = new Set();
 
-  for (const { lineNumber, text } of logicalLines) {
-    const argMatch = /^ARG\s+(?<rest>.+)$/iu.exec(text);
-    if (argMatch) {
-      const targetArgs = seenFrom ? stageArgs : globalArgs;
-      for (const declaration of parseDockerfileArgDeclarations(argMatch.groups.rest)) {
-        const argName = declaration.name;
-        if (argOverrides?.has(argName)) {
-          const overrideEntry = argOverrides.get(argName);
-          const overrideValues = Array.isArray(overrideEntry)
-            ? overrideEntry
-            : overrideEntry.values;
-          const overrideTruncated = Array.isArray(overrideEntry)
-            ? false
-            : Boolean(overrideEntry.truncated);
-          const staticOverrides = overrideValues.filter((val) => !isDynamicReference(val));
-          if (overrideValues.some((val) => isDynamicReference(val))) {
-            dynamicOverriddenArgs.add(argName);
-          }
-          if (staticOverrides.length > 0 || overrideTruncated) {
-            targetArgs.set(argName, { values: staticOverrides, truncated: overrideTruncated });
-          } else {
-            targetArgs.delete(argName);
-          }
-        } else if (declaration.value !== undefined) {
-          const mergedArgs = seenFrom ? new Map([...globalArgs, ...stageArgs]) : globalArgs;
-          targetArgs.set(
-            argName,
-            resolveBuildArgValues(stripQuotes(declaration.value), mergedArgs),
-          );
-        } else if (seenFrom && globalArgs.has(argName)) {
-          targetArgs.set(argName, globalArgs.get(argName));
-        }
-      }
-      continue;
-    }
+    const resolveBuildArgValues = (token, argsMap, activeDynamicArgs = dynamicOverriddenArgs) => {
+      const referencedNames = extractReferencedBuildArgNames(token);
+      const rawValues = new Map();
+      const multiArgs = [];
+      let truncated = false;
 
-    const fromMatch = /^FROM\s+(?<rest>.+)$/iu.exec(text);
-    if (fromMatch) {
-      seenFrom = true;
-      stageArgs = new Map();
-      const tokens = fromMatch.groups.rest.trim().split(/\s+/u);
-      let cursor = 0;
-      while (cursor < tokens.length && tokens[cursor].startsWith("--")) {
-        cursor += 1;
-      }
-      const imageToken = tokens[cursor];
-      if (!imageToken) {
-        continue;
-      }
-
-      const stageAlias =
-        tokens[cursor + 1] && tokens[cursor + 1].toLowerCase() === "as" && tokens[cursor + 2]
-          ? tokens[cursor + 2].toLowerCase()
-          : null;
-
-      // Resolve against global ARGs (including any workflow `--build-arg`
-      // overrides) and check against previously declared stages BEFORE
-      // registering the new stage alias so `FROM alpine AS alpine` fails.
-      const dynamicOverrideName = referencesDynamicOverride(imageToken);
-      if (dynamicOverrideName && sourceFile && sourceLine) {
-        problems.push(
-          `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
-        );
-      }
-      const expandedFrom = resolveBuildArgValues(imageToken, globalArgs);
-      if (expandedFrom.truncated) {
-        problems.push(
-          `${filePath}:${lineNumber}: ${imageToken} exceeds build-arg expansion limit and cannot be verified exhaustively`,
-        );
-      }
-      for (const resolved of expandedFrom.values) {
-        if (
-          resolved.length > 0 &&
-          resolved.toLowerCase() !== "scratch" &&
-          !stages.has(resolved.toLowerCase()) &&
-          !namedContexts?.has(resolved.toLowerCase()) &&
-          !isDynamicReference(resolved) &&
-          !isPinnedDigest(resolved)
-        ) {
-          problems.push(`${filePath}:${lineNumber}: ${resolved} is not pinned to a sha256 digest`);
-        }
-      }
-
-      if (stageAlias) {
-        stages.add(stageAlias);
-      }
-      continue;
-    }
-
-    const onbuildMatch = /^ONBUILD\s+(?<nested>.+)$/iu.exec(text);
-    const isOnbuild = Boolean(onbuildMatch);
-    const effectiveText = onbuildMatch ? onbuildMatch.groups.nested.trimStart() : text;
-    const isExternalOnbuildImage = (ref) =>
-      ref.includes(":") || ref.includes("/") || ref.includes("@");
-
-    const rawCopySource = extractCopyFromSource(effectiveText);
-    if (rawCopySource) {
-      if (isOnbuild) {
-        if (
-          rawCopySource.length > 0 &&
-          !isDynamicReference(rawCopySource) &&
-          isExternalOnbuildImage(rawCopySource) &&
-          !isPinnedDigest(rawCopySource)
-        ) {
-          problems.push(
-            `${filePath}:${lineNumber}: ${rawCopySource} is not pinned to a sha256 digest`,
-          );
-        }
-        continue;
-      }
-      const mergedArgs = new Map([...globalArgs, ...stageArgs]);
-      const dynamicOverrideName = referencesDynamicOverride(rawCopySource);
-      if (dynamicOverrideName && sourceFile && sourceLine) {
-        problems.push(
-          `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
-        );
-      }
-      const expandedCopy = resolveBuildArgValues(rawCopySource, mergedArgs);
-      if (expandedCopy.truncated) {
-        problems.push(
-          `${filePath}:${lineNumber}: ${rawCopySource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
-        );
-      }
-      for (const sourceRef of expandedCopy.values) {
-        if (
-          sourceRef.length === 0 ||
-          /^\d+$/u.test(sourceRef) ||
-          allStages.has(sourceRef.toLowerCase()) ||
-          namedContexts?.has(sourceRef.toLowerCase()) ||
-          isDynamicReference(sourceRef)
-        ) {
+      for (const name of referencedNames) {
+        if (!argsMap.has(name)) {
           continue;
         }
-        if (!isPinnedDigest(sourceRef)) {
-          problems.push(`${filePath}:${lineNumber}: ${sourceRef} is not pinned to a sha256 digest`);
+        const entry = argsMap.get(name);
+        if (entry.truncated) {
+          truncated = true;
+        }
+        if (entry.values.length > 0) {
+          rawValues.set(name, entry.values[0]);
+        }
+        if (entry.values.length > 1) {
+          multiArgs.push([name, entry.values]);
         }
       }
-      continue;
-    }
 
-    if (/^RUN\s+/iu.test(effectiveText)) {
-      const mergedArgs = new Map([...globalArgs, ...stageArgs]);
-      for (const rawSource of extractRunMountSources(effectiveText)) {
+      if (multiArgs.length === 0) {
+        return { values: [resolveBuildArgs(token, rawValues, 0, activeDynamicArgs)], truncated };
+      }
+
+      let combinations = [rawValues];
+      for (const [name, values] of multiArgs) {
+        const next = [];
+        for (const combo of combinations) {
+          for (const value of values) {
+            if (next.length >= MAX_TOKEN_EXPANSIONS) {
+              truncated = true;
+              break;
+            }
+            const clone = new Map(combo);
+            clone.set(name, value);
+            next.push(clone);
+          }
+          if (truncated) {
+            break;
+          }
+        }
+        combinations = next;
+      }
+
+      const seen = new Set();
+      const resolvedList = [];
+      for (const combo of combinations) {
+        const resolved = resolveBuildArgs(token, combo, 0, activeDynamicArgs);
+        if (!seen.has(resolved)) {
+          seen.add(resolved);
+          resolvedList.push(resolved);
+        }
+      }
+      return { values: resolvedList, truncated };
+    };
+
+    const referencesDynamicOverride = (token) => {
+      if (dynamicOverriddenArgs.size === 0) {
+        return null;
+      }
+      const referenced = extractReferencedBuildArgNames(token);
+      for (const argName of dynamicOverriddenArgs) {
+        if (referenced.has(argName)) {
+          return argName;
+        }
+      }
+      return null;
+    };
+
+    for (const { lineNumber, text } of logicalLines) {
+      const argMatch = /^ARG\s+(?<rest>.+)$/iu.exec(text);
+      if (argMatch) {
+        const targetArgs = seenFrom ? stageArgs : globalArgs;
+        const targetAutoDynamic = seenFrom ? stageAutomaticDynamicArgs : globalAutomaticDynamicArgs;
+        for (const declaration of parseDockerfileArgDeclarations(argMatch.groups.rest)) {
+          const argName = declaration.name;
+          if (argOverrides?.has(argName)) {
+            const overrideEntry = argOverrides.get(argName);
+            const overrideValues = Array.isArray(overrideEntry)
+              ? overrideEntry
+              : overrideEntry.values;
+            const overrideTruncated = Array.isArray(overrideEntry)
+              ? false
+              : Boolean(overrideEntry.truncated);
+            const staticOverrides = overrideValues.filter((val) => !isDynamicReference(val));
+            if (overrideValues.some((val) => isDynamicReference(val))) {
+              dynamicOverriddenArgs.add(argName);
+            }
+            if (staticOverrides.length > 0 || overrideTruncated) {
+              targetArgs.set(argName, { values: staticOverrides, truncated: overrideTruncated });
+              targetAutoDynamic.delete(argName);
+            } else {
+              targetArgs.delete(argName);
+            }
+          } else if (declaration.value !== undefined) {
+            if (platformBindings && Object.hasOwn(platformBindings, argName)) {
+              targetAutoDynamic.delete(argName);
+              targetArgs.set(argName, { values: [platformBindings[argName]], truncated: false });
+            } else {
+              const mergedArgs = seenFrom ? new Map([...globalArgs, ...stageArgs]) : globalArgs;
+              const activeDynamic = seenFrom
+                ? new Set([...dynamicOverriddenArgs, ...stageAutomaticDynamicArgs])
+                : new Set([...dynamicOverriddenArgs, ...globalAutomaticDynamicArgs]);
+              targetAutoDynamic.delete(argName);
+              targetArgs.set(
+                argName,
+                resolveBuildArgValues(stripQuotes(declaration.value), mergedArgs, activeDynamic),
+              );
+            }
+          } else if (seenFrom) {
+            if (globalArgs.has(argName)) {
+              targetArgs.set(argName, globalArgs.get(argName));
+              targetAutoDynamic.delete(argName);
+            } else if (globalAutomaticDynamicArgs.has(argName)) {
+              targetAutoDynamic.add(argName);
+            }
+          }
+        }
+        continue;
+      }
+
+      const fromMatch = /^FROM\s+(?<rest>.+)$/iu.exec(text);
+      if (fromMatch) {
+        seenFrom = true;
+        stageArgs = new Map();
+        stageAutomaticDynamicArgs = new Set();
+        const tokens = fromMatch.groups.rest.trim().split(/\s+/u);
+        let cursor = 0;
+        while (cursor < tokens.length && tokens[cursor].startsWith("--")) {
+          cursor += 1;
+        }
+        const imageToken = tokens[cursor];
+        if (!imageToken) {
+          continue;
+        }
+
+        const stageAlias =
+          tokens[cursor + 1] && tokens[cursor + 1].toLowerCase() === "as" && tokens[cursor + 2]
+            ? tokens[cursor + 2].toLowerCase()
+            : null;
+
+        // Resolve against global ARGs (including any workflow `--build-arg`
+        // overrides and BuildKit automatic platform ARGs) and check against
+        // previously declared stages BEFORE registering the new stage alias.
+        const dynamicOverrideName = referencesDynamicOverride(imageToken);
+        if (dynamicOverrideName && sourceFile && sourceLine) {
+          pushProblem(
+            `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
+          );
+        }
+        const fromDynamicArgs = new Set([...dynamicOverriddenArgs, ...globalAutomaticDynamicArgs]);
+        const expandedFrom = resolveBuildArgValues(imageToken, globalArgs, fromDynamicArgs);
+        if (expandedFrom.truncated) {
+          pushProblem(
+            `${filePath}:${lineNumber}: ${imageToken} exceeds build-arg expansion limit and cannot be verified exhaustively`,
+          );
+        }
+        for (const resolved of expandedFrom.values) {
+          if (
+            resolved.length > 0 &&
+            resolved.toLowerCase() !== "scratch" &&
+            !stages.has(resolved.toLowerCase()) &&
+            !namedContexts?.has(resolved.toLowerCase()) &&
+            !isDynamicReference(resolved) &&
+            !isPinnedDigest(resolved)
+          ) {
+            pushProblem(`${filePath}:${lineNumber}: ${resolved} is not pinned to a sha256 digest`);
+          }
+        }
+
+        if (stageAlias) {
+          stages.add(stageAlias);
+        }
+        continue;
+      }
+
+      const onbuildMatch = /^ONBUILD\s+(?<nested>.+)$/iu.exec(text);
+      const isOnbuild = Boolean(onbuildMatch);
+      const effectiveText = onbuildMatch ? onbuildMatch.groups.nested.trimStart() : text;
+      const isExternalOnbuildImage = (ref) =>
+        ref.includes(":") || ref.includes("/") || ref.includes("@");
+
+      const rawCopySource = extractCopyFromSource(effectiveText);
+      if (rawCopySource) {
         if (isOnbuild) {
           if (
-            rawSource.length > 0 &&
-            !isDynamicReference(rawSource) &&
-            isExternalOnbuildImage(rawSource) &&
-            !isPinnedDigest(rawSource)
+            rawCopySource.length > 0 &&
+            !isDynamicReference(rawCopySource) &&
+            isExternalOnbuildImage(rawCopySource) &&
+            !isPinnedDigest(rawCopySource)
           ) {
-            problems.push(
-              `${filePath}:${lineNumber}: ${rawSource} is not pinned to a sha256 digest`,
+            pushProblem(
+              `${filePath}:${lineNumber}: ${rawCopySource} is not pinned to a sha256 digest`,
             );
           }
           continue;
         }
-        const dynamicOverrideName = referencesDynamicOverride(rawSource);
+        const mergedArgs = new Map([...globalArgs, ...stageArgs]);
+        const stageDynamicArgs = new Set([...dynamicOverriddenArgs, ...stageAutomaticDynamicArgs]);
+        const dynamicOverrideName = referencesDynamicOverride(rawCopySource);
         if (dynamicOverrideName && sourceFile && sourceLine) {
-          problems.push(
+          pushProblem(
             `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
           );
         }
-        const expandedMount = resolveBuildArgValues(rawSource, mergedArgs);
-        if (expandedMount.truncated) {
-          problems.push(
-            `${filePath}:${lineNumber}: ${rawSource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
+        const expandedCopy = resolveBuildArgValues(rawCopySource, mergedArgs, stageDynamicArgs);
+        if (expandedCopy.truncated) {
+          pushProblem(
+            `${filePath}:${lineNumber}: ${rawCopySource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
           );
         }
-        for (const sourceRef of expandedMount.values) {
+        for (const sourceRef of expandedCopy.values) {
           if (
             sourceRef.length === 0 ||
             /^\d+$/u.test(sourceRef) ||
@@ -7289,13 +7808,64 @@ export function unpinnedContainerfileReferences(
             continue;
           }
           if (!isPinnedDigest(sourceRef)) {
-            problems.push(
-              `${filePath}:${lineNumber}: ${sourceRef} is not pinned to a sha256 digest`,
+            pushProblem(`${filePath}:${lineNumber}: ${sourceRef} is not pinned to a sha256 digest`);
+          }
+        }
+        continue;
+      }
+
+      if (/^RUN\s+/iu.test(effectiveText)) {
+        const mergedArgs = new Map([...globalArgs, ...stageArgs]);
+        const stageDynamicArgs = new Set([...dynamicOverriddenArgs, ...stageAutomaticDynamicArgs]);
+        for (const rawSource of extractRunMountSources(effectiveText)) {
+          if (isOnbuild) {
+            if (
+              rawSource.length > 0 &&
+              !isDynamicReference(rawSource) &&
+              isExternalOnbuildImage(rawSource) &&
+              !isPinnedDigest(rawSource)
+            ) {
+              pushProblem(
+                `${filePath}:${lineNumber}: ${rawSource} is not pinned to a sha256 digest`,
+              );
+            }
+            continue;
+          }
+          const dynamicOverrideName = referencesDynamicOverride(rawSource);
+          if (dynamicOverrideName && sourceFile && sourceLine) {
+            pushProblem(
+              `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
             );
+          }
+          const expandedMount = resolveBuildArgValues(rawSource, mergedArgs, stageDynamicArgs);
+          if (expandedMount.truncated) {
+            pushProblem(
+              `${filePath}:${lineNumber}: ${rawSource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
+            );
+          }
+          for (const sourceRef of expandedMount.values) {
+            if (
+              sourceRef.length === 0 ||
+              /^\d+$/u.test(sourceRef) ||
+              allStages.has(sourceRef.toLowerCase()) ||
+              namedContexts?.has(sourceRef.toLowerCase()) ||
+              isDynamicReference(sourceRef)
+            ) {
+              continue;
+            }
+            if (!isPinnedDigest(sourceRef)) {
+              pushProblem(
+                `${filePath}:${lineNumber}: ${sourceRef} is not pinned to a sha256 digest`,
+              );
+            }
           }
         }
       }
     }
+  };
+
+  for (const platformBindings of platformBindingRuns) {
+    evaluateForPlatform(platformBindings);
   }
 
   return problems;
@@ -7307,6 +7877,13 @@ export function checkWorkflowPins(root = process.cwd()) {
     path.join(root, ".github", "actions"),
   ];
   const problems = [];
+  const seenProblems = new Set();
+  const pushProblem = (problem) => {
+    if (!seenProblems.has(problem)) {
+      seenProblems.add(problem);
+      problems.push(problem);
+    }
+  };
   const explicitBuildFiles = new Set();
   const buildInvocations = [];
   let checked = 0;
@@ -7319,24 +7896,19 @@ export function checkWorkflowPins(root = process.cwd()) {
       checked += 1;
       const source = readFileSync(filePath, "utf8");
       const relativePath = formatPortableRelativePath(root, filePath);
-      problems.push(
-        ...unpinnedActionReferences(source, relativePath),
-        ...unpinnedWorkflowContainerReferences(source, relativePath, {
-          root,
-          explicitBuildFiles,
-          buildInvocations,
-        }),
-      );
+      for (const problem of unpinnedActionReferences(source, relativePath)) {
+        pushProblem(problem);
+      }
+      for (const problem of unpinnedWorkflowContainerReferences(source, relativePath, {
+        root,
+        explicitBuildFiles,
+        buildInvocations,
+      })) {
+        pushProblem(problem);
+      }
     }
   }
 
-  const seenContainerProblems = new Set(problems);
-  const pushContainerProblem = (problem) => {
-    if (!seenContainerProblems.has(problem)) {
-      seenContainerProblems.add(problem);
-      problems.push(problem);
-    }
-  };
   const symlinkProblems = [];
 
   const containerFileSet = new Set(
@@ -7375,7 +7947,7 @@ export function checkWorkflowPins(root = process.cwd()) {
   }
 
   for (const problem of symlinkProblems) {
-    pushContainerProblem(problem);
+    pushProblem(problem);
   }
 
   const containerFiles = [...containerFileSet].sort();
@@ -7385,12 +7957,12 @@ export function checkWorkflowPins(root = process.cwd()) {
     for (const problem of unpinnedContainerfileReferences(source, relativePath, {
       namedContexts: universalNamedContexts.get(filePath) ?? null,
     })) {
-      pushContainerProblem(problem);
+      pushProblem(problem);
     }
   }
 
   for (const invocation of resolvedInvocations) {
-    if (invocation.buildArgs.size === 0) {
+    if (invocation.buildArgs.size === 0 && invocation.platforms.length === 0) {
       continue;
     }
     const source = readFileSync(invocation.filePath, "utf8");
@@ -7398,10 +7970,11 @@ export function checkWorkflowPins(root = process.cwd()) {
     for (const problem of unpinnedContainerfileReferences(source, relativePath, {
       argOverrides: invocation.buildArgs,
       namedContexts: invocation.namedContexts,
+      platforms: invocation.platforms,
       sourceFile: invocation.sourceFile,
       sourceLine: invocation.sourceLine,
     })) {
-      pushContainerProblem(problem);
+      pushProblem(problem);
     }
   }
 
