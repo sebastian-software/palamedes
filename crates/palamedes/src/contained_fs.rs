@@ -4794,13 +4794,7 @@ mod platform {
                 let error = io::Error::last_os_error();
                 if matches!(
                     error.raw_os_error(),
-                    Some(
-                        libc::ENOTSUP
-                            | libc::EOPNOTSUPP
-                            | libc::EPERM
-                            | libc::EACCES
-                            | libc::ENOSYS
-                    )
+                    Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::ENOSYS)
                 ) {
                     return Ok(Vec::new());
                 }
@@ -4829,7 +4823,7 @@ mod platform {
             }
             if matches!(
                 error.raw_os_error(),
-                Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::EPERM | libc::EACCES | libc::ENOSYS)
+                Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::ENOSYS)
             ) {
                 return Ok(Vec::new());
             }
@@ -4852,13 +4846,6 @@ mod platform {
                 if size < 0 {
                     let error = io::Error::last_os_error();
                     if error.raw_os_error() == Some(libc::ENOATTR) {
-                        break;
-                    }
-                    if matches!(
-                        error.raw_os_error(),
-                        Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::EPERM | libc::EACCES)
-                    ) && raw_name.starts_with(b"com.apple.")
-                    {
                         break;
                     }
                     return Err(error);
@@ -5476,6 +5463,7 @@ mod platform {
         dacl_sd: Option<Vec<usize>>,
         label_sd: Option<Vec<usize>>,
         sacl_sd: Option<Vec<usize>>,
+        sacl_accessible: bool,
         attribute_sd: Option<Vec<usize>>,
         scope_sd: Option<Vec<usize>>,
         file_attributes: u32,
@@ -6273,30 +6261,29 @@ mod platform {
                 let existing_identity = existing_entry.as_ref().map(|(identity, _)| *identity);
                 let target_existed = existing_identity.is_some();
                 let mut existing_security = existing_entry.and_then(|(_, security)| security);
-                if existing_security
-                    .as_ref()
-                    .is_some_and(|security| security.is_encrypted)
-                {
-                    // Replacing an EFS-encrypted file with a newly created file
-                    // cannot guarantee preservation of additional EFS
-                    // recipients without EFS recipient duplication APIs; fail
-                    // closed rather than silently revoking decrypt access.
-                    return Err(ContainedFsError::Io(io::Error::new(
-                        io::ErrorKind::Unsupported,
-                        "cannot safely preserve Windows EFS encryption recipients across atomic replacement",
-                    )));
-                }
-                if existing_security
-                    .as_ref()
-                    .is_some_and(|security| security.has_named_streams)
-                {
-                    // Replacing a file with NTFS named Alternate Data Streams
-                    // via rename would silently discard those streams; fail
-                    // closed before publication rather than deleting stream data.
-                    return Err(ContainedFsError::Io(io::Error::new(
-                        io::ErrorKind::Unsupported,
-                        "cannot safely preserve Windows NTFS named data streams across atomic replacement",
-                    )));
+                if let Some(expected_identity) = existing_identity {
+                    // When the caller lacks `SeSecurityPrivilege` (so audit
+                    // SACLs cannot be read or replayed onto a new file object)
+                    // or the file carries EFS encryption, NTFS named streams,
+                    // or special storage attributes, renaming a new file over
+                    // the destination would silently discard kernel metadata.
+                    // Update the verified single-link file object exclusively
+                    // (`share_access = 0`) instead so Windows preserves 100% of
+                    // its SACL, DACL, EFS, named streams, and attributes.
+                    let can_atomic_replace = existing_security.as_ref().is_none_or(|security| {
+                        security.sacl_accessible
+                            && !security.is_encrypted
+                            && !security.has_named_streams
+                            && (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) == 0
+                    });
+                    if !can_atomic_replace {
+                        return self.overwrite_existing_exclusively(
+                            file_name,
+                            expected_identity,
+                            bytes,
+                            durability,
+                        );
+                    }
                 }
                 let initial_dacl = existing_security
                     .as_mut()
@@ -6480,7 +6467,7 @@ mod platform {
                 )?;
                 let scope_sd =
                     read_security_descriptor(handle.as_raw_handle(), SCOPE_SECURITY_INFORMATION)?;
-                let sacl_sd = match nt_create_relative(
+                let (sacl_accessible, sacl_sd) = match nt_create_relative(
                     self.handle.as_raw_handle(),
                     file_name,
                     ACCESS_SYSTEM_SECURITY | SYNCHRONIZE,
@@ -6490,11 +6477,14 @@ mod platform {
                     FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
                     std::ptr::null_mut(),
                 ) {
-                    Ok(sacl_handle) => read_security_descriptor(
-                        sacl_handle.as_raw_handle(),
-                        SACL_SECURITY_INFORMATION,
-                    )?,
-                    Err(STATUS_PRIVILEGE_NOT_HELD | STATUS_ACCESS_DENIED) => None,
+                    Ok(sacl_handle) => (
+                        true,
+                        read_security_descriptor(
+                            sacl_handle.as_raw_handle(),
+                            SACL_SECURITY_INFORMATION,
+                        )?,
+                    ),
+                    Err(STATUS_PRIVILEGE_NOT_HELD | STATUS_ACCESS_DENIED) => (false, None),
                     Err(status) => {
                         return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
                     }
@@ -6504,6 +6494,7 @@ mod platform {
                     dacl_sd,
                     label_sd,
                     sacl_sd,
+                    sacl_accessible,
                     attribute_sd,
                     scope_sd,
                     file_attributes: info.file_attributes,
@@ -6521,6 +6512,89 @@ mod platform {
                 },
                 security,
             )))
+        }
+
+        fn overwrite_existing_exclusively(
+            &self,
+            file_name: &OsStr,
+            expected_identity: FileIdentity,
+            bytes: &[u8],
+            durability: ContainedWriteDurability,
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            let mut backoff_ms: u64 = 2;
+            let handle = loop {
+                match nt_create_relative(
+                    self.handle.as_raw_handle(),
+                    file_name,
+                    FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_ATTRIBUTE_NORMAL,
+                    0,
+                    FILE_OPEN,
+                    FILE_NON_DIRECTORY_FILE
+                        | FILE_OPEN_REPARSE_POINT
+                        | FILE_SYNCHRONOUS_IO_NONALERT,
+                    std::ptr::null_mut(),
+                ) {
+                    Ok(handle) => break handle,
+                    Err(status) if is_not_found_status(status) => {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            format!(
+                                "destination \"{}\" was removed concurrently before update",
+                                file_name.to_string_lossy()
+                            ),
+                        )));
+                    }
+                    Err(STATUS_SHARING_VIOLATION) => {
+                        if std::time::Instant::now() >= deadline {
+                            return Err(ContainedFsError::Io(nt_status_to_io_error(
+                                STATUS_SHARING_VIOLATION,
+                            )));
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                        backoff_ms = (backoff_ms * 2).min(50);
+                    }
+                    Err(status) => {
+                        return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
+                    }
+                }
+            };
+            let info = file_information(handle.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to write through symlink \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
+            if info.number_of_links > 1 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to overwrite hard-linked file \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
+            let live_identity = FileIdentity {
+                volume_serial: info.volume_serial_number,
+                file_index_high: info.file_index_high,
+                file_index_low: info.file_index_low,
+            };
+            if live_identity != expected_identity {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!(
+                        "destination \"{}\" was replaced concurrently before update",
+                        file_name.to_string_lossy()
+                    ),
+                )));
+            }
+            let mut file = File::from(handle);
+            file.set_len(0)?;
+            file.write_all(bytes)?;
+            file.flush()?;
+            if durability.syncs_file() {
+                file.sync_all()?;
+            }
+            Ok(ContainedWriteOutcome::Committed)
         }
 
         fn create_temp_file(
@@ -7236,6 +7310,7 @@ mod platform {
             (Some(exp), Some(act)) => {
                 if exp.is_encrypted != act.is_encrypted
                     || exp.has_named_streams != act.has_named_streams
+                    || exp.sacl_accessible != act.sacl_accessible
                     || exp.file_attributes != act.file_attributes
                 {
                     return Ok(false);
@@ -8709,6 +8784,80 @@ mod tests {
             expected_flags,
             "user BSD flags (UF_NODUMP | UF_HIDDEN) must be preserved across replacement"
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_replacement_aborts_when_extended_attributes_are_unreadable() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        use std::process::Command;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let file_path = root.path().join("en.mjs");
+        fs::write(&file_path, "export default { v: 1 };\n").expect("seed module");
+        let c_path = CString::new(file_path.as_os_str().as_bytes()).expect("c path");
+        let attr_name = c"com.example.review";
+        let attr_val = b"must-not-drop";
+        // SAFETY: `c_path`, `attr_name`, and `attr_val` are valid.
+        if unsafe {
+            libc::setxattr(
+                c_path.as_ptr(),
+                attr_name.as_ptr(),
+                attr_val.as_ptr().cast::<libc::c_void>(),
+                attr_val.len(),
+                0,
+                0,
+            )
+        } != 0
+        {
+            return;
+        }
+        let status = Command::new("/bin/chmod")
+            .args(["+a", "everyone deny readextattr"])
+            .arg(&file_path)
+            .status()
+            .expect("chmod +a deny readextattr");
+        if !status.success() {
+            return;
+        }
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        let err = dir
+            .write_file_in_place(OsStr::new("en.mjs"), b"export default { v: 2 };\n")
+            .expect_err("replacement must fail closed when xattrs cannot be read");
+        assert!(
+            matches!(
+                &err,
+                ContainedFsError::Io(io_err) if io_err.kind() == io::ErrorKind::PermissionDenied
+            ),
+            "expected PermissionDenied when readextattr is denied, got {err:?}"
+        );
+        // Remove the deny ACE so we can confirm both the original file content
+        // and its extended attribute remained untouched.
+        let _ = Command::new("/bin/chmod")
+            .args(["-a", "everyone deny readextattr"])
+            .arg(&file_path)
+            .status();
+        assert_eq!(
+            fs::read_to_string(&file_path).expect("read untouched module"),
+            "export default { v: 1 };\n"
+        );
+        let mut buf = [0u8; 32];
+        // SAFETY: `c_path`, `attr_name`, and `buf` are valid.
+        let read = unsafe {
+            libc::getxattr(
+                c_path.as_ptr(),
+                attr_name.as_ptr(),
+                buf.as_mut_ptr().cast::<libc::c_void>(),
+                buf.len(),
+                0,
+                0,
+            )
+        };
+        assert!(read >= 0, "original xattr must remain intact");
+        let len = usize::try_from(read).expect("non-negative xattr length");
+        assert_eq!(&buf[..len], attr_val);
     }
 
     #[cfg(unix)]

@@ -646,7 +646,7 @@ fn compile_js(
     }
 
     if diagnostics.is_empty() {
-        fs::create_dir_all(output).map_err(|error| format!("{}: {error}", output.display()))?;
+        create_output_dir_all(output).map_err(|error| format!("{}: {error}", output.display()))?;
         let output_dir = ContainedDir::open_root(output)
             .map_err(|error| format!("{}: {error}", output.display()))?;
         for (file_name, module_path, _) in &modules {
@@ -666,6 +666,21 @@ fn compile_js(
         update,
         diagnostics,
     })
+}
+
+/// Creates missing output directories with mode `0o755` on Unix (matching
+/// `ContainedDir::open_subpath`) so a relaxed umask such as `0002` does not
+/// produce a group-writable `0o775` directory that safe lock/staging checks
+/// reject, while leaving any pre-existing directory's permissions untouched.
+fn create_output_dir_all(output: &Path) -> std::io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o755);
+    }
+    builder.create(output)
 }
 
 fn resolve_compiled_js_module_path(
@@ -1010,5 +1025,63 @@ mod tests {
             "export const original = true;\n"
         );
         fs::set_permissions(&module_path, fs::Permissions::from_mode(0o644)).expect("restore");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_creates_missing_output_dirs_without_group_or_world_write_bits() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let app = temp_dir("compile-js-output-dir-mode");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let existing_parent = app.join("existing-parent");
+        fs::create_dir(&existing_parent).expect("create existing parent");
+        fs::set_permissions(&existing_parent, fs::Permissions::from_mode(0o775))
+            .expect("chmod 0775 existing parent");
+
+        let config = load_config(&app, None).expect("load config");
+        let output = existing_parent.join("nested/js-out");
+        compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect("compile_js must create stageable output directory");
+
+        assert!(output.join("en.mjs").is_file());
+        let nested_mode = fs::metadata(existing_parent.join("nested"))
+            .expect("stat nested")
+            .permissions()
+            .mode();
+        let output_mode = fs::metadata(&output)
+            .expect("stat output")
+            .permissions()
+            .mode();
+        assert_eq!(
+            nested_mode & 0o0022,
+            0,
+            "newly created ancestor must not be group/world-writable"
+        );
+        assert_eq!(
+            output_mode & 0o0022,
+            0,
+            "newly created output dir must not be group/world-writable"
+        );
+        let existing_mode = fs::metadata(&existing_parent)
+            .expect("stat existing parent")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(
+            existing_mode, 0o775,
+            "pre-existing ancestor directory permissions must not be modified"
+        );
+        fs::set_permissions(&existing_parent, fs::Permissions::from_mode(0o755)).expect("restore");
     }
 }

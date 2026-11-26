@@ -2322,8 +2322,8 @@ catalogs:
 
         use palamedes::DirFilenameEquivalence;
 
-        let equivalence = super::ContainedDir::open_root(&app)
-            .expect("open root")
+        let root_dir = super::ContainedDir::open_root(&app).expect("open root");
+        let equivalence = root_dir
             .filename_equivalence()
             .unwrap_or_else(super::default_platform_equivalence);
         let is_unicode_norm = matches!(
@@ -2335,7 +2335,13 @@ catalogs:
                 | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
         );
         // Unicode NFC vs NFD collision on clean checkout (for example APFS/HFS+).
-        if is_unicode_norm {
+        let unicode_norm_aliases = root_dir
+            .probe_names_equivalent(
+                std::ffi::OsStr::new("caf\u{00e9}.po"),
+                std::ffi::OsStr::new("cafe\u{0301}.po"),
+            )
+            .unwrap_or(is_unicode_norm);
+        if unicode_norm_aliases {
             fs::write(
                 app.join("palamedes.yaml"),
                 "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/caf\u{00e9}\n    include: [app/a]\n  - path: locales/{locale}/cafe\u{0301}\n    include: [app/b]\n",
@@ -2358,11 +2364,17 @@ catalogs:
         // Full Unicode multi-character case folding collision (`straße` vs
         // `strasse`) on filesystems that fold `ß` to `ss` (APFS and Linux
         // `FS_CASEFOLD_FL`, NOT HFS+ or NTFS).
-        if matches!(
-            equivalence,
-            DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
-                | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
-        ) {
+        let eszett_aliases = root_dir
+            .probe_names_equivalent(
+                std::ffi::OsStr::new("stra\u{00df}e.po"),
+                std::ffi::OsStr::new("strasse.po"),
+            )
+            .unwrap_or(matches!(
+                equivalence,
+                DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+                    | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
+            ));
+        if eszett_aliases {
             fs::write(
                 app.join("palamedes.yaml"),
                 "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/stra\u{00df}e\n    include: [app/a]\n  - path: locales/{locale}/strasse\n    include: [app/b]\n",
@@ -2382,15 +2394,21 @@ catalogs:
             assert!(!app.join("locales/en/strasse.po").exists());
         }
 
-        // Greek sigma/final-sigma collision (`σ` vs `ς`) on filesystems that
-        // equate both forms (NTFS `$UpCase`, APFS, and Linux `FS_CASEFOLD_FL`,
-        // NOT HFS+ Unicode 3.2 1-to-1 lowercase).
-        if matches!(
-            equivalence,
-            DirFilenameEquivalence::CaseInsensitiveNtfs
-                | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
-                | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
-        ) {
+        // Greek sigma/final-sigma collision (`σ` vs `ς`) on filesystems where
+        // the volume itself equates both forms (for example NTFS `$UpCase`,
+        // APFS, and Linux `FS_CASEFOLD_FL`, NOT ASCII-only XFS or HFS+).
+        let sigma_aliases = root_dir
+            .probe_names_equivalent(
+                std::ffi::OsStr::new("\u{03c3}.po"),
+                std::ffi::OsStr::new("\u{03c2}.po"),
+            )
+            .unwrap_or(matches!(
+                equivalence,
+                DirFilenameEquivalence::CaseInsensitiveNtfs
+                    | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+                    | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
+            ));
+        if sigma_aliases {
             fs::write(
                 app.join("palamedes.yaml"),
                 "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/\u{03c3}\n    include: [app/a]\n  - path: locales/{locale}/\u{03c2}\n    include: [app/b]\n",
