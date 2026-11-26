@@ -3715,12 +3715,9 @@ function extractRunMountImageSources(rawMountSpec) {
   return [];
 }
 
-function inspectAttestSbomSpec(rawSpec, { requireSbomType = false } = {}) {
+function inspectAttestSbomSpec(rawSpec, { requireSbomType = false, shellMode = "posix" } = {}) {
   const trimmed = String(rawSpec ?? "").trim();
   if (!trimmed || trimmed.toLowerCase() === "false") {
-    return { images: [], usesDefaultScanner: false };
-  }
-  if (isDynamicReference(trimmed)) {
     return { images: [], usesDefaultScanner: false };
   }
   if (!requireSbomType && trimmed.toLowerCase() === "true") {
@@ -3729,11 +3726,18 @@ function inspectAttestSbomSpec(rawSpec, { requireSbomType = false } = {}) {
   let attestType = "";
   let generator = "";
   let disabled = false;
+  let disabledDynamic = false;
+  let hasKeyValue = false;
+  let hasDynamicBareField = false;
   for (const field of parseCsvMountFields(trimmed)) {
     const eqIndex = field.indexOf("=");
     if (eqIndex === -1) {
+      if (isDynamicReference(field, shellMode)) {
+        hasDynamicBareField = true;
+      }
       continue;
     }
+    hasKeyValue = true;
     const key = stripQuotes(field.slice(0, eqIndex)).toLowerCase();
     const value = stripQuotes(field.slice(eqIndex + 1));
     if (key === "type") {
@@ -3741,10 +3745,17 @@ function inspectAttestSbomSpec(rawSpec, { requireSbomType = false } = {}) {
     } else if (key === "generator") {
       generator = value;
     } else if (key === "disabled") {
-      disabled = value.toLowerCase() === "true";
+      if (isDynamicReference(value, shellMode)) {
+        disabledDynamic = true;
+      } else {
+        disabled = value.toLowerCase() === "true";
+      }
     }
   }
-  if (disabled) {
+  if (!hasKeyValue && isDynamicReference(trimmed, shellMode)) {
+    return { images: [], usesDefaultScanner: false };
+  }
+  if (disabled || disabledDynamic) {
     return { images: [], usesDefaultScanner: false };
   }
   const sbomEnabled = requireSbomType ? attestType === "sbom" : true;
@@ -3753,6 +3764,9 @@ function inspectAttestSbomSpec(rawSpec, { requireSbomType = false } = {}) {
   }
   if (generator) {
     return { images: [generator], usesDefaultScanner: false };
+  }
+  if (hasDynamicBareField) {
+    return { images: [], usesDefaultScanner: false };
   }
   return { images: [], usesDefaultScanner: true };
 }
@@ -3973,7 +3987,10 @@ function inspectBuildContextSpec(
         continue;
       }
       const imageRef = value.slice(schemeMatch[0].length);
-      if (isDynamicReference(imageRef, shellMode)) {
+      if (
+        isDynamicReference(imageRef, shellMode) &&
+        !hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode)
+      ) {
         continue;
       }
       if (!isPinnedDigest(imageRef)) {
@@ -5337,7 +5354,11 @@ function inspectShellText(
             );
             continue;
           }
-          if (!isDynamicReference(imageRef, shellMode) && !isPinnedDigest(imageRef)) {
+          if (
+            (!isDynamicReference(imageRef, shellMode) ||
+              hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode)) &&
+            !isPinnedDigest(imageRef)
+          ) {
             pushCreateProblem(
               `${filePath}:${imageCandidate.line}: ${imageRef} is not pinned to a sha256 digest`,
             );
@@ -5575,7 +5596,11 @@ function inspectShellText(
               varCandidate.line,
             )) {
               const imageRef = candidate.text.trim();
-              if (!imageRef || isDynamicReference(imageRef, shellMode)) {
+              if (
+                !imageRef ||
+                (isDynamicReference(imageRef, shellMode) &&
+                  !hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode))
+              ) {
                 continue;
               }
               if (flag === "--from" && imageRef.toLowerCase() === "scratch") {
@@ -5615,6 +5640,7 @@ function inspectShellText(
             )) {
               const attestInspection = inspectAttestSbomSpec(candidate.text, {
                 requireSbomType,
+                shellMode,
               });
               if (attestInspection.usesDefaultScanner) {
                 const msg = `${filePath}:${candidate.line}: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)`;
@@ -5624,7 +5650,11 @@ function inspectShellText(
                 }
               }
               for (const generatorImage of attestInspection.images) {
-                if (!generatorImage || isDynamicReference(generatorImage, shellMode)) {
+                if (
+                  !generatorImage ||
+                  (isDynamicReference(generatorImage, shellMode) &&
+                    !hasProvablyUnpinnedLiteralSuffix(generatorImage, shellMode))
+                ) {
                   continue;
                 }
                 if (!isPinnedDigest(generatorImage)) {
@@ -7378,7 +7408,11 @@ function checkStepsList(
                   }
                 }
                 for (const generatorImage of attestInspection.images) {
-                  if (!generatorImage || isDynamicReference(generatorImage)) {
+                  if (
+                    !generatorImage ||
+                    (isDynamicReference(generatorImage) &&
+                      !hasProvablyUnpinnedLiteralSuffix(generatorImage))
+                  ) {
                     continue;
                   }
                   if (!isPinnedDigest(generatorImage)) {
@@ -8985,7 +9019,7 @@ export function unpinnedWorkflowContainerReferences(
         includeEventInputs: true,
       });
     }
-    if (hasNonInputTrigger && workflowInputContexts.length > 0) {
+    if (hasNonInputTrigger) {
       // On non-input triggers (e.g. `schedule`, `push`, `pull_request`), GitHub
       // does not populate `workflow_dispatch` or `workflow_call` defaults; both
       // `inputs.*` and `github.event.inputs.*` evaluate to empty strings.
@@ -9005,11 +9039,32 @@ export function unpinnedWorkflowContainerReferences(
       };
       registerAbsent("workflow_dispatch");
       registerAbsent("workflow_call");
-      workflowInputContexts.push({
-        inputs: absentInputs,
-        deferUnresolvedInputs: false,
-        includeEventInputs: true,
-      });
+      const referencedNames = new Set();
+      for (const fieldName of [
+        "env",
+        "defaults",
+        "container",
+        "services",
+        "image",
+        "steps",
+        "jobs",
+      ]) {
+        collectReferencedInputNames(getMapField(doc, fieldName), referencedNames, new Set(), {
+          includeEventInputs: true,
+        });
+      }
+      for (const inputName of referencedNames) {
+        if (!absentInputs.has(inputName)) {
+          absentInputs.set(inputName, { value: "", line: onNode.line });
+        }
+      }
+      if (absentInputs.size > 0 || workflowInputContexts.length === 0) {
+        workflowInputContexts.push({
+          inputs: absentInputs,
+          deferUnresolvedInputs: false,
+          includeEventInputs: true,
+        });
+      }
     }
     if (workflowInputContexts.length === 0) {
       workflowInputContexts.push({
@@ -10054,7 +10109,7 @@ export function unpinnedContainerfileReferences(
             resolved.toLowerCase() !== "scratch" &&
             !stages.has(resolved.toLowerCase()) &&
             !namedContexts?.has(resolved.toLowerCase()) &&
-            !isDynamicReference(resolved) &&
+            (!isDynamicReference(resolved) || hasProvablyUnpinnedLiteralSuffix(resolved)) &&
             !isPinnedDigest(resolved)
           ) {
             pushProblem(`${filePath}:${lineNumber}: ${resolved} is not pinned to a sha256 digest`);
@@ -10078,7 +10133,8 @@ export function unpinnedContainerfileReferences(
         if (isOnbuild) {
           if (
             rawCopySource.length > 0 &&
-            !isDynamicReference(rawCopySource) &&
+            (!isDynamicReference(rawCopySource) ||
+              hasProvablyUnpinnedLiteralSuffix(rawCopySource)) &&
             isExternalOnbuildImage(rawCopySource) &&
             !isPinnedDigest(rawCopySource)
           ) {
@@ -10108,7 +10164,7 @@ export function unpinnedContainerfileReferences(
             /^\d+$/u.test(sourceRef) ||
             allStages.has(sourceRef.toLowerCase()) ||
             namedContexts?.has(sourceRef.toLowerCase()) ||
-            isDynamicReference(sourceRef)
+            (isDynamicReference(sourceRef) && !hasProvablyUnpinnedLiteralSuffix(sourceRef))
           ) {
             continue;
           }
@@ -10126,7 +10182,7 @@ export function unpinnedContainerfileReferences(
           if (isOnbuild) {
             if (
               rawSource.length > 0 &&
-              !isDynamicReference(rawSource) &&
+              (!isDynamicReference(rawSource) || hasProvablyUnpinnedLiteralSuffix(rawSource)) &&
               isExternalOnbuildImage(rawSource) &&
               !isPinnedDigest(rawSource)
             ) {
@@ -10154,7 +10210,7 @@ export function unpinnedContainerfileReferences(
               /^\d+$/u.test(sourceRef) ||
               allStages.has(sourceRef.toLowerCase()) ||
               namedContexts?.has(sourceRef.toLowerCase()) ||
-              isDynamicReference(sourceRef)
+              (isDynamicReference(sourceRef) && !hasProvablyUnpinnedLiteralSuffix(sourceRef))
             ) {
               continue;
             }

@@ -3298,6 +3298,59 @@ describe("workflow contracts", () => {
     expect(
       unpinnedContainerfileReferences(`{\n  "syntax": "my/frontend:latest@${digest}"\n}\n`),
     ).toEqual([]);
+    // Containerfile FROM / COPY --from / RUN --mount with dynamic repository
+    // prefixes (e.g. `${TARGETARCH}/alpine:3.20`) still flag provably unpinned
+    // literal tags, while allowing opaque dynamic stage references (`${STAGE}`).
+    expect(
+      unpinnedContainerfileReferences(
+        [
+          "ARG STAGE",
+          "FROM ${TARGETARCH}/alpine:3.20 AS builder",
+          "FROM ${STAGE}",
+          "ARG TARGETARCH",
+          "COPY --from=${TARGETARCH}/busybox:1.36 /bin/sh /sh",
+          "RUN --mount=type=bind,from=${TARGETARCH}/tools:latest,source=/bin,target=/mnt true",
+          `FROM \${TARGETARCH}/alpine:3.20@${digest}`,
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:2: ${TARGETARCH}/alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:5: ${TARGETARCH}/busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:6: ${TARGETARCH}/tools:latest is not pinned to a sha256 digest",
+    ]);
+    // Non-input triggers (`push`, `schedule`) still evaluate `inputs.*` and
+    // `github.event.inputs.*` to empty strings even when `workflow_dispatch`
+    // declares only optional inputs with no defaults or choices; and dynamic
+    // SBOM generator / buildx create / build-context image prefixes with literal
+    // tags are flagged.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  push:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      suffix:",
+          "        description: Optional digest suffix",
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-latest",
+          "    container: alpine:3.20${{ inputs.suffix }}",
+          "    steps:",
+          "      - run: |",
+          '          docker buildx create --driver docker-container --driver-opt image="$REGISTRY/buildkit:v0.35.1"',
+          '          docker buildx build --attest type=sbom,generator="$REGISTRY/syft:latest" --build-context tools=docker-image://"$REGISTRY/tools:1.0" .',
+          '          docker buildx build --attest "${{ inputs.attest }}" .',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:10: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:13: $REGISTRY/buildkit:v0.35.1 is not pinned to a sha256 digest",
+      "<memory>:14: $REGISTRY/tools:1.0 is not pinned to a sha256 digest",
+      "<memory>:14: $REGISTRY/syft:latest is not pinned to a sha256 digest",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
