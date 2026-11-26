@@ -525,7 +525,10 @@ function setVarEntries(varMap, name, entries, { caseInsensitive = false, merge =
     }
   }
   if (merge) {
-    varMap.set(targetKey, mergeVarEntries(varMap.get(targetKey) ?? [], entries));
+    const existing = varMap.has(targetKey)
+      ? varMap.get(targetKey)
+      : [{ value: "", line: 0, unset: true }];
+    varMap.set(targetKey, mergeVarEntries(existing, entries));
   } else {
     varMap.set(targetKey, entries);
   }
@@ -2496,22 +2499,85 @@ function recordExplicitBuildFile(rawPath, baseDir, root, explicitBuildFiles) {
   return resolvedPath;
 }
 
+function normalizeExecutableName(cli) {
+  if (!cli) {
+    return "";
+  }
+  const base = cli.split(/[\\/]/u).at(-1) ?? cli;
+  return base.toLowerCase().replace(/\.exe$/u, "");
+}
+
 function recordBuildInvocation(
   resolvedFilePath,
   buildArgsMap,
+  namedContexts,
   sourceFile,
   sourceLine,
   buildInvocations,
 ) {
-  if (!buildInvocations || !resolvedFilePath || buildArgsMap.size === 0) {
+  if (!buildInvocations || !resolvedFilePath) {
+    return;
+  }
+  if (buildArgsMap.size === 0 && (!namedContexts || namedContexts.size === 0)) {
     return;
   }
   buildInvocations.push({
     filePath: resolvedFilePath,
     buildArgs: buildArgsMap,
+    namedContexts: namedContexts ? new Set(namedContexts) : new Set(),
     sourceFile,
     sourceLine,
   });
+}
+
+function inspectBuildContextSpec(
+  rawSpec,
+  stepEnv,
+  varMap,
+  matrixRows,
+  filePath,
+  lineNumber,
+  shellMode,
+  problems,
+  namedContexts,
+) {
+  const eqIndex = rawSpec.indexOf("=");
+  if (eqIndex === -1) {
+    return;
+  }
+  const name = rawSpec.slice(0, eqIndex).trim().toLowerCase();
+  const rawValue = rawSpec.slice(eqIndex + 1).trim();
+  if (!name || !rawValue) {
+    return;
+  }
+  namedContexts.add(name);
+  const expanded = resolveImageTokenCandidates(rawValue, stepEnv, varMap, lineNumber, shellMode);
+  if (expanded.truncated) {
+    problems.push(
+      `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`,
+    );
+  }
+  for (const varCandidate of expanded.candidates) {
+    for (const candidate of expandMatrixReferences(
+      varCandidate.text,
+      matrixRows,
+      varCandidate.line,
+    )) {
+      const value = candidate.text.trim();
+      if (!/^docker-image:\/\//iu.test(value)) {
+        continue;
+      }
+      const imageRef = value.slice("docker-image://".length);
+      if (isDynamicReference(imageRef, shellMode)) {
+        continue;
+      }
+      if (!isPinnedDigest(imageRef)) {
+        problems.push(
+          `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`,
+        );
+      }
+    }
+  }
 }
 
 function expandBuildArgSpec(rawSpec, stepEnv, varMap, matrixRows, lineNumber, shellMode) {
@@ -2536,7 +2602,11 @@ function expandBuildArgSpec(rawSpec, stepEnv, varMap, matrixRows, lineNumber, sh
       }
     }
   }
-  return { name, values: values.length > 0 ? values : [rawValue] };
+  return {
+    name,
+    values: values.length > 0 ? values : [rawValue],
+    truncated: expanded.truncated,
+  };
 }
 
 function inspectShellText(
@@ -2714,10 +2784,10 @@ function inspectShellText(
             lineNumber,
           );
           if (conditional) {
-            frame.vars.set(
-              match.groups.name,
-              mergeVarEntries(frame.vars.get(match.groups.name) ?? [], resolved),
-            );
+            const existing = frame.vars.has(match.groups.name)
+              ? frame.vars.get(match.groups.name)
+              : [{ value: "", line: 0, unset: true }];
+            frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
           } else {
             frame.vars.set(match.groups.name, resolved);
           }
@@ -2783,7 +2853,8 @@ function inspectShellText(
       continue;
     }
 
-    if (SHELL_INTERPRETERS.has(path.basename(cli))) {
+    const normalizedCli = normalizeExecutableName(cli);
+    if (SHELL_INTERPRETERS.has(normalizedCli)) {
       const dashCScript = extractShellDashCScript(tokens, cursor);
       if (dashCScript) {
         inspectShellText(
@@ -2804,12 +2875,12 @@ function inspectShellText(
       continue;
     }
 
-    if (cli !== "docker" && cli !== "podman" && cli !== "buildah") {
+    if (normalizedCli !== "docker" && normalizedCli !== "podman" && normalizedCli !== "buildah") {
       continue;
     }
 
     const globalValueFlags =
-      cli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
+      normalizedCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
     let argIndex = cursor + 1;
     while (argIndex < tokens.length) {
       const flag = tokens[argIndex];
@@ -2825,75 +2896,100 @@ function inspectShellText(
 
     let subcommand = tokens[argIndex];
     if (
-      (cli === "buildah" && (subcommand === "bud" || subcommand === "build")) ||
-      (cli !== "buildah" &&
+      (normalizedCli === "buildah" && (subcommand === "bud" || subcommand === "build")) ||
+      (normalizedCli !== "buildah" &&
         (subcommand === "build" ||
           ((subcommand === "buildx" || subcommand === "image") &&
             tokens[argIndex + 1] === "build")))
     ) {
       const buildArgStart =
         subcommand === "buildx" || subcommand === "image" ? argIndex + 2 : argIndex + 1;
-      if (buildFileContext) {
-        const rawFiles = [];
-        const buildArgsMap = new Map();
-        let contextArg = null;
-        for (let index = buildArgStart; index < tokens.length; index += 1) {
-          const token = tokens[index];
-          if (token === "--") {
-            contextArg = tokens[index + 1] ?? contextArg;
-            break;
-          }
-          if (token === ">" || token === ">>" || token === ">&" || token === "<") {
-            index += 1;
-            continue;
-          }
-          if (token === "-f" || token === "--file") {
-            if (tokens[index + 1]) {
-              rawFiles.push(tokens[index + 1]);
-            }
-            index += 1;
-            continue;
-          }
-          if (token.startsWith("--file=")) {
-            rawFiles.push(token.slice("--file=".length));
-            continue;
-          }
-          if (token.startsWith("-f") && token.length > 2) {
-            rawFiles.push(token.slice(2));
-            continue;
-          }
-          let rawBuildArg = null;
-          if (token === "--build-arg") {
-            rawBuildArg = tokens[index + 1] ?? null;
-            index += 1;
-          } else if (token.startsWith("--build-arg=")) {
-            rawBuildArg = token.slice("--build-arg=".length);
-          }
-          if (rawBuildArg !== null) {
-            const parsedArg = expandBuildArgSpec(
-              rawBuildArg,
-              stepEnv,
-              frame.vars,
-              matrixRows,
-              lineNumber,
-              shellMode,
-            );
-            if (parsedArg) {
-              buildArgsMap.set(parsedArg.name, parsedArg.values);
-            }
-            continue;
-          }
-          if (token.startsWith("-")) {
-            if (!token.includes("=") && DOCKER_BUILD_VALUE_FLAGS.has(token)) {
-              index += 1;
-            }
-            continue;
-          }
-          if (contextArg === null) {
-            contextArg = token;
-          }
+      const rawFiles = [];
+      const buildArgsMap = new Map();
+      const namedContexts = new Set();
+      let contextArg = null;
+      for (let index = buildArgStart; index < tokens.length; index += 1) {
+        const token = tokens[index];
+        if (token === "--") {
+          contextArg = tokens[index + 1] ?? contextArg;
+          break;
         }
+        if (token === ">" || token === ">>" || token === ">&" || token === "<") {
+          index += 1;
+          continue;
+        }
+        if (token === "-f" || token === "--file") {
+          if (tokens[index + 1]) {
+            rawFiles.push(tokens[index + 1]);
+          }
+          index += 1;
+          continue;
+        }
+        if (token.startsWith("--file=")) {
+          rawFiles.push(token.slice("--file=".length));
+          continue;
+        }
+        if (token.startsWith("-f") && token.length > 2) {
+          rawFiles.push(token.slice(2));
+          continue;
+        }
+        let rawBuildContext = null;
+        if (token === "--build-context") {
+          rawBuildContext = tokens[index + 1] ?? null;
+          index += 1;
+        } else if (token.startsWith("--build-context=")) {
+          rawBuildContext = token.slice("--build-context=".length);
+        }
+        if (rawBuildContext !== null) {
+          inspectBuildContextSpec(
+            rawBuildContext,
+            stepEnv,
+            frame.vars,
+            matrixRows,
+            filePath,
+            lineNumber,
+            shellMode,
+            problems,
+            namedContexts,
+          );
+          continue;
+        }
+        let rawBuildArg = null;
+        if (token === "--build-arg") {
+          rawBuildArg = tokens[index + 1] ?? null;
+          index += 1;
+        } else if (token.startsWith("--build-arg=")) {
+          rawBuildArg = token.slice("--build-arg=".length);
+        }
+        if (rawBuildArg !== null) {
+          const parsedArg = expandBuildArgSpec(
+            rawBuildArg,
+            stepEnv,
+            frame.vars,
+            matrixRows,
+            lineNumber,
+            shellMode,
+          );
+          if (parsedArg) {
+            buildArgsMap.set(parsedArg.name, {
+              values: parsedArg.values,
+              truncated: parsedArg.truncated,
+            });
+          }
+          continue;
+        }
+        if (token.startsWith("-")) {
+          if (!token.includes("=") && DOCKER_BUILD_VALUE_FLAGS.has(token)) {
+            index += 1;
+          }
+          continue;
+        }
+        if (contextArg === null) {
+          contextArg = token;
+        }
+      }
 
+      if (buildFileContext) {
         const resolvedBuildFiles = [];
         for (const rawFile of rawFiles) {
           const expanded = resolveImageTokenCandidates(
@@ -2922,19 +3018,45 @@ function inspectShellText(
           }
         }
 
-        if (resolvedBuildFiles.length === 0 && buildArgsMap.size > 0) {
-          const baseContext = contextArg
-            ? (resolveContainedPath(
-                contextArg,
-                buildFileContext.workingDir,
-                buildFileContext.root,
-              ) ?? buildFileContext.workingDir)
-            : buildFileContext.workingDir;
-          for (const defaultName of ["Dockerfile", "Containerfile"]) {
-            const candidateFile = path.join(baseContext, defaultName);
-            if (existsSync(candidateFile)) {
-              resolvedBuildFiles.push(candidateFile);
-              break;
+        if (resolvedBuildFiles.length === 0 && (buildArgsMap.size > 0 || namedContexts.size > 0)) {
+          const contextDirs = [];
+          const seenContextDirs = new Set();
+          if (contextArg) {
+            const expandedCtx = resolveImageTokenCandidates(
+              contextArg,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            for (const varCandidate of expandedCtx.candidates) {
+              for (const candidate of expandMatrixReferences(
+                varCandidate.text,
+                matrixRows,
+                varCandidate.line,
+              )) {
+                const resolvedCtx = resolveContainedPath(
+                  candidate.text,
+                  buildFileContext.workingDir,
+                  buildFileContext.root,
+                );
+                if (resolvedCtx && !seenContextDirs.has(resolvedCtx)) {
+                  seenContextDirs.add(resolvedCtx);
+                  contextDirs.push(resolvedCtx);
+                }
+              }
+            }
+          }
+          if (contextDirs.length === 0) {
+            contextDirs.push(buildFileContext.workingDir);
+          }
+          for (const baseContext of contextDirs) {
+            for (const defaultName of ["Dockerfile", "Containerfile"]) {
+              const candidateFile = path.join(baseContext, defaultName);
+              if (existsSync(candidateFile)) {
+                resolvedBuildFiles.push(candidateFile);
+                break;
+              }
             }
           }
         }
@@ -2943,6 +3065,7 @@ function inspectShellText(
           recordBuildInvocation(
             targetFile,
             buildArgsMap,
+            namedContexts,
             filePath,
             lineNumber,
             buildFileContext.buildInvocations,
@@ -2952,7 +3075,7 @@ function inspectShellText(
       continue;
     }
 
-    if (cli === "buildah") {
+    if (normalizedCli === "buildah") {
       continue;
     }
 
@@ -2973,14 +3096,14 @@ function inspectShellText(
     }
 
     const valueFlags =
-      cli === "podman"
+      normalizedCli === "podman"
         ? subcommand === "pull"
           ? PODMAN_PULL_VALUE_FLAGS
           : PODMAN_RUN_VALUE_FLAGS
         : subcommand === "pull"
           ? DOCKER_PULL_VALUE_FLAGS
           : DOCKER_RUN_VALUE_FLAGS;
-    const allowMultipleImages = cli === "podman" && subcommand === "pull";
+    const allowMultipleImages = normalizedCli === "podman" && subcommand === "pull";
     const imageTokens = [];
 
     for (let index = argIndex; index < tokens.length; index += 1) {
@@ -3179,12 +3302,42 @@ function checkImageField(
   }
 }
 
-function resolveShellModesForStep(
+function resolveWorkingDirsForRow(stepWorkingDirNode, defaultWorkingDir, stepEnv, row, root) {
+  if (!root) {
+    return [null];
+  }
+  const rawDir =
+    stepWorkingDirNode?.kind === "scalar"
+      ? String(stepWorkingDirNode.value).trim()
+      : defaultWorkingDir;
+  if (!rawDir) {
+    return [path.resolve(root)];
+  }
+  const line = stepWorkingDirNode?.line ?? 1;
+  const rowList = row ? [row] : [];
+  const dirs = [];
+  const seen = new Set();
+  for (const envCandidate of resolveEnvExpressionCandidates(rawDir, stepEnv, line).candidates) {
+    for (const candidate of expandMatrixReferences(envCandidate.text, rowList, envCandidate.line)) {
+      const resolved = resolveContainedPath(candidate.text, root, root);
+      if (resolved && !seen.has(resolved)) {
+        seen.add(resolved);
+        dirs.push(resolved);
+      }
+    }
+  }
+  return dirs.length > 0 ? dirs : [path.resolve(root)];
+}
+
+function resolveStepExecutionGroups(
   stepShellNode,
   explicitDefaultShell,
+  stepWorkingDirNode,
+  defaultWorkingDir,
   stepEnv,
   applicableContexts,
   matrixRows,
+  root,
 ) {
   const expandShellTemplate = (template, fallbackLine, row) => {
     const rowList = row ? [row] : [];
@@ -3202,16 +3355,7 @@ function resolveShellModesForStep(
     return modes.length > 0 ? modes : ["posix"];
   };
 
-  const modeToRows = new Map();
-  const addRowForMode = (mode, row) => {
-    if (!modeToRows.has(mode)) {
-      modeToRows.set(mode, []);
-    }
-    if (row !== null) {
-      modeToRows.get(mode).push(row);
-    }
-  };
-
+  const groups = new Map();
   const contexts =
     applicableContexts.length > 0
       ? applicableContexts
@@ -3228,39 +3372,27 @@ function resolveShellModesForStep(
     } else {
       modes = [ctx.defaultShell];
     }
+    const workingDirs = resolveWorkingDirsForRow(
+      stepWorkingDirNode,
+      defaultWorkingDir,
+      stepEnv,
+      ctx.row,
+      root,
+    );
     for (const mode of modes) {
-      addRowForMode(mode, ctx.row);
-    }
-  }
-
-  return modeToRows;
-}
-
-function resolveStepWorkingDir(stepWorkingDirNode, defaultWorkingDir, stepEnv, matrixRows, root) {
-  if (!root) {
-    return null;
-  }
-  const rawDir =
-    stepWorkingDirNode?.kind === "scalar"
-      ? String(stepWorkingDirNode.value).trim()
-      : defaultWorkingDir;
-  if (!rawDir) {
-    return path.resolve(root);
-  }
-  const line = stepWorkingDirNode?.line ?? 1;
-  for (const envCandidate of resolveEnvExpressionCandidates(rawDir, stepEnv, line).candidates) {
-    for (const candidate of expandMatrixReferences(
-      envCandidate.text,
-      matrixRows,
-      envCandidate.line,
-    )) {
-      const resolved = resolveContainedPath(candidate.text, root, root);
-      if (resolved) {
-        return resolved;
+      for (const workingDir of workingDirs) {
+        const key = `${mode}\0${workingDir ?? ""}`;
+        if (!groups.has(key)) {
+          groups.set(key, { shellMode: mode, workingDir, rows: [] });
+        }
+        if (ctx.row !== null) {
+          groups.get(key).rows.push(ctx.row);
+        }
       }
     }
   }
-  return path.resolve(root);
+
+  return [...groups.values()];
 }
 
 function checkStepsList(
@@ -3293,30 +3425,52 @@ function checkStepsList(
         ? applicableContexts.map((ctx) => ctx.row)
         : matrixRows;
 
-    const stepBuildContext = buildFileContext
-      ? {
-          ...buildFileContext,
-          workingDir: resolveStepWorkingDir(
-            stepWorkingDirNode,
-            defaultWorkingDir,
-            stepEnv,
-            applicableMatrixRows,
-            buildFileContext.root,
-          ),
-        }
-      : null;
+    const usesNode = getMapField(stepNode, "uses");
+    const withNode = getMapField(stepNode, "with");
+    if (
+      usesNode?.kind === "scalar" &&
+      /^docker\/(?:build-push-action|bake-action)@/iu.test(String(usesNode.value).trim()) &&
+      withNode?.kind === "map"
+    ) {
+      const fileNode = getMapField(withNode, "file");
+      const contextNode = getMapField(withNode, "context");
+      const buildArgsNode = getMapField(withNode, "build-args");
+      const buildContextsNode = getMapField(withNode, "build-contexts");
+      const actionRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
+      const seenActionContextProblems = new Set();
 
-    if (stepBuildContext) {
-      const usesNode = getMapField(stepNode, "uses");
-      const withNode = getMapField(stepNode, "with");
-      if (
-        usesNode?.kind === "scalar" &&
-        /^docker\/(?:build-push-action|bake-action)@/iu.test(String(usesNode.value).trim()) &&
-        withNode?.kind === "map"
-      ) {
-        const fileNode = getMapField(withNode, "file");
-        const contextNode = getMapField(withNode, "context");
-        const buildArgsNode = getMapField(withNode, "build-args");
+      for (const row of actionRows) {
+        const rowList = row ? [row] : [];
+        const namedContexts = new Set();
+        if (buildContextsNode?.kind === "scalar") {
+          const contextProblems = [];
+          for (const rawLine of String(buildContextsNode.value).split(/\r?\n/u)) {
+            const trimmedLine = rawLine.trim();
+            if (!trimmedLine || trimmedLine.startsWith("#")) {
+              continue;
+            }
+            inspectBuildContextSpec(
+              trimmedLine,
+              stepEnv,
+              stepEnv,
+              rowList,
+              filePath,
+              buildContextsNode.line,
+              "posix",
+              contextProblems,
+              namedContexts,
+            );
+          }
+          for (const message of contextProblems) {
+            if (!seenActionContextProblems.has(message)) {
+              seenActionContextProblems.add(message);
+              problems.push(message);
+            }
+          }
+        }
+        if (!buildFileContext) {
+          continue;
+        }
         const resolvedActionFiles = [];
         if (fileNode?.kind === "scalar") {
           for (const envCandidate of resolveEnvExpressionCandidates(
@@ -3326,14 +3480,14 @@ function checkStepsList(
           ).candidates) {
             for (const candidate of expandMatrixReferences(
               envCandidate.text,
-              applicableMatrixRows,
+              rowList,
               envCandidate.line,
             )) {
               const recorded = recordExplicitBuildFile(
                 candidate.text,
-                stepBuildContext.root,
-                stepBuildContext.root,
-                stepBuildContext.explicitBuildFiles,
+                buildFileContext.root,
+                buildFileContext.root,
+                buildFileContext.explicitBuildFiles,
               );
               if (recorded) {
                 resolvedActionFiles.push(recorded);
@@ -3341,8 +3495,8 @@ function checkStepsList(
             }
           }
         }
+        const actionBuildArgs = new Map();
         if (buildArgsNode?.kind === "scalar") {
-          const actionBuildArgs = new Map();
           for (const rawLine of String(buildArgsNode.value).split(/\r?\n/u)) {
             const trimmedLine = rawLine.trim();
             if (!trimmedLine || trimmedLine.startsWith("#")) {
@@ -3352,24 +3506,49 @@ function checkStepsList(
               trimmedLine,
               stepEnv,
               stepEnv,
-              applicableMatrixRows,
+              rowList,
               buildArgsNode.line,
               "posix",
             );
             if (parsedArg) {
-              actionBuildArgs.set(parsedArg.name, parsedArg.values);
+              actionBuildArgs.set(parsedArg.name, {
+                values: parsedArg.values,
+                truncated: parsedArg.truncated,
+              });
             }
           }
-          if (actionBuildArgs.size > 0) {
-            if (resolvedActionFiles.length === 0) {
-              const contextDir =
-                contextNode?.kind === "scalar"
-                  ? (resolveContainedPath(
-                      String(contextNode.value).trim(),
-                      stepBuildContext.root,
-                      stepBuildContext.root,
-                    ) ?? path.resolve(stepBuildContext.root))
-                  : path.resolve(stepBuildContext.root);
+        }
+        if (actionBuildArgs.size > 0 || namedContexts.size > 0) {
+          if (resolvedActionFiles.length === 0) {
+            const contextDirs = [];
+            const seenDirs = new Set();
+            if (contextNode?.kind === "scalar") {
+              for (const envCandidate of resolveEnvExpressionCandidates(
+                String(contextNode.value).trim(),
+                stepEnv,
+                contextNode.line,
+              ).candidates) {
+                for (const candidate of expandMatrixReferences(
+                  envCandidate.text,
+                  rowList,
+                  envCandidate.line,
+                )) {
+                  const resolvedDir = resolveContainedPath(
+                    candidate.text,
+                    buildFileContext.root,
+                    buildFileContext.root,
+                  );
+                  if (resolvedDir && !seenDirs.has(resolvedDir)) {
+                    seenDirs.add(resolvedDir);
+                    contextDirs.push(resolvedDir);
+                  }
+                }
+              }
+            }
+            if (contextDirs.length === 0) {
+              contextDirs.push(path.resolve(buildFileContext.root));
+            }
+            for (const contextDir of contextDirs) {
               for (const defaultName of ["Dockerfile", "Containerfile"]) {
                 const candidateFile = path.join(contextDir, defaultName);
                 if (existsSync(candidateFile)) {
@@ -3378,60 +3557,67 @@ function checkStepsList(
                 }
               }
             }
-            for (const targetFile of resolvedActionFiles) {
-              recordBuildInvocation(
-                targetFile,
-                actionBuildArgs,
-                filePath,
-                buildArgsNode.line,
-                stepBuildContext.buildInvocations,
-              );
-            }
+          }
+          const invocationLine = buildArgsNode?.line ?? buildContextsNode?.line ?? usesNode.line;
+          for (const targetFile of resolvedActionFiles) {
+            recordBuildInvocation(
+              targetFile,
+              actionBuildArgs,
+              namedContexts,
+              filePath,
+              invocationLine,
+              buildFileContext.buildInvocations,
+            );
           }
         }
       }
     }
 
-    const modeToRows = resolveShellModesForStep(
+    const executionGroups = resolveStepExecutionGroups(
       stepShellNode,
       explicitDefaultShell,
+      stepWorkingDirNode,
+      defaultWorkingDir,
       stepEnv,
       applicableContexts,
       applicableMatrixRows,
+      buildFileContext?.root ?? null,
     );
 
     const emittedGithubEnv = new Map();
     const runNode = getMapField(stepNode, "run");
     if (runNode?.kind === "scalar") {
-      if (modeToRows.size === 1) {
-        const [[shellMode, rowsForMode]] = modeToRows;
+      if (executionGroups.length === 1) {
+        const [{ shellMode, workingDir, rows }] = executionGroups;
+        const groupBuildContext = buildFileContext ? { ...buildFileContext, workingDir } : null;
         inspectShellRunScript(
           runNode,
           stepEnv,
-          rowsForMode,
+          rows,
           filePath,
           problems,
           emittedGithubEnv,
           shellMode,
-          stepBuildContext,
+          groupBuildContext,
         );
       } else {
-        const seenAcrossModes = new Set();
-        for (const [shellMode, rowsForMode] of modeToRows) {
-          const modeProblems = [];
+        const seenAcrossGroups = new Set();
+        for (const { shellMode, workingDir, rows } of executionGroups) {
+          const groupBuildContext = buildFileContext ? { ...buildFileContext, workingDir } : null;
+          const groupProblems = [];
           inspectShellRunScript(
             runNode,
             stepEnv,
-            rowsForMode,
+            rows,
             filePath,
-            modeProblems,
+            groupProblems,
             emittedGithubEnv,
             shellMode,
-            stepBuildContext,
+            groupBuildContext,
           );
-          for (const message of modeProblems) {
-            if (!seenAcrossModes.has(message)) {
-              seenAcrossModes.add(message);
+          for (const message of groupProblems) {
+            if (!seenAcrossGroups.has(message)) {
+              seenAcrossGroups.add(message);
               problems.push(message);
             }
           }
@@ -3439,8 +3625,11 @@ function checkStepsList(
       }
     }
     for (const [name, write] of emittedGithubEnv) {
-      if (stepConditional || write.conditional || !runningEnv.has(name)) {
-        runningEnv.set(name, mergeVarEntries(runningEnv.get(name) ?? [], write.entries));
+      if (stepConditional || write.conditional) {
+        const existing = runningEnv.has(name)
+          ? runningEnv.get(name)
+          : [{ value: "", line: 0, unset: true }];
+        runningEnv.set(name, mergeVarEntries(existing, write.entries));
       } else {
         runningEnv.set(name, write.entries);
       }
@@ -3946,10 +4135,23 @@ function extractRunMountSources(runText) {
   return sources;
 }
 
+function extractReferencedBuildArgNames(token) {
+  const names = new Set();
+  for (const match of token.matchAll(
+    /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)(?:[:-=+].*?)?\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu,
+  )) {
+    const name = match.groups.braced ?? match.groups.bare;
+    if (name) {
+      names.add(name);
+    }
+  }
+  return names;
+}
+
 export function unpinnedContainerfileReferences(
   source,
   filePath = "<memory>",
-  { argOverrides = null, sourceFile = null, sourceLine = null } = {},
+  { argOverrides = null, namedContexts = null, sourceFile = null, sourceLine = null } = {},
 ) {
   const problems = [];
   const rawLines = source.split(/\r?\n/u);
@@ -4033,34 +4235,51 @@ export function unpinnedContainerfileReferences(
   const dynamicOverriddenArgs = new Set();
 
   const resolveBuildArgValues = (token, argsMap) => {
+    const referencedNames = extractReferencedBuildArgNames(token);
     const rawValues = new Map();
-    for (const [name, values] of argsMap) {
-      if (values.length > 0) {
-        rawValues.set(name, values[0]);
+    const multiArgs = [];
+    let truncated = false;
+
+    for (const name of referencedNames) {
+      if (!argsMap.has(name)) {
+        continue;
+      }
+      const entry = argsMap.get(name);
+      if (entry.truncated) {
+        truncated = true;
+      }
+      if (entry.values.length > 0) {
+        rawValues.set(name, entry.values[0]);
+      }
+      if (entry.values.length > 1) {
+        multiArgs.push([name, entry.values]);
       }
     }
-    const multiArgs = [...argsMap.entries()].filter(([, values]) => values.length > 1);
+
     if (multiArgs.length === 0) {
-      return [resolveBuildArgs(token, rawValues)];
+      return { values: [resolveBuildArgs(token, rawValues)], truncated };
     }
+
     let combinations = [rawValues];
     for (const [name, values] of multiArgs) {
       const next = [];
       for (const combo of combinations) {
         for (const value of values) {
+          if (next.length >= MAX_TOKEN_EXPANSIONS) {
+            truncated = true;
+            break;
+          }
           const clone = new Map(combo);
           clone.set(name, value);
           next.push(clone);
-          if (next.length >= MAX_TOKEN_EXPANSIONS) {
-            break;
-          }
         }
-        if (next.length >= MAX_TOKEN_EXPANSIONS) {
+        if (truncated) {
           break;
         }
       }
       combinations = next;
     }
+
     const seen = new Set();
     const resolvedList = [];
     for (const combo of combinations) {
@@ -4070,21 +4289,16 @@ export function unpinnedContainerfileReferences(
         resolvedList.push(resolved);
       }
     }
-    return resolvedList;
+    return { values: resolvedList, truncated };
   };
 
   const referencesDynamicOverride = (token) => {
     if (dynamicOverriddenArgs.size === 0) {
       return null;
     }
+    const referenced = extractReferencedBuildArgNames(token);
     for (const argName of dynamicOverriddenArgs) {
-      if (
-        token.includes(`$${argName}`) ||
-        token.includes(`\${${argName}}`) ||
-        token.includes(`\${${argName}:`) ||
-        token.includes(`\${${argName}-`) ||
-        token.includes(`\${${argName}+`)
-      ) {
+      if (referenced.has(argName)) {
         return argName;
       }
     }
@@ -4097,13 +4311,17 @@ export function unpinnedContainerfileReferences(
       const argName = argMatch.groups.name;
       const targetArgs = seenFrom ? stageArgs : globalArgs;
       if (argOverrides?.has(argName)) {
-        const overrideValues = argOverrides.get(argName);
+        const overrideEntry = argOverrides.get(argName);
+        const overrideValues = Array.isArray(overrideEntry) ? overrideEntry : overrideEntry.values;
+        const overrideTruncated = Array.isArray(overrideEntry)
+          ? false
+          : Boolean(overrideEntry.truncated);
         const staticOverrides = overrideValues.filter((val) => !isDynamicReference(val));
         if (overrideValues.some((val) => isDynamicReference(val))) {
           dynamicOverriddenArgs.add(argName);
         }
-        if (staticOverrides.length > 0) {
-          targetArgs.set(argName, staticOverrides);
+        if (staticOverrides.length > 0 || overrideTruncated) {
+          targetArgs.set(argName, { values: staticOverrides, truncated: overrideTruncated });
         } else {
           targetArgs.delete(argName);
         }
@@ -4147,10 +4365,17 @@ export function unpinnedContainerfileReferences(
           `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
         );
       }
-      for (const resolved of resolveBuildArgValues(imageToken, globalArgs)) {
+      const expandedFrom = resolveBuildArgValues(imageToken, globalArgs);
+      if (expandedFrom.truncated) {
+        problems.push(
+          `${filePath}:${lineNumber}: ${imageToken} exceeds build-arg expansion limit and cannot be verified exhaustively`,
+        );
+      }
+      for (const resolved of expandedFrom.values) {
         if (
           resolved.toLowerCase() !== "scratch" &&
           !stages.has(resolved.toLowerCase()) &&
+          !namedContexts?.has(resolved.toLowerCase()) &&
           !isDynamicReference(resolved) &&
           !isPinnedDigest(resolved)
         ) {
@@ -4174,10 +4399,17 @@ export function unpinnedContainerfileReferences(
           `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
         );
       }
-      for (const sourceRef of resolveBuildArgValues(rawSource, mergedArgs)) {
+      const expandedCopy = resolveBuildArgValues(rawSource, mergedArgs);
+      if (expandedCopy.truncated) {
+        problems.push(
+          `${filePath}:${lineNumber}: ${rawSource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
+        );
+      }
+      for (const sourceRef of expandedCopy.values) {
         if (
           /^\d+$/u.test(sourceRef) ||
           stages.has(sourceRef.toLowerCase()) ||
+          namedContexts?.has(sourceRef.toLowerCase()) ||
           isDynamicReference(sourceRef)
         ) {
           continue;
@@ -4198,10 +4430,17 @@ export function unpinnedContainerfileReferences(
             `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
           );
         }
-        for (const sourceRef of resolveBuildArgValues(rawSource, mergedArgs)) {
+        const expandedMount = resolveBuildArgValues(rawSource, mergedArgs);
+        if (expandedMount.truncated) {
+          problems.push(
+            `${filePath}:${lineNumber}: ${rawSource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
+          );
+        }
+        for (const sourceRef of expandedMount.values) {
           if (
             /^\d+$/u.test(sourceRef) ||
             stages.has(sourceRef.toLowerCase()) ||
+            namedContexts?.has(sourceRef.toLowerCase()) ||
             isDynamicReference(sourceRef)
           ) {
             continue;
@@ -4259,12 +4498,32 @@ export function checkWorkflowPins(root = process.cwd()) {
     }
   }
 
+  // Intersect named contexts across all invocations of a given build file so
+  // `FROM <ctx>` is accepted in the standalone pass only when every recorded
+  // invocation supplies `<ctx>` (and its backing image was checked above).
+  const universalNamedContexts = new Map();
+  for (const invocation of buildInvocations) {
+    const resolvedFile = path.resolve(invocation.filePath);
+    if (!universalNamedContexts.has(resolvedFile)) {
+      universalNamedContexts.set(resolvedFile, new Set(invocation.namedContexts));
+    } else {
+      const existing = universalNamedContexts.get(resolvedFile);
+      for (const name of existing) {
+        if (!invocation.namedContexts.has(name)) {
+          existing.delete(name);
+        }
+      }
+    }
+  }
+
   const containerFiles = [...containerFileSet].sort();
   const seenContainerProblems = new Set();
   for (const filePath of containerFiles) {
     const source = readFileSync(filePath, "utf8");
     const relativePath = formatPortableRelativePath(root, filePath);
-    for (const problem of unpinnedContainerfileReferences(source, relativePath)) {
+    for (const problem of unpinnedContainerfileReferences(source, relativePath, {
+      namedContexts: universalNamedContexts.get(filePath) ?? null,
+    })) {
       if (!seenContainerProblems.has(problem)) {
         seenContainerProblems.add(problem);
         problems.push(problem);
@@ -4284,6 +4543,7 @@ export function checkWorkflowPins(root = process.cwd()) {
     const relativePath = formatPortableRelativePath(root, invocation.filePath);
     for (const problem of unpinnedContainerfileReferences(source, relativePath, {
       argOverrides: invocation.buildArgs,
+      namedContexts: invocation.namedContexts,
       sourceFile: invocation.sourceFile,
       sourceLine: invocation.sourceLine,
     })) {

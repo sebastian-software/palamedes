@@ -1807,11 +1807,38 @@ describe("workflow contracts", () => {
       "<memory>:14: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:15: busybox:1.37 is not pinned to a sha256 digest",
     ]);
+    // Conditional `GITHUB_ENV` writes preserve the unset state for later fallbacks,
+    // executable paths (`/usr/bin/docker`, `docker.exe`) are recognized, matrix
+    // `working-directory` and variable build contexts resolve every target build
+    // file, named `--build-context` / `build-contexts` images are checked, and
+    // build-arg expansion filters to referenced args while reporting overflow.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  paths-and-conditional-env:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - if: github.event_name == 'push'",
+          `        run: echo "COND_IMG=node:24@${digest}" >> "$GITHUB_ENV"`,
+          '      - run: /usr/bin/docker pull "${COND_IMG:-alpine:3.20}"',
+          "      - shell: pwsh",
+          "        run: C:\\Docker\\docker.exe pull busybox:1.37",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:7: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:9: busybox:1.37 is not pinned to a sha256 digest",
+    ]);
     const fixtureRoot = await mkdtemp(join(tmpdir(), "palamedes-pins-lowercase-"));
     try {
       await mkdir(join(fixtureRoot, ".github", "actions", "local-docker"), { recursive: true });
       await mkdir(join(fixtureRoot, ".github", "workflows"), { recursive: true });
       await mkdir(join(fixtureRoot, "ci", "images"), { recursive: true });
+      await mkdir(join(fixtureRoot, "ci", "app-a"), { recursive: true });
+      await mkdir(join(fixtureRoot, "ci", "app-b"), { recursive: true });
+      await mkdir(join(fixtureRoot, "ci", "ctx"), { recursive: true });
       await writeFile(
         join(fixtureRoot, ".github", "actions", "local-docker", "action.yml"),
         "name: Local\nruns:\n  using: docker\n  image: ./dockerfile\n",
@@ -1825,6 +1852,9 @@ describe("workflow contracts", () => {
         [
           "jobs:",
           "  build:",
+          "    strategy:",
+          "      matrix:",
+          "        dir: [ci/app-a, ci/app-b]",
           "    runs-on: ubuntu-24.04",
           "    steps:",
           "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
@@ -1832,26 +1862,57 @@ describe("workflow contracts", () => {
           "          file: ci/images/runtime.build",
           "          build-args: |",
           "            BASE=alpine:3.20",
-          "      - working-directory: ci/images",
-          "        run: docker build -f cli.recipe --build-arg CLI_BASE=busybox:1.37 .",
+          "          build-contexts: |",
+          `            pinnedctx=docker-image://node:24@${digest}`,
+          "            badctx=docker-image://redis:7",
+          "      - working-directory: ${{ matrix.dir }}",
+          "        run: docker build -f cli.recipe .",
+          "      - run: |",
+          "          ctx=ci/ctx",
+          '          docker build --build-arg CTX_BASE=busybox:1.37 "$ctx"',
           "",
         ].join("\n"),
       );
       await writeFile(
         join(fixtureRoot, "ci", "images", "runtime.build"),
-        `ARG BASE=alpine:3.20@${digest}\nFROM \${BASE}\n`,
+        `ARG BASE=alpine:3.20@${digest}\nFROM pinnedctx AS base\nFROM \${BASE}\n`,
       );
+      await writeFile(join(fixtureRoot, "ci", "app-a", "cli.recipe"), `FROM node:24@${digest}\n`);
+      await writeFile(join(fixtureRoot, "ci", "app-b", "cli.recipe"), "FROM ubuntu:24.04\n");
       await writeFile(
-        join(fixtureRoot, "ci", "images", "cli.recipe"),
-        `ARG CLI_BASE=busybox:1.37@${digest}\nFROM \${CLI_BASE}\n`,
+        join(fixtureRoot, "ci", "ctx", "Dockerfile"),
+        `ARG CTX_BASE=busybox:1.37@${digest}\nFROM \${CTX_BASE}\n`,
       );
       const fixtureResult = checkWorkflowPins(fixtureRoot);
-      expect(fixtureResult.containerFilesChecked).toBe(3);
+      expect(fixtureResult.containerFilesChecked).toBe(5);
       expect(fixtureResult.problems).toEqual([
+        ".github/workflows/build.yml:14: redis:7 is not pinned to a sha256 digest",
         ".github/actions/local-docker/dockerfile:1: node:24 is not pinned to a sha256 digest",
-        "ci/images/runtime.build:2: alpine:3.20 is not pinned to a sha256 digest",
-        "ci/images/cli.recipe:2: busybox:1.37 is not pinned to a sha256 digest",
+        "ci/app-b/cli.recipe:1: ubuntu:24.04 is not pinned to a sha256 digest",
+        "ci/images/runtime.build:3: alpine:3.20 is not pinned to a sha256 digest",
+        "ci/ctx/Dockerfile:2: busybox:1.37 is not pinned to a sha256 digest",
       ]);
+      // Irrelevant multi-valued build-args do not mask an unpinned 9th base image.
+      expect(
+        unpinnedContainerfileReferences("ARG BASE\nARG UNUSED\nFROM ${BASE}\n", "<memory>", {
+          argOverrides: new Map([
+            [
+              "BASE",
+              {
+                values: [
+                  ...Array.from({ length: 8 }, (_, idx) => `node:${idx}@${digest}`),
+                  "alpine:3.20",
+                ],
+                truncated: false,
+              },
+            ],
+            [
+              "UNUSED",
+              { values: Array.from({ length: 8 }, (_, idx) => `v${idx}`), truncated: false },
+            ],
+          ]),
+        }),
+      ).toEqual(["<memory>:3: alpine:3.20 is not pinned to a sha256 digest"]);
     } finally {
       await rm(fixtureRoot, { recursive: true, force: true });
     }
