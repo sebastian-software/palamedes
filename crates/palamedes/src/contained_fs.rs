@@ -322,14 +322,30 @@ mod platform {
         validate_single_file_name,
     };
 
+    const UNIX_DIR_LOCK_NAME: &std::ffi::CStr = c".pmds-lock";
+    const UNIX_DIR_LOCK_MAGIC: &[u8] = b"palamedes-dir-lock-v1\n";
+
     #[derive(Debug)]
     struct UnixDirLock {
         key: FileIdentity,
+        cleanup: Option<(OwnedFd, FileIdentity)>,
         _fd: OwnedFd,
     }
 
     impl Drop for UnixDirLock {
         fn drop(&mut self) {
+            // Unlink `.pmds-lock` while `self._fd` still holds `flock(LOCK_EX)`
+            // so waiters that wake on unlock observe the unlink atomically and
+            // re-verify against the directory entry.
+            if let Some((ref dir_fd, expected_id)) = self.cleanup
+                && let Ok(stat) = fstatat_nofollow(dir_fd.as_raw_fd(), UNIX_DIR_LOCK_NAME)
+                && stat_identity(&stat) == expected_id
+            {
+                // SAFETY: `dir_fd` is open and `UNIX_DIR_LOCK_NAME` is valid.
+                unsafe {
+                    let _ = libc::unlinkat(dir_fd.as_raw_fd(), UNIX_DIR_LOCK_NAME.as_ptr(), 0);
+                }
+            }
             HELD_UNIX_DIR_LOCKS.with(|held| {
                 let mut map = held.borrow_mut();
                 if map
@@ -823,13 +839,19 @@ mod platform {
         /// Acquires an exclusive cross-process and cross-thread lock covering
         /// read-modify-write operations on `file_name` in this directory.
         ///
+        /// Uses a handle-relative regular lock file (`.pmds-lock`) opened
+        /// read-write so exclusive `flock` works on Linux NFS remote locks and
+        /// write+search-only (`0311`) directories without listing permission,
+        /// while refusing to overwrite or delete pre-existing non-lock files.
         /// Re-entrant on the same thread; the underlying OS lock stays held
         /// until the last live guard for this directory drops.
         ///
         /// # Errors
         ///
-        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
-        /// or [`ContainedFsError::Io`] on OS lock failures.
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid
+        /// or `.pmds-lock` is a symlink/hard-link/non-regular file, or
+        /// [`ContainedFsError::Io`] on OS lock failures or pre-existing
+        /// non-lock collisions.
         pub fn lock_target(
             &self,
             file_name: &OsStr,
@@ -841,20 +863,7 @@ mod platform {
                 return Ok(ContainedTargetLock { _lock: existing });
             }
 
-            let lock_fd = open_unix_lock_fd(self)?;
-            loop {
-                // SAFETY: `lock_fd` is an open directory descriptor.
-                let rc = unsafe { libc::flock(lock_fd.as_raw_fd(), libc::LOCK_EX) };
-                if rc == 0 {
-                    break;
-                }
-                let error = io::Error::last_os_error();
-                if error.raw_os_error() == Some(libc::EINTR) {
-                    continue;
-                }
-                return Err(ContainedFsError::Io(error));
-            }
-            let lock = Rc::new(UnixDirLock { key, _fd: lock_fd });
+            let lock = Rc::new(acquire_unix_dir_lock(self, key)?);
             HELD_UNIX_DIR_LOCKS.with(|held| {
                 held.borrow_mut().insert(key, Rc::downgrade(&lock));
             });
@@ -2030,6 +2039,287 @@ mod platform {
         None
     }
 
+    fn stat_identity(stat: &libc::stat) -> FileIdentity {
+        #[allow(clippy::unnecessary_cast)]
+        FileIdentity {
+            dev: stat.st_dev as u64,
+            ino: stat.st_ino as u64,
+        }
+    }
+
+    fn fstat_fd(fd: std::os::fd::RawFd) -> io::Result<libc::stat> {
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: `fd` is an open descriptor and `stat` is writable.
+        if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `fstat` succeeded and initialized `stat`.
+        Ok(unsafe { stat.assume_init() })
+    }
+
+    fn fstatat_nofollow(
+        dir_fd: std::os::fd::RawFd,
+        name: &std::ffi::CStr,
+    ) -> io::Result<libc::stat> {
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: `dir_fd` is an open directory descriptor, `name` is valid,
+        // and `stat` is writable.
+        if unsafe {
+            libc::fstatat(
+                dir_fd,
+                name.as_ptr(),
+                stat.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } != 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `fstatat` succeeded and initialized `stat`.
+        Ok(unsafe { stat.assume_init() })
+    }
+
+    fn flock_exclusive(fd: std::os::fd::RawFd) -> io::Result<()> {
+        loop {
+            // SAFETY: `fd` is an open file descriptor.
+            if unsafe { libc::flock(fd, libc::LOCK_EX) } == 0 {
+                return Ok(());
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            return Err(error);
+        }
+    }
+
+    fn write_all_fd(fd: std::os::fd::RawFd, mut bytes: &[u8]) -> io::Result<()> {
+        while !bytes.is_empty() {
+            // SAFETY: `fd` is open and `bytes` is readable for `bytes.len()`.
+            let written = unsafe { libc::write(fd, bytes.as_ptr().cast(), bytes.len()) };
+            if written < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                return Err(error);
+            }
+            if written == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "failed to write catalog lock signature",
+                ));
+            }
+            #[allow(clippy::cast_sign_loss)]
+            let advance = written as usize;
+            bytes = &bytes[advance..];
+        }
+        Ok(())
+    }
+
+    fn verify_lock_file_magic(fd: std::os::fd::RawFd, stat: &libc::stat) -> io::Result<bool> {
+        let expected_len = UNIX_DIR_LOCK_MAGIC.len();
+        #[allow(clippy::cast_possible_wrap)]
+        if stat.st_size != expected_len as libc::off_t {
+            return Ok(false);
+        }
+        let mut buf = [0u8; 32];
+        let mut total = 0usize;
+        while total < expected_len + 1 {
+            #[allow(clippy::cast_possible_wrap)]
+            let offset = total as libc::off_t;
+            // SAFETY: `fd` is open and `buf[total..]` is writable.
+            let read = unsafe {
+                libc::pread(
+                    fd,
+                    buf[total..].as_mut_ptr().cast(),
+                    (expected_len + 1) - total,
+                    offset,
+                )
+            };
+            if read < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                return Err(error);
+            }
+            if read == 0 {
+                break;
+            }
+            #[allow(clippy::cast_sign_loss)]
+            {
+                total += read as usize;
+            }
+        }
+        Ok(total == expected_len && &buf[..expected_len] == UNIX_DIR_LOCK_MAGIC)
+    }
+
+    fn acquire_unix_dir_lock(
+        dir: &ContainedDir,
+        key: FileIdentity,
+    ) -> Result<UnixDirLock, ContainedFsError> {
+        // Duplicate the directory handle so `Drop` can unlink `.pmds-lock`
+        // even if the caller drops `ContainedDir` before `ContainedTargetLock`.
+        // SAFETY: `dir.fd` is an open directory descriptor.
+        let dup_raw = unsafe { libc::fcntl(dir.fd.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
+        if dup_raw < 0 {
+            return Err(ContainedFsError::Io(io::Error::last_os_error()));
+        }
+        // SAFETY: `dup_raw` is a newly duplicated valid file descriptor.
+        let dir_fd = unsafe { OwnedFd::from_raw_fd(dup_raw) };
+        let pid = std::process::id();
+
+        loop {
+            let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
+            let temp_name = CString::new(format!(".pmds-ltmp-{pid}-{nonce}"))
+                .expect("ASCII temp lock name has no NUL bytes");
+            // Create a private temporary file, stamp our signature, and lock it
+            // BEFORE publishing at `.pmds-lock` via `linkat`, so no waiter can
+            // ever observe an empty or unlocked Palamedes lock file and no
+            // pre-existing file is ever overwritten.
+            // SAFETY: `dir.fd` is open and `temp_name` is a valid C string.
+            let temp_raw = unsafe {
+                libc::openat(
+                    dir.fd.as_raw_fd(),
+                    temp_name.as_ptr(),
+                    libc::O_RDWR
+                        | libc::O_CREAT
+                        | libc::O_EXCL
+                        | libc::O_NOFOLLOW
+                        | libc::O_CLOEXEC,
+                    0o600 as libc::c_uint,
+                )
+            };
+            if temp_raw < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EEXIST) {
+                    continue;
+                }
+                return Err(ContainedFsError::Io(error));
+            }
+            // SAFETY: `temp_raw` is a newly opened valid file descriptor.
+            let temp_fd = unsafe { OwnedFd::from_raw_fd(temp_raw) };
+            let temp_guard = UnixTempFileGuard::new(dir, temp_name.clone());
+            write_all_fd(temp_fd.as_raw_fd(), UNIX_DIR_LOCK_MAGIC)?;
+            flock_exclusive(temp_fd.as_raw_fd())?;
+
+            // SAFETY: `dir.fd` is open and both C strings are valid.
+            let link_rc = unsafe {
+                libc::linkat(
+                    dir.fd.as_raw_fd(),
+                    temp_name.as_ptr(),
+                    dir.fd.as_raw_fd(),
+                    UNIX_DIR_LOCK_NAME.as_ptr(),
+                    0,
+                )
+            };
+            let link_err = if link_rc == 0 {
+                None
+            } else {
+                Some(io::Error::last_os_error())
+            };
+            drop(temp_guard);
+
+            match link_err {
+                None => {
+                    let stat = fstat_fd(temp_fd.as_raw_fd())?;
+                    return Ok(UnixDirLock {
+                        key,
+                        cleanup: Some((dir_fd, stat_identity(&stat))),
+                        _fd: temp_fd,
+                    });
+                }
+                Some(error) if error.raw_os_error() == Some(libc::EEXIST) => {
+                    drop(temp_fd);
+                }
+                Some(error)
+                    if matches!(
+                        error.raw_os_error(),
+                        Some(libc::EPERM | libc::EOPNOTSUPP | libc::ENOSYS | libc::EXDEV)
+                    ) =>
+                {
+                    // Filesystems without hard links (e.g. FAT32/exFAT/VFAT)
+                    // cannot atomically link a lock file; fall back to locking
+                    // the directory handle directly.
+                    drop(temp_fd);
+                    let fallback_fd = open_unix_lock_fd(dir)?;
+                    flock_exclusive(fallback_fd.as_raw_fd())?;
+                    return Ok(UnixDirLock {
+                        key,
+                        cleanup: None,
+                        _fd: fallback_fd,
+                    });
+                }
+                Some(error) => return Err(ContainedFsError::Io(error)),
+            }
+
+            // `.pmds-lock` already exists: open without `O_CREAT`/`O_TRUNC`,
+            // wait for the current holder's `flock`, then verify it is still
+            // the live single-link Palamedes lock file.
+            // SAFETY: `dir.fd` is open and `UNIX_DIR_LOCK_NAME` is valid.
+            let existing_raw = unsafe {
+                libc::openat(
+                    dir.fd.as_raw_fd(),
+                    UNIX_DIR_LOCK_NAME.as_ptr(),
+                    libc::O_RDWR | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if existing_raw < 0 {
+                let error = io::Error::last_os_error();
+                match error.raw_os_error() {
+                    Some(libc::ENOENT) => continue,
+                    Some(libc::ELOOP) => {
+                        return Err(ContainedFsError::Containment(
+                            "refusing to use symlink as catalog lock \".pmds-lock\"".to_owned(),
+                        ));
+                    }
+                    Some(libc::EISDIR) => {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            "refusing to overwrite existing directory \".pmds-lock\"",
+                        )));
+                    }
+                    _ => return Err(ContainedFsError::Io(error)),
+                }
+            }
+            // SAFETY: `existing_raw` is a newly opened valid file descriptor.
+            let existing_fd = unsafe { OwnedFd::from_raw_fd(existing_raw) };
+            let pre_stat = fstat_fd(existing_fd.as_raw_fd())?;
+            if (pre_stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+                return Err(ContainedFsError::Containment(
+                    "refusing to use non-regular file as catalog lock \".pmds-lock\"".to_owned(),
+                ));
+            }
+            flock_exclusive(existing_fd.as_raw_fd())?;
+
+            let post_stat = fstat_fd(existing_fd.as_raw_fd())?;
+            let fd_id = stat_identity(&post_stat);
+            match fstatat_nofollow(dir.fd.as_raw_fd(), UNIX_DIR_LOCK_NAME) {
+                Ok(dir_stat) if stat_identity(&dir_stat) == fd_id => {}
+                Ok(_) => continue,
+                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => continue,
+                Err(error) => return Err(ContainedFsError::Io(error)),
+            }
+            if post_stat.st_nlink > 1 {
+                return Err(ContainedFsError::Containment(
+                    "refusing to use hard-linked file as catalog lock \".pmds-lock\"".to_owned(),
+                ));
+            }
+            if !verify_lock_file_magic(existing_fd.as_raw_fd(), &post_stat)? {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "refusing to overwrite or remove pre-existing non-lock file \".pmds-lock\"",
+                )));
+            }
+            return Ok(UnixDirLock {
+                key,
+                cleanup: Some((dir_fd, fd_id)),
+                _fd: existing_fd,
+            });
+        }
+    }
+
     fn open_unix_lock_fd(dir: &ContainedDir) -> Result<OwnedFd, ContainedFsError> {
         let dot = c".";
         // Open a fresh open file description for this directory so `flock`
@@ -2159,9 +2449,10 @@ mod platform {
                     return Some(DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf);
                 }
             }
-            // Check known Linux filesystem types in O(1) before enumerating
-            // directory entries, so large ext4/tmpfs/xfs/btrfs directories do
-            // not pay O(N) enumeration overhead on every extraction.
+            // Short-circuit only filesystems whose case semantics are fixed by
+            // type (or strictly governed by `FS_CASEFOLD_FL` above); leave
+            // configurable filesystems (CIFS/SMB, XFS, NTFS/NTFS3, OverlayFS,
+            // FUSE, NFS, etc.) to `probe_directory_case_insensitivity`.
             let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
             // SAFETY: `readable` is open and `fs_stat` is writable.
             if unsafe { libc::fstatfs(readable.as_raw_fd(), fs_stat.as_mut_ptr()) } == 0 {
@@ -2171,34 +2462,16 @@ mod platform {
                 let f_type = fs_stat.f_type as u64;
                 const MSDOS_SUPER_MAGIC: u64 = 0x4d44;
                 const EXFAT_SUPER_MAGIC: u64 = 0x2011_bab0;
-                const SMB_SUPER_MAGIC: u64 = 0x517b;
-                const CIFS_MAGIC_NUMBER: u64 = 0xff53_4d42;
-                const SMB2_MAGIC_NUMBER: u64 = 0xfe53_4d42;
-                const NTFS_SB_MAGIC: u64 = 0x5346_544e;
-                const NTFS3_SUPER_MAGIC: u64 = 0x7366_746e;
                 const EXT4_SUPER_MAGIC: u64 = 0xef53;
                 const TMPFS_MAGIC: u64 = 0x0102_1994;
                 const BTRFS_SUPER_MAGIC: u64 = 0x9123_683e;
-                const XFS_SUPER_MAGIC: u64 = 0x5846_5342;
                 const F2FS_SUPER_MAGIC: u64 = 0xf2f5_2010;
-                const OVERLAYFS_SUPER_MAGIC: u64 = 0x794c_7630;
-                if matches!(
-                    f_type,
-                    MSDOS_SUPER_MAGIC
-                        | EXFAT_SUPER_MAGIC
-                        | SMB_SUPER_MAGIC
-                        | CIFS_MAGIC_NUMBER
-                        | SMB2_MAGIC_NUMBER
-                        | NTFS_SB_MAGIC
-                        | NTFS3_SUPER_MAGIC
-                ) {
+                if matches!(f_type, MSDOS_SUPER_MAGIC | EXFAT_SUPER_MAGIC) {
                     return Some(DirFilenameEquivalence::CaseInsensitiveNtfs);
                 }
-                if matches!(
-                    f_type,
-                    BTRFS_SUPER_MAGIC | XFS_SUPER_MAGIC | OVERLAYFS_SUPER_MAGIC
-                ) || (checked_casefold_flag
-                    && matches!(f_type, EXT4_SUPER_MAGIC | TMPFS_MAGIC | F2FS_SUPER_MAGIC))
+                if f_type == BTRFS_SUPER_MAGIC
+                    || (checked_casefold_flag
+                        && matches!(f_type, EXT4_SUPER_MAGIC | TMPFS_MAGIC | F2FS_SUPER_MAGIC))
                 {
                     return Some(DirFilenameEquivalence::Exact);
                 }
@@ -3493,6 +3766,7 @@ mod platform {
         file_name: [u16; 1],
     }
 
+    const FILE_DELETE_ON_CLOSE: u32 = 0x0000_1000;
     const STATUS_SHARING_VIOLATION: NtStatus = 0xC000_0043_u32 as i32;
     const STATUS_DELETE_PENDING: NtStatus = 0xC000_0056_u32 as i32;
     const FILE_READ_DATA: u32 = 0x0000_0001;
@@ -3842,18 +4116,19 @@ mod platform {
         /// lock covering read-modify-write operations on `file_name` in this
         /// directory.
         ///
-        /// Uses a handle-pinned `share_access = 0` file inside this directory
-        /// marked delete-on-close after verifying it is not a reparse point, so
-        /// writers across all logon sessions (interactive, RDP, Windows
-        /// services, SMB shares) coordinate cleanly without leaving lock files
-        /// behind. Re-entrant on the same thread; the OS lock remains held
-        /// until the last live guard drops.
+        /// Uses create-only (`FILE_CREATE`) acquisition with atomic
+        /// `FILE_DELETE_ON_CLOSE` and `share_access = 0` inside this directory
+        /// so writers across all logon sessions (interactive, RDP, Windows
+        /// services, SMB shares) coordinate cleanly without ever modifying or
+        /// deleting a pre-existing unowned file and without leaving lock files
+        /// behind on normal drop or crash. Re-entrant on the same thread; the
+        /// OS lock remains held until the last live guard drops.
         ///
         /// # Errors
         ///
-        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid
-        /// or the lock entry is a reparse point, or [`ContainedFsError::Io`] on
-        /// OS lock failures.
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
+        /// or [`ContainedFsError::Io`] on OS lock failures or pre-existing
+        /// unowned lock-name collisions.
         pub fn lock_target(
             &self,
             file_name: &OsStr,
@@ -3875,9 +4150,10 @@ mod platform {
                     FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
                     FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_TEMPORARY,
                     0,
-                    FILE_OPEN_IF,
+                    FILE_CREATE,
                     FILE_NON_DIRECTORY_FILE
                         | FILE_OPEN_REPARSE_POINT
+                        | FILE_DELETE_ON_CLOSE
                         | FILE_SYNCHRONOUS_IO_NONALERT,
                     std::ptr::null_mut(),
                 ) {
@@ -3895,25 +4171,52 @@ mod platform {
                         std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
                         backoff_ms = (backoff_ms * 2).min(50);
                     }
+                    Err(STATUS_OBJECT_NAME_COLLISION) => {
+                        // Distinguish an active `FILE_DELETE_ON_CLOSE` exclusive
+                        // lock holder from a pre-existing unowned file without
+                        // ever modifying or deleting the existing entry.
+                        match nt_create_relative(
+                            self.handle.as_raw_handle(),
+                            &lock_name,
+                            FILE_READ_DATA | SYNCHRONIZE,
+                            FILE_ATTRIBUTE_NORMAL,
+                            0,
+                            FILE_OPEN,
+                            FILE_NON_DIRECTORY_FILE
+                                | FILE_OPEN_REPARSE_POINT
+                                | FILE_SYNCHRONOUS_IO_NONALERT,
+                            std::ptr::null_mut(),
+                        ) {
+                            Err(STATUS_SHARING_VIOLATION | STATUS_DELETE_PENDING) => {
+                                if std::time::Instant::now() >= deadline {
+                                    return Err(ContainedFsError::Io(io::Error::new(
+                                        io::ErrorKind::TimedOut,
+                                        format!(
+                                            "timed out waiting for exclusive catalog lock for \"{}\"",
+                                            file_name.to_string_lossy()
+                                        ),
+                                    )));
+                                }
+                                std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                                backoff_ms = (backoff_ms * 2).min(50);
+                            }
+                            Err(status) if is_not_found_status(status) => continue,
+                            Ok(_unowned) | Err(_) => {
+                                return Err(ContainedFsError::Io(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    format!(
+                                        "refusing to overwrite or delete pre-existing entry \"{}\"",
+                                        lock_name.to_string_lossy()
+                                    ),
+                                )));
+                            }
+                        }
+                    }
                     Err(status) => {
                         return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
                     }
                 }
             };
-            let info = file_information(handle.as_raw_handle())?;
-            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
-                return Err(ContainedFsError::Containment(format!(
-                    "refusing to use symlink or reparse point as catalog lock \"{}\"",
-                    lock_name.to_string_lossy()
-                )));
-            }
-            if info.number_of_links > 1 {
-                return Err(ContainedFsError::Containment(format!(
-                    "refusing to use hard-linked file as catalog lock \"{}\"",
-                    lock_name.to_string_lossy()
-                )));
-            }
-            nt_mark_delete_on_close(handle.as_raw_handle())?;
             let lock = std::rc::Rc::new(WindowsDirTargetLock {
                 key,
                 _handle: handle,
@@ -5088,6 +5391,7 @@ mod tests {
     }
 
     #[cfg(any(
+        target_os = "linux",
         target_os = "macos",
         target_os = "ios",
         target_os = "freebsd",
@@ -5526,5 +5830,32 @@ mod tests {
         rx.recv_timeout(Duration::from_secs(5))
             .expect("worker must acquire lock once the last reentrant guard drops");
         handle.join().expect("worker joined");
+        assert!(
+            !root.path().join(".pmds-lock").exists(),
+            "Unix lock file must be removed when the final guard drops"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_target_lock_preserves_preexisting_non_lock_file() {
+        for initial in ["user-owned-content", ""] {
+            let root = tempfile::tempdir().expect("temp dir");
+            let existing = root.path().join(".pmds-lock");
+            fs::write(&existing, initial).expect("seed pre-existing file");
+
+            let dir = ContainedDir::open_root(root.path()).expect("open root");
+            let error = dir
+                .lock_target(OsStr::new("en.po"))
+                .expect_err("lock must refuse to overwrite or remove pre-existing non-lock file");
+            assert!(
+                matches!(&error, ContainedFsError::Io(io_err) if io_err.kind() == io::ErrorKind::AlreadyExists),
+                "unexpected error for initial={initial:?}: {error}"
+            );
+            assert_eq!(
+                fs::read_to_string(&existing).expect("pre-existing file must remain intact"),
+                initial
+            );
+        }
     }
 }

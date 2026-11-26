@@ -14,7 +14,7 @@ use std::io::{self, BufReader, IsTerminal, Read, Write};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::Once;
 #[cfg(unix)]
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -744,19 +744,7 @@ fn invoke_binary(
         )
     })?;
     request_bytes.push(b'\n');
-    let mut command = Command::new(&resolved.binary_path);
-    #[cfg(unix)]
-    if resolved.invocation_path != resolved.binary_path {
-        command.arg0(&resolved.invocation_path);
-    }
-    command
-        .current_dir(cwd)
-        .env(NATIVE_EXECUTABLE_ENV, native_executable)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
-    isolate_process_group(&mut command);
-    let mut child = spawn_binary(&mut command).map_err(|error| {
+    let mut child = spawn_resolved_binary(resolved, cwd, native_executable).map_err(|error| {
         PluginFailure::new(
             "PLUGIN_BINARY_SPAWN_FAILED",
             format!(
@@ -772,7 +760,7 @@ fn invoke_binary(
     // The request is written from a helper thread while this thread consumes
     // stdout, so a plugin that emits events before draining its stdin cannot
     // deadlock against a request larger than the pipe buffers.
-    let stdin = child.stdin.take();
+    let stdin = child.take_stdin();
     let writer = thread::spawn(move || -> io::Result<()> {
         let Some(mut stdin) = stdin else {
             return Ok(());
@@ -786,7 +774,7 @@ fn invoke_binary(
         }
     });
 
-    let mut stdout = BufReader::new(child.stdout.take().expect("piped plugin stdout"));
+    let mut stdout = BufReader::new(child.take_stdout().expect("piped plugin stdout"));
     let (stdout_tx, stdout_rx) = mpsc::sync_channel(1);
     let reader = thread::spawn(move || {
         loop {
@@ -947,6 +935,565 @@ fn invoke_binary(
     })
 }
 
+#[cfg(not(windows))]
+type PluginStdin = ChildStdin;
+
+#[cfg(not(windows))]
+type PluginStdout = ChildStdout;
+
+#[cfg(not(windows))]
+struct PluginChild(Child);
+
+#[cfg(not(windows))]
+impl PluginChild {
+    fn take_stdin(&mut self) -> Option<PluginStdin> {
+        self.0.stdin.take()
+    }
+
+    fn take_stdout(&mut self) -> Option<PluginStdout> {
+        self.0.stdout.take()
+    }
+
+    #[cfg(unix)]
+    fn id(&self) -> u32 {
+        self.0.id()
+    }
+
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        self.0.try_wait()
+    }
+
+    fn wait(&mut self) -> io::Result<ExitStatus> {
+        self.0.wait()
+    }
+
+    fn kill(&mut self) -> io::Result<()> {
+        self.0.kill()
+    }
+}
+
+#[cfg(windows)]
+enum PluginStdin {
+    Std(ChildStdin),
+    Pipe(fs::File),
+}
+
+#[cfg(windows)]
+impl Write for PluginStdin {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Std(stdin) => stdin.write(buf),
+            Self::Pipe(file) => file.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Std(stdin) => stdin.flush(),
+            Self::Pipe(file) => file.flush(),
+        }
+    }
+}
+
+#[cfg(windows)]
+enum PluginStdout {
+    Std(ChildStdout),
+    Pipe(fs::File),
+}
+
+#[cfg(windows)]
+impl Read for PluginStdout {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Std(stdout) => stdout.read(buf),
+            Self::Pipe(file) => file.read(buf),
+        }
+    }
+}
+
+#[cfg(windows)]
+struct WindowsAliasChild {
+    process: std::os::windows::io::OwnedHandle,
+    pid: u32,
+    stdin: Option<fs::File>,
+    stdout: Option<fs::File>,
+    exit_status: Option<ExitStatus>,
+}
+
+#[cfg(windows)]
+enum PluginChild {
+    Std(Child),
+    WinAlias(WindowsAliasChild),
+}
+
+#[cfg(windows)]
+impl PluginChild {
+    fn take_stdin(&mut self) -> Option<PluginStdin> {
+        match self {
+            Self::Std(child) => child.stdin.take().map(PluginStdin::Std),
+            Self::WinAlias(child) => child.stdin.take().map(PluginStdin::Pipe),
+        }
+    }
+
+    fn take_stdout(&mut self) -> Option<PluginStdout> {
+        match self {
+            Self::Std(child) => child.stdout.take().map(PluginStdout::Std),
+            Self::WinAlias(child) => child.stdout.take().map(PluginStdout::Pipe),
+        }
+    }
+
+    fn id(&self) -> u32 {
+        match self {
+            Self::Std(child) => child.id(),
+            Self::WinAlias(child) => child.pid,
+        }
+    }
+
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        match self {
+            Self::Std(child) => child.try_wait(),
+            Self::WinAlias(child) => child.wait_with_timeout(0),
+        }
+    }
+
+    fn wait(&mut self) -> io::Result<ExitStatus> {
+        match self {
+            Self::Std(child) => child.wait(),
+            Self::WinAlias(child) => child
+                .wait_with_timeout(windows_alias_spawn::INFINITE)?
+                .ok_or_else(|| io::Error::other("Windows plugin wait returned without status")),
+        }
+    }
+
+    fn kill(&mut self) -> io::Result<()> {
+        match self {
+            Self::Std(child) => child.kill(),
+            Self::WinAlias(child) => child.kill(),
+        }
+    }
+}
+
+#[cfg(any(windows, test))]
+fn encode_windows_argv0_command_line(invocation_units: &[u16]) -> io::Result<Vec<u16>> {
+    if invocation_units.is_empty()
+        || invocation_units
+            .iter()
+            .any(|&unit| unit == 0 || unit == u16::from(b'"'))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid Windows plugin invocation path",
+        ));
+    }
+    let mut command_line = Vec::with_capacity(invocation_units.len() + 3);
+    command_line.push(u16::from(b'"'));
+    command_line.extend_from_slice(invocation_units);
+    command_line.push(u16::from(b'"'));
+    command_line.push(0);
+    Ok(command_line)
+}
+
+#[cfg(any(windows, test))]
+fn build_windows_environment_block_units(
+    entries: Vec<(Vec<u16>, Vec<u16>)>,
+    override_key: &str,
+    override_value: &[u16],
+) -> io::Result<Vec<u16>> {
+    if override_value.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Windows environment override contains interior NUL",
+        ));
+    }
+    let override_key_units: Vec<u16> = override_key.encode_utf16().collect();
+    let override_key_upper: Vec<u16> = override_key.to_ascii_uppercase().encode_utf16().collect();
+    let mut filtered = Vec::with_capacity(entries.len() + 1);
+    for (key, value) in entries {
+        if key.is_empty()
+            || key.contains(&0)
+            || key[1..].contains(&u16::from(b'='))
+            || value.contains(&0)
+        {
+            continue;
+        }
+        let key_upper: Vec<u16> = key
+            .iter()
+            .map(|&unit| {
+                u8::try_from(unit).map_or(unit, |byte| u16::from(byte.to_ascii_uppercase()))
+            })
+            .collect();
+        if key_upper == override_key_upper {
+            continue;
+        }
+        filtered.push((key_upper, key, value));
+    }
+    filtered.push((
+        override_key_upper,
+        override_key_units,
+        override_value.to_vec(),
+    ));
+    filtered.sort_by(|left, right| left.0.cmp(&right.0));
+
+    let mut block = Vec::new();
+    for (_, key, value) in filtered {
+        block.extend_from_slice(&key);
+        block.push(u16::from(b'='));
+        block.extend_from_slice(&value);
+        block.push(0);
+    }
+    if block.is_empty() {
+        block.push(0);
+    }
+    block.push(0);
+    Ok(block)
+}
+
+#[cfg(windows)]
+mod windows_alias_spawn {
+    use std::env;
+    use std::ffi::{OsStr, c_void};
+    use std::fs::File;
+    use std::io;
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use std::os::windows::process::ExitStatusExt;
+    use std::path::Path;
+    use std::process::ExitStatus;
+
+    use super::{
+        NATIVE_EXECUTABLE_ENV, WindowsAliasChild, build_windows_environment_block_units,
+        encode_windows_argv0_command_line,
+    };
+
+    pub(super) const INFINITE: u32 = 0xFFFF_FFFF;
+    const WAIT_OBJECT_0: u32 = 0x0000_0000;
+    const WAIT_TIMEOUT: u32 = 0x0000_0102;
+    const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
+    const STARTF_USESTDHANDLES: u32 = 0x0000_0100;
+    const CREATE_UNICODE_ENVIRONMENT: u32 = 0x0000_0400;
+    const STD_ERROR_HANDLE: u32 = 0xFFFF_FFF4;
+    const DUPLICATE_SAME_ACCESS: u32 = 0x0000_0002;
+    const INVALID_HANDLE_VALUE: *mut c_void = (-1_isize) as *mut c_void;
+
+    #[repr(C)]
+    struct SecurityAttributes {
+        n_length: u32,
+        lp_security_descriptor: *mut c_void,
+        b_inherit_handle: i32,
+    }
+
+    #[repr(C)]
+    struct StartupInfoW {
+        cb: u32,
+        lp_reserved: *mut u16,
+        lp_desktop: *mut u16,
+        lp_title: *mut u16,
+        dw_x: u32,
+        dw_y: u32,
+        dw_x_size: u32,
+        dw_y_size: u32,
+        dw_x_count_chars: u32,
+        dw_y_count_chars: u32,
+        dw_fill_attribute: u32,
+        dw_flags: u32,
+        w_show_window: u16,
+        cb_reserved2: u16,
+        lp_reserved2: *mut u8,
+        h_std_input: *mut c_void,
+        h_std_output: *mut c_void,
+        h_std_error: *mut c_void,
+    }
+
+    #[repr(C)]
+    struct ProcessInformation {
+        h_process: *mut c_void,
+        h_thread: *mut c_void,
+        dw_process_id: u32,
+        dw_thread_id: u32,
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn CreatePipe(
+            h_read_pipe: *mut *mut c_void,
+            h_write_pipe: *mut *mut c_void,
+            lp_pipe_attributes: *mut SecurityAttributes,
+            n_size: u32,
+        ) -> i32;
+        fn SetHandleInformation(h_object: *mut c_void, dw_mask: u32, dw_flags: u32) -> i32;
+        fn GetStdHandle(n_std_handle: u32) -> *mut c_void;
+        fn GetCurrentProcess() -> *mut c_void;
+        fn DuplicateHandle(
+            h_source_process_handle: *mut c_void,
+            h_source_handle: *mut c_void,
+            h_target_process_handle: *mut c_void,
+            lp_target_handle: *mut *mut c_void,
+            dw_desired_access: u32,
+            b_inherit_handle: i32,
+            dw_options: u32,
+        ) -> i32;
+        fn CreateProcessW(
+            lp_application_name: *const u16,
+            lp_command_line: *mut u16,
+            lp_process_attributes: *mut SecurityAttributes,
+            lp_thread_attributes: *mut SecurityAttributes,
+            b_inherit_handles: i32,
+            dw_creation_flags: u32,
+            lp_environment: *const c_void,
+            lp_current_directory: *const u16,
+            lp_startup_info: *const StartupInfoW,
+            lp_process_information: *mut ProcessInformation,
+        ) -> i32;
+        fn WaitForSingleObject(h_handle: *mut c_void, dw_milliseconds: u32) -> u32;
+        fn GetExitCodeProcess(h_process: *mut c_void, lp_exit_code: *mut u32) -> i32;
+        fn TerminateProcess(h_process: *mut c_void, u_exit_code: u32) -> i32;
+    }
+
+    fn to_wide_nul(value: &OsStr) -> io::Result<Vec<u16>> {
+        let mut units: Vec<u16> = value.encode_wide().collect();
+        if units.contains(&0) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Windows path contains interior NUL",
+            ));
+        }
+        units.push(0);
+        Ok(units)
+    }
+
+    fn create_inheritable_pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
+        let mut attrs = SecurityAttributes {
+            n_length: u32::try_from(std::mem::size_of::<SecurityAttributes>())
+                .expect("SecurityAttributes fits in u32"),
+            lp_security_descriptor: std::ptr::null_mut(),
+            b_inherit_handle: 1,
+        };
+        let mut read_raw = std::ptr::null_mut();
+        let mut write_raw = std::ptr::null_mut();
+        // SAFETY: output pointers and `attrs` are valid for `CreatePipe`.
+        if unsafe { CreatePipe(&mut read_raw, &mut write_raw, &mut attrs, 0) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `CreatePipe` succeeded and returned two newly owned handles.
+        let read_handle = unsafe { OwnedHandle::from_raw_handle(read_raw) };
+        // SAFETY: `CreatePipe` succeeded and returned two newly owned handles.
+        let write_handle = unsafe { OwnedHandle::from_raw_handle(write_raw) };
+        Ok((read_handle, write_handle))
+    }
+
+    fn mark_not_inheritable(handle: &OwnedHandle) -> io::Result<()> {
+        // SAFETY: `handle` is an open Windows kernel handle.
+        if unsafe { SetHandleInformation(handle.as_raw_handle(), HANDLE_FLAG_INHERIT, 0) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    fn duplicate_inheritable_stderr() -> io::Result<Option<OwnedHandle>> {
+        // SAFETY: `GetStdHandle` has no preconditions.
+        let raw = unsafe { GetStdHandle(STD_ERROR_HANDLE) };
+        if raw.is_null() || raw == INVALID_HANDLE_VALUE {
+            return Ok(None);
+        }
+        let mut dup = std::ptr::null_mut();
+        // SAFETY: `GetCurrentProcess` returns the pseudo-handle for this process.
+        let proc_handle = unsafe { GetCurrentProcess() };
+        // SAFETY: `raw` is the current standard error handle and `dup` is writable.
+        if unsafe {
+            DuplicateHandle(
+                proc_handle,
+                raw,
+                proc_handle,
+                &mut dup,
+                0,
+                1,
+                DUPLICATE_SAME_ACCESS,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `DuplicateHandle` succeeded and returned a newly owned handle.
+        Ok(Some(unsafe { OwnedHandle::from_raw_handle(dup) }))
+    }
+
+    pub(super) fn spawn_alias_binary(
+        binary_path: &Path,
+        invocation_path: &Path,
+        cwd: &Path,
+        native_executable: &Path,
+    ) -> io::Result<WindowsAliasChild> {
+        let app_name = to_wide_nul(binary_path.as_os_str())?;
+        let invocation_units: Vec<u16> = invocation_path.as_os_str().encode_wide().collect();
+        let mut cmd_line = encode_windows_argv0_command_line(&invocation_units)?;
+        let cwd_wide = to_wide_nul(cwd.as_os_str())?;
+        let native_exe_units: Vec<u16> = native_executable.as_os_str().encode_wide().collect();
+        let env_entries: Vec<(Vec<u16>, Vec<u16>)> = env::vars_os()
+            .map(|(k, v)| (k.encode_wide().collect(), v.encode_wide().collect()))
+            .collect();
+        let env_block = build_windows_environment_block_units(
+            env_entries,
+            NATIVE_EXECUTABLE_ENV,
+            &native_exe_units,
+        )?;
+
+        let (stdin_read, stdin_write) = create_inheritable_pipe()?;
+        mark_not_inheritable(&stdin_write)?;
+        let (stdout_read, stdout_write) = create_inheritable_pipe()?;
+        mark_not_inheritable(&stdout_read)?;
+        let stderr_dup = duplicate_inheritable_stderr()?;
+
+        let startup_info = StartupInfoW {
+            cb: u32::try_from(std::mem::size_of::<StartupInfoW>())
+                .expect("StartupInfoW fits in u32"),
+            lp_reserved: std::ptr::null_mut(),
+            lp_desktop: std::ptr::null_mut(),
+            lp_title: std::ptr::null_mut(),
+            dw_x: 0,
+            dw_y: 0,
+            dw_x_size: 0,
+            dw_y_size: 0,
+            dw_x_count_chars: 0,
+            dw_y_count_chars: 0,
+            dw_fill_attribute: 0,
+            dw_flags: STARTF_USESTDHANDLES,
+            w_show_window: 0,
+            cb_reserved2: 0,
+            lp_reserved2: std::ptr::null_mut(),
+            h_std_input: stdin_read.as_raw_handle(),
+            h_std_output: stdout_write.as_raw_handle(),
+            h_std_error: stderr_dup
+                .as_ref()
+                .map_or(std::ptr::null_mut(), AsRawHandle::as_raw_handle),
+        };
+        let mut proc_info = ProcessInformation {
+            h_process: std::ptr::null_mut(),
+            h_thread: std::ptr::null_mut(),
+            dw_process_id: 0,
+            dw_thread_id: 0,
+        };
+
+        // SAFETY: `app_name`, `cmd_line`, `env_block`, `cwd_wide`,
+        // `startup_info`, and `proc_info` all remain valid and properly
+        // NUL-terminated for the duration of `CreateProcessW`.
+        let created = unsafe {
+            CreateProcessW(
+                app_name.as_ptr(),
+                cmd_line.as_mut_ptr(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                1,
+                CREATE_UNICODE_ENVIRONMENT,
+                env_block.as_ptr().cast::<c_void>(),
+                cwd_wide.as_ptr(),
+                &startup_info,
+                &mut proc_info,
+            )
+        };
+        drop(stdin_read);
+        drop(stdout_write);
+        drop(stderr_dup);
+        if created == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `CreateProcessW` succeeded and returned owned process and thread handles.
+        let process = unsafe { OwnedHandle::from_raw_handle(proc_info.h_process) };
+        // SAFETY: `CreateProcessW` succeeded and returned an owned thread handle.
+        let _thread = unsafe { OwnedHandle::from_raw_handle(proc_info.h_thread) };
+
+        Ok(WindowsAliasChild {
+            process,
+            pid: proc_info.dw_process_id,
+            stdin: Some(File::from(stdin_write)),
+            stdout: Some(File::from(stdout_read)),
+            exit_status: None,
+        })
+    }
+
+    impl WindowsAliasChild {
+        pub(super) fn wait_with_timeout(
+            &mut self,
+            timeout_ms: u32,
+        ) -> io::Result<Option<ExitStatus>> {
+            if let Some(status) = self.exit_status {
+                return Ok(Some(status));
+            }
+            // SAFETY: `self.process` is an open Windows process handle.
+            let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle(), timeout_ms) };
+            match wait {
+                WAIT_OBJECT_0 => {
+                    let mut code: u32 = 0;
+                    // SAFETY: `self.process` is open and `code` is writable.
+                    if unsafe { GetExitCodeProcess(self.process.as_raw_handle(), &mut code) } == 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    let status = ExitStatus::from_raw(code);
+                    self.exit_status = Some(status);
+                    Ok(Some(status))
+                }
+                WAIT_TIMEOUT => Ok(None),
+                _ => Err(io::Error::last_os_error()),
+            }
+        }
+
+        pub(super) fn kill(&mut self) -> io::Result<()> {
+            if self.exit_status.is_some() {
+                return Ok(());
+            }
+            // SAFETY: `self.process` is an open Windows process handle.
+            if unsafe { TerminateProcess(self.process.as_raw_handle(), 1) } == 0 {
+                let error = io::Error::last_os_error();
+                if self.wait_with_timeout(0)?.is_some() {
+                    return Ok(());
+                }
+                return Err(error);
+            }
+            Ok(())
+        }
+    }
+}
+
+fn spawn_resolved_binary(
+    resolved: &ResolvedPlugin,
+    cwd: &Path,
+    native_executable: &Path,
+) -> io::Result<PluginChild> {
+    #[cfg(windows)]
+    if resolved.invocation_path != resolved.binary_path {
+        return windows_alias_spawn::spawn_alias_binary(
+            &resolved.binary_path,
+            &resolved.invocation_path,
+            cwd,
+            native_executable,
+        )
+        .map(PluginChild::WinAlias);
+    }
+
+    let mut command = Command::new(&resolved.binary_path);
+    #[cfg(unix)]
+    if resolved.invocation_path != resolved.binary_path {
+        command.arg0(&resolved.invocation_path);
+    }
+    #[cfg(not(any(unix, windows)))]
+    let _ = &resolved.invocation_path;
+    command
+        .current_dir(cwd)
+        .env(NATIVE_EXECUTABLE_ENV, native_executable)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit());
+    isolate_process_group(&mut command);
+
+    #[cfg(windows)]
+    {
+        spawn_binary(&mut command).map(PluginChild::Std)
+    }
+    #[cfg(not(windows))]
+    {
+        spawn_binary(&mut command).map(PluginChild)
+    }
+}
+
 fn spawn_binary(command: &mut Command) -> io::Result<Child> {
     #[cfg(unix)]
     {
@@ -973,7 +1520,7 @@ fn spawn_binary(command: &mut Command) -> io::Result<Child> {
 }
 
 fn wait_for_plugin_exit(
-    child: &mut Child,
+    child: &mut PluginChild,
     resolved: &ResolvedPlugin,
     policy: InvocationPolicy,
     started: Instant,
@@ -1041,7 +1588,7 @@ fn reader_failure(resolved: &ResolvedPlugin) -> PluginFailure {
 }
 
 #[cfg(unix)]
-fn terminate_plugin_tree(child: &mut Child) {
+fn terminate_plugin_tree(child: &mut PluginChild) {
     let Ok(group) = i32::try_from(child.id()) else {
         let _ = child.kill();
         return;
@@ -1111,7 +1658,7 @@ fn windows_system_directory() -> Option<PathBuf> {
 }
 
 #[cfg(windows)]
-fn terminate_plugin_tree(child: &mut Child) {
+fn terminate_plugin_tree(child: &mut PluginChild) {
     let system_dir = windows_system_directory();
     if let Some(taskkill) =
         resolve_windows_taskkill(system_dir.as_deref(), env::var_os("SystemRoot").as_deref())
@@ -1128,7 +1675,7 @@ fn terminate_plugin_tree(child: &mut Child) {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn terminate_plugin_tree(child: &mut Child) {
+fn terminate_plugin_tree(child: &mut PluginChild) {
     let _ = child.kill();
 }
 
@@ -1192,7 +1739,7 @@ struct ChildSignalGuard;
 
 #[cfg(unix)]
 impl ChildSignalGuard {
-    fn arm(child: &std::process::Child) -> Self {
+    fn arm(child: &PluginChild) -> Self {
         static INSTALL: Once = Once::new();
         INSTALL.call_once(|| {
             let Ok(mut signals) = signal_hook::iterator::Signals::new([
@@ -2884,7 +3431,7 @@ mod tests {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         isolate_process_group(&mut command);
-        let mut child = command.spawn().expect("isolated child");
+        let mut child = super::PluginChild(command.spawn().expect("isolated child"));
         let child_id = i32::try_from(child.id()).expect("child PID");
 
         // SAFETY: queries the process group of the child we just spawned.
@@ -3459,5 +4006,64 @@ catalogs:
                 .expect("multicall symlinked native plugin must receive declared argv0");
             assert_eq!(manifest.name, "acme");
         }
+    }
+
+    #[test]
+    fn windows_alias_command_line_and_env_block_preserve_declared_argv0() {
+        let invocation: Vec<u16> = r"C:\repo\node_modules\acme\bin\acme-plugin.exe"
+            .encode_utf16()
+            .collect();
+        let cmd_line = super::encode_windows_argv0_command_line(&invocation).expect("quoted argv0");
+        assert_eq!(
+            String::from_utf16(&cmd_line).expect("UTF-16"),
+            "\"C:\\repo\\node_modules\\acme\\bin\\acme-plugin.exe\"\0"
+        );
+        assert!(
+            super::encode_windows_argv0_command_line(&[]).is_err(),
+            "empty invocation path must fail"
+        );
+        let with_quote: Vec<u16> = "C:\\bad\"path.exe".encode_utf16().collect();
+        assert!(
+            super::encode_windows_argv0_command_line(&with_quote).is_err(),
+            "embedded quote in invocation path must fail"
+        );
+
+        let override_val: Vec<u16> = r"C:\bin\pmds.exe".encode_utf16().collect();
+        let block = super::build_windows_environment_block_units(
+            vec![
+                (
+                    "path".encode_utf16().collect(),
+                    r"C:\Windows".encode_utf16().collect(),
+                ),
+                (
+                    super::NATIVE_EXECUTABLE_ENV
+                        .to_ascii_lowercase()
+                        .encode_utf16()
+                        .collect(),
+                    r"C:\stale\pmds.exe".encode_utf16().collect(),
+                ),
+                (
+                    "ALPHA".encode_utf16().collect(),
+                    "1".encode_utf16().collect(),
+                ),
+            ],
+            super::NATIVE_EXECUTABLE_ENV,
+            &override_val,
+        )
+        .expect("Windows environment block");
+        let rendered = String::from_utf16(&block).expect("UTF-16 env block");
+        let entries: Vec<&str> = rendered
+            .strip_suffix("\0\0")
+            .expect("double-NUL terminated")
+            .split('\0')
+            .collect();
+        assert_eq!(
+            entries,
+            vec![
+                "ALPHA=1",
+                &format!("{}=C:\\bin\\pmds.exe", super::NATIVE_EXECUTABLE_ENV),
+                "path=C:\\Windows",
+            ]
+        );
     }
 }

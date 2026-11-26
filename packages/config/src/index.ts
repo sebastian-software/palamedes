@@ -831,6 +831,7 @@ function validateCatalogPathPattern(catalogPath: string): string | undefined {
   }
   const segments = catalogPath.replaceAll("\\", "/").split("/");
   let hasNormal = false;
+  let firstNormal: string | undefined;
   let lastNonEmpty = "";
   for (const segment of segments) {
     if (segment === "") {
@@ -843,6 +844,9 @@ function validateCatalogPathPattern(catalogPath: string): string | undefined {
     if (segment === "..") {
       return "catalog path must not contain parent-directory ('..') segments";
     }
+    if (firstNormal === undefined) {
+      firstNormal = segment;
+    }
     hasNormal = true;
   }
   if (lastNonEmpty === ".") {
@@ -850,6 +854,13 @@ function validateCatalogPathPattern(catalogPath: string): string | undefined {
   }
   if (!hasNormal) {
     return "catalog path must name a file path inside the config directory";
+  }
+  if (
+    firstNormal !== undefined &&
+    (hasWindowsDrivePrefix(firstNormal) ||
+      hasWindowsDrivePrefix(firstNormal.replaceAll("{locale}", "a")))
+  ) {
+    return "catalog path must be relative to the config directory";
   }
   return undefined;
 }

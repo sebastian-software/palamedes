@@ -163,6 +163,17 @@ fn resolve_catalog_request(
                 .ok_or_else(|| PalamedesError::CouldNotResolveLocale {
                     resource_path: resource_path.to_path_buf(),
                 })?;
+            // A pattern with multiple `{locale}` placeholders captures each
+            // occurrence independently. Verify every placeholder captured the
+            // same value before rejecting the locale, so a nonmatching earlier
+            // catalog cannot mask a valid later catalog.
+            if (2..captures.len()).any(|index| {
+                captures
+                    .get(index)
+                    .is_none_or(|value| value.as_str() != locale)
+            }) {
+                continue;
+            }
             if !is_valid_locale(&locale) {
                 return Err(PalamedesError::InvalidCatalogLocale { locale });
             }
@@ -182,9 +193,6 @@ fn resolve_catalog_request(
                 &locale,
                 catalog.format,
             )?;
-            // A pattern with multiple `{locale}` placeholders captures each
-            // occurrence independently; require every placeholder to resolve to
-            // the same validated locale.
             if normalize_path(&expected_primary) != normalized_resource {
                 continue;
             }

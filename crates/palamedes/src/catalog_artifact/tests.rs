@@ -2170,3 +2170,44 @@ fn restore_mtime(path: &Path, mtime: SystemTime) {
 fn po_string(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
+
+#[test]
+fn compile_catalog_artifact_repeated_locale_mismatch_falls_through_to_later_catalog() {
+    let root = create_fixture_dir("repeated-locale-fallthrough");
+    let admin_dir = root.join("locales/admin");
+    fs::create_dir_all(&admin_dir).expect("create admin dir");
+    write_test_catalog(&admin_dir, "en", &[("Admin", "Admin")]);
+    write_test_catalog(&admin_dir, "de", &[("Admin", "Verwaltung")]);
+
+    let result = compile_catalog_artifact(&CatalogArtifactRequest {
+        config: CatalogArtifactConfig {
+            root_dir: root.to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "./locales/{locale}/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: "locales/admin/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        },
+        resource_path: admin_dir.join("de.po").to_string_lossy().into_owned(),
+    })
+    .expect("mismatched repeated-locale pattern must fall through to later catalog");
+
+    assert_eq!(
+        result.resolved_locale_chain,
+        Some(vec!["de".to_owned(), "en".to_owned()])
+    );
+    assert_eq!(
+        result.messages.get(&compiled_key("Admin", None)),
+        Some(&"Verwaltung".to_owned())
+    );
+    let _ = fs::remove_dir_all(&root);
+}

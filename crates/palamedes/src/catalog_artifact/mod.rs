@@ -103,12 +103,28 @@ pub fn validate_catalog_path_pattern(catalog_path: &str) -> Result<(), &'static 
     if !has_normal {
         return Err("catalog path must name a file path inside the config directory");
     }
+    let normalized = normalize_relative_catalog_pattern(catalog_path);
+    if Path::new(&normalized).is_absolute()
+        || has_windows_drive_prefix(&normalized)
+        || has_windows_drive_prefix(&normalized.replace("{locale}", "a"))
+    {
+        return Err("catalog path must be relative to the config directory");
+    }
     Ok(())
 }
 
 fn has_windows_drive_prefix(path: &str) -> bool {
     let bytes = path.as_bytes();
     bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
+}
+
+fn normalize_relative_catalog_pattern(catalog_path: &str) -> String {
+    catalog_path
+        .replace('\\', "/")
+        .split('/')
+        .filter(|segment| !segment.is_empty() && *segment != ".")
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 fn normalize_lexical_path(path: &Path) -> PathBuf {
@@ -315,14 +331,9 @@ pub fn resolve_catalog_file_path(
     {
         catalog_path.replace('\\', "/")
     } else {
-        let raw = catalog_path.replace('\\', "/");
-        let normalized = raw
-            .split('/')
-            .filter(|segment| !segment.is_empty() && *segment != ".")
-            .collect::<Vec<_>>()
-            .join("/");
+        let normalized = normalize_relative_catalog_pattern(catalog_path);
         if normalized.is_empty() {
-            raw
+            catalog_path.replace('\\', "/")
         } else {
             normalized
         }
