@@ -169,11 +169,10 @@ function directoryHasNamedFile(
   stem: string,
   extensions: readonly string[],
 ): boolean {
+  // Construct filenames verbatim (`${stem}.${ext}`), matching Next.js's
+  // `createValidFileMatcher`, which does not strip a leading dot from `ext`.
   const expectedNames = new Set(
-    extensions
-      .map((ext) => (ext.startsWith(".") ? ext.slice(1) : ext))
-      .filter((ext) => ext.length > 0)
-      .map((ext) => `${stem}.${ext}`),
+    extensions.filter((ext) => ext.length > 0).map((ext) => `${stem}.${ext}`),
   );
   if (expectedNames.size === 0) return false;
   let entries: Dirent[];
@@ -455,7 +454,31 @@ function walkCompiledLoaderTree(
   if (!parallelRoutes || !modules) return;
 
   const hasOptionalLocale = seenOptionalLocale || segment === "[[...locale]]";
-  if (modules.has("layout")) return hasOptionalLocale;
+  if (modules.has("layout")) {
+    const layoutExpr = modules.get("layout")!;
+    const layoutStart = skipWhitespaceAndComments(layoutExpr, 0);
+    const trimmedLayout = layoutExpr.slice(layoutStart).trim();
+    if (
+      trimmedLayout === "undefined" ||
+      trimmedLayout === "null" ||
+      /^void\s+0$/u.test(trimmedLayout)
+    ) {
+      // Explicit absent layout value: continue down `children`, matching Next's
+      // `if (typeof layout !== 'undefined')` check in `getRootParamsImpl()`.
+    } else if (layoutExpr[layoutStart] === "[") {
+      const layoutEnd = scanBalancedEnd(layoutExpr, layoutStart);
+      if (
+        layoutEnd === -1 ||
+        skipWhitespaceAndComments(layoutExpr, layoutEnd) !== layoutExpr.length
+      ) {
+        return;
+      }
+      return hasOptionalLocale;
+    } else {
+      // Dynamic or non-tuple layout expression: inconclusive.
+      return;
+    }
+  }
   const childrenExpr = parallelRoutes.get("children");
   if (childrenExpr === undefined) return;
   const childStart = skipWhitespaceAndComments(childrenExpr, 0);
@@ -1185,10 +1208,13 @@ function resolveEffectivePageExtensions(
   distDir: string,
   projectRoot: string,
   fallbackPageExtensions?: readonly string[],
+  options: { allowRequiredServerFiles?: boolean } = {},
 ): readonly string[] {
   return (
     readNextBuildContextPageExtensions(distDir, projectRoot) ??
-    readRequiredServerFilesPageExtensions(distDir) ??
+    (options.allowRequiredServerFiles
+      ? readRequiredServerFilesPageExtensions(distDir)
+      : undefined) ??
     (isNonEmptyStringArray(fallbackPageExtensions)
       ? fallbackPageExtensions
       : DEFAULT_PAGE_EXTENSIONS)
@@ -1400,6 +1426,12 @@ export type EmitClientCatalogPermutationsOptions = {
   projectRoot: string;
   configPath?: string;
   pageExtensions?: readonly string[];
+  /**
+   * Set by `withPalamedes()` during `compiler.runAfterProductionCompile` so
+   * stale `required-server-files.json` files retained from a previous build are
+   * never consulted before Next writes the current build's manifest.
+   */
+  fromProductionCompileHook?: boolean;
   failOnMissing: boolean;
 };
 
@@ -1483,6 +1515,7 @@ export async function emitClientCatalogPermutations(
     distDir,
     options.projectRoot,
     options.pageExtensions,
+    { allowRequiredServerFiles: !options.fromProductionCompileHook },
   );
   const standardAdapter = renderManifestAdapter(compiler.locales, compiler.sourceLocale, variants, {
     optionalRootLocale: false,

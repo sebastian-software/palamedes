@@ -713,6 +713,7 @@ export function withPalamedes(
                 projectRoot,
                 ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
                 ...(baseConfig.pageExtensions ? { pageExtensions: baseConfig.pageExtensions } : {}),
+                fromProductionCompileHook: true,
                 failOnMissing,
               });
               installClientCatalogPreload(metadata.distDir);
