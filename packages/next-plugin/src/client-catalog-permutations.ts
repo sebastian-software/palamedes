@@ -2607,11 +2607,11 @@ function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): b
         continue;
       }
     }
-    if (ch === ".") {
+    if (ch === "." || ch === "#") {
       index += 1;
       prevToken = "dot";
       prevWord = "";
-      prevChar = ".";
+      prevChar = ch;
       regexAllowed = false;
       continue;
     }
@@ -2646,10 +2646,10 @@ function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): b
           }
         }
       }
+      regexAllowed = prevToken !== "dot" && REGEX_PRECEDING_KEYWORDS.has(word);
       prevToken = "other";
       prevWord = word;
       prevChar = word.at(-1) ?? "";
-      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
       continue;
     }
     if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
@@ -2663,7 +2663,7 @@ function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): b
     prevToken = "other";
     prevWord = "";
     prevChar = ch ?? "";
-    regexAllowed = "([{=,:;!?&|^~+-*/%<>".includes(ch ?? "");
+    regexAllowed = "([{=,:;!?&|^~+-*/%<>}".includes(ch ?? "");
   }
   return false;
 }
@@ -2728,11 +2728,11 @@ function verifyTurbopackAppPageRuntimeExport(
   // `pathname` parameters (supporting both minified dot-member and unminified
   // bracket-member forms: `new ns.AppPageRouteModule(` and `new ns["AppPageRouteModule"](`).
   const prefixMatch = new RegExp(
-    `^\\s*(?:["']use strict["']\\s*;?\\s*)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*\\{\\s*require\\s*:\\s*${escapeRegExpLiteral(reqParam)}\\s*,\\s*loadChunk\\s*:\\s*${escapeRegExpLiteral(loadChunkParam)}\\s*,?\\s*\\}\\s*(?:,\\s*|;\\s*(?:const|let|var)\\s+)([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+([A-Za-z_$][\\w$]*)\\s*(?:\\.\\s*AppPageRouteModule|\\[\\s*["']AppPageRouteModule["']\\s*\\])\\s*\\(`,
+    `^(\\s*(?:["']use strict["']\\s*;?\\s*)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*\\{\\s*require\\s*:\\s*${escapeRegExpLiteral(reqParam)}\\s*,\\s*loadChunk\\s*:\\s*${escapeRegExpLiteral(loadChunkParam)}\\s*,?\\s*\\}\\s*(?:,\\s*|;\\s*(?:const|let|var)\\s+))([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+([A-Za-z_$][\\w$]*)\\s*(?:\\.\\s*AppPageRouteModule|\\[\\s*["']AppPageRouteModule["']\\s*\\])\\s*\\(`,
     "u",
   ).exec(fnBody);
   if (!prefixMatch) return false;
-  const [, nextAppVar, routeModVar, appPageNs] = prefixMatch;
+  const [, beforeRouteMod, nextAppVar, routeModVar, appPageNs] = prefixMatch;
   const ctorParen = prefixMatch[0].length - 1;
   const ctorEnd = scanBalancedEnd(fnBody, ctorParen);
   if (ctorEnd === -1) return false;
@@ -2766,10 +2766,7 @@ function verifyTurbopackAppPageRuntimeExport(
   ) {
     return false;
   }
-  const routeModDeclOffset = fnBody.indexOf(
-    routeModVar!,
-    prefixMatch[0].indexOf(nextAppVar!) + nextAppVar!.length,
-  );
+  const routeModDeclOffset = beforeRouteMod!.length;
   if (hasWriteToIdentifier(fnBody, treeParam)) return false;
   if (hasWriteToIdentifier(fnBody, routeModVar!, routeModDeclOffset)) return false;
 
@@ -4431,6 +4428,170 @@ export function compiledLoaderTreeHasOptionalRootLocale(
   return walkCompiledLoaderTree(treeExpr, 0, false);
 }
 
+function extractTurbopackLoadedChunks(
+  entrySource: string,
+  distDir: string,
+  runtimeVar: string,
+): string[] | undefined {
+  const loadedChunks: string[] = [];
+  let index = 0;
+  let prevWasDot = false;
+  let prevWord = "";
+  let regexAllowed = true;
+  let pendingCondition = false;
+  let bracketDepth = 0;
+
+  while (index < entrySource.length) {
+    const ch = entrySource[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (entrySource[index + 1] === "/" || entrySource[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(entrySource, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(entrySource, index);
+      if (end === -1) return;
+      index = end;
+      prevWord = "";
+      prevWasDot = false;
+      pendingCondition = false;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(entrySource, index);
+      if (end === -1) return;
+      index = end;
+      prevWord = "";
+      prevWasDot = false;
+      pendingCondition = false;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(entrySource, index);
+      if (end !== -1) {
+        index = end;
+        prevWord = "";
+        prevWasDot = false;
+        pendingCondition = false;
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (
+      (ch === "+" && entrySource[index + 1] === "+") ||
+      (ch === "-" && entrySource[index + 1] === "-")
+    ) {
+      index += 2;
+      prevWord = "";
+      prevWasDot = false;
+      pendingCondition = false;
+      continue;
+    }
+    if (ch && /[A-Za-z_$]/u.test(ch)) {
+      let end = index + 1;
+      while (end < entrySource.length && /[\w$]/u.test(entrySource[end]!)) end += 1;
+      const word = entrySource.slice(index, end);
+      if (bracketDepth === 0 && !prevWasDot && word === runtimeVar) {
+        const afterIdent = skipWhitespaceAndComments(entrySource, end);
+        let afterProp = -1;
+        if (entrySource[afterIdent] === ".") {
+          const propStart = skipWhitespaceAndComments(entrySource, afterIdent + 1);
+          let propEnd = propStart;
+          while (propEnd < entrySource.length && /[\w$]/u.test(entrySource[propEnd]!)) {
+            propEnd += 1;
+          }
+          if (entrySource.slice(propStart, propEnd) === "c") {
+            afterProp = propEnd;
+          }
+        } else if (entrySource[afterIdent] === "[") {
+          const bracketEnd = scanBalancedEnd(entrySource, afterIdent);
+          if (bracketEnd === -1) return;
+          const key = parseJsStringLiteral(entrySource.slice(afterIdent + 1, bracketEnd - 1));
+          if (key === "c") {
+            afterProp = bracketEnd;
+          }
+        }
+        if (afterProp !== -1) {
+          const openParen = skipWhitespaceAndComments(entrySource, afterProp);
+          if (entrySource[openParen] !== "(") return;
+          const closeParen = scanBalancedEnd(entrySource, openParen);
+          if (closeParen === -1) return;
+          const argText = entrySource.slice(openParen + 1, closeParen - 1).trim();
+          const chunkRel = parseJsStringLiteral(argText);
+          if (!chunkRel || path.isAbsolute(chunkRel)) return;
+          const resolvedChunk = path.resolve(distDir, chunkRel);
+          const relFromDist = path.relative(distDir, resolvedChunk);
+          if (
+            !relFromDist ||
+            relFromDist === ".." ||
+            relFromDist.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relFromDist)
+          ) {
+            return;
+          }
+          loadedChunks.push(resolvedChunk);
+          index = closeParen;
+          prevWord = "";
+          prevWasDot = false;
+          pendingCondition = false;
+          regexAllowed = false;
+          continue;
+        }
+      }
+      const isConditionKeyword =
+        !prevWasDot &&
+        (CONTROL_FLOW_KEYWORDS.has(word) ||
+          word === "for" ||
+          (word === "await" && prevWord === "for"));
+      regexAllowed = !prevWasDot && REGEX_PRECEDING_KEYWORDS.has(word);
+      prevWord = prevWasDot ? "" : word;
+      prevWasDot = false;
+      pendingCondition = isConditionKeyword;
+      index = end;
+      continue;
+    }
+    if (ch === "(" && pendingCondition) {
+      const end = scanBalancedEnd(entrySource, index);
+      if (end === -1) return;
+      index = end;
+      prevWord = "";
+      prevWasDot = false;
+      pendingCondition = false;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "[") {
+      bracketDepth += 1;
+      index += 1;
+      prevWord = "";
+      prevWasDot = false;
+      pendingCondition = false;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+      index += 1;
+      prevWord = "";
+      prevWasDot = false;
+      pendingCondition = false;
+      regexAllowed = false;
+      continue;
+    }
+    index += 1;
+    prevWord = "";
+    prevWasDot = ch === "." || ch === "#";
+    pendingCondition = false;
+    regexAllowed = "([{=,:;!?&|^~+-*/%<>}".includes(ch ?? "");
+  }
+  return loadedChunks;
+}
+
 export function compiledRouteHasOptionalRootLocale(
   distDir: string,
   manifestFile: string,
@@ -4451,16 +4612,22 @@ export function compiledRouteHasOptionalRootLocale(
   }
 
   const expectedPage = `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`;
+  const moduleExportCallMatch = /module\.exports\s*=\s*([A-Za-z_$][\w$]*)\.m\s*\(/u.exec(
+    entrySource,
+  );
+  const runtimeVar =
+    moduleExportCallMatch?.[1] ??
+    /(?:^|[;\n\r])\s*(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*(?:"(?:[^"\\]|\\.)*turbopack(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*turbopack(?:[^'\\]|\\.)*')\s*\)/u.exec(
+      entrySource,
+    )?.[1];
   const expectedModuleId =
     /module\.exports\s*=\s*[A-Za-z_$][\w$]*\.m\(\s*(\d+(?:\.\d+)?(?:[eE]\+?\d+)?|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*\)\.exports/u.exec(
       entrySource,
     )?.[1];
-  const loadedChunks: string[] = [];
-  for (const match of entrySource.matchAll(/\.c\(\s*["']([^"']+\.js)["']\s*\)/gu)) {
-    const chunkRel = match[1];
-    if (!chunkRel) continue;
-    loadedChunks.push(path.join(distDir, chunkRel));
-  }
+  if (moduleExportCallMatch !== null && expectedModuleId === undefined) return;
+  const loadedChunks =
+    runtimeVar !== undefined ? extractTurbopackLoadedChunks(entrySource, distDir, runtimeVar) : [];
+  if (loadedChunks === undefined) return;
 
   // Identify the route entrypoint strictly by the module ID exported by
   // `page.js` (`module.exports = R.m(<id>).exports`) across its loaded chunks
@@ -4480,6 +4647,7 @@ export function compiledRouteHasOptionalRootLocale(
       resolveModule,
     );
   }
+  if (runtimeVar !== undefined && expectedModuleId === undefined) return;
   const resolveEntryModule = createTurbopackModuleResolver([entrySource], [], chunkCache);
   return compiledLoaderTreeHasOptionalRootLocale(
     entrySource,

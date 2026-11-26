@@ -1602,6 +1602,79 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
           );
           expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
 
+          // Minified single-letter routeModule local bindings (`r` colliding with
+          // `require`, or `l` colliding with `loadChunk`) must use the captured
+          // declaration offset rather than `indexOf(routeModVar, ...)`, while a
+          // real reassignment of `r` still fails closed.
+          writeFileSync(
+            namedRuntimeChunk,
+            `module.exports = ([
+'${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function({tree:O,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},r=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:O}}); async function W(){return null} return {__next_app__:U,routeModule:r,handler:W}; }], '${namedRuntimeId}'); },
+'${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
+'${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
+]);\n`,
+          );
+          writeFileSync(
+            path.join(distDir, "server/app/[[...locale]]/page.js"),
+            `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+          writeFileSync(
+            namedRuntimeChunk,
+            `module.exports = ([
+'${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function({tree:O,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},r=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:O}}); r = tampered; async function W(){return null} return {__next_app__:U,routeModule:r,handler:W}; }], '${namedRuntimeId}'); },
+'${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
+'${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
+]);\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
+          // Quoted `R.c(...)` chunk paths containing apostrophes (for example
+          // Next's actions chunk for a `today's` route) must be parsed as JS
+          // string literals so they are never silently dropped, and unrecognized
+          // chunk-load arguments must fail closed as inconclusive.
+          const apostropheChunk = path.join(
+            distDir,
+            "server/chunks/ssr/1whs__next-internal_server_app_today's_page_actions_abc.js",
+          );
+          try {
+            writeFileSync(
+              namedRuntimeChunk,
+              `module.exports = ([
+'${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function({tree:O,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},r=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:O}}); async function W(){return null} return {__next_app__:U,routeModule:r,handler:W}; }], '${namedRuntimeId}'); },
+'${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
+'${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
+]);\n`,
+            );
+            writeFileSync(
+              apostropheChunk,
+              `module.exports = ['[project]/today-actions', a => { a.s([]); }];\n`,
+            );
+            writeFileSync(
+              path.join(distDir, "server/app/[[...locale]]/page.js"),
+              `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/1whs__next-internal_server_app_today's_page_actions_abc.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+            );
+            expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+            // If the apostrophe-named chunk registers a conflicting factory for
+            // the entry module ID, fail closed instead of dropping the chunk.
+            writeFileSync(
+              apostropheChunk,
+              `module.exports = ['${namedEntryId}', a => { a.s([]); }];\n`,
+            );
+            expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
+            // Non-literal chunk-load arguments fail closed as inconclusive.
+            writeFileSync(
+              path.join(distDir, "server/app/[[...locale]]/page.js"),
+              `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c(dynamicChunkPath)\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+            );
+            expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+          } finally {
+            rmSync(apostropheChunk, { force: true });
+          }
+
           // An unparseable sibling chunk (for example `module.exports = wrap([...])`)
           // must fail closed rather than being treated as an empty factory table.
           writeFileSync(
