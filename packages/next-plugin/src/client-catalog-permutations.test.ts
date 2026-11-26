@@ -725,9 +725,15 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
         distDir,
         "server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js",
       );
+      const ep = (
+        treeField: string,
+        page = '"/[[...locale]]/page"',
+        pathname = '"/[[...locale]]"',
+      ) =>
+        `(0,c.f)({${treeField},page:${page},pathname:${pathname},require:r,loadChunk:lc,interopDefault:id})`;
       writeFileSync(
         templateChunk,
-        `module.exports=[1,a=>{let unrelated=["",{children:["other",{},{},[]]},{layout:[u,"other"]},[]];let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{},layout:[l,"[project]/app/[[...locale]]/layout.page.tsx"]},[]]},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]"});}];`,
+        `module.exports=[1,a=>{let unrelated=["",{children:["other",{},{},[]]},{layout:[u,"other"]},[]];let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{},layout:[l,"[project]/app/[[...locale]]/layout.page.tsx"]},[]]},{"global-error":[g,"builtin"]},[]];let m=${ep("tree:j")};}];`,
       );
 
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(true);
@@ -761,7 +767,7 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
       // layout file exists.
       writeFileSync(
         templateChunk,
-        `module.exports=[1,a=>{let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{}},[]]},{layout:[l,"[project]/app/layout.page.tsx"],"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]"});}];`,
+        `module.exports=[1,a=>{let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{}},[]]},{layout:[l,"[project]/app/layout.page.tsx"],"global-error":[g,"builtin"]},[]];let m=${ep("tree:j")};}];`,
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
 
@@ -786,6 +792,8 @@ const entrypoint = createAppPageEntrypoint({
   tree,
   page: "/[[...locale]]/page",
   pathname: "/[[...locale]]",
+  require: __next_app_require__,
+  loadChunk: __next_app_load_chunk__,
   interopDefault
 });`,
       );
@@ -823,28 +831,38 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       );
       writeFileSync(
         path.join(distDir, "server/chunks/ssr/next_dist_esm_build_templates_app-page_special.js"),
-        `module.exports=[2,a=>{let j=["",{children:['Bob\\'s recs',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s recs/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s recs/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:'/Bob\\'s recs/[[...locale]]/page',pathname:'/Bob\\'s recs/[[...locale]]'});}];`,
+        `module.exports=[2,a=>{let j=["",{children:['Bob\\'s recs',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s recs/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s recs/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];let m=${ep("tree:j", "'/Bob\\'s recs/[[...locale]]/page'", "'/Bob\\'s recs/[[...locale]]'")};}];`,
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, specialManifestPath)).toBe(true);
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `module.exports=[2,a=>{let j=["",{children:['Bob\\'s "recs"',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s "recs"/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s "recs"/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:'/Bob\\'s "recs"/[[...locale]]/page',pathname:'/Bob\\'s "recs"/[[...locale]]'});}];`,
+          `module.exports=[2,a=>{let j=["",{children:['Bob\\'s "recs"',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s "recs"/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s "recs"/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];let m=${ep("tree:j", "'/Bob\\'s \"recs\"/[[...locale]]/page'", "'/Bob\\'s \"recs\"/[[...locale]]'")};}];`,
           '/Bob\'s "recs"/[[...locale]]/page',
         ),
       ).toBe(true);
+
+      // Diagnostic or unrelated calls that only carry `tree` and `page` (without
+      // Next's createAppPageEntrypoint properties) are ignored so they cannot
+      // impersonate the page entrypoint when the real entrypoint receives a variable.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `logDiagnostic({ tree: ["", {}, { layout: [l, "root"] }], page: "/[[...locale]]/page" }); const entrypoint = createAppPageEntrypoint(optionsObj);`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
 
       // Nonliteral `children` references (e.g. a variable or shorthand) are
       // inconclusive and return undefined so emitClientCatalogPermutations()
       // falls back to inspecting the source tree instead of assuming false.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `const child = ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }]; const tree = ["", { children: child }, {}]; start({ tree, page: "/[[...locale]]/page" });`,
+          `const child = ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }]; const tree = ["", { children: child }, {}]; ${ep("tree")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `const children = ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }]; const tree = ["", { children }, {}]; start({ tree, page: "/[[...locale]]/page" });`,
+          `const children = ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }]; const tree = ["", { children }, {}]; ${ep("tree")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -853,7 +871,7 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       // returns undefined so the source-tree / fail-closed fallback runs.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `const tree = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [p, "page.tsx"] }, []] }, {}, []] }, {}, []]; start({ tree, page: "/[[...locale]]/page" });`,
+          `const tree = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [p, "page.tsx"] }, []] }, {}, []] }, {}, []]; ${ep("tree")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -863,13 +881,13 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       // non-tuple layout expression returns undefined (inconclusive).
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `const tree = ["", { children: ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }] }, { layout: void 0 }]; start({ tree, page: "/[[...locale]]/page" });`,
+          `const tree = ["", { children: ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }] }, { layout: void 0 }]; ${ep("tree")};`,
           "/[[...locale]]/page",
         ),
       ).toBe(true);
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `const tree = ["", { children: ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }] }, { layout: maybeLayout }]; start({ tree, page: "/[[...locale]]/page" });`,
+          `const tree = ["", { children: ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }] }, { layout: maybeLayout }]; ${ep("tree")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -880,13 +898,13 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       // undefined so the caller falls back to the source tree.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["[[...locale]]",{},{layout:[l,"root"]}]; function other(){let t=["",{},{layout:[o,"otherRoot"]}]; return t} start({tree:t,page:"/[[...locale]]/page"});`,
+          `let t=["[[...locale]]",{},{layout:[l,"root"]}]; function other(){let t=["",{},{layout:[o,"otherRoot"]}]; return t} ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBe(true);
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `module.exports=[1,a=>{let j=["",{},{layout:[l,"a"]}]; start({tree:j,page:"/other/page"});},2,a=>{let x=1,j=["",{children:["[[...locale]]",{},{layout:[l,"b"]}]},{}]; start({tree:j,page:"/[[...locale]]/page"});}];`,
+          `module.exports=[1,a=>{let j=["",{},{layout:[l,"a"]}]; ${ep("tree:j", '"/other/page"', '"/other"')};},2,a=>{let x=1,j=["",{children:["[[...locale]]",{},{layout:[l,"b"]}]},{}]; ${ep("tree:j")};}];`,
           "/[[...locale]]/page",
         ),
       ).toBe(true);
@@ -896,13 +914,13 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       // by outer mutation are treated as inconclusive.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; function run(){ return start({tree:t,page:"/[[...locale]]/page"}); } t[2]={}; run();`,
+          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; function run(){ return ${ep("tree:t")}; } t[2]={}; run();`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; { const { t: label } = meta; t[2]={}; } start({tree:t,page:"/[[...locale]]/page"});`,
+          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; { const { t: label } = meta; t[2]={}; } ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -911,68 +929,68 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       // invalidate the static tree inference and return undefined.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; t[2]={}; start({tree:t,page:"/[[...locale]]/page"});`,
+          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; t[2]={}; ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; mutate(t); start({tree:t,page:"/[[...locale]]/page"});`,
+          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; mutate(t); ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          'let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const note = `${(t[2] = {}, "")}`; start({tree:t,page:"/[[...locale]]/page"});',
+          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const note = \`\${(t[2] = {}, "")}\`; ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `start({tree:["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}].with(2,{}),page:"/[[...locale]]/page"});`,
+          `${ep('tree:["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}].with(2,{})')};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `start({tree:["",{children:["[[...locale]]",{},{layout:[i,"inner"]}].with(2,{})},{}],page:"/[[...locale]]/page"});`,
+          `${ep('tree:["",{children:["[[...locale]]",{},{layout:[i,"inner"]}].with(2,{})},{}]')};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["[[...locale]]",{},{layout:[l,"root"]}]; function mutate(){t=["",{},{layout:[o,"otherRoot"]}];} start({tree:t,page:"/[[...locale]]/page"});`,
+          `let t=["[[...locale]]",{},{layout:[l,"root"]}]; function mutate(){t=["",{},{layout:[o,"otherRoot"]}];} ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["[[...locale]]",{},{layout:[l,"root"]}]; if (cond) { var t=["",{},{layout:[o,"otherRoot"]}]; } start({tree:t,page:"/[[...locale]]/page"});`,
+          `let t=["[[...locale]]",{},{layout:[l,"root"]}]; if (cond) { var t=["",{},{layout:[o,"otherRoot"]}]; } ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["",{},{layout:[o,"otherRoot"]}]; function run(t){ start({tree:t,page:"/[[...locale]]/page"}); }`,
+          `let t=["",{},{layout:[o,"otherRoot"]}]; function run(t){ ${ep("tree:t")}; }`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       // Conditional, chained, or subsequent assignments in the same scope are inconclusive.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `let t=["[[...locale]]",{},{layout:[l,"root"]}]; if (flag) t=["",{},{layout:[o,"otherRoot"]}]; start({tree:t,page:"/[[...locale]]/page"});`,
+          `let t=["[[...locale]]",{},{layout:[l,"root"]}]; if (flag) t=["",{},{layout:[o,"otherRoot"]}]; ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `const tree = ["", { children: ["[[...locale]]", {}, { layout: [l, "inner"] }] }, {}].with(2, { layout: [r, "root"] }); start({ tree, page: "/[[...locale]]/page" });`,
+          `const tree = ["", { children: ["[[...locale]]", {}, { layout: [l, "inner"] }] }, {}].with(2, { layout: [r, "root"] }); ${ep("tree")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `if (flag) var t=["",{},{layout:[o,"otherRoot"]}]; start({tree:t,page:"/[[...locale]]/page"});`,
+          `if (flag) var t=["",{},{layout:[o,"otherRoot"]}]; ${ep("tree:t")};`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -980,19 +998,19 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       // comments must never be treated as a real entrypoint call.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `const serialized = 'start({tree:["",{},{layout:[l,"root"]}],page:"/[[...locale]]/page"})';`,
+          `const serialized = '${ep('tree:["",{},{layout:[l,"root"]}]')}';`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          'const serialized = `start({tree:["",{},{layout:[l,"root"]}],page:"/[[...locale]]/page"})`;',
+          `const serialized = \`${ep('tree:["",{},{layout:[l,"root"]}]')}\`;`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `// start({tree:["",{},{layout:[l,"root"]}],page:"/[[...locale]]/page"})`,
+          `// ${ep('tree:["",{},{layout:[l,"root"]}]')}`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();

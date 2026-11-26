@@ -970,16 +970,25 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
         if (source[afterObject] === ")") {
           const props = parseTopLevelObjectProperties(source.slice(objectStart, objectEnd));
           const pageValue = props?.get("page");
-          if (props && pageValue && parseJsStringLiteral(pageValue) === expectedPage) {
-            const treeExpr = props.get("tree");
-            if (treeExpr !== undefined) {
-              if (treeExpr.startsWith("[")) {
-                matches.push(treeExpr);
-              } else if (/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) {
-                matches.push(resolveIdentifierArrayInScope(source, objectStart, treeExpr));
-              } else {
-                matches.push(undefined);
-              }
+          const pathnameValue = props?.get("pathname");
+          const isNextAppPageEntrypointArgs =
+            props !== undefined &&
+            pageValue !== undefined &&
+            parseJsStringLiteral(pageValue) === expectedPage &&
+            pathnameValue !== undefined &&
+            parseJsStringLiteral(pathnameValue) !== undefined &&
+            props.has("tree") &&
+            props.has("require") &&
+            props.has("loadChunk") &&
+            props.has("interopDefault");
+          if (isNextAppPageEntrypointArgs) {
+            const treeExpr = props.get("tree")!;
+            if (treeExpr.startsWith("[")) {
+              matches.push(treeExpr);
+            } else if (/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) {
+              matches.push(resolveIdentifierArrayInScope(source, objectStart, treeExpr));
+            } else {
+              matches.push(undefined);
             }
           }
         }

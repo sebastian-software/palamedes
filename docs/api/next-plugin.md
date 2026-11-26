@@ -456,8 +456,10 @@ export async function register() {
 ```
 
 When the layout also reads `x-palamedes-locale` to load its server catalog, verify
-and unwrap the signed header value with `verifyClientCatalogLocaleHeader()` so the
-layout receives the plain verified locale instead of the `<locale>.<mac>` token:
+and unwrap the signed header value with `verifyClientCatalogLocaleHeader()`, check
+that the verified locale is one of your configured locales, and fall back to the
+same `source-locale` configured in `palamedes.yaml` so HTML and client chunks
+always agree:
 
 ```ts
 // app/layout.tsx
@@ -468,13 +470,22 @@ import {
   verifyClientCatalogLocaleHeader,
 } from "@palamedes/next-plugin/server";
 
+// Keep these aligned with `locales` and `source-locale` in palamedes.yaml.
+const SUPPORTED_LOCALES = ["en", "de"] as const;
+const SOURCE_LOCALE = "en";
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
   if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
   const requestHeaders = await headers();
+  const verified = verifyClientCatalogLocaleHeader(
+    requestHeaders.get(CLIENT_CATALOG_LOCALE_HEADER),
+    localeSecret,
+  );
   const locale =
-    verifyClientCatalogLocaleHeader(requestHeaders.get(CLIENT_CATALOG_LOCALE_HEADER), localeSecret) ??
-    "en";
+    verified && (SUPPORTED_LOCALES as readonly string[]).includes(verified)
+      ? verified
+      : SOURCE_LOCALE;
   await createNextServerI18n({ locale });
   return (
     <html lang={locale}>

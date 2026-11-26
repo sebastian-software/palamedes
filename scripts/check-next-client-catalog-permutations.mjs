@@ -13,14 +13,27 @@
 // unless `PORT` is set. The browser check uses Playwright's Chromium, or the
 // executable in `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
+
+const repoRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 
 const exampleDir = path.resolve(process.argv[2] ?? ".");
 const distName = process.argv[3] ?? ".next";
@@ -270,3 +283,208 @@ try {
   server?.kill();
   rmSync(deployDir, { recursive: true, force: true });
 }
+
+// Production-build contract for optional catch-all `[[...locale]]` routes
+// (ADR-031): verifies directly against real Next.js Turbopack output that
+// `compiledRouteHasOptionalRootLocale()` classifies the route without falling
+// back to the source tree, and that requesting `/` with a conflicting
+// `x-palamedes-locale: de` header selects `en` chunks when the root layout sits
+// inside `app/[[...locale]]/layout.tsx` and `de` chunks when the root layout
+// sits above it in `app/layout.tsx`.
+async function verifyOptionalRootLocaleOwnership() {
+  const { compiledRouteHasOptionalRootLocale } = await import(
+    new URL("../packages/next-plugin/dist/chunks/client-catalog-permutations.mjs", import.meta.url)
+  );
+  const nextBin = path.join(exampleDir, "node_modules/next/dist/bin/next");
+  assert.ok(existsSync(nextBin), `Missing Next CLI at ${nextBin}`);
+
+  for (const scenario of [
+    { name: "layout-inside-optional", layoutAbove: false, expectedLocale: "en" },
+    { name: "layout-above-optional", layoutAbove: true, expectedLocale: "de" },
+  ]) {
+    const fixtureDir = mkdtempSync(path.join(exampleDir, `.palamedes-optional-${scenario.name}-`));
+    let fixtureServer;
+    const fixtureOutput = [];
+    try {
+      symlinkSync(
+        path.join(exampleDir, "node_modules"),
+        path.join(fixtureDir, "node_modules"),
+        "junction",
+      );
+      mkdirSync(path.join(fixtureDir, "app/[[...locale]]"), { recursive: true });
+      mkdirSync(path.join(fixtureDir, "locales"), { recursive: true });
+      writeFileSync(
+        path.join(fixtureDir, "package.json"),
+        JSON.stringify({ name: `optional-locale-${scenario.name}`, private: true, type: "module" }),
+      );
+      writeFileSync(
+        path.join(fixtureDir, "tsconfig.json"),
+        JSON.stringify({
+          compilerOptions: {
+            target: "ES2022",
+            lib: ["dom", "dom.iterable", "esnext"],
+            allowJs: true,
+            skipLibCheck: true,
+            strict: true,
+            noEmit: true,
+            esModuleInterop: true,
+            module: "esnext",
+            moduleResolution: "bundler",
+            resolveJsonModule: true,
+            isolatedModules: true,
+            jsx: "react-jsx",
+            plugins: [{ name: "next" }],
+          },
+          include: ["**/*.ts", "**/*.tsx"],
+        }),
+      );
+      writeFileSync(
+        path.join(fixtureDir, "palamedes.yaml"),
+        "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [app]\n",
+      );
+      writeFileSync(path.join(fixtureDir, "locales/en.po"), 'msgid "Greeting"\nmsgstr "Hello"\n');
+      writeFileSync(path.join(fixtureDir, "locales/de.po"), 'msgid "Greeting"\nmsgstr "Hallo"\n');
+      writeFileSync(
+        path.join(fixtureDir, "next.config.mjs"),
+        `import { withPalamedes } from "@palamedes/next-plugin";
+export default withPalamedes(
+  { outputFileTracingRoot: ${JSON.stringify(repoRoot)} },
+  {
+    experimentalClientCatalogPermutations: true,
+    projectRoot: ${JSON.stringify(fixtureDir)},
+    workspaceRoot: ${JSON.stringify(repoRoot)},
+  },
+);
+`,
+      );
+      writeFileSync(
+        path.join(fixtureDir, "instrumentation.ts"),
+        `export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { bindClientCatalogPermutations } = await import("@palamedes/next-plugin/server");
+    bindClientCatalogPermutations({ dir: ${JSON.stringify(fixtureDir)} });
+  }
+}
+`,
+      );
+      const layoutSource = `import type { ReactNode } from "react";
+import { createNextServerI18n } from "@palamedes/next-plugin/server";
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  await createNextServerI18n({ locale: ${JSON.stringify(scenario.expectedLocale)} });
+  return (
+    <html lang=${JSON.stringify(scenario.expectedLocale)}>
+      <body>{children}</body>
+    </html>
+  );
+}
+`;
+      writeFileSync(
+        path.join(
+          fixtureDir,
+          scenario.layoutAbove ? "app/layout.tsx" : "app/[[...locale]]/layout.tsx",
+        ),
+        layoutSource,
+      );
+      writeFileSync(
+        path.join(fixtureDir, "app/[[...locale]]/greeting.tsx"),
+        `"use client";
+import { t } from "@palamedes/core/macro";
+export function Greeting() {
+  return <p>{t\`Greeting\`}</p>;
+}
+`,
+      );
+      writeFileSync(
+        path.join(fixtureDir, "app/[[...locale]]/page.tsx"),
+        `import { Greeting } from "./greeting";
+export const dynamic = "force-dynamic";
+export default function Page() {
+  return <Greeting />;
+}
+`,
+      );
+
+      execFileSync(process.execPath, [nextBin, "build"], {
+        cwd: fixtureDir,
+        env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+        stdio: "pipe",
+      });
+
+      const fixtureDist = path.join(fixtureDir, ".next");
+      const manifestPath = path.join(
+        fixtureDist,
+        "server/app/[[...locale]]/page_client-reference-manifest.js",
+      );
+      assert.equal(
+        compiledRouteHasOptionalRootLocale(fixtureDist, manifestPath),
+        !scenario.layoutAbove,
+        `${scenario.name}: compiledRouteHasOptionalRootLocale() must classify Next's compiled loaderTree directly without source-tree fallback`,
+      );
+
+      const fixtureVariants = new Map();
+      for (const file of readdirSync(path.join(fixtureDist, "static/chunks"))) {
+        const match = VARIANT_NAME.exec(file);
+        if (!match || !["en", "de"].includes(match.groups.locale)) continue;
+        const copies = fixtureVariants.get(match.groups.name) ?? new Map();
+        copies.set(match.groups.locale, `static/chunks/${file}`);
+        fixtureVariants.set(match.groups.name, copies);
+      }
+      assert.notEqual(fixtureVariants.size, 0, `${scenario.name}: no locale chunk variants built`);
+      const fixtureNeutral = new Set(
+        [...fixtureVariants.keys()].map((name) => `static/chunks/${name}.js`),
+      );
+      const classifyFixture = (reference) => {
+        if (fixtureNeutral.has(reference)) return "neutral";
+        const match = VARIANT_NAME.exec(path.posix.basename(reference));
+        return match && fixtureVariants.has(match.groups.name) ? match.groups.locale : "unrelated";
+      };
+
+      const port = await freePort();
+      const origin = `http://127.0.0.1:${port}`;
+      fixtureServer = spawn(
+        process.execPath,
+        [nextBin, "start", "-H", "127.0.0.1", "-p", String(port)],
+        {
+          cwd: fixtureDir,
+          env: { ...process.env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      fixtureServer.stdout.on("data", (chunk) => fixtureOutput.push(chunk));
+      fixtureServer.stderr.on("data", (chunk) => fixtureOutput.push(chunk));
+      await waitForServer(origin, fixtureServer, fixtureOutput);
+
+      const html = await fetchText(`${origin}/`, { "x-palamedes-locale": "de" });
+      const found = [...new Set(html.match(CHUNK_REFERENCE) ?? [])];
+      const bad = found.filter(
+        (reference) => !["unrelated", scenario.expectedLocale].includes(classifyFixture(reference)),
+      );
+      assert.deepEqual(
+        bad,
+        [],
+        `${scenario.name}: / with x-palamedes-locale: de named ${bad.join(", ")} instead of ${scenario.expectedLocale}`,
+      );
+      const matched = found.filter(
+        (reference) => classifyFixture(reference) === scenario.expectedLocale,
+      );
+      assert.notEqual(
+        matched.length,
+        0,
+        `${scenario.name}: / with x-palamedes-locale: de named no ${scenario.expectedLocale} chunk copy`,
+      );
+    } catch (error) {
+      if (fixtureOutput.length > 0) {
+        console.error(`${scenario.name} server output:\n${fixtureOutput.join("")}`);
+      }
+      throw error;
+    } finally {
+      fixtureServer?.kill();
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  }
+  console.log(
+    "[next-catalog-permutations] optional [[...locale]] production fixtures verified both root-layout-inside (en) and root-layout-above (de) chunk selection",
+  );
+}
+
+await verifyOptionalRootLocaleOwnership();
