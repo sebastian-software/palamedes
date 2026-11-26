@@ -397,22 +397,25 @@ mod platform {
     #[derive(Debug)]
     struct UnixDirLock {
         key: FileIdentity,
-        cleanup: Option<(OwnedFd, FileIdentity)>,
+        cleanup: Option<(OwnedFd, CString, FileIdentity)>,
         _fd: OwnedFd,
+        _secondary_fd: Option<OwnedFd>,
     }
 
     impl Drop for UnixDirLock {
         fn drop(&mut self) {
-            // Unlink `.pmds-lock` while `self._fd` still holds `flock(LOCK_EX)`
-            // so waiters that wake on unlock observe the unlink atomically and
-            // re-verify against the directory entry.
-            if let Some((ref dir_fd, expected_id)) = self.cleanup
-                && let Ok(stat) = fstatat_nofollow(dir_fd.as_raw_fd(), UNIX_DIR_LOCK_NAME)
+            // Unlink the owned lock/claim entry while `self._fd` still holds
+            // `flock(LOCK_EX)` (and `_secondary_fd`, when present, still holds
+            // `LOCK_SH` on the foreign `.pmds-lock`) so waiters that wake on
+            // unlock observe the unlink atomically and re-verify against the
+            // directory entry.
+            if let Some((ref dir_fd, ref entry_name, expected_id)) = self.cleanup
+                && let Ok(stat) = fstatat_nofollow(dir_fd.as_raw_fd(), entry_name)
                 && stat_identity(&stat) == expected_id
             {
-                // SAFETY: `dir_fd` is open and `UNIX_DIR_LOCK_NAME` is valid.
+                // SAFETY: `dir_fd` is open and `entry_name` is a valid C string.
                 unsafe {
-                    let _ = libc::unlinkat(dir_fd.as_raw_fd(), UNIX_DIR_LOCK_NAME.as_ptr(), 0);
+                    let _ = libc::unlinkat(dir_fd.as_raw_fd(), entry_name.as_ptr(), 0);
                 }
             }
             HELD_UNIX_DIR_LOCKS.with(|held| {
@@ -480,6 +483,14 @@ mod platform {
         mode: libc::mode_t,
         uid: libc::uid_t,
         gid: libc::gid_t,
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        flags: u32,
         identity: FileIdentity,
     }
 
@@ -1504,6 +1515,14 @@ mod platform {
                 mode: stat.st_mode & 0o7777,
                 uid: stat.st_uid,
                 gid: stat.st_gid,
+                #[cfg(any(
+                    target_os = "macos",
+                    target_os = "ios",
+                    target_os = "freebsd",
+                    target_os = "netbsd",
+                    target_os = "openbsd"
+                ))]
+                flags: stat.st_flags,
                 identity,
             };
             let acl = read_existing_acl(existing_fd.as_raw_fd())?;
@@ -1550,6 +1569,14 @@ mod platform {
                 mode: stat.st_mode & 0o7777,
                 uid: stat.st_uid,
                 gid: stat.st_gid,
+                #[cfg(any(
+                    target_os = "macos",
+                    target_os = "ios",
+                    target_os = "freebsd",
+                    target_os = "netbsd",
+                    target_os = "openbsd"
+                ))]
+                flags: stat.st_flags,
                 identity,
             }))
         }
@@ -2290,23 +2317,73 @@ mod platform {
         }
     }
 
+    #[derive(Debug)]
+    pub(super) enum ReadonlyRecoveryOutcome {
+        /// The abandoned `.pmds-lock` was removed (or replaced by another
+        /// writer); the caller should retry normal `.pmds-lock` acquisition.
+        LockReleased,
+        /// `.pmds-lock` belongs to another UID in a sticky directory and
+        /// cannot be unlinked by this user. The caller now holds `LOCK_SH` on
+        /// `existing_fd` (blocking the original owner's `LOCK_EX` on
+        /// `.pmds-lock`) and `LOCK_EX` on its own `claim_fd` (blocking other
+        /// distinct-UID waiters), and will unlink `claim_name` on drop.
+        HeldViaClaim {
+            claim_name: CString,
+            claim_id: FileIdentity,
+            claim_fd: OwnedFd,
+            existing_fd: OwnedFd,
+        },
+    }
+
+    fn unlink_unix_dir_lock(dir_raw: std::os::fd::RawFd) -> io::Result<()> {
+        // SAFETY: `dir_raw` is open and `UNIX_DIR_LOCK_NAME` is valid.
+        if unsafe { libc::unlinkat(dir_raw, UNIX_DIR_LOCK_NAME.as_ptr(), 0) } == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+
     /// Waits for a read-only `.pmds-lock` opened on a filesystem that rejects
     /// `flock(LOCK_EX)` on `O_RDONLY` descriptors (such as Linux NFS). Once
     /// `LOCK_SH` succeeds, no active writer holds `LOCK_EX` on `existing_id`:
     /// if `.pmds-lock` is already gone or replaced, the live writer released it
     /// cleanly; if `.pmds-lock` still names `existing_id`, the previous owner
-    /// died without unlinking it and we coordinate atomic single-winner unlink
-    /// via a generation-indexed claim chain `.pmds-claim-<ino>-<gen>` (using
-    /// only the cross-client `st_ino` fileid, never client-local `st_dev`).
-    /// Waiters never unlink a stale claim directly; instead, if a claimant dies
-    /// mid-recovery, surviving waiters advance to `gen + 1` and only the single
-    /// atomic winner of the highest generation unlinks `.pmds-lock` and cleans
-    /// up `.pmds-claim-<ino>-0..=gen`.
+    /// died without unlinking it and we coordinate atomic single-winner
+    /// recovery via a generation-indexed claim chain `.pmds-claim-<ino>-<gen>`
+    /// (using only the cross-client `st_ino` fileid, never client-local
+    /// `st_dev`).
+    ///
+    /// When the caller can unlink `.pmds-lock`, it removes the abandoned lock
+    /// and cleans up prior claims before returning [`ReadonlyRecoveryOutcome::LockReleased`].
+    /// When `.pmds-lock` belongs to a different UID in a root-owned sticky
+    /// directory (`unlinkat` returns `EPERM`/`EACCES`), the caller instead
+    /// retains `LOCK_SH` on `.pmds-lock` (preventing the original owner from
+    /// taking `LOCK_EX`) together with `LOCK_EX` on its own claim file
+    /// (serializing all other distinct-UID waiters) and returns
+    /// [`ReadonlyRecoveryOutcome::HeldViaClaim`].
     pub(super) fn wait_for_readonly_lock_release(
         dir: &ContainedDir,
         existing_fd: OwnedFd,
         existing_id: FileIdentity,
-    ) -> Result<(), ContainedFsError> {
+    ) -> Result<ReadonlyRecoveryOutcome, ContainedFsError> {
+        wait_for_readonly_lock_release_with_unlink(
+            dir,
+            existing_fd,
+            existing_id,
+            unlink_unix_dir_lock,
+        )
+    }
+
+    pub(super) fn wait_for_readonly_lock_release_with_unlink<F>(
+        dir: &ContainedDir,
+        existing_fd: OwnedFd,
+        existing_id: FileIdentity,
+        unlink_lock: F,
+    ) -> Result<ReadonlyRecoveryOutcome, ContainedFsError>
+    where
+        F: Fn(std::os::fd::RawFd) -> io::Result<()>,
+    {
         const MAX_RECOVERY_GENERATIONS: u32 = 64;
 
         let dir_raw = dir.fd.as_raw_fd();
@@ -2325,8 +2402,10 @@ mod platform {
                     }
                 }
             }
-            Ok(_) => return Ok(()),
-            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(()),
+            Ok(_) => return Ok(ReadonlyRecoveryOutcome::LockReleased),
+            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
+                return Ok(ReadonlyRecoveryOutcome::LockReleased);
+            }
             Err(error) => return Err(ContainedFsError::Io(error)),
         }
 
@@ -2342,8 +2421,10 @@ mod platform {
         'recovery: loop {
             match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                 Ok(stat) if stat_identity(&stat) == existing_id => {}
-                Ok(_) => return Ok(()),
-                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(()),
+                Ok(_) => return Ok(ReadonlyRecoveryOutcome::LockReleased),
+                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
+                    return Ok(ReadonlyRecoveryOutcome::LockReleased);
+                }
                 Err(error) => return Err(ContainedFsError::Io(error)),
             }
 
@@ -2368,47 +2449,60 @@ mod platform {
                         fstatat_nofollow(dir_raw, &claim_name),
                         Ok(stat) if stat_identity(&stat) == claim_id
                     );
-                    let mut result = Ok(());
-                    if owns_claim {
-                        match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
-                            Ok(stat) if stat_identity(&stat) == existing_id => {
-                                // SAFETY: `dir_raw` is open and `UNIX_DIR_LOCK_NAME` is valid.
-                                if unsafe {
-                                    libc::unlinkat(dir_raw, UNIX_DIR_LOCK_NAME.as_ptr(), 0)
-                                } != 0
-                                {
-                                    let error = io::Error::last_os_error();
-                                    if error.raw_os_error() != Some(libc::ENOENT) {
+                    if !owns_claim {
+                        drop(claim_fd);
+                        continue 'recovery;
+                    }
+                    // Clean up only prior-generation claims whose identity
+                    // still matches the verified dead claim we inspected
+                    // (best-effort when owned by a different UID in a sticky dir).
+                    for (prior_name, prior_id) in &verified_prior_claims {
+                        if let Ok(stat) = fstatat_nofollow(dir_raw, prior_name)
+                            && stat_identity(&stat) == *prior_id
+                        {
+                            // SAFETY: `dir_raw` is open and `prior_name` matches the verified dead claim.
+                            unsafe {
+                                let _ = libc::unlinkat(dir_raw, prior_name.as_ptr(), 0);
+                            }
+                        }
+                    }
+                    let mut result = Ok(ReadonlyRecoveryOutcome::LockReleased);
+                    match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
+                        Ok(stat) if stat_identity(&stat) == existing_id => {
+                            if let Err(error) = unlink_lock(dir_raw) {
+                                match error.raw_os_error() {
+                                    Some(libc::ENOENT) => {}
+                                    Some(libc::EPERM | libc::EACCES) => {
+                                        // Distinct UID in a sticky directory cannot delete
+                                        // another user's `.pmds-lock`. Hold `LOCK_SH` on
+                                        // `existing_fd` (blocking the owner's `LOCK_EX`)
+                                        // plus `LOCK_EX` on our own `claim_fd` (blocking
+                                        // all other distinct-UID waiters) directly.
+                                        return Ok(ReadonlyRecoveryOutcome::HeldViaClaim {
+                                            claim_name,
+                                            claim_id,
+                                            claim_fd,
+                                            existing_fd,
+                                        });
+                                    }
+                                    _ => {
                                         result = Err(ContainedFsError::Io(error));
                                     }
                                 }
                             }
-                            Ok(_) => {}
-                            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {}
-                            Err(error) => {
-                                result = Err(ContainedFsError::Io(error));
-                            }
                         }
-                        // Clean up only prior-generation claims whose identity
-                        // still matches the verified dead claim we inspected,
-                        // then remove our own verified claim entry.
-                        for (prior_name, prior_id) in &verified_prior_claims {
-                            if let Ok(stat) = fstatat_nofollow(dir_raw, prior_name)
-                                && stat_identity(&stat) == *prior_id
-                            {
-                                // SAFETY: `dir_raw` is open and `prior_name` matches the verified dead claim.
-                                unsafe {
-                                    let _ = libc::unlinkat(dir_raw, prior_name.as_ptr(), 0);
-                                }
-                            }
+                        Ok(_) => {}
+                        Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {}
+                        Err(error) => {
+                            result = Err(ContainedFsError::Io(error));
                         }
-                        if let Ok(stat) = fstatat_nofollow(dir_raw, &claim_name)
-                            && stat_identity(&stat) == claim_id
-                        {
-                            // SAFETY: `dir_raw` is open and `claim_name` is verified.
-                            unsafe {
-                                let _ = libc::unlinkat(dir_raw, claim_name.as_ptr(), 0);
-                            }
+                    }
+                    if let Ok(stat) = fstatat_nofollow(dir_raw, &claim_name)
+                        && stat_identity(&stat) == claim_id
+                    {
+                        // SAFETY: `dir_raw` is open and `claim_name` is verified.
+                        unsafe {
+                            let _ = libc::unlinkat(dir_raw, claim_name.as_ptr(), 0);
                         }
                     }
                     drop(claim_fd);
@@ -2424,8 +2518,9 @@ mod platform {
             // on it via `LOCK_SH` (or bounded polling when a CIFS/SMB mandatory
             // byte-range lock blocks `openat` or `pread`). Never unlink a stale
             // claim directly (which could race with another waiter); instead,
-            // if that claimant died without unlinking `existing_id`, advance to
-            // `generation + 1` so recovery stays single-winner across all clients.
+            // if that claimant exited cleanly and unlinked its claim we reuse
+            // this generation, and if it died leaving its claim behind we
+            // advance to `generation + 1` so serialization stays single-winner.
             let claim_deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
             let mut open_backoff_ms: u64 = 2;
             let other_fd = loop {
@@ -2454,8 +2549,10 @@ mod platform {
                 {
                     match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                         Ok(stat) if stat_identity(&stat) == existing_id => {}
-                        Ok(_) => return Ok(()),
-                        Err(err) if err.raw_os_error() == Some(libc::ENOENT) => return Ok(()),
+                        Ok(_) => return Ok(ReadonlyRecoveryOutcome::LockReleased),
+                        Err(err) if err.raw_os_error() == Some(libc::ENOENT) => {
+                            return Ok(ReadonlyRecoveryOutcome::LockReleased);
+                        }
                         Err(err) => return Err(ContainedFsError::Io(err)),
                     }
                     match fstatat_nofollow(dir_raw, &claim_name) {
@@ -2508,8 +2605,10 @@ mod platform {
                         // `.pmds-lock` and the claim identity.
                         match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                             Ok(stat) if stat_identity(&stat) == existing_id => {}
-                            Ok(_) => return Ok(()),
-                            Err(err) if err.raw_os_error() == Some(libc::ENOENT) => return Ok(()),
+                            Ok(_) => return Ok(ReadonlyRecoveryOutcome::LockReleased),
+                            Err(err) if err.raw_os_error() == Some(libc::ENOENT) => {
+                                return Ok(ReadonlyRecoveryOutcome::LockReleased);
+                            }
                             Err(err) => return Err(ContainedFsError::Io(err)),
                         }
                         match fstatat_nofollow(dir_raw, &claim_name) {
@@ -2539,7 +2638,18 @@ mod platform {
                 Err(err) => return Err(ContainedFsError::Io(err)),
             };
             if !still_abandoned {
-                return Ok(());
+                return Ok(ReadonlyRecoveryOutcome::LockReleased);
+            }
+            // If the previous claimant exited cleanly and unlinked its own
+            // claim file before releasing `LOCK_EX`, reuse this generation
+            // slot rather than advancing indefinitely.
+            let claim_still_present = match fstatat_nofollow(dir_raw, &claim_name) {
+                Ok(stat) => stat_identity(&stat) == other_id,
+                Err(err) if err.raw_os_error() == Some(libc::ENOENT) => false,
+                Err(err) => return Err(ContainedFsError::Io(err)),
+            };
+            if !claim_still_present {
+                continue 'recovery;
             }
             verified_prior_claims.push((claim_name, other_id));
             generation += 1;
@@ -3090,8 +3200,9 @@ mod platform {
                     verify_dir_allows_lock_publication(dir)?;
                     return Ok(UnixDirLock {
                         key,
-                        cleanup: Some((dir_fd, temp_id)),
+                        cleanup: Some((dir_fd, UNIX_DIR_LOCK_NAME.to_owned(), temp_id)),
                         _fd: temp_fd,
+                        _secondary_fd: None,
                     });
                 }
                 LockPublishResult::AlreadyExists => {}
@@ -3106,6 +3217,7 @@ mod platform {
                         key,
                         cleanup: None,
                         _fd: fallback_fd,
+                        _secondary_fd: None,
                     });
                 }
             }
@@ -3232,8 +3344,23 @@ mod platform {
                         MandatoryLockOutcome::RetryOuter => continue,
                         MandatoryLockOutcome::AcquiredExclusive => true,
                         MandatoryLockOutcome::ReadyForReadonlyRecovery => {
-                            wait_for_readonly_lock_release(dir, existing_fd, existing_id)?;
-                            continue;
+                            match wait_for_readonly_lock_release(dir, existing_fd, existing_id)? {
+                                ReadonlyRecoveryOutcome::LockReleased => continue,
+                                ReadonlyRecoveryOutcome::HeldViaClaim {
+                                    claim_name,
+                                    claim_id,
+                                    claim_fd,
+                                    existing_fd,
+                                } => {
+                                    verify_dir_allows_lock_publication(dir)?;
+                                    return Ok(UnixDirLock {
+                                        key,
+                                        cleanup: Some((dir_fd, claim_name, claim_id)),
+                                        _fd: claim_fd,
+                                        _secondary_fd: Some(existing_fd),
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -3247,8 +3374,23 @@ mod platform {
                     )
                 {
                     let existing_id = stat_identity(&pre_stat);
-                    wait_for_readonly_lock_release(dir, existing_fd, existing_id)?;
-                    continue;
+                    match wait_for_readonly_lock_release(dir, existing_fd, existing_id)? {
+                        ReadonlyRecoveryOutcome::LockReleased => continue,
+                        ReadonlyRecoveryOutcome::HeldViaClaim {
+                            claim_name,
+                            claim_id,
+                            claim_fd,
+                            existing_fd,
+                        } => {
+                            verify_dir_allows_lock_publication(dir)?;
+                            return Ok(UnixDirLock {
+                                key,
+                                cleanup: Some((dir_fd, claim_name, claim_id)),
+                                _fd: claim_fd,
+                                _secondary_fd: Some(existing_fd),
+                            });
+                        }
+                    }
                 }
                 return Err(ContainedFsError::Io(lock_err));
             }
@@ -3277,10 +3419,12 @@ mod platform {
                     ));
                 }
             }
+            verify_dir_allows_lock_publication(dir)?;
             return Ok(UnixDirLock {
                 key,
-                cleanup: Some((dir_fd, fd_id)),
+                cleanup: Some((dir_fd, UNIX_DIR_LOCK_NAME.to_owned(), fd_id)),
                 _fd: existing_fd,
+                _secondary_fd: None,
             });
         }
     }
@@ -3454,7 +3598,7 @@ mod platform {
                     return Some(DirFilenameEquivalence::Exact);
                 }
             }
-            if let Ok(dir_id) = dir.self_identity()
+            if let Ok(Some(dir_id)) = dir.self_identity()
                 && let Ok(cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
                 && let Some(&cached) = cache.get(&dir_id)
             {
@@ -3471,7 +3615,7 @@ mod platform {
                 (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
                 (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
             };
-            if let Ok(dir_id) = dir.self_identity()
+            if let Ok(Some(dir_id)) = dir.self_identity()
                 && let Ok(mut cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
             {
                 if cache.len() >= 1024 {
@@ -3484,7 +3628,7 @@ mod platform {
         #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
         {
             let readable = open_readable_self(dir)?;
-            if let Ok(dir_id) = dir.self_identity()
+            if let Ok(Some(dir_id)) = dir.self_identity()
                 && let Ok(cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
                 && let Some(&cached) = cache.get(&dir_id)
             {
@@ -3501,7 +3645,7 @@ mod platform {
                 (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
                 (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
             };
-            if let Ok(dir_id) = dir.self_identity()
+            if let Ok(Some(dir_id)) = dir.self_identity()
                 && let Ok(mut cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
             {
                 if cache.len() >= 1024 {
@@ -4791,10 +4935,7 @@ mod platform {
             let size = unsafe { libc::flistxattr(fd, std::ptr::null_mut(), 0) };
             if size < 0 {
                 let error = io::Error::last_os_error();
-                if matches!(
-                    error.raw_os_error(),
-                    Some(libc::EOPNOTSUPP | libc::ENOTSUP | libc::ENOSYS)
-                ) {
+                if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::ENOSYS)) {
                     return Ok(Vec::new());
                 }
                 return Err(error);
@@ -4819,10 +4960,7 @@ mod platform {
             if error.raw_os_error() == Some(libc::ERANGE) {
                 continue;
             }
-            if matches!(
-                error.raw_os_error(),
-                Some(libc::EOPNOTSUPP | libc::ENOTSUP | libc::ENOSYS)
-            ) {
+            if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::ENOSYS)) {
                 return Ok(Vec::new());
             }
             return Err(error);
@@ -4965,6 +5103,25 @@ mod platform {
         if let Some(acl) = existing.acl.as_ref() {
             apply_existing_acl(temp_fd, acl)?;
         }
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        if existing.entry.flags != temp_stat.st_flags {
+            // SAFETY: `temp_fd` is an open file descriptor we just staged.
+            if unsafe { libc::fchflags(temp_fd, existing.entry.flags) } != 0 {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    error.kind(),
+                    format!(
+                        "cannot safely preserve original BSD file flags on replacement: {error}"
+                    ),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -4998,6 +5155,11 @@ mod platform {
     const STATUS_OBJECT_NAME_NOT_FOUND: NtStatus = 0xC000_0034_u32 as i32;
     const STATUS_OBJECT_PATH_NOT_FOUND: NtStatus = 0xC000_003A_u32 as i32;
     const STATUS_OBJECT_NAME_COLLISION: NtStatus = 0xC000_0035_u32 as i32;
+    const STATUS_BUFFER_OVERFLOW: NtStatus = 0x8000_0005_u32 as i32;
+    const STATUS_NOT_IMPLEMENTED: NtStatus = 0xC000_0002_u32 as i32;
+    const STATUS_INVALID_PARAMETER: NtStatus = 0xC000_000D_u32 as i32;
+    const STATUS_INVALID_DEVICE_REQUEST: NtStatus = 0xC000_0010_u32 as i32;
+    const STATUS_NOT_SUPPORTED: NtStatus = 0xC000_00BB_u32 as i32;
     const ERROR_INVALID_FUNCTION: i32 = 1;
     const ERROR_NOT_SUPPORTED: i32 = 50;
     const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
@@ -5031,9 +5193,19 @@ mod platform {
     const OBJ_CASE_INSENSITIVE: u32 = 0x0000_0040;
     const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
     const FILE_DISPOSITION_INFORMATION_CLASS: u32 = 13;
+    const FILE_STREAM_INFORMATION_CLASS: u32 = 22;
     const OWNER_SECURITY_INFORMATION: u32 = 0x0000_0001;
     const DACL_SECURITY_INFORMATION: u32 = 0x0000_0004;
     const SE_DACL_PROTECTED: u16 = 0x1000;
+
+    #[repr(C)]
+    struct FileStreamInformation {
+        next_entry_offset: u32,
+        stream_name_length: u32,
+        stream_size: i64,
+        stream_allocation_size: i64,
+        stream_name: [u16; 1],
+    }
 
     #[repr(C)]
     struct AclHeader {
@@ -5048,6 +5220,7 @@ mod platform {
         owner_sd: Option<Vec<usize>>,
         dacl_sd: Option<Vec<usize>>,
         is_encrypted: bool,
+        has_named_streams: bool,
     }
 
     struct WindowsTempFileGuard {
@@ -5834,6 +6007,18 @@ mod platform {
                         "cannot safely preserve Windows EFS encryption recipients across atomic replacement",
                     )));
                 }
+                if existing_security
+                    .as_ref()
+                    .is_some_and(|security| security.has_named_streams)
+                {
+                    // Replacing a file with NTFS named Alternate Data Streams
+                    // via rename would silently discard those streams; fail
+                    // closed before publication rather than deleting stream data.
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "cannot safely preserve Windows NTFS named data streams across atomic replacement",
+                    )));
+                }
                 let initial_dacl = existing_security
                     .as_mut()
                     .and_then(|sec| sec.dacl_sd.as_mut())
@@ -5958,17 +6143,19 @@ mod platform {
             }
             let security = if for_replace {
                 let is_encrypted = (info.file_attributes & FILE_ATTRIBUTE_ENCRYPTED) != 0;
+                let has_named_streams = has_windows_named_streams(handle.as_raw_handle())?;
                 let owner_sd =
                     read_security_descriptor(handle.as_raw_handle(), OWNER_SECURITY_INFORMATION)?;
                 let dacl_sd =
                     read_security_descriptor(handle.as_raw_handle(), DACL_SECURITY_INFORMATION)?;
-                if !is_encrypted && owner_sd.is_none() && dacl_sd.is_none() {
+                if !is_encrypted && !has_named_streams && owner_sd.is_none() && dacl_sd.is_none() {
                     None
                 } else {
                     Some(ExistingWindowsSecurity {
                         owner_sd,
                         dacl_sd,
                         is_encrypted,
+                        has_named_streams,
                     })
                 }
             } else {
@@ -6356,6 +6543,109 @@ mod platform {
         Ok(unsafe { EqualSid(expected_owner, actual_owner) } != 0)
     }
 
+    fn is_default_ntfs_data_stream(name_utf16: &[u16]) -> bool {
+        const DEFAULT_STREAM: &[u8] = b"::$DATA";
+        name_utf16.len() == DEFAULT_STREAM.len()
+            && name_utf16
+                .iter()
+                .zip(DEFAULT_STREAM.iter())
+                .all(|(&unit, &expected)| {
+                    u8::try_from(unit).is_ok_and(|byte| byte.eq_ignore_ascii_case(&expected))
+                })
+    }
+
+    fn has_windows_named_streams(handle: *mut c_void) -> io::Result<bool> {
+        let mut buf_bytes = 4096usize;
+        let max_bytes = 1024 * 1024;
+        loop {
+            let word_count = buf_bytes.div_ceil(std::mem::size_of::<u64>());
+            let mut buffer = vec![0u64; word_count];
+            let byte_len = u32::try_from(buffer.len().saturating_mul(std::mem::size_of::<u64>()))
+                .unwrap_or(u32::MAX);
+            let mut iosb = IoStatusBlock {
+                status_or_pointer: 0,
+                information: 0,
+            };
+            // SAFETY: `handle` is open and `buffer` is 8-byte aligned with `byte_len` bytes.
+            let status = unsafe {
+                NtQueryInformationFile(
+                    handle,
+                    &mut iosb,
+                    buffer.as_mut_ptr().cast::<c_void>(),
+                    byte_len,
+                    FILE_STREAM_INFORMATION_CLASS,
+                )
+            };
+            if status == STATUS_BUFFER_OVERFLOW {
+                if buf_bytes >= max_bytes {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "cannot inspect Windows NTFS named data streams because stream metadata exceeds buffer limit",
+                    ));
+                }
+                buf_bytes = (buf_bytes * 2).min(max_bytes);
+                continue;
+            }
+            if matches!(
+                status,
+                STATUS_INVALID_DEVICE_REQUEST
+                    | STATUS_NOT_SUPPORTED
+                    | STATUS_NOT_IMPLEMENTED
+                    | STATUS_INVALID_PARAMETER
+            ) {
+                return Ok(false);
+            }
+            if status < 0 {
+                return Err(nt_status_to_io_error(status));
+            }
+            let returned = iosb
+                .information
+                .min(buffer.len() * std::mem::size_of::<u64>());
+            if returned == 0 {
+                return Ok(false);
+            }
+            let base = buffer.as_ptr().cast::<u8>();
+            let name_offset = std::mem::offset_of!(FileStreamInformation, stream_name);
+            let mut offset = 0usize;
+            while offset + name_offset <= returned {
+                // SAFETY: `offset` is within `returned` and each entry is
+                // naturally aligned by NT's `FILE_STREAM_INFORMATION` layout.
+                let entry_ptr = unsafe { base.add(offset).cast::<FileStreamInformation>() };
+                let next_entry_offset =
+                    unsafe { std::ptr::addr_of!((*entry_ptr).next_entry_offset).read_unaligned() };
+                let stream_name_length =
+                    unsafe { std::ptr::addr_of!((*entry_ptr).stream_name_length).read_unaligned() };
+                let name_bytes = usize::try_from(stream_name_length).unwrap_or(0);
+                if offset + name_offset + name_bytes > returned {
+                    break;
+                }
+                let unit_count = name_bytes / 2;
+                let mut units = Vec::with_capacity(unit_count);
+                for idx in 0..unit_count {
+                    // SAFETY: bounded by `offset + name_offset + name_bytes <= returned`.
+                    let unit = unsafe {
+                        base.add(offset + name_offset + idx * 2)
+                            .cast::<u16>()
+                            .read_unaligned()
+                    };
+                    units.push(unit);
+                }
+                if !is_default_ntfs_data_stream(&units) {
+                    return Ok(true);
+                }
+                if next_entry_offset == 0 {
+                    break;
+                }
+                let step = usize::try_from(next_entry_offset).unwrap_or(0);
+                if step == 0 || offset.saturating_add(step) <= offset {
+                    break;
+                }
+                offset += step;
+            }
+            return Ok(false);
+        }
+    }
+
     fn windows_security_matches(
         expected: Option<&mut ExistingWindowsSecurity>,
         actual: Option<&mut ExistingWindowsSecurity>,
@@ -6363,7 +6653,9 @@ mod platform {
         match (expected, actual) {
             (None, None) => Ok(true),
             (Some(exp), Some(act)) => {
-                if exp.is_encrypted != act.is_encrypted {
+                if exp.is_encrypted != act.is_encrypted
+                    || exp.has_named_streams != act.has_named_streams
+                {
                     return Ok(false);
                 }
                 let owners_equal = match (exp.owner_sd.as_deref_mut(), act.owner_sd.as_deref_mut())
@@ -7716,10 +8008,15 @@ mod tests {
             };
             if rc != 0 {
                 let err = io::Error::last_os_error();
-                if matches!(
+                #[cfg(target_os = "macos")]
+                let unsupported = matches!(
                     err.raw_os_error(),
                     Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::ENOSYS)
-                ) {
+                );
+                #[cfg(target_os = "linux")]
+                let unsupported =
+                    matches!(err.raw_os_error(), Some(libc::EOPNOTSUPP | libc::ENOSYS));
+                if unsupported {
                     // Temp filesystem does not support user xattrs.
                     return;
                 }
@@ -7766,5 +8063,212 @@ mod tests {
             let actual = &buf[..read as usize];
             assert_eq!(actual, expected, "user xattr {name:?} value changed");
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn replacing_file_preserves_macos_user_bsd_flags() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let file_path = root.path().join("en.mjs");
+        fs::write(&file_path, "export default { v: 1 };\n").expect("seed module");
+        let c_path = CString::new(file_path.as_os_str().as_bytes()).expect("c path");
+        let expected_flags = libc::UF_NODUMP | libc::UF_HIDDEN;
+        // SAFETY: `c_path` is a valid NUL-terminated path to our temp file.
+        if unsafe { libc::chflags(c_path.as_ptr(), expected_flags) } != 0 {
+            let err = io::Error::last_os_error();
+            if matches!(
+                err.raw_os_error(),
+                Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::ENOSYS)
+            ) {
+                return;
+            }
+            panic!("chflags failed: {err}");
+        }
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        dir.write_file_in_place(OsStr::new("en.mjs"), b"export default { v: 2 };\n")
+            .expect("recompile module with BSD user flags");
+        assert_eq!(
+            fs::read_to_string(&file_path).expect("read updated module"),
+            "export default { v: 2 };\n"
+        );
+
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: `c_path` and `stat` are valid.
+        assert_eq!(
+            unsafe { libc::lstat(c_path.as_ptr(), stat.as_mut_ptr()) },
+            0
+        );
+        // SAFETY: `lstat` succeeded.
+        let stat = unsafe { stat.assume_init() };
+        assert_eq!(
+            stat.st_flags & expected_flags,
+            expected_flags,
+            "user BSD flags (UF_NODUMP | UF_HIDDEN) must be preserved across replacement"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_readonly_lock_recovery_serializes_foreign_uid_sticky_lock_without_deleting_it() {
+        use std::os::fd::{AsRawFd, OwnedFd};
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        let lock_path = root.path().join(".pmds-lock");
+        fs::write(&lock_path, super::platform::UNIX_DIR_LOCK_MAGIC).expect("write foreign lock");
+        fs::set_permissions(&lock_path, fs::Permissions::from_mode(0o444)).expect("chmod 0444");
+
+        let eperm_unlink = |_dir_raw: std::os::fd::RawFd| -> io::Result<()> {
+            Err(io::Error::from_raw_os_error(libc::EPERM))
+        };
+
+        // 1. Writer B (distinct UID in root-owned sticky dir) cannot unlink
+        //    `.pmds-lock` (`EPERM`), so it acquires `HeldViaClaim`:
+        //    `LOCK_SH` on `.pmds-lock` + `LOCK_EX` on `.pmds-claim-<ino>-0`.
+        let b_fd = OwnedFd::from(fs::File::open(&lock_path).expect("open foreign lock"));
+        let lock_id = super::platform::stat_identity(
+            &super::platform::fstat_fd(b_fd.as_raw_fd()).expect("fstat foreign lock"),
+        );
+        let outcome = super::platform::wait_for_readonly_lock_release_with_unlink(
+            &dir,
+            b_fd,
+            lock_id,
+            eperm_unlink,
+        )
+        .expect("foreign sticky lock must recover via HeldViaClaim without failing EPERM");
+        let super::platform::ReadonlyRecoveryOutcome::HeldViaClaim {
+            claim_name,
+            claim_id,
+            claim_fd,
+            existing_fd,
+        } = outcome
+        else {
+            panic!("expected HeldViaClaim when unlinkat returns EPERM");
+        };
+        assert_eq!(
+            claim_name.to_str().expect("utf8"),
+            format!(".pmds-claim-{}-0", lock_id.ino)
+        );
+        assert!(
+            lock_path.exists(),
+            "foreign .pmds-lock must remain intact when unlinkat is denied"
+        );
+
+        // Original owner (UID A) attempting `LOCK_EX` on `.pmds-lock` must be
+        // blocked while writer B holds `LOCK_SH` on `existing_fd`.
+        let owner_fd = fs::File::open(&lock_path).expect("owner open lock");
+        assert_ne!(
+            unsafe { libc::flock(owner_fd.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+            0,
+            "original lock owner must be blocked while HeldViaClaim holds LOCK_SH"
+        );
+
+        // 2. Concurrent distinct-UID writer C must block on writer B's claim,
+        //    then wake immediately and reuse generation 0 when writer B exits
+        //    cleanly and unlinks its claim.
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let dir_path = root.path().to_path_buf();
+        let lock_path_c = lock_path.clone();
+        let writer_c = std::thread::spawn(move || {
+            let c_dir = ContainedDir::open_root(&dir_path).expect("open root for C");
+            let c_fd = OwnedFd::from(fs::File::open(&lock_path_c).expect("C open lock"));
+            ready_tx.send(()).expect("signal C ready");
+            let c_outcome = super::platform::wait_for_readonly_lock_release_with_unlink(
+                &c_dir,
+                c_fd,
+                lock_id,
+                |_dir_raw| Err(io::Error::from_raw_os_error(libc::EPERM)),
+            )
+            .expect("writer C acquires HeldViaClaim after B releases");
+            let super::platform::ReadonlyRecoveryOutcome::HeldViaClaim {
+                claim_name: c_claim_name,
+                claim_id: c_claim_id,
+                claim_fd: c_claim_fd,
+                existing_fd: c_existing_fd,
+            } = c_outcome
+            else {
+                panic!("expected HeldViaClaim for writer C");
+            };
+            // Clean release of writer C's claim (mirrors `UnixDirLock::drop`).
+            let c_claim_str = c_claim_name.to_str().expect("utf8").to_owned();
+            if let Ok(st) = super::platform::fstat_fd(c_claim_fd.as_raw_fd())
+                && super::platform::stat_identity(&st) == c_claim_id
+            {
+                let _ = fs::remove_file(dir_path.join(&c_claim_str));
+            }
+            drop(c_claim_fd);
+            drop(c_existing_fd);
+            done_tx.send(c_claim_str).expect("signal C done");
+        });
+        ready_rx.recv().expect("C ready");
+        assert!(
+            matches!(
+                done_rx.recv_timeout(std::time::Duration::from_millis(60)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ),
+            "writer C must block while writer B holds HeldViaClaim"
+        );
+
+        // Writer B finishes cleanly: unlink its claim before releasing locks.
+        let b_claim_path = root.path().join(claim_name.to_str().expect("utf8"));
+        assert!(b_claim_path.exists());
+        let b_stat = super::platform::fstat_fd(claim_fd.as_raw_fd()).expect("fstat B claim");
+        assert_eq!(super::platform::stat_identity(&b_stat), claim_id);
+        fs::remove_file(&b_claim_path).expect("B unlinks own claim on drop");
+        drop(claim_fd);
+        drop(existing_fd);
+
+        let c_claim_used = done_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("writer C must wake once writer B releases HeldViaClaim");
+        writer_c.join().expect("join C");
+        assert_eq!(
+            c_claim_used,
+            format!(".pmds-claim-{}-0", lock_id.ino),
+            "clean claim release must reuse generation 0 instead of leaking generations"
+        );
+
+        // Once both foreign-UID holders exit, original owner UID A can take LOCK_EX.
+        assert_eq!(
+            unsafe { libc::flock(owner_fd.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+            0,
+            "original owner must be able to acquire LOCK_EX once foreign-UID holders exit"
+        );
+        drop(owner_fd);
+
+        // 3. If a foreign-UID claimant crashes leaving `.pmds-claim-<ino>-0`
+        //    behind, the next foreign-UID writer advances to generation 1.
+        let crashed_claim = root.path().join(format!(".pmds-claim-{}-0", lock_id.ino));
+        fs::write(&crashed_claim, super::platform::UNIX_DIR_LOCK_MAGIC)
+            .expect("seed crashed claim");
+        let d_fd = OwnedFd::from(fs::File::open(&lock_path).expect("D open lock"));
+        let d_outcome = super::platform::wait_for_readonly_lock_release_with_unlink(
+            &dir,
+            d_fd,
+            lock_id,
+            eperm_unlink,
+        )
+        .expect("writer D must advance past crashed generation-0 claim");
+        let super::platform::ReadonlyRecoveryOutcome::HeldViaClaim {
+            claim_name: d_claim_name,
+            claim_fd: d_claim_fd,
+            existing_fd: d_existing_fd,
+            ..
+        } = d_outcome
+        else {
+            panic!("expected HeldViaClaim for writer D");
+        };
+        assert_eq!(
+            d_claim_name.to_str().expect("utf8"),
+            format!(".pmds-claim-{}-1", lock_id.ino)
+        );
+        let _ = fs::remove_file(root.path().join(d_claim_name.to_str().expect("utf8")));
+        drop(d_claim_fd);
+        drop(d_existing_fd);
     }
 }
