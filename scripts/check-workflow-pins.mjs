@@ -6394,7 +6394,11 @@ function inspectShellText(
           varCandidate.line,
         )) {
           for (const mountImageRef of extractRunMountImageSources(candidate.text)) {
-            if (!mountImageRef || isDynamicReference(mountImageRef, shellMode)) {
+            if (
+              !mountImageRef ||
+              (isDynamicReference(mountImageRef, shellMode) &&
+                !hasProvablyUnpinnedLiteralSuffix(mountImageRef, shellMode))
+            ) {
               continue;
             }
             const isValid =
@@ -6441,7 +6445,11 @@ function inspectShellText(
           matrixRows,
           varCandidate.line,
         )) {
-          if (!candidate.text || isDynamicReference(candidate.text, shellMode)) {
+          if (
+            !candidate.text ||
+            (isDynamicReference(candidate.text, shellMode) &&
+              !hasProvablyUnpinnedLiteralSuffix(candidate.text, shellMode))
+          ) {
             continue;
           }
           if (allowScratchOperand && candidate.text.toLowerCase() === "scratch") {
@@ -7037,7 +7045,10 @@ function checkStepsList(
               );
               continue;
             }
-            if (!isDynamicReference(imageRef) && !isPinnedDigest(imageRef)) {
+            if (
+              (!isDynamicReference(imageRef) || hasProvablyUnpinnedLiteralSuffix(imageRef)) &&
+              !isPinnedDigest(imageRef)
+            ) {
               pushQemuProblem(
                 `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`,
               );
@@ -9684,12 +9695,37 @@ export function unpinnedContainerfileReferences(
       problems.push(message);
     }
   };
-  const rawLines = source.split(/\r?\n/u);
+  const normalizedSource = source.startsWith("\uFEFF") ? source.slice(1) : source;
+  const rawLines = normalizedSource.split(/\r?\n/u);
   const logicalLines = [];
   const pendingHeredocs = [];
   let inHeaderDirectives = true;
   let escapeChar = "\\";
   const seenDirectives = new Set();
+
+  // Match BuildKit's `DetectSyntax` JSON frontend declaration (`{"syntax": "..."}`).
+  const trimmedWhole = normalizedSource.trimStart();
+  if (trimmedWhole.startsWith("{")) {
+    try {
+      const parsedJson = JSON.parse(normalizedSource);
+      if (parsedJson && typeof parsedJson === "object" && typeof parsedJson.syntax === "string") {
+        const frontend = stripQuotes(parsedJson.syntax.trim().split(/\s+/u)[0] ?? "");
+        const syntaxLineIndex = rawLines.findIndex((rawLine) => /"syntax"\s*:/u.test(rawLine));
+        const syntaxLine = (syntaxLineIndex === -1 ? 1 : syntaxLineIndex + 1) + startLineOffset;
+        if (
+          frontend &&
+          (!isDynamicReference(frontend) || hasProvablyUnpinnedLiteralSuffix(frontend)) &&
+          !isPinnedDigest(frontend)
+        ) {
+          pushProblem(`${filePath}:${syntaxLine}: ${frontend} is not pinned to a sha256 digest`);
+        }
+        seenDirectives.add("syntax");
+        inHeaderDirectives = false;
+      }
+    } catch {
+      // Not valid JSON; continue with standard Dockerfile directive scanning.
+    }
+  }
 
   for (let index = 0; index < rawLines.length; index += 1) {
     const line = rawLines[index];
@@ -9708,6 +9744,30 @@ export function unpinnedContainerfileReferences(
       inHeaderDirectives = false;
       continue;
     }
+    // BuildKit's `DetectSyntax` skips an initial `#!` shebang before checking
+    // frontend syntax directives on subsequent lines.
+    if (index === 0 && trimmed.startsWith("#!")) {
+      continue;
+    }
+    if (inHeaderDirectives && trimmed.startsWith("//")) {
+      const slashSyntaxMatch = /^\/\/\s*syntax\s*=\s*(?<value>.+)$/iu.exec(trimmed);
+      if (slashSyntaxMatch && !seenDirectives.has("syntax")) {
+        seenDirectives.add("syntax");
+        const frontend = stripQuotes(slashSyntaxMatch.groups.value.trim().split(/\s+/u)[0] ?? "");
+        if (
+          frontend &&
+          (!isDynamicReference(frontend) || hasProvablyUnpinnedLiteralSuffix(frontend)) &&
+          !isPinnedDigest(frontend)
+        ) {
+          pushProblem(
+            `${filePath}:${index + 1 + startLineOffset}: ${frontend} is not pinned to a sha256 digest`,
+          );
+        }
+        inHeaderDirectives = false;
+        continue;
+      }
+      inHeaderDirectives = false;
+    }
     if (trimmed.startsWith("#")) {
       if (inHeaderDirectives) {
         const directiveMatch = /^#\s*(?<name>syntax|escape|check)\s*=\s*(?<value>.+)$/iu.exec(
@@ -9722,7 +9782,11 @@ export function unpinnedContainerfileReferences(
             seenDirectives.add(directiveName);
             if (directiveName === "syntax") {
               const frontend = stripQuotes(directiveValue.split(/\s+/u)[0] ?? "");
-              if (frontend && !isDynamicReference(frontend) && !isPinnedDigest(frontend)) {
+              if (
+                frontend &&
+                (!isDynamicReference(frontend) || hasProvablyUnpinnedLiteralSuffix(frontend)) &&
+                !isPinnedDigest(frontend)
+              ) {
                 pushProblem(
                   `${filePath}:${index + 1 + startLineOffset}: ${frontend} is not pinned to a sha256 digest`,
                 );

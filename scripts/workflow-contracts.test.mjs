@@ -3264,6 +3264,40 @@ describe("workflow contracts", () => {
       "<memory>:25: docker/setup-buildx-action appended node uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
       "<memory>:27: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
     ]);
+    // Shell image pulls/runs with dynamic registry prefixes still catch literal
+    // unpinned tags while allowing opaque local image IDs and dynamic tags; and
+    // BuildKit `DetectSyntax` rules honor shebangs, `// syntax=`, and JSON syntax.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          "  - run: |",
+          '      docker pull "$REGISTRY/app:latest"',
+          '      docker run --rm "$REGISTRY/app:v1.2" node -v',
+          '      docker run --rm "$IMAGE_ID" node -v',
+          '      docker run --rm "ghcr.io/${{ github.repository_owner }}/app:sha-${{ github.sha }}" node -v',
+          `      docker pull "$REGISTRY/app:latest@${digest}"`,
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:3: $REGISTRY/app:latest is not pinned to a sha256 digest",
+      "<memory>:4: $REGISTRY/app:v1.2 is not pinned to a sha256 digest",
+    ]);
+    expect(
+      unpinnedContainerfileReferences(
+        `#!/usr/bin/env buildctl\n# syntax=docker/dockerfile:1.9\nFROM node:24@${digest}\n`,
+      ),
+    ).toEqual(["<memory>:2: docker/dockerfile:1.9 is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedContainerfileReferences(`// syntax=docker/dockerfile:1.10\nFROM node:24@${digest}\n`),
+    ).toEqual(["<memory>:1: docker/dockerfile:1.10 is not pinned to a sha256 digest"]);
+    expect(unpinnedContainerfileReferences('{\n  "syntax": "my/frontend:latest"\n}\n')).toEqual([
+      "<memory>:2: my/frontend:latest is not pinned to a sha256 digest",
+    ]);
+    expect(
+      unpinnedContainerfileReferences(`{\n  "syntax": "my/frontend:latest@${digest}"\n}\n`),
+    ).toEqual([]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
