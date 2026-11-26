@@ -393,10 +393,9 @@ import {
   signClientCatalogLocaleHeader,
 } from "@palamedes/next-plugin/server";
 
-const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
-if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
-
 export function proxy(request: NextRequest) {
+  const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
+  if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
   const headers = new Headers(request.headers);
   headers.delete(CLIENT_CATALOG_LOCALE_HEADER);
   headers.set(
@@ -410,13 +409,17 @@ export function proxy(request: NextRequest) {
 And pass the matching secret in `instrumentation.ts`:
 
 ```ts
-const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
-if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
-
-bindClientCatalogPermutations({
-  localeSource: "header",
-  headerSecret: localeSecret,
-});
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
+    if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
+    const { bindClientCatalogPermutations } = await import("@palamedes/next-plugin/server");
+    bindClientCatalogPermutations({
+      localeSource: "header",
+      headerSecret: localeSecret,
+    });
+  }
+}
 ```
 
 A route that gets its locale from the header alone, such as a cookie strategy

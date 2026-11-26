@@ -7,7 +7,7 @@ const MARKER_PREFIX = "pmds-next:";
 const KEY_LENGTH = 12;
 const RETRY_PARAM = "pmds-retry";
 const STATIC_CATALOG_DIRECTORY_SUFFIX = "/_next/static/palamedes/";
-const DEFAULT_MAP_PATH_PATTERN = /^\/(?:[^/]+\/)*_next\/static\/palamedes\/(catalogs\.[^/]+)$/u;
+const DEFAULT_MAP_PATH_PATTERN = /^\/_next\/static\/palamedes\/(catalogs\.[^/]+)$/u;
 const SAFE_ASSET_FILE_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/u;
 
 let catalogMap;

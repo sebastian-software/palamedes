@@ -92,6 +92,16 @@ type UnitStore = ReturnType<typeof workUnitAsyncStorageType.getStore>;
 
 const localeByRender = new WeakMap<object, string>();
 
+const OPTIONAL_CATCH_ALL_LOCALE_SEGMENT = /(?:^|\/)\[\[\.\.\.locale\]\](?:\/|$)/u;
+
+function hasDeclaredOptionalLocaleRoute(render: RenderStore): boolean {
+  if (!render) return false;
+  if (typeof render.route === "string" && OPTIONAL_CATCH_ALL_LOCALE_SEGMENT.test(render.route)) {
+    return true;
+  }
+  return typeof render.page === "string" && OPTIONAL_CATCH_ALL_LOCALE_SEGMENT.test(render.page);
+}
+
 /*
  * By default (`localeSource: "route-first"`), a present root route param named
  * `locale` wins so an untrusted incoming `x-palamedes-locale` header cannot
@@ -121,26 +131,24 @@ export function resolveRenderLocale(
     unit && "rootParams" in unit && unit.rootParams && typeof unit.rootParams === "object"
       ? unit.rootParams
       : undefined;
-  const hasRootLocale = rootParams !== undefined && Object.hasOwn(rootParams, "locale");
-  const rootLocale = hasRootLocale ? rootParams.locale : undefined;
-  const requireSignature = Object.hasOwn(options, "headerSecret");
-  const headerLocale =
-    localeSource === "route"
-      ? undefined
-      : unit && "headers" in unit && unit.headers
-        ? parseLocaleHeader(unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER), {
-            requireSignature,
-            secret: options.headerSecret,
-          })
-        : undefined;
+  const hasRootLocaleParam = rootParams !== undefined && Object.hasOwn(rootParams, "locale");
+  const hasRootLocale = hasRootLocaleParam || hasDeclaredOptionalLocaleRoute(render);
+  const rootLocale = hasRootLocaleParam ? rootParams.locale : undefined;
+  const readHeaderLocale = () =>
+    unit && "headers" in unit && unit.headers
+      ? parseLocaleHeader(unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER), {
+          requireSignature: "headerSecret" in options,
+          secret: options.headerSecret,
+        })
+      : undefined;
 
   let candidate: unknown;
   if (localeSource === "header") {
-    candidate = headerLocale ?? (hasRootLocale ? rootLocale : undefined);
+    candidate = readHeaderLocale() ?? (hasRootLocale ? rootLocale : undefined);
   } else if (localeSource === "route") {
     candidate = hasRootLocale ? rootLocale : undefined;
   } else {
-    candidate = hasRootLocale ? rootLocale : headerLocale;
+    candidate = hasRootLocale ? rootLocale : readHeaderLocale();
   }
   const locale =
     typeof candidate === "string" && locales.includes(candidate) ? candidate : fallback;
@@ -170,7 +178,7 @@ export function bindClientCatalogPermutationsAt(
   distDir: string,
   options: ResolveRenderLocaleOptions = {},
 ): string[] {
-  const hasHeaderSecret = Object.hasOwn(options, "headerSecret");
+  const hasHeaderSecret = "headerSecret" in options;
   if (
     hasHeaderSecret &&
     (typeof options.headerSecret !== "string" || options.headerSecret.length === 0)

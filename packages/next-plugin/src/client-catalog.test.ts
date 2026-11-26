@@ -148,8 +148,9 @@ describe("loadClientCatalog", () => {
     await expect(loadClientCatalog(MARKER)).resolves.toEqual({ a: "Hallo" });
   });
 
-  it("supports basePath and configured cross-origin assetPrefix", async () => {
+  it("supports configured basePath and cross-origin assetPrefix", async () => {
     const fileName = await writeAsset("cdn.de.js", 'export const messages = { a: "Hallo" };');
+    vi.stubEnv("PALAMEDES_NEXT_CATALOG_BASE", "/shop/_next/static/palamedes/");
     await stubDocument({ locale: "de", assets: { [KEY]: fileName } }, "de", { basePath: "/shop" });
     const withBasePath = await loadModule();
     await expect(withBasePath.loadClientCatalog(MARKER)).resolves.toEqual({ a: "Hallo" });
@@ -269,6 +270,7 @@ export const messages = { a: "Hallo" };`,
       "data:text/javascript,export default {}",
       "file:///tmp/catalogs.de.0123456789ab.js",
       "blob:https://app.example/catalogs.de.0123456789ab.js",
+      `${APP_ORIGIN}/other-app/_next/static/palamedes/catalogs.de.0123456789ab.js`,
       `${APP_ORIGIN}/uploads/catalogs.de.0123456789ab.js`,
       `${APP_ORIGIN}/_next/static/palamedes/not-a-catalog.js`,
       `${APP_ORIGIN}/_next/static/palamedes/sub/catalogs.de.0123456789ab.js`,

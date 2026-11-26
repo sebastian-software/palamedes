@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import vm from "node:vm";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   bindClientCatalogPermutationsAt,
@@ -256,8 +256,10 @@ describe("locale resolution", () => {
         unit({ rootParams: { locale: "zz" }, headers: header("de") }),
       ),
     ).toBe("en");
-    // Catch-all and optional catch-all `locale` root params are still present
-    // route params and must not fall through to an untrusted header.
+    // Catch-all and optional catch-all `locale` root params must not fall
+    // through to an untrusted header, including Next's store shape for an
+    // omitted `[[...locale]]` segment (where `rootParams` omits the key and
+    // `render.route` declares `[[...locale]]`).
     expect(
       resolveRenderLocale(
         locales,
@@ -270,10 +272,31 @@ describe("locale resolution", () => {
       resolveRenderLocale(
         locales,
         "en",
-        undefined,
-        unit({ rootParams: { locale: undefined }, headers: header("de") }),
+        render("/[[...locale]]"),
+        unit({ rootParams: {}, headers: header("de") }),
       ),
     ).toBe("en");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        render("/(marketing)/[[...locale]]"),
+        unit({ rootParams: {}, headers: header("de") }),
+      ),
+    ).toBe("en");
+    // When `rootParams.locale` already decides in default route-first mode,
+    // `unit.headers` is not even read.
+    const spyHeaders = header("en");
+    const getHeader = vi.spyOn(spyHeaders, "get");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ rootParams: { locale: "de" }, headers: spyHeaders }),
+      ),
+    ).toBe("de");
+    expect(getHeader).not.toHaveBeenCalled();
     expect(
       resolveRenderLocale(locales, "en", undefined, unit({ rootParams: { locale: "de" } })),
     ).toBe("de");
@@ -369,6 +392,37 @@ describe("locale resolution", () => {
         headerSecret: undefined,
       }),
     ).toBe("en");
+    // Inherited option getters are honored rather than silently treated as unsigned mode.
+    class InheritedSecretOptions {
+      private readonly value: string | undefined;
+      public constructor(value: string | undefined) {
+        this.value = value;
+      }
+      public get headerSecret(): string | undefined {
+        return this.value;
+      }
+    }
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ headers: header(signedDe) }),
+        new InheritedSecretOptions(secret),
+      ),
+    ).toBe("de");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ headers: header("de") }),
+        new InheritedSecretOptions(secret),
+      ),
+    ).toBe("en");
+    expect(() =>
+      bindClientCatalogPermutationsAt("/nonexistent", new InheritedSecretOptions(undefined)),
+    ).toThrow(/non-empty string/u);
   });
 
   it("does not guess from other params and falls back for unknown or missing locales", () => {
