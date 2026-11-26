@@ -302,7 +302,10 @@ async function verifyOptionalRootLocaleOwnership() {
     { name: "layout-inside-optional", layoutAbove: false, expectedLocale: "en" },
     { name: "layout-above-optional", layoutAbove: true, expectedLocale: "de" },
   ]) {
-    const fixtureDir = mkdtempSync(path.join(exampleDir, `.palamedes-optional-${scenario.name}-`));
+    // Create the fixture directly under `repoRoot` (outside `examples/nextjs-route`)
+    // so Turbopack keeps `distDir` inside `outputFileTracingRoot` without
+    // inheriting `examples/nextjs-route/src/middleware.ts`.
+    const fixtureDir = mkdtempSync(path.join(repoRoot, `.palamedes-optional-${scenario.name}-`));
     let fixtureServer;
     const fixtureOutput = [];
     try {
@@ -454,7 +457,18 @@ export default function Page() {
       fixtureServer.stderr.on("data", (chunk) => fixtureOutput.push(chunk));
       await waitForServer(origin, fixtureServer, fixtureOutput);
 
-      const html = await fetchText(`${origin}/`, { "x-palamedes-locale": "de" });
+      // Reject redirects so `/` is guaranteed to exercise the omitted
+      // `[[...locale]]` segment rather than a middleware-redirected `/en` path.
+      const response = await fetch(`${origin}/`, {
+        headers: { "x-palamedes-locale": "de" },
+        redirect: "manual",
+      });
+      assert.equal(
+        response.status,
+        200,
+        `${scenario.name}: expected HTTP 200 without redirect on /, got ${response.status} (location: ${response.headers.get("location")})`,
+      );
+      const html = await response.text();
       const found = [...new Set(html.match(CHUNK_REFERENCE) ?? [])];
       const bad = found.filter(
         (reference) => !["unrelated", scenario.expectedLocale].includes(classifyFixture(reference)),

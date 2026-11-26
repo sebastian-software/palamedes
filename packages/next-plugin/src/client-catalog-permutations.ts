@@ -550,7 +550,10 @@ function resolveIdentifierArrayInScope(
   const scopeStack: ScopeFrame[] = [
     { tainted: false, exprDepth: 0, pendingCondition: false, conditionalStmt: false },
   ];
-  const identWord = new RegExp(`(?<![\\w$.])${escapeRegExpLiteral(ident)}(?![\\w$])`, "u");
+  const identWord = new RegExp(
+    `(?:(?<![\\w$.])|\\.\\.\\.)${escapeRegExpLiteral(ident)}(?![\\w$])`,
+    "u",
+  );
   let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
   let prevNonWsChar = "";
   let regexAllowed = true;
@@ -946,7 +949,7 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
               matches.push(treeExpr);
             } else if (/^[A-Za-z_$][\w$]*$/u.test(treeExpr)) {
               const identWord = new RegExp(
-                `(?<![\\w$.])${escapeRegExpLiteral(treeExpr)}(?![\\w$])`,
+                `(?:(?<![\\w$.])|\\.\\.\\.)${escapeRegExpLiteral(treeExpr)}(?![\\w$])`,
                 "u",
               );
               const referencedInSiblingProp = [...props.entries()].some(
