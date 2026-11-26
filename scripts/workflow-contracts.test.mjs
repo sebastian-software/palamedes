@@ -1517,7 +1517,8 @@ describe("workflow contracts", () => {
       "<memory>:6: node:24 is not pinned to a sha256 digest",
       "<memory>:9: alpine:3.20 is not pinned to a sha256 digest",
     ]);
-    // Matrix `include` merges into matching base rows, and `exclude` removes dropped rows.
+    // Matrix `include` merges into matching base rows (including all original rows
+    // when an include introduces only new keys), and `exclude` removes dropped rows.
     expect(
       unpinnedWorkflowContainerReferences(
         [
@@ -1538,10 +1539,29 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:12: node:24 is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  matrix-include-new-keys:",
+          "    strategy:",
+          "      matrix:",
+          "        repo:",
+          "          - node",
+          "        include:",
+          "          - tag: 24",
+          "    container: ${{ matrix.repo }}:${{ matrix.tag }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:8: node:24 is not pinned to a sha256 digest"]);
     // Actions `${{ env.* }}` evaluates before shell reassignment, shell heredocs
-    // are executed while data heredocs and multiline quoted strings are inert,
-    // arithmetic `<<` is not a heredoc, subshell `)` stays out of digests, and
-    // Podman-specific options (`--authfile`) are skipped before the image operand.
+    // are executed while quoted data heredocs and multiline quoted strings are
+    // inert, command substitutions evaluate with current shell variables (not in
+    // quoted data heredocs), subshell assignments do not leak to the parent scope,
+    // `sh -c` / `bash -eu -c` scripts are inspected, arithmetic `<<` is not a
+    // heredoc, subshell `)` stays out of digests, and Podman-specific options
+    // (`--authfile`) are skipped before the image operand.
     expect(
       unpinnedWorkflowContainerReferences(
         [
@@ -1558,6 +1578,15 @@ describe("workflow contracts", () => {
           `          (docker pull node:24@${digest})`,
           `          podman run --rm --authfile ci-auth.json node:24@${digest} node -v`,
           "          x=$((1 << 4))",
+          "          cat <<'EOF'",
+          "          $(docker run -d node:24)",
+          "          EOF",
+          "          image=node:24",
+          '          cid=$(docker run -d "$image")',
+          `          (image=node:24@${digest})`,
+          '          docker pull "$image"',
+          "          sh -c 'docker pull alpine:3.20'",
+          `          bash -eu -c "docker pull node:24@${digest}"`,
           "          bash <<'SH'",
           "          docker pull alpine:3.20",
           "          SH",
@@ -1566,8 +1595,11 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual([
-      "<memory>:17: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:19: node:24 is not pinned to a sha256 digest",
+      "<memory>:19: node:24 is not pinned to a sha256 digest",
+      "<memory>:23: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:26: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:28: node:24 is not pinned to a sha256 digest",
     ]);
     expect(
       unpinnedWorkflowContainerReferences(
@@ -1610,6 +1642,12 @@ describe("workflow contracts", () => {
         `# syntax=docker/dockerfile:1@${digest}\nFROM rust:1.96-bookworm@${digest} AS toolchain\nFROM node:24-bookworm@${digest} AS build\nCOPY <<'EOF' /tmp/docs.txt\nFROM ubuntu:latest\nEOF\nRUN --mount=type=bind,from=toolchain,source=/usr/local,target=/mnt/rust --mount=type=bind,from=golang:1.24@${digest},source=/bin,target=/mnt/go true\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nFROM build AS runtime\n`,
       ),
     ).toEqual([]);
+    // Arithmetic shift `<<` inside Dockerfile `RUN` must not be mistaken for a heredoc.
+    expect(
+      unpinnedContainerfileReferences(
+        `FROM node:24-bookworm@${digest} AS build\nRUN echo "$((1 << 4))"\nFROM alpine:3.20\n`,
+      ),
+    ).toEqual(["<memory>:3: alpine:3.20 is not pinned to a sha256 digest"]);
 
     // Renovate custom manager extracts the digest-pinned musl action images.
     const [renovateConfig, verifyMuslAction] = await Promise.all([

@@ -581,17 +581,108 @@ function isShellInterpreterCommand(tokens) {
   return SHELL_INTERPRETERS.has(path.basename(cmd));
 }
 
-// Extract executable command substitutions `$(...)` and `` `...` `` from a
-// shell script segment (unquoted and double-quoted; never single-quoted or
-// arithmetic `$((...))`).
-function extractCommandSubstitutions(script, baseLine) {
-  const substitutions = [];
-  let quote = null;
-  let escaping = false;
-  let line = baseLine;
+const MAX_SHELL_NESTING_DEPTH = 8;
+const COMMAND_SUBSTITUTION_PLACEHOLDER = "${__CMD_SUB__}";
 
-  for (let index = 0; index < script.length; index += 1) {
-    const ch = script[index];
+function scanDollarCommandSubstitution(text, startIndex, startLine) {
+  let depth = 1;
+  let cursor = startIndex + 2;
+  let innerQuote = null;
+  let innerEscape = false;
+  let line = startLine;
+
+  while (cursor < text.length && depth > 0) {
+    const ich = text[cursor];
+    if (ich === "\n") {
+      line += 1;
+    }
+    if (innerEscape) {
+      innerEscape = false;
+      cursor += 1;
+      continue;
+    }
+    if (ich === "\\" && innerQuote !== "'") {
+      innerEscape = true;
+      cursor += 1;
+      continue;
+    }
+    if (innerQuote) {
+      if (ich === innerQuote) {
+        innerQuote = null;
+      }
+      cursor += 1;
+      continue;
+    }
+    if (ich === "'" || ich === '"') {
+      innerQuote = ich;
+      cursor += 1;
+      continue;
+    }
+    if (ich === "(") {
+      depth += 1;
+    } else if (ich === ")") {
+      depth -= 1;
+    }
+    cursor += 1;
+  }
+
+  if (depth !== 0) {
+    return null;
+  }
+
+  return {
+    innerText: text.slice(startIndex + 2, cursor - 1),
+    endIndex: cursor - 1,
+    endLine: line,
+  };
+}
+
+function scanBacktickSubstitution(text, startIndex, startLine, inDoubleQuotes) {
+  let cursor = startIndex + 1;
+  let btEscape = false;
+  let line = startLine;
+
+  while (cursor < text.length) {
+    const bch = text[cursor];
+    if (bch === "\n") {
+      line += 1;
+    }
+    if (btEscape) {
+      btEscape = false;
+      cursor += 1;
+      continue;
+    }
+    if (bch === "\\") {
+      btEscape = true;
+      cursor += 1;
+      continue;
+    }
+    if (bch === "`") {
+      const raw = text.slice(startIndex + 1, cursor);
+      const innerText = inDoubleQuotes
+        ? raw.replace(/\\([$`\\"])/gu, "$1")
+        : raw.replace(/\\([$`\\])/gu, "$1");
+      return {
+        innerText,
+        endIndex: cursor,
+        endLine: line,
+      };
+    }
+    cursor += 1;
+  }
+
+  return null;
+}
+
+// Unquoted data heredocs (`cat <<EOF`) still expand `$(...)` and `` `...` ``
+// (treating `'` and `"` as literal characters, not shell quotes).
+function extractUnquotedHeredocSubstitutions(bodyText, startLine) {
+  const substitutions = [];
+  let escaping = false;
+  let line = startLine;
+
+  for (let index = 0; index < bodyText.length; index += 1) {
+    const ch = bodyText[index];
     if (ch === "\n") {
       line += 1;
       escaping = false;
@@ -601,108 +692,27 @@ function extractCommandSubstitutions(script, baseLine) {
       escaping = false;
       continue;
     }
-    if (ch === "\\" && quote !== "'") {
+    if (ch === "\\") {
       escaping = true;
       continue;
     }
-    if (quote === "'") {
-      if (ch === "'") {
-        quote = null;
+    if (ch === "$" && bodyText[index + 1] === "(" && bodyText[index + 2] !== "(") {
+      const subStartLine = line;
+      const scanned = scanDollarCommandSubstitution(bodyText, index, line);
+      if (scanned) {
+        substitutions.push({ text: scanned.innerText, lineNumber: subStartLine });
+        index = scanned.endIndex;
+        line = scanned.endLine;
       }
       continue;
     }
-    if (ch === "'" && quote === null) {
-      quote = "'";
-      continue;
-    }
-    if (ch === '"') {
-      quote = quote === '"' ? null : '"';
-      continue;
-    }
-    if (quote === null && ch === "#" && (index === 0 || /[\s;&|()]/u.test(script[index - 1]))) {
-      while (index < script.length && script[index] !== "\n") {
-        index += 1;
-      }
-      if (script[index] === "\n") {
-        line += 1;
-      }
-      continue;
-    }
-
-    if (ch === "$" && script[index + 1] === "(" && script[index + 2] !== "(") {
-      const startLine = line;
-      let depth = 1;
-      let cursor = index + 2;
-      let innerQuote = null;
-      let innerEscape = false;
-      while (cursor < script.length && depth > 0) {
-        const ich = script[cursor];
-        if (ich === "\n") {
-          line += 1;
-        }
-        if (innerEscape) {
-          innerEscape = false;
-          cursor += 1;
-          continue;
-        }
-        if (ich === "\\" && innerQuote !== "'") {
-          innerEscape = true;
-          cursor += 1;
-          continue;
-        }
-        if (innerQuote) {
-          if (ich === innerQuote) {
-            innerQuote = null;
-          }
-          cursor += 1;
-          continue;
-        }
-        if (ich === "'" || ich === '"') {
-          innerQuote = ich;
-          cursor += 1;
-          continue;
-        }
-        if (ich === "(") {
-          depth += 1;
-        } else if (ich === ")") {
-          depth -= 1;
-        }
-        cursor += 1;
-      }
-      if (depth === 0) {
-        substitutions.push({ text: script.slice(index + 2, cursor - 1), lineNumber: startLine });
-        index = cursor - 1;
-      }
-      continue;
-    }
-
     if (ch === "`") {
-      const startLine = line;
-      let cursor = index + 1;
-      let btEscape = false;
-      while (cursor < script.length) {
-        const bch = script[cursor];
-        if (bch === "\n") {
-          line += 1;
-        }
-        if (btEscape) {
-          btEscape = false;
-          cursor += 1;
-          continue;
-        }
-        if (bch === "\\") {
-          btEscape = true;
-          cursor += 1;
-          continue;
-        }
-        if (bch === "`") {
-          break;
-        }
-        cursor += 1;
-      }
-      if (cursor < script.length && script[cursor] === "`") {
-        substitutions.push({ text: script.slice(index + 1, cursor), lineNumber: startLine });
-        index = cursor;
+      const subStartLine = line;
+      const scanned = scanBacktickSubstitution(bodyText, index, line, false);
+      if (scanned) {
+        substitutions.push({ text: scanned.innerText, lineNumber: subStartLine });
+        index = scanned.endIndex;
+        line = scanned.endLine;
       }
     }
   }
@@ -712,10 +722,12 @@ function extractCommandSubstitutions(script, baseLine) {
 
 // Lex an entire shell script preserving quotes across physical newlines,
 // tracking heredocs (while ignoring `<<<` here-strings and arithmetic `<<`),
-// splitting on unquoted subshell `(` / `)`, and recording 1-based line numbers.
+// attaching unquoted/double-quoted command substitutions to their owning
+// command, and emitting explicit subshell enter/exit scope markers.
 function lexShellScript(text, startLine) {
-  const commands = [];
+  const events = [];
   let tokens = [];
+  let commandSubstitutions = [];
   let commandLine = startLine;
   let current = "";
   let quote = null;
@@ -737,9 +749,15 @@ function lexShellScript(text, startLine) {
 
   const flushCommand = () => {
     flushToken();
-    if (tokens.length > 0) {
-      commands.push({ tokens, lineNumber: commandLine });
+    if (tokens.length > 0 || commandSubstitutions.length > 0) {
+      events.push({
+        kind: "command",
+        tokens,
+        lineNumber: commandLine,
+        substitutions: commandSubstitutions,
+      });
       tokens = [];
+      commandSubstitutions = [];
     }
   };
 
@@ -762,8 +780,24 @@ function lexShellScript(text, startLine) {
         }
         bodyLines.push(rawLine);
       }
-      if (spec.executable && bodyLines.length > 0) {
-        commands.push(...lexShellScript(bodyLines.join("\n"), bodyStartLine));
+      if (bodyLines.length === 0) {
+        continue;
+      }
+      const bodyText = bodyLines.join("\n");
+      if (spec.executable) {
+        events.push({ kind: "enter-subshell" });
+        events.push(...lexShellScript(bodyText, bodyStartLine));
+        events.push({ kind: "exit-subshell" });
+      } else if (!spec.quoted) {
+        const heredocSubs = extractUnquotedHeredocSubstitutions(bodyText, bodyStartLine);
+        if (heredocSubs.length > 0) {
+          events.push({
+            kind: "command",
+            tokens: [],
+            lineNumber: bodyStartLine,
+            substitutions: heredocSubs,
+          });
+        }
       }
     }
     return cursor;
@@ -787,11 +821,45 @@ function lexShellScript(text, startLine) {
       continue;
     }
 
-    if (quote) {
+    if (quote === "'") {
       if (ch === "\n") {
         line += 1;
       }
-      if (ch === quote) {
+      if (ch === "'") {
+        quote = null;
+      } else {
+        current += ch;
+      }
+      continue;
+    }
+
+    if (quote === '"') {
+      if (ch === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
+        const subStartLine = line;
+        const scanned = scanDollarCommandSubstitution(text, index, line);
+        if (scanned) {
+          commandSubstitutions.push({ text: scanned.innerText, lineNumber: subStartLine });
+          current += COMMAND_SUBSTITUTION_PLACEHOLDER;
+          index = scanned.endIndex;
+          line = scanned.endLine;
+          continue;
+        }
+      }
+      if (ch === "`") {
+        const subStartLine = line;
+        const scanned = scanBacktickSubstitution(text, index, line, true);
+        if (scanned) {
+          commandSubstitutions.push({ text: scanned.innerText, lineNumber: subStartLine });
+          current += COMMAND_SUBSTITUTION_PLACEHOLDER;
+          index = scanned.endIndex;
+          line = scanned.endLine;
+          continue;
+        }
+      }
+      if (ch === "\n") {
+        line += 1;
+      }
+      if (ch === '"') {
         quote = null;
       } else {
         current += ch;
@@ -825,53 +893,36 @@ function lexShellScript(text, startLine) {
       continue;
     }
 
-    // Keep command substitution `$(...)` opaque in the outer command because
-    // `extractCommandSubstitutions` inspects it separately (avoiding duplicates).
+    // Command substitution `$(...)` outside single quotes.
     if (ch === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
-      let depth = 1;
-      let cursor = index + 2;
-      let innerQuote = null;
-      let innerEscape = false;
-      while (cursor < text.length && depth > 0) {
-        const ich = text[cursor];
-        if (ich === "\n") {
-          line += 1;
-        }
-        if (innerEscape) {
-          innerEscape = false;
-          cursor += 1;
-          continue;
-        }
-        if (ich === "\\" && innerQuote !== "'") {
-          innerEscape = true;
-          cursor += 1;
-          continue;
-        }
-        if (innerQuote) {
-          if (ich === innerQuote) {
-            innerQuote = null;
-          }
-          cursor += 1;
-          continue;
-        }
-        if (ich === "'" || ich === '"') {
-          innerQuote = ich;
-          cursor += 1;
-          continue;
-        }
-        if (ich === "(") {
-          depth += 1;
-        } else if (ich === ")") {
-          depth -= 1;
-        }
-        cursor += 1;
-      }
       if (tokens.length === 0 && current.length === 0) {
         commandLine = line;
       }
-      current += text.slice(index, cursor);
-      index = cursor - 1;
-      continue;
+      const subStartLine = line;
+      const scanned = scanDollarCommandSubstitution(text, index, line);
+      if (scanned) {
+        commandSubstitutions.push({ text: scanned.innerText, lineNumber: subStartLine });
+        current += COMMAND_SUBSTITUTION_PLACEHOLDER;
+        index = scanned.endIndex;
+        line = scanned.endLine;
+        continue;
+      }
+    }
+
+    // Backtick command substitution `` `...` `` outside single quotes.
+    if (ch === "`") {
+      if (tokens.length === 0 && current.length === 0) {
+        commandLine = line;
+      }
+      const subStartLine = line;
+      const scanned = scanBacktickSubstitution(text, index, line, false);
+      if (scanned) {
+        commandSubstitutions.push({ text: scanned.innerText, lineNumber: subStartLine });
+        current += COMMAND_SUBSTITUTION_PLACEHOLDER;
+        index = scanned.endIndex;
+        line = scanned.endLine;
+        continue;
+      }
     }
 
     // Arithmetic expansion `$((...))` or arithmetic command `((...))`.
@@ -941,6 +992,7 @@ function lexShellScript(text, startLine) {
       }
       let delimiter = "";
       let delimQuote = null;
+      let delimQuoted = false;
       let delimEscaping = false;
       while (cursor < text.length) {
         const dch = text[cursor];
@@ -952,6 +1004,7 @@ function lexShellScript(text, startLine) {
         }
         if (dch === "\\" && delimQuote !== "'") {
           delimEscaping = true;
+          delimQuoted = true;
           cursor += 1;
           continue;
         }
@@ -966,6 +1019,7 @@ function lexShellScript(text, startLine) {
         }
         if (dch === "'" || dch === '"') {
           delimQuote = dch;
+          delimQuoted = true;
           cursor += 1;
           continue;
         }
@@ -979,6 +1033,7 @@ function lexShellScript(text, startLine) {
         pendingHeredocs.push({
           delimiter,
           stripTabs,
+          quoted: delimQuoted,
           executable: isShellInterpreterCommand(tokens),
         });
       }
@@ -1012,6 +1067,7 @@ function lexShellScript(text, startLine) {
         continue;
       }
       flushCommand();
+      events.push({ kind: "enter-subshell" });
       continue;
     }
 
@@ -1024,6 +1080,7 @@ function lexShellScript(text, startLine) {
       // Treat an unquoted `)` as a subshell delimiter even when it immediately
       // follows a word (e.g. `(docker pull node:24@sha256:...)`).
       flushCommand();
+      events.push({ kind: "exit-subshell" });
       continue;
     }
 
@@ -1047,7 +1104,7 @@ function lexShellScript(text, startLine) {
   }
 
   flushCommand();
-  return commands;
+  return events;
 }
 
 // --- Matrix row expansion with Actions `exclude` and `include` semantics -----
@@ -1174,12 +1231,15 @@ function extractJobMatrixRows(jobNode) {
     );
   }
 
-  // Apply GitHub Actions `include`: merge into matching base rows when shared
-  // axis keys match; otherwise append as a new standalone row.
+  // Apply GitHub Actions `include`: merge non-axis properties into every
+  // original base row matching all shared axis keys (including all original
+  // rows when an include entry only introduces new keys); append as a new
+  // standalone row only when no original base row matches.
+  const standaloneIncludeRows = [];
   for (const includeMap of includeRows) {
     const sharedAxisKeys = [...includeMap.keys()].filter((k) => axisNames.has(k));
     let matchedBase = false;
-    if (rows.length > 0 && sharedAxisKeys.length > 0) {
+    if (rows.length > 0) {
       for (const row of rows) {
         if (sharedAxisKeys.every((k) => matrixNodesEqual(row.get(k), includeMap.get(k)))) {
           matchedBase = true;
@@ -1192,11 +1252,11 @@ function extractJobMatrixRows(jobNode) {
       }
     }
     if (!matchedBase) {
-      rows.push(new Map(includeMap));
+      standaloneIncludeRows.push(new Map(includeMap));
     }
   }
 
-  return rows;
+  return [...rows, ...standaloneIncludeRows];
 }
 
 function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
@@ -1249,6 +1309,40 @@ function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
   return candidates.length > 0 ? candidates : [{ text: rawText, line: fallbackLine }];
 }
 
+function extractShellDashCScript(tokens, cursor) {
+  let sawDashC = false;
+  for (let index = cursor + 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === "--" || token === "-") {
+      return sawDashC ? (tokens[index + 1] ?? null) : null;
+    }
+    if (token === "-o" || token === "+o" || token === "-O" || token === "+O") {
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--")) {
+      if (token === "--rcfile" || token === "--init-file") {
+        index += 1;
+      }
+      continue;
+    }
+    if (/^-[A-Za-z]+$/u.test(token)) {
+      if (token.includes("c")) {
+        sawDashC = true;
+      }
+      if (token.endsWith("o") || token.endsWith("O")) {
+        index += 1;
+      }
+      continue;
+    }
+    if (/^\+[A-Za-z]+$/u.test(token)) {
+      continue;
+    }
+    return sawDashC ? token : null;
+  }
+  return null;
+}
+
 function inspectShellText(
   scriptText,
   startLine,
@@ -1258,21 +1352,43 @@ function inspectShellText(
   matrixRows,
   filePath,
   problems,
+  depth = 0,
 ) {
-  for (const nested of extractCommandSubstitutions(scriptText, startLine)) {
-    inspectShellText(
-      nested.text,
-      nested.lineNumber,
-      sourceLines,
-      stepEnv,
-      new Map(shellVars),
-      matrixRows,
-      filePath,
-      problems,
-    );
+  if (depth > MAX_SHELL_NESTING_DEPTH) {
+    return;
   }
 
-  for (const { tokens, lineNumber } of lexShellScript(scriptText, startLine)) {
+  const varStack = [shellVars];
+
+  for (const event of lexShellScript(scriptText, startLine)) {
+    if (event.kind === "enter-subshell") {
+      varStack.push(new Map(varStack.at(-1)));
+      continue;
+    }
+    if (event.kind === "exit-subshell") {
+      if (varStack.length > 1) {
+        varStack.pop();
+      }
+      continue;
+    }
+
+    const currentVars = varStack.at(-1);
+    const { tokens, lineNumber, substitutions } = event;
+
+    for (const nested of substitutions) {
+      inspectShellText(
+        nested.text,
+        nested.lineNumber,
+        sourceLines,
+        stepEnv,
+        new Map(currentVars),
+        matrixRows,
+        filePath,
+        problems,
+        depth + 1,
+      );
+    }
+
     if (tokens.length === 0 || tokens[0].startsWith("#")) {
       continue;
     }
@@ -1286,8 +1402,8 @@ function inspectShellText(
       for (const token of tokens.slice(assignStart)) {
         const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
         if (match) {
-          shellVars.set(match.groups.name, {
-            value: resolveImageToken(match.groups.value, stepEnv, shellVars),
+          currentVars.set(match.groups.name, {
+            value: resolveImageToken(match.groups.value, stepEnv, currentVars),
             line: lineNumber,
           });
         }
@@ -1295,7 +1411,7 @@ function inspectShellText(
       continue;
     }
 
-    const commandVars = new Map(shellVars);
+    const commandVars = new Map(currentVars);
     let cursor = 0;
     while (cursor < tokens.length) {
       const token = tokens[cursor];
@@ -1316,6 +1432,28 @@ function inspectShellText(
     }
 
     const cli = tokens[cursor];
+    if (!cli) {
+      continue;
+    }
+
+    if (SHELL_INTERPRETERS.has(path.basename(cli))) {
+      const dashCScript = extractShellDashCScript(tokens, cursor);
+      if (dashCScript) {
+        inspectShellText(
+          dashCScript,
+          lineNumber,
+          sourceLines,
+          stepEnv,
+          new Map(commandVars),
+          matrixRows,
+          filePath,
+          problems,
+          depth + 1,
+        );
+      }
+      continue;
+    }
+
     if (cli !== "docker" && cli !== "podman") {
       continue;
     }
@@ -1736,24 +1874,120 @@ function resolveBuildArgs(token, buildArgs) {
 
 function extractDockerfileHeredocDelimiters(instructionText) {
   const delimiters = [];
-  if (!/^(?:COPY|ADD|RUN)\s+/iu.test(instructionText)) {
+  const headerMatch = /^(?:COPY|ADD|RUN)\s+(?<rest>.+)$/iu.exec(instructionText);
+  if (!headerMatch) {
     return delimiters;
   }
-  for (const match of instructionText.matchAll(
-    /(?<op><<-?)\s*(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)"|(?<bare>[A-Za-z0-9_.-]+))/gu,
-  )) {
-    const delimiter = match.groups.sq ?? match.groups.dq ?? match.groups.bare;
-    if (delimiter) {
-      delimiters.push({ delimiter, stripTabs: match.groups.op === "<<-" });
-    }
+  const rest = headerMatch.groups.rest.trimStart();
+  // JSON exec form (`RUN ["sh", "-c", "..."]`) does not support Dockerfile heredocs.
+  if (rest.startsWith("[")) {
+    return delimiters;
   }
+
+  let quote = null;
+  let escaping = false;
+  let arithDepth = 0;
+  let atWordStart = true;
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const ch = rest[index];
+    if (escaping) {
+      escaping = false;
+      atWordStart = false;
+      continue;
+    }
+    if (ch === "\\" && quote !== "'") {
+      escaping = true;
+      atWordStart = false;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      }
+      atWordStart = false;
+      continue;
+    }
+    if (arithDepth > 0) {
+      if (ch === "(" && rest[index + 1] === "(") {
+        arithDepth += 1;
+        index += 1;
+      } else if (ch === ")" && rest[index + 1] === ")") {
+        arithDepth -= 1;
+        index += 1;
+      }
+      atWordStart = false;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      atWordStart = false;
+      continue;
+    }
+    if (ch === "$" && rest[index + 1] === "(" && rest[index + 2] === "(") {
+      arithDepth += 1;
+      index += 2;
+      atWordStart = false;
+      continue;
+    }
+    if (ch === "(" && rest[index + 1] === "(" && atWordStart) {
+      arithDepth += 1;
+      index += 1;
+      atWordStart = false;
+      continue;
+    }
+    if (atWordStart && ch === "<" && rest[index + 1] === "<" && rest[index + 2] !== "<") {
+      let cursor = index + 2;
+      let stripTabs = false;
+      if (rest[cursor] === "-") {
+        stripTabs = true;
+        cursor += 1;
+      }
+      // BuildKit Dockerfile heredocs require the delimiter immediately attached
+      // to `<<` or `<<-` with no intervening whitespace.
+      let delimiter = "";
+      if (rest[cursor] === "'" || rest[cursor] === '"') {
+        const delimQuote = rest[cursor];
+        cursor += 1;
+        const start = cursor;
+        while (cursor < rest.length && rest[cursor] !== delimQuote) {
+          cursor += 1;
+        }
+        if (
+          cursor < rest.length &&
+          rest[cursor] === delimQuote &&
+          cursor > start &&
+          (cursor + 1 === rest.length || /[\s;&|<>()]/u.test(rest[cursor + 1]))
+        ) {
+          delimiter = rest.slice(start, cursor);
+          cursor += 1;
+        }
+      } else {
+        const bareMatch = /^(?<bare>[A-Za-z_][A-Za-z0-9_.-]*)(?=$|[\s;&|<>()])/u.exec(
+          rest.slice(cursor),
+        );
+        if (bareMatch) {
+          delimiter = bareMatch.groups.bare;
+          cursor += delimiter.length;
+        }
+      }
+      if (delimiter.length > 0) {
+        delimiters.push({ delimiter, stripTabs });
+        index = cursor - 1;
+        atWordStart = false;
+        continue;
+      }
+    }
+    atWordStart = /[\s;&|(]/u.test(ch);
+  }
+
   return delimiters;
 }
 
 function extractRunMountSources(runText) {
   const sources = [];
   const rest = runText.replace(/^RUN\s+/iu, "");
-  const firstCommand = lexShellScript(rest, 1)[0];
+  const firstCommand = lexShellScript(rest, 1).find((event) => event.kind === "command");
   const tokens = firstCommand?.tokens ?? [];
   for (const token of tokens) {
     if (!token.startsWith("--")) {
