@@ -3136,6 +3136,16 @@ function inspectShellText(
     }
     return copy;
   };
+  const cloneRowDirStacks = (rowDirStacks) => {
+    const copy = new Map();
+    for (const [key, stack] of rowDirStacks) {
+      copy.set(
+        key,
+        stack.map((dirs) => [...dirs]),
+      );
+    }
+    return copy;
+  };
 
   const initialRowCwds = buildFileContext?.rowCwds
     ? cloneRowCwds(buildFileContext.rowCwds)
@@ -3146,6 +3156,12 @@ function inspectShellText(
       initialRowCwds.set(row, [buildFileContext.workingDir]);
     }
   }
+  const initialRowDirStacks = buildFileContext?.rowDirStacks
+    ? cloneRowDirStacks(buildFileContext.rowDirStacks)
+    : new Map();
+  const initialRowOldPwds = buildFileContext?.rowOldPwds
+    ? cloneRowCwds(buildFileContext.rowOldPwds)
+    : new Map();
   const initialRowCwdsTruncated = buildFileContext?.rowCwdsTruncated
     ? new Set(buildFileContext.rowCwdsTruncated)
     : new Set();
@@ -3158,6 +3174,8 @@ function inspectShellText(
       exportedVars: initialExportedVars,
       branches: [],
       rowCwds: initialRowCwds,
+      rowDirStacks: initialRowDirStacks,
+      rowOldPwds: initialRowOldPwds,
       rowCwdsTruncated: initialRowCwdsTruncated,
       pendingStdinBuilds: [],
     },
@@ -3172,6 +3190,8 @@ function inspectShellText(
         exportedVars: new Set(parent.exportedVars),
         branches: [],
         rowCwds: cloneRowCwds(parent.rowCwds),
+        rowDirStacks: cloneRowDirStacks(parent.rowDirStacks),
+        rowOldPwds: cloneRowCwds(parent.rowOldPwds),
         rowCwdsTruncated: new Set(parent.rowCwdsTruncated),
         pendingStdinBuilds: [],
       });
@@ -3285,6 +3305,8 @@ function inspectShellText(
           ? {
               ...buildFileContext,
               rowCwds: cloneRowCwds(frame.rowCwds),
+              rowDirStacks: cloneRowDirStacks(frame.rowDirStacks),
+              rowOldPwds: cloneRowCwds(frame.rowOldPwds),
               rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
             }
           : null,
@@ -3546,13 +3568,52 @@ function inspectShellText(
     const normalizedCli = normalizeExecutableName(cli);
     if (
       buildFileContext &&
+      (normalizedCli === "popd" || (shellMode === "pwsh" && normalizedCli === "pop-location"))
+    ) {
+      const rowsForCd = matrixRows.length > 0 ? matrixRows : [null];
+      const preserveExisting = conditional || frame.branches.length > 0;
+      for (const row of rowsForCd) {
+        const stack = frame.rowDirStacks.get(row);
+        if (!stack || stack.length === 0) {
+          continue;
+        }
+        const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
+        if (preserveExisting) {
+          const topDirs = stack.at(-1);
+          const mergedDirs = [...currentDirs];
+          const seenDirs = new Set(mergedDirs);
+          for (const dir of topDirs) {
+            if (seenDirs.has(dir)) {
+              continue;
+            }
+            if (mergedDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
+              frame.rowCwdsTruncated.add(row);
+              continue;
+            }
+            seenDirs.add(dir);
+            mergedDirs.push(dir);
+          }
+          frame.rowCwds.set(row, mergedDirs);
+        } else {
+          frame.rowOldPwds.set(row, [...currentDirs]);
+          frame.rowCwds.set(row, stack.pop());
+        }
+      }
+      continue;
+    }
+
+    if (
+      buildFileContext &&
       (normalizedCli === "cd" ||
         normalizedCli === "pushd" ||
         (shellMode === "pwsh" &&
           (normalizedCli === "set-location" ||
             normalizedCli === "sl" ||
-            normalizedCli === "chdir")))
+            normalizedCli === "chdir" ||
+            normalizedCli === "push-location")))
     ) {
+      const isPushd =
+        normalizedCli === "pushd" || (shellMode === "pwsh" && normalizedCli === "push-location");
       let dirArg = null;
       for (let index = cursor + 1; index < tokens.length; index += 1) {
         const token = tokens[index];
@@ -3560,7 +3621,7 @@ function inspectShellText(
           dirArg = tokens[index + 1] ?? null;
           break;
         }
-        if (token.startsWith("-")) {
+        if (token.startsWith("-") && token !== "-") {
           if (shellMode === "pwsh" && /^-(?:path|literalpath)$/iu.test(token)) {
             dirArg = tokens[index + 1] ?? null;
             break;
@@ -3570,6 +3631,59 @@ function inspectShellText(
         dirArg = token;
         break;
       }
+      const rowsForCd = matrixRows.length > 0 ? matrixRows : [null];
+      const preserveExisting = conditional || frame.branches.length > 0;
+      if (isPushd && !dirArg) {
+        for (const row of rowsForCd) {
+          const stack = frame.rowDirStacks.get(row);
+          if (!stack || stack.length === 0) {
+            continue;
+          }
+          const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
+          if (preserveExisting) {
+            const topDirs = stack.at(-1);
+            const mergedDirs = [...currentDirs];
+            const seenDirs = new Set(mergedDirs);
+            for (const dir of topDirs) {
+              if (!seenDirs.has(dir) && mergedDirs.length < MAX_WORKING_DIRS_PER_ROW) {
+                seenDirs.add(dir);
+                mergedDirs.push(dir);
+              }
+            }
+            frame.rowCwds.set(row, mergedDirs);
+          } else {
+            const topDirs = stack.pop();
+            stack.push([...currentDirs]);
+            frame.rowOldPwds.set(row, [...currentDirs]);
+            frame.rowCwds.set(row, topDirs);
+          }
+        }
+        continue;
+      }
+      if (!isPushd && dirArg === "-") {
+        for (const row of rowsForCd) {
+          const oldDirs = frame.rowOldPwds.get(row);
+          if (!oldDirs || oldDirs.length === 0) {
+            continue;
+          }
+          const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
+          if (preserveExisting) {
+            const mergedDirs = [...currentDirs];
+            const seenDirs = new Set(mergedDirs);
+            for (const dir of oldDirs) {
+              if (!seenDirs.has(dir) && mergedDirs.length < MAX_WORKING_DIRS_PER_ROW) {
+                seenDirs.add(dir);
+                mergedDirs.push(dir);
+              }
+            }
+            frame.rowCwds.set(row, mergedDirs);
+          } else {
+            frame.rowOldPwds.set(row, [...currentDirs]);
+            frame.rowCwds.set(row, [...oldDirs]);
+          }
+        }
+        continue;
+      }
       if (dirArg && dirArg !== "-") {
         const expandedDir = resolveImageTokenCandidates(
           dirArg,
@@ -3578,8 +3692,6 @@ function inspectShellText(
           lineNumber,
           shellMode,
         );
-        const rowsForCd = matrixRows.length > 0 ? matrixRows : [null];
-        const preserveExisting = conditional || frame.branches.length > 0;
         for (const row of rowsForCd) {
           const rowList = row ? [row] : [];
           const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
@@ -3611,6 +3723,14 @@ function inspectShellText(
             }
           }
           if (nextDirs.length > 0) {
+            if (isPushd) {
+              const stack = frame.rowDirStacks.get(row) ?? [];
+              if (stack.length < 64) {
+                stack.push([...currentDirs]);
+              }
+              frame.rowDirStacks.set(row, stack);
+            }
+            frame.rowOldPwds.set(row, [...currentDirs]);
             frame.rowCwds.set(row, nextDirs);
           }
         }
@@ -4222,6 +4342,86 @@ function inspectShellRunScript(
     }
   }
 
+  // GitHub Actions substitutes `${{ matrix.* }}` expressions into the `run:`
+  // script before the shell parses arguments. Expand statically known matrix
+  // expressions per row prior to lexing so values like `--platform linux/amd64`
+  // tokenize as flags instead of being mistaken for the image operand.
+  if (
+    matrixRows.length > 0 &&
+    new RegExp(MATRIX_EXPRESSION_PATTERN.source, "iu").test(scriptText)
+  ) {
+    const seenStepProblems = new Set();
+    const perRowEmitted = [];
+    const substituteMatrixForRow = (text, row) =>
+      text.replace(MATRIX_EXPRESSION_PATTERN, (match, _p1, _offset, _str, groups) => {
+        const resolved = resolveMatrixPath(row, parseMatrixPathSegments(groups.path));
+        return resolved ? resolved.value : match;
+      });
+
+    for (const row of matrixRows) {
+      const expandedScript = substituteMatrixForRow(scriptText, row);
+      const expandedSourceLines = sourceLines
+        ? sourceLines.map((entry) => ({
+            ...entry,
+            text: substituteMatrixForRow(entry.text, row),
+          }))
+        : null;
+      const rowProblems = [];
+      const rowEmitted = emittedGithubEnv ? new Map() : null;
+      inspectShellText(
+        expandedScript,
+        runNode.line,
+        expandedSourceLines,
+        stepEnv,
+        initialShellVars,
+        [row],
+        filePath,
+        rowProblems,
+        rowEmitted,
+        shellMode,
+        0,
+        buildFileContext,
+      );
+      for (const problem of rowProblems) {
+        if (!seenStepProblems.has(problem)) {
+          seenStepProblems.add(problem);
+          problems.push(problem);
+        }
+      }
+      if (rowEmitted) {
+        perRowEmitted.push(rowEmitted);
+      }
+    }
+
+    if (emittedGithubEnv && perRowEmitted.length > 0) {
+      const allKeys = new Set();
+      for (const rowMap of perRowEmitted) {
+        for (const key of rowMap.keys()) {
+          allKeys.add(key);
+        }
+      }
+      for (const key of allKeys) {
+        let mergedEntries = [];
+        let conditionalAcrossRows = false;
+        for (const rowMap of perRowEmitted) {
+          const record = rowMap.get(key);
+          if (!record) {
+            conditionalAcrossRows = true;
+            continue;
+          }
+          if (record.conditional) {
+            conditionalAcrossRows = true;
+          }
+          mergedEntries = mergeVarEntries(mergedEntries, record.entries);
+        }
+        if (mergedEntries.length > 0) {
+          recordGithubEnvWrite(emittedGithubEnv, key, mergedEntries, conditionalAcrossRows);
+        }
+      }
+    }
+    return;
+  }
+
   inspectShellText(
     scriptText,
     runNode.line,
@@ -4434,6 +4634,99 @@ function checkStepsList(
       problems.push(
         `${filePath}:${usesNode.line}: docker/bake-action target definitions cannot be verified statically for container image digests`,
       );
+    } else if (
+      usesNode?.kind === "scalar" &&
+      /^docker\/setup-buildx-action@/iu.test(String(usesNode.value).trim())
+    ) {
+      const driverNode = getMapField(withNode, "driver");
+      const driverOptsNode = getMapField(withNode, "driver-opts");
+      const actionRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
+      const seenBuildxProblems = new Set();
+      const pushBuildxProblem = (message) => {
+        if (!seenBuildxProblems.has(message)) {
+          seenBuildxProblems.add(message);
+          problems.push(message);
+        }
+      };
+
+      for (const row of actionRows) {
+        const rowList = row ? [row] : [];
+        const rawDriver = driverNode?.kind === "scalar" ? String(driverNode.value).trim() : "";
+        const driverCandidates = rawDriver
+          ? resolveEnvExpressionCandidates(rawDriver, stepEnv, driverNode.line).candidates.flatMap(
+              (envCandidate) =>
+                expandMatrixReferences(envCandidate.text, rowList, envCandidate.line),
+            )
+          : [{ text: "docker-container", line: usesNode.line }];
+
+        const usesContainerDriver = driverCandidates.some((candidate) => {
+          const normalizedDriver = candidate.text.trim().toLowerCase();
+          return (
+            normalizedDriver === "" ||
+            normalizedDriver === "docker-container" ||
+            normalizedDriver === "kubernetes"
+          );
+        });
+        if (!usesContainerDriver) {
+          continue;
+        }
+
+        const rawImageValues = [];
+        if (driverOptsNode?.kind === "scalar") {
+          for (const rawLine of String(driverOptsNode.value).split(/\r?\n/u)) {
+            const trimmedLine = stripQuotes(rawLine.trim());
+            if (!trimmedLine || trimmedLine.startsWith("#")) {
+              continue;
+            }
+            const imageOptMatch = /^image=(?<image>.+)$/iu.exec(trimmedLine);
+            if (imageOptMatch) {
+              rawImageValues.push({
+                text: stripQuotes(imageOptMatch.groups.image),
+                line: driverOptsNode.line,
+              });
+            }
+          }
+        }
+
+        if (rawImageValues.length === 0) {
+          pushBuildxProblem(
+            `${filePath}:${usesNode.line}: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)`,
+          );
+          continue;
+        }
+
+        const effectiveImage = rawImageValues.at(-1);
+        const expandedImage = resolveEnvExpressionCandidates(
+          effectiveImage.text,
+          stepEnv,
+          effectiveImage.line,
+        );
+        if (expandedImage.truncated) {
+          pushBuildxProblem(
+            `${filePath}:${effectiveImage.line}: ${effectiveImage.text} exceeds expansion limit and cannot be verified exhaustively`,
+          );
+        }
+        for (const envCandidate of expandedImage.candidates) {
+          for (const candidate of expandMatrixReferences(
+            envCandidate.text,
+            rowList,
+            envCandidate.line,
+          )) {
+            const imageRef = candidate.text.trim();
+            if (!imageRef) {
+              pushBuildxProblem(
+                `${filePath}:${usesNode.line}: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)`,
+              );
+              continue;
+            }
+            if (!isDynamicReference(imageRef) && !isPinnedDigest(imageRef)) {
+              pushBuildxProblem(
+                `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`,
+              );
+            }
+          }
+        }
+      }
     } else if (
       usesNode?.kind === "scalar" &&
       /^docker\/build-push-action@/iu.test(String(usesNode.value).trim())
@@ -4979,8 +5272,10 @@ export function unpinnedWorkflowContainerReferences(
 }
 
 // Resolve Dockerfile `$ARG`, `${ARG}`, `${ARG:-default}`, `${ARG-default}`,
-// `${ARG:+alternate}`, and `${ARG+alternate}` expansions.
-function resolveBuildArgs(token, buildArgs, depth = 0) {
+// `${ARG:+alternate}`, and `${ARG+alternate}` expansions. Unset ARGs without a
+// dynamic runtime override evaluate to the empty string per BuildKit semantics,
+// while still distinguishing unset from empty for `-` / `+` operators.
+function resolveBuildArgs(token, buildArgs, depth = 0, dynamicArgs = null) {
   if (depth > 8) {
     return token;
   }
@@ -5008,19 +5303,27 @@ function resolveBuildArgs(token, buildArgs, depth = 0) {
           /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:(?<op>:-|:\+|-|\+)(?<word>.*))?$/su.exec(inner);
         if (exprMatch) {
           const { name, op, word } = exprMatch.groups;
+          const isDynamic = Boolean(dynamicArgs?.has(name));
           const isSet = buildArgs.has(name);
           const value = isSet ? buildArgs.get(name) : "";
-          if (!op) {
-            output += isSet ? value : token.slice(index, cursor);
+          if (isDynamic) {
+            output += token.slice(index, cursor);
+          } else if (!op) {
+            output += isSet ? value : "";
           } else if (op === ":-") {
             output +=
-              isSet && value.length > 0 ? value : resolveBuildArgs(word, buildArgs, depth + 1);
+              isSet && value.length > 0
+                ? value
+                : resolveBuildArgs(word, buildArgs, depth + 1, dynamicArgs);
           } else if (op === "-") {
-            output += isSet ? value : resolveBuildArgs(word, buildArgs, depth + 1);
+            output += isSet ? value : resolveBuildArgs(word, buildArgs, depth + 1, dynamicArgs);
           } else if (op === ":+") {
-            output += isSet && value.length > 0 ? resolveBuildArgs(word, buildArgs, depth + 1) : "";
+            output +=
+              isSet && value.length > 0
+                ? resolveBuildArgs(word, buildArgs, depth + 1, dynamicArgs)
+                : "";
           } else if (op === "+") {
-            output += isSet ? resolveBuildArgs(word, buildArgs, depth + 1) : "";
+            output += isSet ? resolveBuildArgs(word, buildArgs, depth + 1, dynamicArgs) : "";
           }
           index = cursor - 1;
           continue;
@@ -5031,7 +5334,11 @@ function resolveBuildArgs(token, buildArgs, depth = 0) {
     const bareMatch = /^(?<bare>[A-Za-z_][A-Za-z0-9_]*)/u.exec(token.slice(index + 1));
     if (bareMatch) {
       const name = bareMatch.groups.bare;
-      output += buildArgs.has(name) ? buildArgs.get(name) : `$${name}`;
+      if (dynamicArgs?.has(name)) {
+        output += `$${name}`;
+      } else {
+        output += buildArgs.has(name) ? buildArgs.get(name) : "";
+      }
       index += name.length;
       continue;
     }
@@ -5447,7 +5754,7 @@ export function unpinnedContainerfileReferences(
     }
 
     if (multiArgs.length === 0) {
-      return { values: [resolveBuildArgs(token, rawValues)], truncated };
+      return { values: [resolveBuildArgs(token, rawValues, 0, dynamicOverriddenArgs)], truncated };
     }
 
     let combinations = [rawValues];
@@ -5473,7 +5780,7 @@ export function unpinnedContainerfileReferences(
     const seen = new Set();
     const resolvedList = [];
     for (const combo of combinations) {
-      const resolved = resolveBuildArgs(token, combo);
+      const resolved = resolveBuildArgs(token, combo, 0, dynamicOverriddenArgs);
       if (!seen.has(resolved)) {
         seen.add(resolved);
         resolvedList.push(resolved);

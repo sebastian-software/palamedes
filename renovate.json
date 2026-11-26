@@ -4,7 +4,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Track digest-pinned Docker images referenced in shell commands of GitHub workflows and composite actions",
+      "description": "Track digest-pinned Docker images referenced in shell commands and action inputs of GitHub workflows and composite actions",
       "managerFilePatterns": ["/^\\.github/(?:workflows|actions)/.+\\.ya?ml$/"],
       "matchStrings": [
         "(?:^|[\\s=\"'])(?<depName>(?:[a-z0-9.-]+\\.[a-z0-9.-]+(?::\\d+)?/)?[a-z0-9]+(?:[._/-][a-z0-9]+)*):(?<currentValue>[A-Za-z0-9._-]+)@(?<currentDigest>sha256:[0-9a-f]{64})"

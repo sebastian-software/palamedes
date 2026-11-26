@@ -1493,7 +1493,7 @@ describe("workflow contracts", () => {
       ),
     ).toEqual([
       "<memory>:7: node:24 is not pinned to a sha256 digest",
-      "<memory>:7: node:24 is not pinned to a sha256 digest",
+      "<memory>:12: node:24 is not pinned to a sha256 digest",
     ]);
     expect(
       unpinnedWorkflowContainerReferences(
@@ -1515,7 +1515,7 @@ describe("workflow contracts", () => {
       ),
     ).toEqual([
       "<memory>:6: node:24 is not pinned to a sha256 digest",
-      "<memory>:9: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:12: alpine:3.20 is not pinned to a sha256 digest",
     ]);
     // Matrix `include` merges into matching base rows (including all original rows
     // when an include introduces only new keys), and `exclude` removes dropped rows.
@@ -2001,6 +2001,14 @@ describe("workflow contracts", () => {
       "<memory>:2: alpine:3.20 is not pinned to a sha256 digest",
     ]);
     expect(unpinnedContainerfileReferences("ARG BASE\nFROM ${BASE+alpine:3.20}\n")).toEqual([]);
+    expect(unpinnedContainerfileReferences("ARG VARIANT\nFROM node:24${VARIANT}\n")).toEqual([
+      "<memory>:2: node:24 is not pinned to a sha256 digest",
+    ]);
+    expect(
+      unpinnedContainerfileReferences("ARG VARIANT\nFROM node:24${VARIANT}\n", "<memory>", {
+        argOverrides: new Map([["VARIANT", { values: [`@${digest}`], truncated: false }]]),
+      }),
+    ).toEqual([]);
     expect(
       unpinnedWorkflowContainerReferences(
         [
@@ -2024,6 +2032,16 @@ describe("workflow contracts", () => {
           "          EOF",
           "          cat ci/build.recipe | docker build -f - .",
           "          buildah --storage-driver vfs pull ubuntu:24.04",
+          "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
+          "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
+          "        with:",
+          "          driver-opts: image=moby/buildkit:v0.35.1",
+          "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
+          "        with:",
+          `          driver-opts: image=moby/buildkit:v0.35.1@${digest}`,
+          "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
+          "        with:",
+          "          driver: docker",
           "  case-insensitive-contexts:",
           "    runs-on: ubuntu-24.04",
           "    env:",
@@ -2031,9 +2049,12 @@ describe("workflow contracts", () => {
           "    strategy:",
           "      matrix:",
           "        image: [alpine:3.20]",
+          "        flags: ['--platform linux/amd64']",
           "    container: ${{ Matrix.image }}",
           "    steps:",
           "      - run: docker pull ${{ Env.BASE_IMG }}",
+          `      - run: docker run \${{ matrix.flags }} node:24@${digest} node -v`,
+          "      - run: docker run ${{ matrix.flags }} debian:12 node -v",
           "",
         ].join("\n"),
       ),
@@ -2044,8 +2065,11 @@ describe("workflow contracts", () => {
       "<memory>:17: redis:7 is not pinned to a sha256 digest",
       "<memory>:19: stdin containerfile input cannot be verified statically",
       "<memory>:20: ubuntu:24.04 is not pinned to a sha256 digest",
-      "<memory>:27: alpine:3.20 is not pinned to a sha256 digest",
-      "<memory>:24: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:21: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
+      "<memory>:24: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
+      "<memory>:37: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:34: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:43: debian:12 is not pinned to a sha256 digest",
     ]);
     const buildFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-builds-"));
     try {
@@ -2095,6 +2119,7 @@ describe("workflow contracts", () => {
         `ARG TAG_BASE=node:24@${digest}\nFROM \${TAG_BASE}\n`,
       );
       await writeFile(join(buildFixture, "ci", "cmdsub", "sub.recipe"), "FROM ruby:3.4\n");
+      await writeFile(join(buildFixture, "ci", "popd.recipe"), "FROM perl:5.40\n");
       await writeFile(
         join(buildFixture, ".github", "workflows", "cd-and-ctx.yml"),
         [
@@ -2129,8 +2154,10 @@ describe("workflow contracts", () => {
           "          buildah bud --build-arg BUILDAH_BASE=nginx:1.27 ci/dual",
           "          docker build --build-arg DOCKER_BASE=python:3.13 ci/dual",
           "          docker build -tfrontend --build-arg TAG_BASE=erlang:27 ci/tag-opt",
-          "          cd ci/cmdsub",
+          "          pushd ci/cmdsub",
           "          IMAGE_ID=$(docker build -q -f sub.recipe .)",
+          "          popd",
+          "          docker build -f ci/popd.recipe .",
           "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
           "        with:",
           `          build-contexts: rootctx=docker-image://node:24@${digest}`,
@@ -2146,6 +2173,7 @@ describe("workflow contracts", () => {
         "Dockerfile:1: rootctx is not pinned to a sha256 digest",
         "ci/cmdsub/sub.recipe:1: ruby:3.4 is not pinned to a sha256 digest",
         "ci/nested-b/cd.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
+        "ci/popd.recipe:1: perl:5.40 is not pinned to a sha256 digest",
         "ci/shared.recipe:1: maybectx is not pinned to a sha256 digest",
         "ci/stdin-attached.recipe:1: debian:12 is not pinned to a sha256 digest",
         "ci/win/win.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
@@ -2316,10 +2344,12 @@ describe("workflow contracts", () => {
       ),
     ).toEqual(["<memory>:5: matrix exceeds 256 combinations and cannot be verified exhaustively"]);
 
-    // Renovate custom manager extracts the digest-pinned musl action images.
-    const [renovateConfig, verifyMuslAction] = await Promise.all([
+    // Renovate custom manager extracts the digest-pinned musl action images and
+    // the BuildKit daemon image pinned in `publish-examples-container.yml`.
+    const [renovateConfig, verifyMuslAction, publishExamples] = await Promise.all([
       readRepositoryFile("renovate.json").then(JSON.parse),
       readRepositoryFile(".github/actions/verify-musl-native/action.yml"),
+      readRepositoryFile(".github/workflows/publish-examples-container.yml"),
     ]);
     const manager = renovateConfig.customManagers?.find(
       (entry) => entry.customType === "regex" && entry.datasourceTemplate === "docker",
@@ -2335,6 +2365,14 @@ describe("workflow contracts", () => {
       { depName: "rust", currentValue: `${rustVersion}-alpine`, hasDigest: true },
       { depName: "node", currentValue: "24-alpine", hasDigest: true },
       { depName: "node", currentValue: "24-alpine", hasDigest: true },
+    ]);
+    const publishExtracted = [...publishExamples.matchAll(pattern)].map((match) => ({
+      depName: match.groups.depName,
+      currentValue: match.groups.currentValue,
+      hasDigest: /^sha256:[0-9a-f]{64}$/u.test(match.groups.currentDigest),
+    }));
+    expect(publishExtracted).toEqual([
+      { depName: "moby/buildkit", currentValue: "v0.35.1", hasDigest: true },
     ]);
     for (const fileName of [".github/actions/verify-musl-native/action.yml", "Containerfile"]) {
       const rules = (renovateConfig.packageRules ?? []).filter((rule) =>
