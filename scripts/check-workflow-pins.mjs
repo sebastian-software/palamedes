@@ -3028,10 +3028,11 @@ function inspectBuildContextSpec(
       varCandidate.line,
     )) {
       const value = candidate.text.trim();
-      if (!/^docker-image:\/\//iu.test(value)) {
+      const schemeMatch = /^(?:docker-image|container-image):\/\//iu.exec(value);
+      if (!schemeMatch) {
         continue;
       }
-      const imageRef = value.slice("docker-image://".length);
+      const imageRef = value.slice(schemeMatch[0].length);
       if (isDynamicReference(imageRef, shellMode)) {
         continue;
       }
@@ -3040,6 +3041,38 @@ function inspectBuildContextSpec(
           `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`,
         );
       }
+    }
+  }
+}
+
+function checkBuildkitSyntaxOverride(entry, reportFile, reportLine, problems) {
+  if (!entry) {
+    return;
+  }
+  const values = Array.isArray(entry) ? entry : entry.values;
+  const truncated = Array.isArray(entry) ? false : Boolean(entry.truncated);
+  if (truncated) {
+    problems.push(
+      `${reportFile}:${reportLine}: BUILDKIT_SYNTAX exceeds build-arg expansion limit and cannot be verified exhaustively`,
+    );
+  }
+  let reportedDynamic = false;
+  for (const rawValue of values) {
+    const value = stripQuotes(String(rawValue ?? ""));
+    if (!value) {
+      continue;
+    }
+    if (isDynamicReference(value)) {
+      if (!reportedDynamic) {
+        reportedDynamic = true;
+        problems.push(
+          `${reportFile}:${reportLine}: build-arg BUILDKIT_SYNTAX overrides BuildKit syntax frontend dynamically and cannot be verified`,
+        );
+      }
+      continue;
+    }
+    if (!isPinnedDigest(value)) {
+      problems.push(`${reportFile}:${reportLine}: ${value} is not pinned to a sha256 digest`);
     }
   }
 }
@@ -3886,6 +3919,7 @@ function inspectShellText(
 
       const buildRows = matrixRows.length > 0 ? matrixRows : [null];
       const seenContextProblems = new Set();
+      const seenSyntaxProblems = new Set();
       const seenStdinProblems = new Set();
       const pushStdinProblem = (message) => {
         if (!seenStdinProblems.has(message)) {
@@ -3932,10 +3966,6 @@ function inspectShellText(
           }
         }
 
-        if (usesStdinContextArchive) {
-          continue;
-        }
-
         const buildArgsMap = new Map();
         for (const rawBuildArg of rawBuildArgs) {
           const parsedArg = expandBuildArgSpec(
@@ -3953,6 +3983,26 @@ function inspectShellText(
               truncated: parsedArg.truncated,
             });
           }
+        }
+
+        if (buildArgsMap.has("BUILDKIT_SYNTAX")) {
+          const rowSyntaxProblems = [];
+          checkBuildkitSyntaxOverride(
+            buildArgsMap.get("BUILDKIT_SYNTAX"),
+            filePath,
+            lineNumber,
+            rowSyntaxProblems,
+          );
+          for (const message of rowSyntaxProblems) {
+            if (!seenSyntaxProblems.has(message)) {
+              seenSyntaxProblems.add(message);
+              problems.push(message);
+            }
+          }
+        }
+
+        if (usesStdinContextArchive) {
+          continue;
         }
 
         const activeWorkingDirs =
@@ -4342,80 +4392,101 @@ function inspectShellRunScript(
     }
   }
 
-  // GitHub Actions substitutes `${{ matrix.* }}` expressions into the `run:`
-  // script before the shell parses arguments. Expand statically known matrix
-  // expressions per row prior to lexing so values like `--platform linux/amd64`
-  // tokenize as flags instead of being mistaken for the image operand.
-  if (
-    matrixRows.length > 0 &&
-    new RegExp(MATRIX_EXPRESSION_PATTERN.source, "iu").test(scriptText)
-  ) {
+  // GitHub Actions substitutes `${{ matrix.* }}` and `${{ env.* }}` expressions
+  // into the `run:` script before the shell parses arguments. Expand statically
+  // known expressions prior to lexing so values like `--platform linux/amd64`
+  // or `--rm` tokenize as flags instead of being mistaken for the image operand.
+  const hasMatrixExpr =
+    matrixRows.length > 0 && new RegExp(MATRIX_EXPRESSION_PATTERN.source, "iu").test(scriptText);
+  const hasEnvExpr =
+    stepEnv.size > 0 && new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(scriptText);
+  if (hasMatrixExpr || hasEnvExpr) {
     const seenStepProblems = new Set();
-    const perRowEmitted = [];
+    const perRunEmitted = [];
     const substituteMatrixForRow = (text, row) =>
       text.replace(MATRIX_EXPRESSION_PATTERN, (match, _p1, _offset, _str, groups) => {
         const resolved = resolveMatrixPath(row, parseMatrixPathSegments(groups.path));
         return resolved ? resolved.value : match;
       });
 
-    for (const row of matrixRows) {
-      const expandedScript = substituteMatrixForRow(scriptText, row);
-      const expandedSourceLines = sourceLines
-        ? sourceLines.map((entry) => ({
-            ...entry,
-            text: substituteMatrixForRow(entry.text, row),
-          }))
-        : null;
-      const rowProblems = [];
-      const rowEmitted = emittedGithubEnv ? new Map() : null;
-      inspectShellText(
-        expandedScript,
-        runNode.line,
-        expandedSourceLines,
-        stepEnv,
-        initialShellVars,
-        [row],
-        filePath,
-        rowProblems,
-        rowEmitted,
-        shellMode,
-        0,
-        buildFileContext,
-      );
-      for (const problem of rowProblems) {
-        if (!seenStepProblems.has(problem)) {
-          seenStepProblems.add(problem);
-          problems.push(problem);
+    const effectiveRows = hasMatrixExpr ? matrixRows : [null];
+    for (const row of effectiveRows) {
+      const rowScript = row ? substituteMatrixForRow(scriptText, row) : scriptText;
+      const rowSourceLines =
+        row && sourceLines
+          ? sourceLines.map((entry) => ({
+              ...entry,
+              text: substituteMatrixForRow(entry.text, row),
+            }))
+          : sourceLines;
+
+      let scriptVariants = [rowScript];
+      if (hasEnvExpr && new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(rowScript)) {
+        const expandedEnv = resolveEnvExpressionCandidates(rowScript, stepEnv, runNode.line);
+        if (expandedEnv.truncated) {
+          const limitMessage = `${filePath}:${runNode.line}: run script env expression exceeds expansion limit and cannot be verified exhaustively`;
+          if (!seenStepProblems.has(limitMessage)) {
+            seenStepProblems.add(limitMessage);
+            problems.push(limitMessage);
+          }
         }
+        scriptVariants = expandedEnv.candidates.map((candidate) => candidate.text);
       }
-      if (rowEmitted) {
-        perRowEmitted.push(rowEmitted);
+
+      for (const expandedScript of scriptVariants) {
+        const rowProblems = [];
+        const rowEmitted = emittedGithubEnv ? new Map() : null;
+        inspectShellText(
+          expandedScript,
+          runNode.line,
+          rowSourceLines,
+          stepEnv,
+          initialShellVars,
+          row ? [row] : matrixRows,
+          filePath,
+          rowProblems,
+          rowEmitted,
+          shellMode,
+          0,
+          buildFileContext,
+        );
+        for (const problem of rowProblems) {
+          if (!seenStepProblems.has(problem)) {
+            problems.push(problem);
+          }
+        }
+        for (const problem of rowProblems) {
+          seenStepProblems.add(problem);
+        }
+        if (rowEmitted) {
+          perRunEmitted.push(rowEmitted);
+        }
       }
     }
 
-    if (emittedGithubEnv && perRowEmitted.length > 0) {
+    if (emittedGithubEnv && perRunEmitted.length > 0) {
       const allKeys = new Set();
-      for (const rowMap of perRowEmitted) {
+      for (const rowMap of perRunEmitted) {
         for (const key of rowMap.keys()) {
           allKeys.add(key);
         }
       }
       for (const key of allKeys) {
         let mergedEntries = [];
-        let conditionalAcrossRows = false;
-        for (const rowMap of perRowEmitted) {
+        let conditionalAcrossRuns = false;
+        for (const rowMap of perRunEmitted) {
           const record = rowMap.get(key);
           if (!record) {
-            conditionalAcrossRows = true;
+            conditionalAcrossRuns = true;
             continue;
           }
           if (record.conditional) {
-            conditionalAcrossRows = true;
+            conditionalAcrossRuns = true;
           }
           mergedEntries = mergeVarEntries(mergedEntries, record.entries);
         }
         if (mergedEntries.length > 0) {
-          recordGithubEnvWrite(emittedGithubEnv, key, mergedEntries, conditionalAcrossRows);
+          recordGithubEnvWrite(emittedGithubEnv, key, mergedEntries, conditionalAcrossRuns);
         }
       }
     }
@@ -4737,6 +4808,7 @@ function checkStepsList(
       const buildContextsNode = getMapField(withNode, "build-contexts");
       const actionRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
       const seenActionContextProblems = new Set();
+      const seenActionSyntaxProblems = new Set();
 
       for (const row of actionRows) {
         const rowList = row ? [row] : [];
@@ -4767,6 +4839,46 @@ function checkStepsList(
             }
           }
         }
+        const actionBuildArgs = new Map();
+        if (buildArgsNode?.kind === "scalar") {
+          for (const rawLine of String(buildArgsNode.value).split(/\r?\n/u)) {
+            const trimmedLine = rawLine.trim();
+            if (!trimmedLine || trimmedLine.startsWith("#")) {
+              continue;
+            }
+            const parsedArg = expandBuildArgSpec(
+              trimmedLine,
+              stepEnv,
+              stepEnv,
+              stepEnv,
+              rowList,
+              buildArgsNode.line,
+              "posix",
+            );
+            if (parsedArg) {
+              actionBuildArgs.set(parsedArg.name, {
+                values: parsedArg.values,
+                truncated: parsedArg.truncated,
+              });
+            }
+          }
+        }
+        const invocationLine = buildArgsNode?.line ?? buildContextsNode?.line ?? usesNode.line;
+        if (actionBuildArgs.has("BUILDKIT_SYNTAX")) {
+          const actionSyntaxProblems = [];
+          checkBuildkitSyntaxOverride(
+            actionBuildArgs.get("BUILDKIT_SYNTAX"),
+            filePath,
+            invocationLine,
+            actionSyntaxProblems,
+          );
+          for (const message of actionSyntaxProblems) {
+            if (!seenActionSyntaxProblems.has(message)) {
+              seenActionSyntaxProblems.add(message);
+              problems.push(message);
+            }
+          }
+        }
         if (!buildFileContext) {
           continue;
         }
@@ -4791,30 +4903,6 @@ function checkStepsList(
               if (recorded) {
                 resolvedActionFiles.push(recorded);
               }
-            }
-          }
-        }
-        const actionBuildArgs = new Map();
-        if (buildArgsNode?.kind === "scalar") {
-          for (const rawLine of String(buildArgsNode.value).split(/\r?\n/u)) {
-            const trimmedLine = rawLine.trim();
-            if (!trimmedLine || trimmedLine.startsWith("#")) {
-              continue;
-            }
-            const parsedArg = expandBuildArgSpec(
-              trimmedLine,
-              stepEnv,
-              stepEnv,
-              stepEnv,
-              rowList,
-              buildArgsNode.line,
-              "posix",
-            );
-            if (parsedArg) {
-              actionBuildArgs.set(parsedArg.name, {
-                values: parsedArg.values,
-                truncated: parsedArg.truncated,
-              });
             }
           }
         }
@@ -4857,7 +4945,6 @@ function checkStepsList(
             }
           }
         }
-        const invocationLine = buildArgsNode?.line ?? buildContextsNode?.line ?? usesNode.line;
         for (const targetFile of resolvedActionFiles) {
           recordBuildInvocation(
             targetFile,
@@ -5694,20 +5781,30 @@ export function unpinnedContainerfileReferences(
     }
     inHeaderDirectives = false;
     const startLine = index + 1 + startLineOffset;
-    let combined = trimmed;
+    let combined = line.trimStart().trimEnd();
     while (combined.endsWith(escapeChar) && index + 1 < rawLines.length) {
       index += 1;
-      const nextTrimmed = rawLines[index].trim();
+      const nextLine = rawLines[index].trimEnd();
+      const nextTrimmed = nextLine.trimStart();
       if (nextTrimmed.length === 0 || nextTrimmed.startsWith("#")) {
         continue;
       }
-      combined = `${combined.slice(0, -1)} ${nextTrimmed}`;
+      combined = `${combined.slice(0, -1)}${nextLine}`;
     }
     if (combined.endsWith(escapeChar)) {
       combined = combined.slice(0, -1).trimEnd();
     }
     pendingHeredocs.push(...extractDockerfileHeredocDelimiters(combined));
     logicalLines.push({ lineNumber: startLine, text: combined });
+  }
+
+  if (argOverrides?.has("BUILDKIT_SYNTAX")) {
+    checkBuildkitSyntaxOverride(
+      argOverrides.get("BUILDKIT_SYNTAX"),
+      sourceFile ?? filePath,
+      sourceLine ?? 1,
+      problems,
+    );
   }
 
   const stages = new Set();
@@ -5990,7 +6087,7 @@ export function checkWorkflowPins(root = process.cwd()) {
     }
   }
 
-  const seenContainerProblems = new Set();
+  const seenContainerProblems = new Set(problems);
   const pushContainerProblem = (problem) => {
     if (!seenContainerProblems.has(problem)) {
       seenContainerProblems.add(problem);

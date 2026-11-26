@@ -1373,7 +1373,7 @@ describe("workflow contracts", () => {
       ),
     ).toEqual([
       "<memory>:2: node:24 is not pinned to a sha256 digest",
-      "<memory>:2: node:24 is not pinned to a sha256 digest",
+      "<memory>:7: node:24 is not pinned to a sha256 digest",
     ]);
     expect(
       unpinnedWorkflowContainerReferences(
@@ -2009,6 +2009,19 @@ describe("workflow contracts", () => {
         argOverrides: new Map([["VARIANT", { values: [`@${digest}`], truncated: false }]]),
       }),
     ).toEqual([]);
+    // Dockerfile continuations preserve exact token boundaries without inserting
+    // extra spaces, and `BUILDKIT_SYNTAX` overrides are checked even without an
+    // explicit `ARG BUILDKIT_SYNTAX` declaration.
+    expect(unpinnedContainerfileReferences(`FROM node:24@sha256:\\\n${"a".repeat(64)}\n`)).toEqual(
+      [],
+    );
+    expect(
+      unpinnedContainerfileReferences(`FROM node:24@${digest}\n`, "<memory>", {
+        argOverrides: new Map([
+          ["BUILDKIT_SYNTAX", { values: ["docker/dockerfile:1"], truncated: false }],
+        ]),
+      }),
+    ).toEqual(["<memory>:1: docker/dockerfile:1 is not pinned to a sha256 digest"]);
     expect(
       unpinnedWorkflowContainerReferences(
         [
@@ -2032,6 +2045,8 @@ describe("workflow contracts", () => {
           "          EOF",
           "          cat ci/build.recipe | docker build -f - .",
           "          buildah --storage-driver vfs pull ubuntu:24.04",
+          "          docker build --build-arg BUILDKIT_SYNTAX=docker/dockerfile:1.9 .",
+          "          podman build --build-context pctx=container-image://traefik:3 .",
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "        with:",
@@ -2042,10 +2057,14 @@ describe("workflow contracts", () => {
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "        with:",
           "          driver: docker",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v7",
+          "        with:",
+          "          build-args: BUILDKIT_SYNTAX=docker/dockerfile:1.10",
           "  case-insensitive-contexts:",
           "    runs-on: ubuntu-24.04",
           "    env:",
           "      BASE_IMG: busybox:1.37",
+          "      RUN_FLAGS: --rm",
           "    strategy:",
           "      matrix:",
           "        image: [alpine:3.20]",
@@ -2053,6 +2072,8 @@ describe("workflow contracts", () => {
           "    container: ${{ Matrix.image }}",
           "    steps:",
           "      - run: docker pull ${{ Env.BASE_IMG }}",
+          `      - run: docker run \${{ env.RUN_FLAGS }} node:24@${digest} node -v`,
+          "      - run: docker run ${{ env.RUN_FLAGS }} caddy:2 node -v",
           `      - run: docker run \${{ matrix.flags }} node:24@${digest} node -v`,
           "      - run: docker run ${{ matrix.flags }} debian:12 node -v",
           "",
@@ -2065,11 +2086,15 @@ describe("workflow contracts", () => {
       "<memory>:17: redis:7 is not pinned to a sha256 digest",
       "<memory>:19: stdin containerfile input cannot be verified statically",
       "<memory>:20: ubuntu:24.04 is not pinned to a sha256 digest",
-      "<memory>:21: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
-      "<memory>:24: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
-      "<memory>:37: alpine:3.20 is not pinned to a sha256 digest",
-      "<memory>:34: busybox:1.37 is not pinned to a sha256 digest",
-      "<memory>:43: debian:12 is not pinned to a sha256 digest",
+      "<memory>:21: docker/dockerfile:1.9 is not pinned to a sha256 digest",
+      "<memory>:22: traefik:3 is not pinned to a sha256 digest",
+      "<memory>:23: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
+      "<memory>:26: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
+      "<memory>:35: docker/dockerfile:1.10 is not pinned to a sha256 digest",
+      "<memory>:43: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:47: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:49: caddy:2 is not pinned to a sha256 digest",
+      "<memory>:51: debian:12 is not pinned to a sha256 digest",
     ]);
     const buildFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-builds-"));
     try {
@@ -2372,7 +2397,21 @@ describe("workflow contracts", () => {
       hasDigest: /^sha256:[0-9a-f]{64}$/u.test(match.groups.currentDigest),
     }));
     expect(publishExtracted).toEqual([
-      { depName: "moby/buildkit", currentValue: "v0.35.1", hasDigest: true },
+      {
+        depName: "moby/buildkit",
+        currentValue: expect.stringMatching(/^v\d+\.\d+\.\d+$/u),
+        hasDigest: true,
+      },
+    ]);
+    const buildkitFixtureExtracted = [
+      ...`image=moby/buildkit:v0.35.1@${digest}`.matchAll(pattern),
+    ].map((match) => ({
+      depName: match.groups.depName,
+      currentValue: match.groups.currentValue,
+      currentDigest: match.groups.currentDigest,
+    }));
+    expect(buildkitFixtureExtracted).toEqual([
+      { depName: "moby/buildkit", currentValue: "v0.35.1", currentDigest: digest },
     ]);
     for (const fileName of [".github/actions/verify-musl-native/action.yml", "Containerfile"]) {
       const rules = (renovateConfig.packageRules ?? []).filter((rule) =>
