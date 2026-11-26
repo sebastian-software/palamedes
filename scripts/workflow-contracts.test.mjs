@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -1892,7 +1892,8 @@ describe("workflow contracts", () => {
         "ci/images/runtime.build:3: alpine:3.20 is not pinned to a sha256 digest",
         "ci/ctx/Dockerfile:2: busybox:1.37 is not pinned to a sha256 digest",
       ]);
-      // Irrelevant multi-valued build-args do not mask an unpinned 9th base image.
+      // Irrelevant multi-valued build-args do not mask an unpinned 9th base image,
+      // and nested `${BASE:-$DEFAULT_BASE}` fallback ARGs are resolved.
       expect(
         unpinnedContainerfileReferences("ARG BASE\nARG UNUSED\nFROM ${BASE}\n", "<memory>", {
           argOverrides: new Map([
@@ -1913,8 +1914,61 @@ describe("workflow contracts", () => {
           ]),
         }),
       ).toEqual(["<memory>:3: alpine:3.20 is not pinned to a sha256 digest"]);
+      expect(
+        unpinnedContainerfileReferences(
+          "ARG DEFAULT_BASE=alpine:3.20\nARG BASE\nFROM ${BASE:-$DEFAULT_BASE}\n",
+        ),
+      ).toEqual(["<memory>:3: alpine:3.20 is not pinned to a sha256 digest"]);
     } finally {
       await rm(fixtureRoot, { recursive: true, force: true });
+    }
+    // Bundled short Docker options (`-itv`), `buildah pull` / `buildah from`,
+    // `cd`-relative build files, per-row shell build-arg pairing, non-universal
+    // named contexts, and repository-local symlinked Dockerfiles.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          `  - run: docker run -itv cache:/cache node:24@${digest} node -v`,
+          "  - run: buildah from scratch",
+          "  - run: buildah pull alpine:3.20",
+          "  - run: buildah from busybox:1.37",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:4: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:5: busybox:1.37 is not pinned to a sha256 digest",
+    ]);
+    const symlinkFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-symlink-"));
+    try {
+      await mkdir(join(symlinkFixture, ".github", "workflows"), { recursive: true });
+      await mkdir(join(symlinkFixture, "ci", "nested"), { recursive: true });
+      await writeFile(join(symlinkFixture, "ci", "target.recipe"), "FROM alpine:3.20\n");
+      await symlink("ci/target.recipe", join(symlinkFixture, "Dockerfile"));
+      await writeFile(join(symlinkFixture, "ci", "nested", "cd.recipe"), "FROM busybox:1.37\n");
+      await writeFile(join(symlinkFixture, "ci", "shared.recipe"), `FROM maybectx\n`);
+      await writeFile(
+        join(symlinkFixture, ".github", "workflows", "cd-and-ctx.yml"),
+        [
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - run: cd ci/nested && docker build -f cd.recipe .",
+          `      - run: docker build --build-context maybectx=docker-image://node:24@${digest} -f ci/shared.recipe .`,
+          "      - run: docker build -f ci/shared.recipe .",
+          "",
+        ].join("\n"),
+      );
+      const symlinkResult = checkWorkflowPins(symlinkFixture);
+      expect(symlinkResult.problems).toEqual([
+        "ci/nested/cd.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
+        "ci/shared.recipe:1: maybectx is not pinned to a sha256 digest",
+        "ci/target.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(symlinkFixture, { recursive: true, force: true });
     }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
