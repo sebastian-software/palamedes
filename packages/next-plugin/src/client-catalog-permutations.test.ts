@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import vm from "node:vm";
 
 import { describe, expect, it, vi } from "vitest";
 
 import {
   bindClientCatalogPermutationsAt,
-  manifestHasOptionalRootLocale,
   resolveRenderLocale,
   signClientCatalogLocaleHeader,
 } from "./client-catalog-binding";
@@ -15,10 +17,12 @@ import {
   assertNoBootstrapChunks,
   assertChunkCoverage,
   chunkReferences,
+  emitClientCatalogPermutations,
   filterLoadableManifest,
   inlineMessageExpression,
   renderManifestAdapter,
   renderVariants,
+  routeHasOptionalRootLocale,
   variantPath,
 } from "./client-catalog-permutations";
 
@@ -316,71 +320,63 @@ describe("locale resolution", () => {
         { headerSecret: secret, optionalRootLocale: true },
       ),
     ).toBe("en");
-    // Manifest inspection distinguishes root vs nested optional locale layouts
-    // without triggering any chunk array getters.
-    expect(
-      manifestHasOptionalRootLocale({
-        __RSC_MANIFEST: {
-          "/[[...locale]]/page": {
-            entryJSFiles: {
-              "[project]/src/app/[[...locale]]/layout": [],
-              "[project]/src/app/[[...locale]]/page": [],
-            },
-          },
-        },
-      }),
-    ).toBe(true);
-    expect(
-      manifestHasOptionalRootLocale({
-        __RSC_MANIFEST: {
-          "/shop/[[...locale]]/page": {
-            entryJSFiles: {
-              "[project]/src/app/layout": [],
-              "[project]/src/app/shop/[[...locale]]/layout": [],
-              "[project]/src/app/shop/[[...locale]]/page": [],
-            },
-          },
-        },
-      }),
-    ).toBe(false);
-    expect(
-      manifestHasOptionalRootLocale({
-        __RSC_MANIFEST: {
-          "/[[...locale]]/page": {
-            entryJSFiles: {
-              "[project]/src/app/layout": [],
-              "[project]/src/app/[[...locale]]/page": [],
-            },
-          },
-        },
-      }),
-    ).toBe(false);
-    expect(
-      manifestHasOptionalRootLocale({
-        __RSC_MANIFEST: {
-          "/shop/[[...locale]]/page": {
-            entryJSFiles: {
-              "[project]/src/app/shop/[[...locale]]/layout": [],
-              "[project]/src/app/shop/[[...locale]]/page": [],
-            },
-          },
-        },
-      }),
-    ).toBe(true);
-    const throwingEntryJSFiles: Record<string, unknown> = {};
-    Object.defineProperty(throwingEntryJSFiles, "[project]/src/app/[[...locale]]/layout", {
-      enumerable: false,
-      get() {
-        throw new Error("chunk getter must not be invoked during manifest inspection");
-      },
-    });
-    expect(
-      manifestHasOptionalRootLocale({
-        __RSC_MANIFEST: {
-          "/[[...locale]]/page": { entryJSFiles: throwingEntryJSFiles },
-        },
-      }),
-    ).toBe(true);
+    // Route-tree layout detection distinguishes root vs nested optional locale
+    // layouts regardless of whether the layout has client JS/CSS entries.
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-root-layout-tree-"));
+    try {
+      const writeLayout = (project: string, relativePath: string) => {
+        const target = path.join(fixtureRoot, project, relativePath);
+        mkdirSync(path.dirname(target), { recursive: true });
+        writeFileSync(
+          target,
+          "export default function Layout({ children }) { return children; }\n",
+        );
+      };
+
+      // Server-only root layout at app/shop/[[...locale]]/layout.jsx (no app/layout.jsx).
+      writeLayout("nested-root", "app/shop/[[...locale]]/layout.jsx");
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "nested-root"),
+          "shop/[[...locale]]/page_client-reference-manifest.js",
+        ),
+      ).toBe(true);
+
+      // Root layout at app/layout.jsx above app/shop/[[...locale]]/page.jsx.
+      writeLayout("top-layout", "app/layout.jsx");
+      writeLayout("top-layout", "app/shop/[[...locale]]/layout.jsx");
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "top-layout"),
+          "shop/[[...locale]]/page_client-reference-manifest.js",
+        ),
+      ).toBe(false);
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "top-layout"),
+          "[[...locale]]/page_client-reference-manifest.js",
+        ),
+      ).toBe(false);
+
+      // src/app/(marketing)/[[...locale]]/layout.page.tsx with custom pageExtensions.
+      writeLayout("src-custom-ext", "src/app/(marketing)/[[...locale]]/layout.page.tsx");
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "src-custom-ext"),
+          "(marketing)/[[...locale]]/page_client-reference-manifest.js",
+          ["page.tsx", "tsx"],
+        ),
+      ).toBe(true);
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "src-custom-ext"),
+          "(marketing)/[[...locale]]/page_client-reference-manifest.js",
+          ["tsx"],
+        ),
+      ).toBe(false);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
     // When `rootParams.locale` already decides in default route-first mode,
     // `unit.headers` is not even read.
     const spyHeaders = header("en");
@@ -400,6 +396,117 @@ describe("locale resolution", () => {
     expect(resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de") }))).toBe(
       "de",
     );
+  });
+
+  it("embeds optional-root-locale route-tree detection into built manifests without relying on layout asset entries", async () => {
+    const projectRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-built-optional-locale-"));
+    try {
+      // Minimal Palamedes project with two locales and a server-only root layout
+      // at app/shop/[[...locale]]/layout.jsx (omitted from entryJSFiles/entryCSSFiles,
+      // matching Next 16.4.6 Turbopack output for server-only layouts).
+      mkdirSync(path.join(projectRoot, "app/shop/[[...locale]]"), { recursive: true });
+      mkdirSync(path.join(projectRoot, "locales"), { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "palamedes.yaml"),
+        "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [app]\n",
+      );
+      writeFileSync(path.join(projectRoot, "locales/en.po"), 'msgid "Hello"\nmsgstr "Hello"\n');
+      writeFileSync(path.join(projectRoot, "locales/de.po"), 'msgid "Hello"\nmsgstr "Hallo"\n');
+      writeFileSync(
+        path.join(projectRoot, "app/shop/[[...locale]]/layout.jsx"),
+        "export default function Layout({ children }) { return children; }\n",
+      );
+
+      const distDir = path.join(projectRoot, ".next");
+      mkdirSync(path.join(distDir, "static/chunks"), { recursive: true });
+      mkdirSync(path.join(distDir, "server/app/shop/[[...locale]]"), { recursive: true });
+      const payload = Buffer.from(
+        JSON.stringify({ source: "app/shop/[[...locale]]/page.jsx", ids: ["Hello"] }),
+      ).toString("base64url");
+      writeFileSync(
+        path.join(distDir, "static/chunks/page.js"),
+        `export const msgs = clientCatalogMessages("pmds-next:aaaaaaaaaaaa:${payload}");\n`,
+      );
+      writeFileSync(
+        path.join(distDir, "build-manifest.json"),
+        JSON.stringify({ rootMainFiles: [] }),
+      );
+      const manifestPath = path.join(
+        distDir,
+        "server/app/shop/[[...locale]]/page_client-reference-manifest.js",
+      );
+      // Matches Next 16.4.6 Turbopack: entryJSFiles/entryCSSFiles contain only the
+      // client page and builtin fallbacks, with no layout key at all.
+      writeFileSync(
+        manifestPath,
+        `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
+globalThis.__RSC_MANIFEST["/shop/[[...locale]]/page"] = ${JSON.stringify({
+          entryCSSFiles: { "[project]/app/shop/[[...locale]]/page": [] },
+          entryJSFiles: { "[project]/app/shop/[[...locale]]/page": ["static/chunks/page.js"] },
+        })};`,
+      );
+
+      await emitClientCatalogPermutations({
+        distDir,
+        projectRoot,
+        failOnMissing: false,
+      });
+
+      const manifestSource = readFileSync(manifestPath, "utf8");
+      const context: Record<string, unknown> = { process: { env: {} } };
+      vm.runInNewContext(manifestSource, context);
+      const bind = context.__PALAMEDES_CLIENT_CATALOG_BIND as (
+        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
+      ) => void;
+      bind((availableLocales, fallbackLocale, optionalRootLocale) =>
+        resolveRenderLocale(
+          availableLocales,
+          fallbackLocale,
+          render("/shop/[[...locale]]"),
+          unit({ rootParams: {}, headers: header("de") }),
+          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
+        ),
+      );
+      const entryFiles = (
+        context.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
+      )["/shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/shop/[[...locale]]/page"]!;
+      // Because app/shop/[[...locale]]/layout.jsx is the root layout, an
+      // omitted locale on /shop must fall back to "en" instead of trusting the header.
+      expect(entryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+
+      // Adding a top-level app/layout.jsx moves the root layout above /shop/[[...locale]],
+      // so the same route now accepts the Proxy header in route-first mode.
+      writeFileSync(
+        path.join(projectRoot, "app/layout.jsx"),
+        "export default function RootLayout({ children }) { return children; }\n",
+      );
+      await emitClientCatalogPermutations({
+        distDir,
+        projectRoot,
+        failOnMissing: false,
+      });
+      const nestedManifestSource = readFileSync(manifestPath, "utf8");
+      const nestedContext: Record<string, unknown> = { process: { env: {} } };
+      vm.runInNewContext(nestedManifestSource, nestedContext);
+      const bindNested = nestedContext.__PALAMEDES_CLIENT_CATALOG_BIND as (
+        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
+      ) => void;
+      bindNested((availableLocales, fallbackLocale, optionalRootLocale) =>
+        resolveRenderLocale(
+          availableLocales,
+          fallbackLocale,
+          render("/shop/[[...locale]]"),
+          unit({ rootParams: {}, headers: header("de") }),
+          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
+        ),
+      );
+      const nestedEntryFiles = (
+        nestedContext.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
+      )["/shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/shop/[[...locale]]/page"]!;
+      expect(nestedEntryFiles[0]).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   it("supports opting into header precedence or route-only resolution", () => {

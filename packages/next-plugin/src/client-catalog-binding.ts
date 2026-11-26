@@ -93,14 +93,13 @@ export const CLIENT_CATALOG_PERMUTATIONS_ENV = "PALAMEDES_NEXT_CATALOG_PERMUTATI
 export const CLIENT_CATALOG_PERMUTATIONS_DIST_ENV = "__PALAMEDES_NEXT_CATALOG_PERMUTATIONS_DIST";
 const BIND_GLOBAL = "__PALAMEDES_CLIENT_CATALOG_BIND";
 
-type LocaleResolver = (locales: readonly string[], fallback: string) => string;
-type RouteManifestShape = {
-  entryJSFiles?: Record<string, unknown>;
-  entryCSSFiles?: Record<string, unknown>;
-};
+type LocaleResolver = (
+  locales: readonly string[],
+  fallback: string,
+  optionalRootLocale?: boolean,
+) => string;
 type BindableManifest = {
   [BIND_GLOBAL]?: (resolve: LocaleResolver) => void;
-  __RSC_MANIFEST?: Record<string, RouteManifestShape | undefined>;
 };
 
 type RenderStore = ReturnType<typeof workAsyncStorageType.getStore>;
@@ -108,8 +107,6 @@ type UnitStore = ReturnType<typeof workUnitAsyncStorageType.getStore>;
 
 const localeByRender = new WeakMap<object, string>();
 const ROOT_OPTIONAL_CATCH_ALL_LOCALE_ROUTE = /^\/(?:\([^/]+\)\/)*\[\[\.\.\.locale\]\](?:\/|$)/u;
-const LAYOUT_ENTRY_KEY_PATTERN = /(?:^|\/)layout$/u;
-const OPTIONAL_CATCH_ALL_LOCALE_DIR_PATTERN = /(?:^|\/)\[\[\.\.\.locale\]\]\//u;
 
 function hasRootOptionalLocaleRoute(render: RenderStore): boolean {
   if (!render) return false;
@@ -117,35 +114,6 @@ function hasRootOptionalLocaleRoute(render: RenderStore): boolean {
     return true;
   }
   return typeof render.page === "string" && ROOT_OPTIONAL_CATCH_ALL_LOCALE_ROUTE.test(render.page);
-}
-
-/**
- * Inspects a Next.js client reference manifest's layout keys without invoking
- * any chunk getters to determine whether the route's root layout sits at or
- * below an optional catch-all `[[...locale]]` segment.
- */
-export function manifestHasOptionalRootLocale(context: BindableManifest): boolean | undefined {
-  const rscManifest = context.__RSC_MANIFEST;
-  if (!rscManifest || typeof rscManifest !== "object") return;
-  const layoutPaths: string[] = [];
-  for (const routeKey of Object.getOwnPropertyNames(rscManifest)) {
-    const entry = rscManifest[routeKey];
-    if (!entry || typeof entry !== "object") continue;
-    for (const field of ["entryJSFiles", "entryCSSFiles"] as const) {
-      const table = entry[field];
-      if (!table || typeof table !== "object") continue;
-      for (const key of Object.getOwnPropertyNames(table)) {
-        const normalized = key.replaceAll("\\", "/");
-        if (LAYOUT_ENTRY_KEY_PATTERN.test(normalized)) {
-          layoutPaths.push(normalized);
-        }
-      }
-    }
-  }
-  if (layoutPaths.length === 0) return;
-  const minDepth = Math.min(...layoutPaths.map((entry) => entry.split("/").length));
-  const rootLayouts = layoutPaths.filter((entry) => entry.split("/").length === minDepth);
-  return rootLayouts.some((entry) => OPTIONAL_CATCH_ALL_LOCALE_DIR_PATTERN.test(entry));
 }
 
 /*
@@ -265,24 +233,25 @@ export function bindClientCatalogPermutationsAt(
     ...(hasHeaderSecret ? { headerSecret: options.headerSecret } : {}),
   };
 
+  const resolve: LocaleResolver = (locales, fallback, optionalRootLocale) => {
+    const { workAsyncStorage, workUnitAsyncStorage } = loadStorages();
+    return resolveRenderLocale(
+      locales,
+      fallback,
+      workAsyncStorage.getStore(),
+      workUnitAsyncStorage.getStore(),
+      typeof optionalRootLocale === "boolean"
+        ? { ...resolveOptions, optionalRootLocale }
+        : resolveOptions,
+    );
+  };
+
   const bound: string[] = [];
   for (const file of manifestFiles(path.join(distDir, "server", "app"))) {
     const context = evalManifest(file) as BindableManifest;
     const bind = context[BIND_GLOBAL];
     if (typeof bind !== "function") continue;
-    const optionalRootLocale = manifestHasOptionalRootLocale(context);
-    const manifestOptions: ResolveRenderLocaleOptions =
-      optionalRootLocale === undefined ? resolveOptions : { ...resolveOptions, optionalRootLocale };
-    bind((locales, fallback) => {
-      const { workAsyncStorage, workUnitAsyncStorage } = loadStorages();
-      return resolveRenderLocale(
-        locales,
-        fallback,
-        workAsyncStorage.getStore(),
-        workUnitAsyncStorage.getStore(),
-        manifestOptions,
-      );
-    });
+    bind(resolve);
     bound.push(file);
   }
   return bound;

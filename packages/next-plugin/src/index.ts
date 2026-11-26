@@ -712,6 +712,7 @@ export function withPalamedes(
                 distDir: metadata.distDir,
                 projectRoot,
                 ...(resolvedConfigPath ? { configPath: resolvedConfigPath } : {}),
+                ...(baseConfig.pageExtensions ? { pageExtensions: baseConfig.pageExtensions } : {}),
                 failOnMissing,
               });
               installClientCatalogPreload(metadata.distDir);

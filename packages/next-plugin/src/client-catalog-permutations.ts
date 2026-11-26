@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
@@ -129,6 +130,70 @@ export function inlineMessageExpression(messages: Record<string, string>): strin
   return `(()=>{${declarations}return (${literal});})()`;
 }
 
+const DEFAULT_PAGE_EXTENSIONS = ["tsx", "ts", "jsx", "js"] as const;
+
+function resolveAppDirectory(projectRoot: string): string | undefined {
+  const rootApp = path.join(projectRoot, "app");
+  if (existsSync(rootApp)) return rootApp;
+  const srcApp = path.join(projectRoot, "src", "app");
+  if (existsSync(srcApp)) return srcApp;
+  return;
+}
+
+function directoryHasLayout(directory: string, extensions: readonly string[]): boolean {
+  return extensions.some((ext) => {
+    const normalized = ext.startsWith(".") ? ext.slice(1) : ext;
+    return normalized.length > 0 && existsSync(path.join(directory, `layout.${normalized}`));
+  });
+}
+
+/**
+ * Determines from the App Router directory tree whether `manifestRelativePath`
+ * (relative to `<distDir>/server/app`) has an optional catch-all
+ * `[[...locale]]` segment at or above its root layout — matching Next.js's
+ * `getRootParamsImpl()`, which stops at the first `layout` along `children`.
+ */
+export function routeHasOptionalRootLocale(
+  projectRoot: string,
+  manifestRelativePath: string,
+  pageExtensions: readonly string[] = DEFAULT_PAGE_EXTENSIONS,
+): boolean {
+  const appDir = resolveAppDirectory(projectRoot);
+  if (!appDir) return false;
+  const routeDir = path.posix.dirname(manifestRelativePath.replaceAll("\\", "/"));
+  if (routeDir === "." || routeDir === "") return false;
+  const segments = routeDir.split("/").filter(Boolean);
+  const localeIndex = segments.indexOf("[[...locale]]");
+  if (localeIndex === -1) return false;
+
+  // Next's `getRootParamsImpl()` traverses only `parallelRoutes.children`, so
+  // any parallel-route slot above `[[...locale]]` cannot provide a root param.
+  for (let index = 0; index < localeIndex; index += 1) {
+    if (segments[index]!.startsWith("@")) return false;
+  }
+
+  // If any ancestor directory strictly above `[[...locale]]` defines a layout,
+  // that layout is the root layout and `[[...locale]]` is below it.
+  let current = appDir;
+  if (directoryHasLayout(current, pageExtensions)) return false;
+  for (let index = 0; index < localeIndex; index += 1) {
+    current = path.join(current, segments[index]!);
+    if (directoryHasLayout(current, pageExtensions)) return false;
+  }
+
+  // At least one layout must exist at `[[...locale]]` or a descendant along the
+  // route; otherwise Next injects its built-in root layout above the route.
+  current = path.join(current, segments[localeIndex]!);
+  if (directoryHasLayout(current, pageExtensions)) return true;
+  for (let index = localeIndex + 1; index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    if (segment.startsWith("@")) return false;
+    current = path.join(current, segment);
+    if (directoryHasLayout(current, pageExtensions)) return true;
+  }
+  return false;
+}
+
 /*
  * Appended to a client reference manifest. It keeps Next's own JavaScript and
  * replaces every array that names an affected chunk with a non-enumerable
@@ -141,13 +206,16 @@ export function renderManifestAdapter(
   locales: readonly string[],
   fallback: string,
   variants: Readonly<Record<string, readonly string[]>>,
+  options: { optionalRootLocale?: boolean } = {},
 ): string {
+  const optionalRootLocale = Boolean(options.optionalRootLocale);
   return `
 ${ADAPTER_MARKER}
 (function () {
   var locales = ${JSON.stringify(locales)};
   var fallback = ${JSON.stringify(fallback)};
   var variants = ${JSON.stringify(variants)};
+  var optionalRootLocale = ${JSON.stringify(optionalRootLocale)};
   var keys = Object.keys(variants);
   var resolve = null;
   var covered = Object.create(null);
@@ -182,7 +250,7 @@ ${ADAPTER_MARKER}
           if (resolve === null) {
             throw new Error("Palamedes client catalog permutations: this process renders without a bound locale resolver, so it cannot select locale chunks. Call bindClientCatalogPermutations() from register() in instrumentation.ts; during next build, the prerender workers need the Palamedes Node preload (experimental.workerThreads is not supported).");
           }
-          var index = locales.indexOf(resolve(locales, fallback));
+          var index = locales.indexOf(resolve(locales, fallback, optionalRootLocale));
           if (index === -1) throw new Error("Palamedes client catalog permutations: the resolved locale has no chunk permutation.");
           return tables[index];
         },
@@ -271,6 +339,7 @@ export type EmitClientCatalogPermutationsOptions = {
   distDir: string;
   projectRoot: string;
   configPath?: string;
+  pageExtensions?: readonly string[];
   failOnMissing: boolean;
 };
 
@@ -343,17 +412,32 @@ export async function emitClientCatalogPermutations(
     await writeFile(file, JSON.stringify(manifest));
   }
 
-  const manifests = await findFiles(
-    path.join(distDir, "server", "app"),
-    /_client-reference-manifest\.js$/u,
-  );
+  const serverAppDir = path.join(distDir, "server", "app");
+  const manifests = await findFiles(serverAppDir, /_client-reference-manifest\.js$/u);
   if (!compiler.locales.includes(compiler.sourceLocale)) {
     throw new Error(
       `Palamedes client catalog permutations: the source locale "${compiler.sourceLocale}" is not in the configured locales, so renders without a locale have no fallback chunk copy.`,
     );
   }
-  const adapter = renderManifestAdapter(compiler.locales, compiler.sourceLocale, variants);
+  const pageExtensions = options.pageExtensions ?? DEFAULT_PAGE_EXTENSIONS;
+  const standardAdapter = renderManifestAdapter(compiler.locales, compiler.sourceLocale, variants, {
+    optionalRootLocale: false,
+  });
+  const optionalRootLocaleAdapter = renderManifestAdapter(
+    compiler.locales,
+    compiler.sourceLocale,
+    variants,
+    { optionalRootLocale: true },
+  );
   for (const file of manifests) {
+    const manifestRelativePath = path.relative(serverAppDir, file).split(path.sep).join("/");
+    const adapter = routeHasOptionalRootLocale(
+      options.projectRoot,
+      manifestRelativePath,
+      pageExtensions,
+    )
+      ? optionalRootLocaleAdapter
+      : standardAdapter;
     const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;
     // Next may construct paths from shared prefixes, so inspect the evaluated
     // arrays that the adapter actually replaces, not substrings in source.
