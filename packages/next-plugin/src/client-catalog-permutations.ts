@@ -937,9 +937,32 @@ function resolveIdentifierArrayInScope(
 
 const ENTRYPOINT_EXPORTS = ["__next_app__", "routeModule", "handler"] as const;
 type EntrypointExportName = (typeof ENTRYPOINT_EXPORTS)[number];
+type EntrypointExportNames = Record<EntrypointExportName, string>;
+
+const DEFAULT_ENTRYPOINT_EXPORT_NAMES: EntrypointExportNames = {
+  __next_app__: "__next_app__",
+  routeModule: "routeModule",
+  handler: "handler",
+};
 
 function isEntrypointExportName(value: string): value is EntrypointExportName {
   return value === "__next_app__" || value === "routeModule" || value === "handler";
+}
+
+function normalizeTurbopackModuleId(rawLiteral: string): string | undefined {
+  const trimmed = rawLiteral.trim();
+  if (/^\d+$/u.test(trimmed)) return `n:${trimmed}`;
+  if (trimmed.startsWith('"') || trimmed.startsWith("'")) {
+    const decoded = parseJsStringLiteral(trimmed);
+    if (decoded !== undefined) return `s:${decoded}`;
+  }
+  return;
+}
+
+function formatNormalizedTurbopackModuleIdLiteral(normalizedId: string): string {
+  return normalizedId.startsWith("n:")
+    ? normalizedId.slice(2)
+    : JSON.stringify(normalizedId.slice(2));
 }
 
 type EnclosingModuleContext = {
@@ -1041,8 +1064,12 @@ function findEnclosingModuleContext(
 
   const prefix = source.slice(0, openBrace);
   const fnHeaderMatch =
-    /(?:^|[^\w$])(?:\(\s*([A-Za-z_$][\w$]*)\s*\)|([A-Za-z_$][\w$]*))\s*=>\s*$/u.exec(prefix) ??
-    /(?:^|[^\w$])function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*$/u.exec(prefix);
+    /(?:^|[^\w$])(?:\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*[A-Za-z_$][\w$]*)*\s*\)|([A-Za-z_$][\w$]*))\s*=>\s*$/u.exec(
+      prefix,
+    ) ??
+    /(?:^|[^\w$])function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*[A-Za-z_$][\w$]*)*\s*\)\s*$/u.exec(
+      prefix,
+    );
   const moduleParam = fnHeaderMatch?.[1] ?? fnHeaderMatch?.[2];
   if (!fnHeaderMatch || !moduleParam) return;
 
@@ -1060,7 +1087,9 @@ function findEnclosingModuleContext(
       cursorText,
     );
     if (!idMatch) break;
-    moduleIds.unshift(idMatch[1]!);
+    const normalizedId = normalizeTurbopackModuleId(idMatch[1]!);
+    if (!normalizedId) break;
+    moduleIds.unshift(normalizedId);
     const matched = idMatch[0];
     const keepLeading = matched.startsWith("[") || matched.startsWith(",") ? 1 : 0;
     cursorText = cursorText.slice(0, idMatch.index + keepLeading);
@@ -1288,17 +1317,33 @@ function extractEntrypointCallBinding(
   return;
 }
 
-function unwrapExportGetter(expr: string): string | undefined {
-  const trimmed = expr.trim();
-  const arrowSimple = /^\(\s*\)\s*=>\s*([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)?)$/u.exec(
-    trimmed,
-  );
-  if (arrowSimple) return arrowSimple[1]!.replace(/\s+/gu, "");
+function stripOuterParens(expr: string): string {
+  let trimmed = expr.trim();
+  while (trimmed.startsWith("(") && scanBalancedEnd(trimmed, 0) === trimmed.length) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function unwrapExportGetterBody(expr: string): string | undefined {
+  const trimmed = stripOuterParens(expr);
+  const arrowSimple = /^\(\s*\)\s*=>\s*([\s\S]+)$/u.exec(trimmed);
+  if (arrowSimple) {
+    const body = arrowSimple[1]!.trim();
+    if (!body.startsWith("{")) return stripOuterParens(body);
+  }
   const blockReturn =
-    /^(?:function\s*\(\s*\)|\(\s*\)\s*=>)\s*\{\s*return\s+([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)?)\s*;?\s*\}$/u.exec(
-      trimmed,
-    );
-  return blockReturn?.[1]?.replace(/\s+/gu, "");
+    /^(?:function\s*\(\s*\)|\(\s*\)\s*=>)\s*\{\s*return\s+([\s\S]+?)\s*;?\s*\}$/u.exec(trimmed);
+  return blockReturn ? stripOuterParens(blockReturn[1]!) : undefined;
+}
+
+function unwrapExportGetter(expr: string): string | undefined {
+  const body = unwrapExportGetterBody(expr);
+  if (!body) return;
+  if (/^[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)?$/u.test(body)) {
+    return body.replace(/\s+/gu, "");
+  }
+  return;
 }
 
 function isAssignmentOperatorAt(source: string, offset: number): boolean {
@@ -1333,8 +1378,6 @@ const NEXT_APP_PAGE_EXTERNAL_SPECIFIER =
 
 type TurbopackModuleResolver = (moduleId: string) => string | undefined;
 type TurbopackChunkModuleCache = Map<string, Map<string, string | null> | null>;
-
-const TURBOPACK_MODULE_ID_LITERAL = /^(?:\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')$/u;
 
 function extractTurbopackModulesFromSource(source: string): Map<string, string | null> {
   const modules = new Map<string, string | null>();
@@ -1401,8 +1444,9 @@ function extractTurbopackModulesFromSource(source: string): Map<string, string |
               let pendingIds: string[] = [];
               for (const rawElement of elements) {
                 const elem = rawElement.trim();
-                if (TURBOPACK_MODULE_ID_LITERAL.test(elem)) {
-                  pendingIds.push(elem);
+                const normalizedId = normalizeTurbopackModuleId(elem);
+                if (normalizedId !== undefined) {
+                  pendingIds.push(normalizedId);
                   continue;
                 }
                 if (pendingIds.length === 0) break;
@@ -1746,8 +1790,9 @@ function resolveUniqueTopLevelImportSource(
               if (callEnd === -1 || !endsInitializerAt(scopeSource, callEnd)) return;
               const arg = scopeSource.slice(callParen + 1, callEnd - 1).trim();
               if (moduleParam !== undefined) {
-                if (!/^(?:\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')$/u.test(arg)) return;
-                resolvedSource = arg;
+                const normalizedId = normalizeTurbopackModuleId(arg);
+                if (!normalizedId) return;
+                resolvedSource = normalizedId;
               } else {
                 const spec = parseJsStringLiteral(arg);
                 if (!spec) return;
@@ -2101,7 +2146,8 @@ function isNextAppPageExternalModule(
     `^(?:[A-Za-z_$][\\w$]*\\.exports\\s*=\\s*${p}\\.[ir]\\(\\s*(\\d+|"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\)|${p}\\.n\\(\\s*${p}\\.[ir]\\(\\s*(\\d+|"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\)\\s*\\))\\s*;?$`,
     "u",
   ).exec(body);
-  const nextId = reexportMatch?.[1] ?? reexportMatch?.[2];
+  const nextRawId = reexportMatch?.[1] ?? reexportMatch?.[2];
+  const nextId = nextRawId ? normalizeTurbopackModuleId(nextRawId) : undefined;
   if (!nextId) return false;
   return isNextAppPageExternalModule(nextId, resolveModule, depth + 1);
 }
@@ -2430,13 +2476,346 @@ function verifyCalleeIsNextEntrypoint(
   return false;
 }
 
+type TurbopackReexportStep =
+  | { status: "terminal" }
+  | { status: "invalid" }
+  | { status: "forward"; targetModuleId: string; mapping: Map<string, string> };
+
+function extractTurbopackReexportsForModule(
+  body: string,
+  moduleParam: string,
+  expectedModuleId: string,
+  wantedNames: ReadonlySet<string>,
+): TurbopackReexportStep {
+  const unwrappedBody = unwrapTurbopackCompileTimeBranches(body);
+  const reexports = new Map<string, { targetModuleId: string; importedName: string }>();
+  const directExports = new Set<string>();
+  const nestedExportCallPattern = new RegExp(
+    `(?:^|[^\\w$.])${escapeRegExpLiteral(moduleParam)}\\s*\\.\\s*[sS]\\s*\\(`,
+    "u",
+  );
+  let hasNestedExportCall = false;
+  let exprDepth = 0;
+  let pendingCondition = false;
+  let conditionalStmt = false;
+  let prevTokenKind: "dot" | "other" = "other";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < unwrappedBody.length) {
+    const ch = unwrappedBody[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (unwrappedBody[index + 1] === "/" || unwrappedBody[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(unwrappedBody, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(unwrappedBody, index);
+      if (end === -1) return { status: "invalid" };
+      index = end;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(unwrappedBody, index);
+      if (end === -1) return { status: "invalid" };
+      index = end;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(unwrappedBody, index);
+      if (end !== -1) {
+        index = end;
+        prevTokenKind = "other";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === "{") {
+      const end = scanBalancedEnd(unwrappedBody, index);
+      if (end === -1) return { status: "invalid" };
+      if (nestedExportCallPattern.test(unwrappedBody.slice(index + 1, end - 1))) {
+        hasNestedExportCall = true;
+      }
+      index = end;
+      prevTokenKind = "other";
+      conditionalStmt = false;
+      pendingCondition = false;
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "(" || ch === "[") {
+      exprDepth += 1;
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ")" || ch === "]") {
+      if (exprDepth > 0) exprDepth -= 1;
+      if (ch === ")" && exprDepth === 0 && pendingCondition) {
+        pendingCondition = false;
+        conditionalStmt = true;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === ";") {
+      if (exprDepth === 0) {
+        conditionalStmt = false;
+        pendingCondition = false;
+      }
+      index += 1;
+      prevTokenKind = "other";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === ".") {
+      index += 1;
+      prevTokenKind = "dot";
+      regexAllowed = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < unwrappedBody.length && /[\w$]/u.test(unwrappedBody[index] ?? "")) index += 1;
+      const word = unwrappedBody.slice(wordStart, index);
+      if (prevTokenKind !== "dot" && exprDepth === 0) {
+        if (CONTROL_FLOW_KEYWORDS.has(word) || word === "for") {
+          pendingCondition = true;
+          prevTokenKind = "other";
+          regexAllowed = false;
+          continue;
+        }
+        if (word === "else" || word === "do") {
+          conditionalStmt = true;
+          prevTokenKind = "other";
+          regexAllowed = true;
+          continue;
+        }
+        if (word === moduleParam) {
+          const afterParam = skipWhitespaceAndComments(unwrappedBody, index);
+          if (unwrappedBody[afterParam] === ".") {
+            const afterDot = skipWhitespaceAndComments(unwrappedBody, afterParam + 1);
+            const method = unwrappedBody[afterDot];
+            if (method === "S" || method === "s") {
+              const afterMethod = skipWhitespaceAndComments(unwrappedBody, afterDot + 1);
+              if (unwrappedBody[afterMethod] === "(") {
+                const callEnd = scanBalancedEnd(unwrappedBody, afterMethod);
+                if (callEnd === -1) return { status: "invalid" };
+                const firstArgStart = skipWhitespaceAndComments(unwrappedBody, afterMethod + 1);
+                if (unwrappedBody[firstArgStart] !== "[") return { status: "invalid" };
+                const arrayEnd = scanBalancedEnd(unwrappedBody, firstArgStart);
+                if (arrayEnd === -1 || arrayEnd > callEnd - 1) return { status: "invalid" };
+                const afterArray = skipWhitespaceAndComments(unwrappedBody, arrayEnd);
+                if (unwrappedBody[afterArray] === ",") {
+                  const secondArg = unwrappedBody.slice(afterArray + 1, callEnd - 1).trim();
+                  const normalizedTarget = normalizeTurbopackModuleId(secondArg);
+                  if (!normalizedTarget) return { status: "invalid" };
+                  if (normalizedTarget !== expectedModuleId) {
+                    index = callEnd;
+                    prevTokenKind = "other";
+                    regexAllowed = false;
+                    continue;
+                  }
+                }
+                const elements = splitTopLevelArrayElements(
+                  unwrappedBody.slice(firstArgStart, arrayEnd),
+                  0,
+                );
+                if (!elements) return { status: "invalid" };
+                if (method === "S") {
+                  let elemIdx = 0;
+                  while (elemIdx < elements.length) {
+                    const head = elements[elemIdx]!.trim();
+                    elemIdx += 1;
+                    const groupEntries: string[] = [];
+                    while (elemIdx < elements.length && elements[elemIdx]!.trim() !== "0") {
+                      groupEntries.push(elements[elemIdx]!.trim());
+                      elemIdx += 1;
+                    }
+                    if (elemIdx < elements.length && elements[elemIdx]!.trim() === "0") {
+                      elemIdx += 1;
+                    }
+                    if (groupEntries.length === 0) return { status: "invalid" };
+                    const pairs: Array<[string, string]> = [];
+                    if (groupEntries.length === 1) {
+                      const joined = parseJsStringLiteral(groupEntries[0]!);
+                      if (joined === undefined) return { status: "invalid" };
+                      const parts = joined.split(",");
+                      if (parts.length < 2 || parts.length % 2 !== 0) return { status: "invalid" };
+                      for (let p = 0; p < parts.length; p += 2) {
+                        pairs.push([parts[p]!, parts[p + 1]!]);
+                      }
+                    } else {
+                      if (groupEntries.length % 2 !== 0) return { status: "invalid" };
+                      for (let p = 0; p < groupEntries.length; p += 2) {
+                        const expName = parseJsStringLiteral(groupEntries[p]!);
+                        const impName = parseJsStringLiteral(groupEntries[p + 1]!);
+                        if (expName === undefined || impName === undefined) {
+                          return { status: "invalid" };
+                        }
+                        pairs.push([expName, impName]);
+                      }
+                    }
+                    const relevantPairs = pairs.filter(([expName]) => wantedNames.has(expName));
+                    if (relevantPairs.length > 0) {
+                      if (conditionalStmt) return { status: "invalid" };
+                      const targetModuleId =
+                        normalizeTurbopackModuleId(head) ??
+                        (/^[A-Za-z_$][\w$]*$/u.test(head)
+                          ? resolveUniqueTopLevelImportSource(unwrappedBody, head, moduleParam)
+                          : undefined);
+                      if (!targetModuleId) return { status: "invalid" };
+                      for (const [expName, impName] of relevantPairs) {
+                        if (reexports.has(expName) || directExports.has(expName)) {
+                          return { status: "invalid" };
+                        }
+                        reexports.set(expName, { targetModuleId, importedName: impName });
+                      }
+                    }
+                  }
+                } else {
+                  let elemIdx = 0;
+                  while (elemIdx < elements.length) {
+                    const expName = parseJsStringLiteral(elements[elemIdx]!);
+                    if (expName === undefined) return { status: "invalid" };
+                    let isValue = false;
+                    let rawExpr: string | undefined;
+                    if (elements[elemIdx + 1]?.trim() === "0") {
+                      if (elemIdx + 2 >= elements.length) return { status: "invalid" };
+                      isValue = true;
+                      rawExpr = elements[elemIdx + 2]!.trim();
+                      elemIdx += 3;
+                    } else {
+                      if (elemIdx + 1 >= elements.length) return { status: "invalid" };
+                      rawExpr = elements[elemIdx + 1]!.trim();
+                      elemIdx += 2;
+                    }
+                    if (wantedNames.has(expName)) {
+                      if (conditionalStmt || reexports.has(expName) || directExports.has(expName)) {
+                        return { status: "invalid" };
+                      }
+                      const getterBody = isValue ? undefined : unwrapExportGetterBody(rawExpr);
+                      const member = getterBody ? parseCalleeMemberAccess(getterBody) : undefined;
+                      const targetModuleId = member
+                        ? resolveUniqueTopLevelImportSource(unwrappedBody, member.ns, moduleParam)
+                        : undefined;
+                      if (member && targetModuleId) {
+                        reexports.set(expName, { targetModuleId, importedName: member.prop });
+                      } else {
+                        directExports.add(expName);
+                      }
+                    }
+                  }
+                }
+                index = callEnd;
+                prevTokenKind = "other";
+                regexAllowed = false;
+                continue;
+              }
+            }
+          }
+        }
+      }
+      prevTokenKind = "other";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    if (/[0-9]/u.test(ch ?? "")) {
+      index += 1;
+      while (index < unwrappedBody.length && /[\w.]/u.test(unwrappedBody[index] ?? "")) index += 1;
+      prevTokenKind = "other";
+      regexAllowed = false;
+      continue;
+    }
+    index += 1;
+    prevTokenKind = "other";
+    regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+
+  if (reexports.size === 0) return { status: "terminal" };
+  if (hasNestedExportCall || directExports.size > 0 || reexports.size !== wantedNames.size) {
+    return { status: "invalid" };
+  }
+
+  let sharedTargetModuleId: string | undefined;
+  const importedNames = new Set<string>();
+  const mapping = new Map<string, string>();
+  for (const [expName, entry] of reexports) {
+    if (sharedTargetModuleId === undefined) {
+      sharedTargetModuleId = entry.targetModuleId;
+    } else if (sharedTargetModuleId !== entry.targetModuleId) {
+      return { status: "invalid" };
+    }
+    if (importedNames.has(entry.importedName)) return { status: "invalid" };
+    importedNames.add(entry.importedName);
+    mapping.set(expName, entry.importedName);
+  }
+  return sharedTargetModuleId
+    ? { status: "forward", targetModuleId: sharedTargetModuleId, mapping }
+    : { status: "invalid" };
+}
+
+function resolveTurbopackForwardedEntrypoint(
+  entryModuleId: string,
+  resolveModule: TurbopackModuleResolver,
+): { moduleId: string; exportNames: EntrypointExportNames; forwarded: boolean } | undefined {
+  let currentModuleId = entryModuleId;
+  let exportNames: EntrypointExportNames = { ...DEFAULT_ENTRYPOINT_EXPORT_NAMES };
+  let forwarded = false;
+  const visited = new Set<string>([entryModuleId]);
+
+  for (let depth = 0; depth <= 4; depth += 1) {
+    const factory = resolveModule(currentModuleId);
+    if (!factory) return { moduleId: currentModuleId, exportNames, forwarded };
+    const parsed = parseTurbopackFactory(factory);
+    if (!parsed) return { moduleId: currentModuleId, exportNames, forwarded };
+    const wantedNames = new Set<string>(Object.values(exportNames));
+    const step = extractTurbopackReexportsForModule(
+      parsed.body,
+      parsed.param,
+      currentModuleId,
+      wantedNames,
+    );
+    if (step.status === "invalid") return;
+    if (step.status === "terminal") return { moduleId: currentModuleId, exportNames, forwarded };
+    if (depth === 4 || visited.has(step.targetModuleId)) return;
+    visited.add(step.targetModuleId);
+    currentModuleId = step.targetModuleId;
+    exportNames = {
+      __next_app__: step.mapping.get(exportNames.__next_app__)!,
+      routeModule: step.mapping.get(exportNames.routeModule)!,
+      handler: step.mapping.get(exportNames.handler)!,
+    };
+    forwarded = true;
+  }
+  return;
+}
+
 function verifyEntrypointExportsInScope(
   scopeSource: string,
   entrypointVar: string,
   varStart: number,
   moduleParam: string | undefined,
   expectedModuleId: string | undefined,
+  expectedExportNames: EntrypointExportNames = DEFAULT_ENTRYPOINT_EXPORT_NAMES,
 ): boolean {
+  const exportNameToCanonical = new Map<string, EntrypointExportName>();
+  for (const canonical of ENTRYPOINT_EXPORTS) {
+    exportNameToCanonical.set(expectedExportNames[canonical], canonical);
+  }
+  if (exportNameToCanonical.size !== ENTRYPOINT_EXPORTS.length) return false;
+
   const exported = new Map<EntrypointExportName, string>();
   const aliases = new Map<string, { prop: EntrypointExportName; declStart: number }>();
   const exportReadSpans: Array<[number, number]> = [];
@@ -2573,7 +2952,7 @@ function verifyEntrypointExportsInScope(
 
       if (prevTokenKind !== "dot" && exprDepth === 0) {
         // Turbopack module export call: `<moduleParam>.s([...], <moduleId>?)`
-        if (moduleParam !== undefined && word === moduleParam) {
+        if (moduleParam !== undefined && !conditionalStmt && word === moduleParam) {
           const afterParam = skipWhitespaceAndComments(scopeSource, index);
           if (scopeSource[afterParam] === ".") {
             const afterDot = skipWhitespaceAndComments(scopeSource, afterParam + 1);
@@ -2589,8 +2968,15 @@ function verifyEntrypointExportsInScope(
                 const afterArray = skipWhitespaceAndComments(scopeSource, arrayEnd);
                 if (scopeSource[afterArray] === ",") {
                   const secondArg = scopeSource.slice(afterArray + 1, callEnd - 1).trim();
-                  if (expectedModuleId !== undefined && secondArg !== expectedModuleId) {
-                    return false;
+                  const normalizedSecondArg = normalizeTurbopackModuleId(secondArg);
+                  if (!normalizedSecondArg) return false;
+                  if (expectedModuleId !== undefined && normalizedSecondArg !== expectedModuleId) {
+                    index = callEnd;
+                    prevTokenKind = "other";
+                    prevWord = "";
+                    prevNonWsChar = ")";
+                    regexAllowed = false;
+                    continue;
                   }
                 }
                 const elements = splitTopLevelArrayElements(
@@ -2603,7 +2989,7 @@ function verifyEntrypointExportsInScope(
                   const exportName = parseJsStringLiteral(elements[elemIdx]!);
                   if (exportName === undefined) return false;
                   let expr: string | undefined;
-                  if (elements[elemIdx + 1] === "0") {
+                  if (elements[elemIdx + 1]?.trim() === "0") {
                     if (elemIdx + 2 >= elements.length) return false;
                     expr = elements[elemIdx + 2]!.trim().replace(/\s+/gu, "");
                     elemIdx += 3;
@@ -2612,9 +2998,10 @@ function verifyEntrypointExportsInScope(
                     expr = unwrapExportGetter(elements[elemIdx + 1]!);
                     elemIdx += 2;
                   }
-                  if (isEntrypointExportName(exportName)) {
-                    if (!expr || exported.has(exportName)) return false;
-                    exported.set(exportName, expr);
+                  const canonicalName = exportNameToCanonical.get(exportName);
+                  if (canonicalName !== undefined) {
+                    if (!expr || exported.has(canonicalName)) return false;
+                    exported.set(canonicalName, expr);
                   }
                 }
                 exportReadSpans.push([afterS, callEnd]);
@@ -2973,12 +3360,13 @@ function verifyEntrypointExportsInScope(
   return true;
 }
 
-function findTreeExpressionForPage(
+function findTreeExpressionsInSource(
   source: string,
   expectedPage: string,
-  expectedModuleId?: string,
-  resolveTurbopackModule: TurbopackModuleResolver = createTurbopackModuleResolver([source]),
-): string | undefined {
+  expectedModuleId: string | undefined,
+  expectedExportNames: EntrypointExportNames,
+  resolveTurbopackModule: TurbopackModuleResolver,
+): Array<string | undefined> {
   const matches: Array<string | undefined> = [];
   let prevNonWsChar = "";
   let prevBeforeParenChar = "";
@@ -2998,7 +3386,7 @@ function findTreeExpressionForPage(
     }
     if (ch === '"' || ch === "'") {
       const end = scanQuotedStringEnd(source, index);
-      if (end === -1) return;
+      if (end === -1) return [];
       index = end;
       prevNonWsChar = ch;
       regexAllowed = false;
@@ -3006,7 +3394,7 @@ function findTreeExpressionForPage(
     }
     if (ch === "`") {
       const end = scanTemplateLiteralEnd(source, index);
-      if (end === -1) return;
+      if (end === -1) return [];
       index = end;
       prevNonWsChar = "`";
       regexAllowed = false;
@@ -3075,6 +3463,7 @@ function findTreeExpressionForPage(
                   callBinding.varStart,
                   moduleCtx.moduleParam,
                   expectedModuleId,
+                  expectedExportNames,
                 )
               ) {
                 const treeExpr = props.get("tree")!;
@@ -3129,6 +3518,53 @@ function findTreeExpressionForPage(
     index += 1;
     prevNonWsChar = ch ?? "";
     regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+
+  return matches;
+}
+
+function findTreeExpressionForPage(
+  source: string,
+  expectedPage: string,
+  expectedModuleId?: string,
+  resolveTurbopackModule: TurbopackModuleResolver = createTurbopackModuleResolver([source]),
+): string | undefined {
+  const normalizedExpectedModuleId =
+    expectedModuleId === undefined ? undefined : normalizeTurbopackModuleId(expectedModuleId);
+  if (expectedModuleId !== undefined && normalizedExpectedModuleId === undefined) return;
+
+  let targetModuleId = normalizedExpectedModuleId;
+  let targetExportNames: EntrypointExportNames = DEFAULT_ENTRYPOINT_EXPORT_NAMES;
+  let forwarded = false;
+  if (normalizedExpectedModuleId !== undefined) {
+    const resolved = resolveTurbopackForwardedEntrypoint(
+      normalizedExpectedModuleId,
+      resolveTurbopackModule,
+    );
+    if (!resolved) return;
+    targetModuleId = resolved.moduleId;
+    targetExportNames = resolved.exportNames;
+    forwarded = resolved.forwarded;
+  }
+
+  let matches = findTreeExpressionsInSource(
+    source,
+    expectedPage,
+    targetModuleId,
+    targetExportNames,
+    resolveTurbopackModule,
+  );
+  if (matches.length === 0 && forwarded && targetModuleId !== undefined) {
+    const forwardedFactory = resolveTurbopackModule(targetModuleId);
+    if (forwardedFactory) {
+      matches = findTreeExpressionsInSource(
+        `module.exports=[${formatNormalizedTurbopackModuleIdLiteral(targetModuleId)},${forwardedFactory}];`,
+        expectedPage,
+        targetModuleId,
+        targetExportNames,
+        resolveTurbopackModule,
+      );
+    }
   }
 
   return matches.length === 1 ? matches[0] : undefined;

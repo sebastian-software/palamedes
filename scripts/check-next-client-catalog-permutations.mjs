@@ -307,6 +307,14 @@ async function verifyOptionalRootLocaleOwnership() {
       expectedLocale: "de",
       nextConfig: { experimental: { turbopackMinify: false, taint: true } },
     },
+    {
+      name: "layout-above-optional-named-no-hoist",
+      layoutAbove: true,
+      expectedLocale: "de",
+      nextConfig: {
+        experimental: { turbopackModuleIds: "named", turbopackScopeHoisting: false },
+      },
+    },
   ]) {
     // Create the fixture directly under `repoRoot` (outside `examples/nextjs-route`)
     // so Turbopack keeps `distDir` inside `outputFileTracingRoot` without
