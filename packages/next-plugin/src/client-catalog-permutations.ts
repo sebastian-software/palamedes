@@ -1253,17 +1253,99 @@ function isAssignmentOperatorAt(source: string, offset: number): boolean {
   return source.slice(offset, offset + 4) === ">>>=";
 }
 
-function isUniqueTopLevelImportedNamespace(
+const NEXT_APP_PAGE_RUNTIME_SPECIFIER =
+  /^(?:\.\/app-page-runtime(?:\.js)?|next\/dist\/(?:esm\/)?build\/templates\/app-page-runtime(?:\.js)?)$/u;
+
+const NEXT_APP_PAGE_EXTERNAL_SPECIFIER =
+  /^next\/dist\/(?:compiled\/next-server\/app-page(?:-turbo)?\.runtime\.(?:prod|dev)\.js|server\/route-modules\/app-page\/module\.compiled(?:\.js)?)$/u;
+
+type TurbopackModuleResolver = (moduleId: string) => string | undefined;
+
+function extractTurbopackModulesFromSource(source: string): Map<string, string | null> {
+  const modules = new Map<string, string | null>();
+  const marker = /module\.exports\s*=\s*\[/gu;
+  let match: RegExpExecArray | null;
+  while ((match = marker.exec(source)) !== null) {
+    const arrayStart = match.index + match[0].length - 1;
+    const arrayEnd = scanBalancedEnd(source, arrayStart);
+    if (arrayEnd === -1) continue;
+    const elements = splitTopLevelArrayElements(source.slice(arrayStart, arrayEnd), 0);
+    if (!elements || elements.length % 2 !== 0) continue;
+    for (let index = 0; index < elements.length; index += 2) {
+      const id = elements[index]!.trim();
+      const factory = elements[index + 1]!.trim();
+      const existing = modules.get(id);
+      if (existing === undefined) {
+        modules.set(id, factory);
+      } else if (existing !== factory) {
+        modules.set(id, null);
+      }
+    }
+  }
+  return modules;
+}
+
+function createTurbopackModuleResolver(
+  inlineSources: readonly string[],
+  chunkPaths: readonly string[] = [],
+): TurbopackModuleResolver {
+  const combined = new Map<string, string | null>();
+  let loadedChunks = false;
+
+  const mergeSource = (source: string) => {
+    for (const [id, factory] of extractTurbopackModulesFromSource(source)) {
+      const existing = combined.get(id);
+      if (existing === undefined) {
+        combined.set(id, factory);
+      } else if (existing !== factory) {
+        combined.set(id, null);
+      }
+    }
+  };
+
+  for (const source of inlineSources) mergeSource(source);
+
+  return (moduleId: string): string | undefined => {
+    if (!loadedChunks && chunkPaths.length > 0) {
+      loadedChunks = true;
+      for (const chunkPath of chunkPaths) {
+        try {
+          mergeSource(readFileSync(chunkPath, "utf8"));
+        } catch {
+          // Ignore unreadable chunks; missing provenance fails closed.
+        }
+      }
+    }
+    const found = combined.get(moduleId);
+    return found === null ? undefined : found;
+  };
+}
+
+function resolveUniqueTopLevelImportSource(
   scopeSource: string,
   ns: string,
   moduleParam: string | undefined,
-): boolean {
+): string | undefined {
+  type ImportScopeFrame = {
+    isFunction: boolean;
+    shadowed: boolean;
+    declKind?: "let" | "const" | "var";
+    exprDepth: number;
+    pendingCondition: boolean;
+    conditionalStmt: boolean;
+  };
   const nsWord = new RegExp(`(?:(?<![\\w$.])|\\.\\.\\.)${escapeRegExpLiteral(ns)}(?![\\w$])`, "u");
-  let bindingKind: "valid" | "invalid" | undefined;
-  let declKind: "let" | "const" | "var" | undefined;
-  let exprDepth = 0;
-  let pendingCondition = false;
-  let conditionalStmt = false;
+  const frames: ImportScopeFrame[] = [
+    {
+      isFunction: true,
+      shadowed: false,
+      exprDepth: 0,
+      pendingCondition: false,
+      conditionalStmt: false,
+    },
+  ];
+  const isShadowed = () => frames.slice(1).some((frame) => frame.shadowed);
+  let resolvedSource: string | undefined;
   let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
   let prevWord = "";
   let prevNonWsChar = "";
@@ -1282,7 +1364,7 @@ function isUniqueTopLevelImportedNamespace(
     }
     if (ch === '"' || ch === "'") {
       const end = scanQuotedStringEnd(scopeSource, index);
-      if (end === -1) return false;
+      if (end === -1) return;
       index = end;
       prevTokenKind = "other";
       prevWord = "";
@@ -1292,9 +1374,13 @@ function isUniqueTopLevelImportedNamespace(
     }
     if (ch === "`") {
       const end = scanTemplateLiteralEnd(scopeSource, index);
-      if (end === -1) return false;
+      if (end === -1) return;
       const literal = scopeSource.slice(index, end);
-      if (literal.includes("${") && nsWord.test(literal)) return false;
+      if (!isShadowed() && literal.includes("${") && nsWord.test(literal)) {
+        // Template interpolations referencing `ns` without assignment (e.g. `${ns.FOO}`)
+        // are read-only; reject only if the interpolation contains a write to `ns`.
+        if (hasWriteToIdentifier(literal, ns)) return;
+      }
       index = end;
       prevTokenKind = "other";
       prevWord = "";
@@ -1313,30 +1399,52 @@ function isUniqueTopLevelImportedNamespace(
         continue;
       }
     }
+    const top = frames.at(-1)!;
     if (ch === "{") {
-      const end = scanBalancedEnd(scopeSource, index);
-      if (end === -1) return false;
-      if (nsWord.test(scopeSource.slice(index + 1, end - 1))) {
-        // Any nested write/shadowing of `ns` invalidates it; plain property reads
-        // like `{ ... }` inside an object literal are still checked below if not a block.
-        const inner = scopeSource.slice(index + 1, end - 1);
-        const mutation = new RegExp(
-          `(?:^|[^\\w$.])${escapeRegExpLiteral(ns)}\\s*(?:=|\\+\\+|--|\\+=|-=|\\*=|\\/=)|(?:let|const|var|function)\\s+${escapeRegExpLiteral(ns)}(?![\\w$])`,
-          "u",
-        );
-        if (mutation.test(inner)) return false;
-      }
-      index = end;
+      const beforeBrace = scopeSource.slice(Math.max(0, index - 240), index);
+      const arrowParamsMatch = /(?:^|[^\w$])(?:\(([^()]*)\)|([A-Za-z_$][\w$]*))\s*=>\s*$/u.exec(
+        beforeBrace,
+      );
+      const fnParamsMatch = /(?:^|[^\w$])function(?:\s+[A-Za-z_$][\w$]*)?\s*\(([^()]*)\)\s*$/u.exec(
+        beforeBrace,
+      );
+      const paramText = arrowParamsMatch
+        ? (arrowParamsMatch[1] ?? arrowParamsMatch[2] ?? "")
+        : fnParamsMatch
+          ? (fnParamsMatch[1] ?? "")
+          : undefined;
+      const isFunction = paramText !== undefined;
+      const paramShadowsNs =
+        paramText !== undefined &&
+        new RegExp(`(?:^|[^\\w$.])${escapeRegExpLiteral(ns)}(?![\\w$])`, "u").test(paramText);
+      top.conditionalStmt = false;
+      top.pendingCondition = false;
+      frames.push({
+        isFunction,
+        shadowed: paramShadowsNs,
+        exprDepth: 0,
+        pendingCondition: false,
+        conditionalStmt: false,
+      });
+      index += 1;
+      prevTokenKind = "other";
+      prevWord = "";
+      prevNonWsChar = "{";
+      regexAllowed = true;
+      continue;
+    }
+    if (ch === "}") {
+      if (frames.length <= 1) return;
+      frames.pop();
+      index += 1;
       prevTokenKind = "other";
       prevWord = "";
       prevNonWsChar = "}";
-      conditionalStmt = false;
-      pendingCondition = false;
       regexAllowed = true;
       continue;
     }
     if (ch === "(" || ch === "[") {
-      exprDepth += 1;
+      top.exprDepth += 1;
       index += 1;
       prevTokenKind = "other";
       prevWord = "";
@@ -1345,10 +1453,10 @@ function isUniqueTopLevelImportedNamespace(
       continue;
     }
     if (ch === ")" || ch === "]") {
-      if (exprDepth > 0) exprDepth -= 1;
-      if (ch === ")" && exprDepth === 0 && pendingCondition) {
-        pendingCondition = false;
-        conditionalStmt = true;
+      if (top.exprDepth > 0) top.exprDepth -= 1;
+      if (ch === ")" && top.exprDepth === 0 && top.pendingCondition) {
+        top.pendingCondition = false;
+        top.conditionalStmt = true;
       }
       index += 1;
       prevTokenKind = "other";
@@ -1358,10 +1466,10 @@ function isUniqueTopLevelImportedNamespace(
       continue;
     }
     if (ch === ";") {
-      if (exprDepth === 0) {
-        declKind = undefined;
-        conditionalStmt = false;
-        pendingCondition = false;
+      if (top.exprDepth === 0) {
+        top.declKind = undefined;
+        top.conditionalStmt = false;
+        top.pendingCondition = false;
       }
       index += 1;
       prevTokenKind = "other";
@@ -1400,38 +1508,46 @@ function isUniqueTopLevelImportedNamespace(
       while (index < scopeSource.length && /[\w$]/u.test(scopeSource[index] ?? "")) index += 1;
       const word = scopeSource.slice(wordStart, index);
       if (prevTokenKind !== "dot") {
-        if (exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
-          declKind = word;
+        if (top.exprDepth === 0 && (word === "let" || word === "const" || word === "var")) {
+          top.declKind = word;
           prevTokenKind = "decl";
           prevWord = word;
           prevNonWsChar = word.at(-1) ?? "";
           regexAllowed = false;
           continue;
         }
-        if (exprDepth === 0 && (CONTROL_FLOW_KEYWORDS.has(word) || word === "for")) {
-          pendingCondition = true;
+        if (top.exprDepth === 0 && (CONTROL_FLOW_KEYWORDS.has(word) || word === "for")) {
+          top.pendingCondition = true;
           prevTokenKind = "other";
           prevWord = word;
           prevNonWsChar = word.at(-1) ?? "";
           regexAllowed = false;
           continue;
         }
-        if (exprDepth === 0 && (word === "else" || word === "do")) {
-          conditionalStmt = true;
+        if (top.exprDepth === 0 && (word === "else" || word === "do")) {
+          top.conditionalStmt = true;
           prevTokenKind = "other";
           prevWord = word;
           prevNonWsChar = word.at(-1) ?? "";
           regexAllowed = true;
           continue;
         }
-        if (exprDepth === 0 && word === "import" && moduleParam === undefined) {
+        if (
+          frames.length === 1 &&
+          top.exprDepth === 0 &&
+          word === "import" &&
+          moduleParam === undefined
+        ) {
           const afterImport = skipWhitespaceAndComments(scopeSource, index);
-          const starMatch = /^\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\b/u.exec(
-            scopeSource.slice(afterImport),
-          );
+          const starMatch =
+            /^\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/u.exec(
+              scopeSource.slice(afterImport),
+            );
           if (starMatch?.[1] === ns) {
-            if (bindingKind !== undefined) return false;
-            bindingKind = "valid";
+            if (resolvedSource !== undefined) return;
+            const spec = parseJsStringLiteral(starMatch[2]!);
+            if (!spec) return;
+            resolvedSource = spec;
           }
           prevTokenKind = "other";
           prevWord = word;
@@ -1442,34 +1558,62 @@ function isUniqueTopLevelImportedNamespace(
         if (word === ns) {
           const afterWord = skipWhitespaceAndComments(scopeSource, index);
           const isDeclarator =
-            exprDepth === 0 &&
-            (prevTokenKind === "decl" || (prevTokenKind === "comma" && declKind !== undefined));
-          if (prevWord === "function" || prevWord === "class") return false;
-          if (isDeclarator) {
-            if (bindingKind !== undefined || conditionalStmt) return false;
-            if (
-              scopeSource[afterWord] !== "=" ||
-              scopeSource[afterWord + 1] === "=" ||
-              scopeSource[afterWord + 1] === ">"
-            ) {
-              return false;
+            top.exprDepth === 0 &&
+            (prevTokenKind === "decl" || (prevTokenKind === "comma" && top.declKind !== undefined));
+          if (frames.length === 1) {
+            if (prevWord === "function" || prevWord === "class") return;
+            if (isDeclarator) {
+              if (resolvedSource !== undefined || top.conditionalStmt) return;
+              if (
+                scopeSource[afterWord] !== "=" ||
+                scopeSource[afterWord + 1] === "=" ||
+                scopeSource[afterWord + 1] === ">"
+              ) {
+                return;
+              }
+              const rhsStart = skipWhitespaceAndComments(scopeSource, afterWord + 1);
+              const expectedPrefix = moduleParam
+                ? new RegExp(`^${escapeRegExpLiteral(moduleParam)}\\s*\\.\\s*[ir]\\s*\\(`, "u")
+                : /^require\s*\(/u;
+              const callMatch = expectedPrefix.exec(scopeSource.slice(rhsStart));
+              if (!callMatch) return;
+              const callParen = rhsStart + callMatch[0].length - 1;
+              const callEnd = scanBalancedEnd(scopeSource, callParen);
+              if (callEnd === -1 || !endsInitializerAt(scopeSource, callEnd)) return;
+              const arg = scopeSource.slice(callParen + 1, callEnd - 1).trim();
+              if (moduleParam !== undefined) {
+                if (!/^(?:\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')$/u.test(arg)) return;
+                resolvedSource = arg;
+              } else {
+                const spec = parseJsStringLiteral(arg);
+                if (!spec) return;
+                resolvedSource = spec;
+              }
+              index = callEnd;
+            } else {
+              const isObjectKey =
+                (prevNonWsChar === "{" || prevNonWsChar === ",") && scopeSource[afterWord] === ":";
+              if (!isObjectKey && isAssignmentOperatorAt(scopeSource, afterWord)) {
+                return;
+              }
             }
-            const rhsStart = skipWhitespaceAndComments(scopeSource, afterWord + 1);
-            const expectedPrefix = moduleParam
-              ? new RegExp(`^${escapeRegExpLiteral(moduleParam)}\\s*\\.\\s*[ir]\\s*\\(`, "u")
-              : /^require\s*\(/u;
-            const callMatch = expectedPrefix.exec(scopeSource.slice(rhsStart));
-            if (!callMatch) return false;
-            const callParen = rhsStart + callMatch[0].length - 1;
-            const callEnd = scanBalancedEnd(scopeSource, callParen);
-            if (callEnd === -1 || !endsInitializerAt(scopeSource, callEnd)) return false;
-            bindingKind = "valid";
-            index = callEnd;
-          } else {
+          } else if (isDeclarator) {
+            // Inside a nested scope: a `let`/`const` declaration shadows `ns` in
+            // this block; a `var` declaration shadows `ns` in the nearest enclosing
+            // function (or fails if that enclosing function is the module scope!).
+            if (top.declKind === "let" || top.declKind === "const") {
+              top.shadowed = true;
+            } else if (top.declKind === "var") {
+              let fnIdx = frames.length - 1;
+              while (fnIdx > 0 && !frames[fnIdx]!.isFunction) fnIdx -= 1;
+              if (fnIdx === 0) return;
+              frames[fnIdx]!.shadowed = true;
+            }
+          } else if (!isShadowed()) {
             const isObjectKey =
               (prevNonWsChar === "{" || prevNonWsChar === ",") && scopeSource[afterWord] === ":";
             if (!isObjectKey && isAssignmentOperatorAt(scopeSource, afterWord)) {
-              return false;
+              return;
             }
           }
         }
@@ -1496,11 +1640,11 @@ function isUniqueTopLevelImportedNamespace(
     regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
   }
 
-  return bindingKind === "valid";
+  return resolvedSource;
 }
 
 function isImportedDirectCreateAppPageEntrypoint(scopeSource: string): boolean {
-  let hasNamedImport = false;
+  let hasVerifiedImport = false;
   let exprDepth = 0;
   let prevTokenKind: "decl" | "comma" | "dot" | "other" = "other";
   let declKind: "let" | "const" | "var" | undefined;
@@ -1622,16 +1766,28 @@ function isImportedDirectCreateAppPageEntrypoint(scopeSource: string): boolean {
           if (scopeSource[afterImport] === "{") {
             const braceEnd = scanBalancedEnd(scopeSource, afterImport);
             if (braceEnd === -1) return false;
+            const afterBrace = skipWhitespaceAndComments(scopeSource, braceEnd);
+            const fromMatch = /^from\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/u.exec(
+              scopeSource.slice(afterBrace),
+            );
+            const fromSpecifier = fromMatch ? parseJsStringLiteral(fromMatch[1]!) : undefined;
             const specifiers = scopeSource.slice(afterImport + 1, braceEnd - 1).split(",");
             for (const rawSpec of specifiers) {
               const spec = rawSpec.trim();
               if (spec === "createAppPageEntrypoint") {
-                hasNamedImport = true;
+                if (
+                  hasVerifiedImport ||
+                  !fromSpecifier ||
+                  !NEXT_APP_PAGE_RUNTIME_SPECIFIER.test(fromSpecifier)
+                ) {
+                  return false;
+                }
+                hasVerifiedImport = true;
               } else if (/\bas\s+createAppPageEntrypoint$/u.test(spec)) {
                 return false;
               }
             }
-            index = braceEnd;
+            index = fromMatch ? afterBrace + fromMatch[0].length : braceEnd;
             prevTokenKind = "other";
             prevWord = "";
             prevNonWsChar = "}";
@@ -1665,27 +1821,358 @@ function isImportedDirectCreateAppPageEntrypoint(scopeSource: string): boolean {
     regexAllowed = "=,:;!?&|^~+-*%<>".includes(ch ?? "");
   }
 
-  return hasNamedImport;
+  return hasVerifiedImport;
+}
+
+function parseTurbopackFactory(factorySource: string): { param: string; body: string } | undefined {
+  const trimmed = factorySource.trim();
+  const arrowMatch =
+    /^(?:\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*[A-Za-z_$][\w$]*)*\s*\)|([A-Za-z_$][\w$]*))\s*=>\s*\{/u.exec(
+      trimmed,
+    );
+  const fnMatch =
+    /^function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*[A-Za-z_$][\w$]*)*\s*\)\s*\{/u.exec(
+      trimmed,
+    );
+  const match = arrowMatch ?? fnMatch;
+  const param = arrowMatch ? (arrowMatch[1] ?? arrowMatch[2]) : fnMatch?.[1];
+  if (!match || !param) return;
+  const openBrace = match[0].length - 1;
+  const closeEnd = scanBalancedEnd(trimmed, openBrace);
+  if (closeEnd !== trimmed.length) return;
+  return { param, body: trimmed.slice(openBrace + 1, closeEnd - 1) };
+}
+
+function isNextAppPageExternalModule(
+  moduleId: string,
+  resolveModule: TurbopackModuleResolver,
+  depth = 0,
+): boolean {
+  if (depth > 4) return false;
+  const factory = resolveModule(moduleId);
+  if (!factory) return false;
+  const parsed = parseTurbopackFactory(factory);
+  if (!parsed) return false;
+  const body = parsed.body.replace(/^\s*["']use strict["']\s*;?\s*/u, "").trim();
+  const p = escapeRegExpLiteral(parsed.param);
+
+  // Direct external wrapper: `b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("..."))`
+  const externalMatch = new RegExp(
+    `^[A-Za-z_$][\\w$]*\\.exports\\s*=\\s*${p}\\.x\\(\\s*("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*,\\s*\\(\\s*\\)\\s*=>\\s*require\\(\\s*("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\)\\s*\\)\\s*;?$`,
+    "u",
+  ).exec(body);
+  if (externalMatch) {
+    const specA = parseJsStringLiteral(externalMatch[1]!);
+    const specB = parseJsStringLiteral(externalMatch[2]!);
+    return specA !== undefined && specA === specB && NEXT_APP_PAGE_EXTERNAL_SPECIFIER.test(specA);
+  }
+
+  // Re-export hop: `b.exports = a.r(18622)` or `a.n(a.i(18622))`
+  const reexportMatch = new RegExp(
+    `^(?:[A-Za-z_$][\\w$]*\\.exports\\s*=\\s*${p}\\.[ir]\\(\\s*(\\d+|"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\)|${p}\\.n\\(\\s*${p}\\.[ir]\\(\\s*(\\d+|"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\s*\\)\\s*\\))\\s*;?$`,
+    "u",
+  ).exec(body);
+  const nextId = reexportMatch?.[1] ?? reexportMatch?.[2];
+  if (!nextId) return false;
+  return isNextAppPageExternalModule(nextId, resolveModule, depth + 1);
+}
+
+function extractTurbopackExportedFunction(
+  body: string,
+  moduleParam: string,
+  exportName: string,
+): string | undefined {
+  const sCallPattern = new RegExp(
+    `(?:^|[^\\w$.])${escapeRegExpLiteral(moduleParam)}\\s*\\.\\s*s\\s*\\(`,
+    "gu",
+  );
+  let foundExpr: string | undefined;
+  let match: RegExpExecArray | null;
+  while ((match = sCallPattern.exec(body)) !== null) {
+    const parenIndex = match.index + match[0].length - 1;
+    const callEnd = scanBalancedEnd(body, parenIndex);
+    if (callEnd === -1) return;
+    const arrStart = skipWhitespaceAndComments(body, parenIndex + 1);
+    if (body[arrStart] !== "[") continue;
+    const arrEnd = scanBalancedEnd(body, arrStart);
+    if (arrEnd === -1 || arrEnd > callEnd - 1) continue;
+    const elements = splitTopLevelArrayElements(body.slice(arrStart, arrEnd), 0);
+    if (!elements) continue;
+    let idx = 0;
+    while (idx < elements.length) {
+      const name = parseJsStringLiteral(elements[idx]!);
+      if (name === undefined) break;
+      let expr: string | undefined;
+      if (elements[idx + 1] === "0") {
+        if (idx + 2 >= elements.length) break;
+        expr = elements[idx + 2]!.trim();
+        idx += 3;
+      } else {
+        if (idx + 1 >= elements.length) break;
+        expr = elements[idx + 1]!.trim();
+        idx += 2;
+      }
+      if (name === exportName) {
+        if (foundExpr !== undefined) return;
+        foundExpr = expr;
+      }
+    }
+  }
+  if (!foundExpr) return;
+  if (/^function\b/u.test(foundExpr)) return foundExpr;
+  // Unminified getter export: `() => createAppPageEntrypoint`
+  const getterTarget = unwrapExportGetter(foundExpr);
+  if (getterTarget && /^[A-Za-z_$][\w$]*$/u.test(getterTarget)) {
+    const fnDecl = new RegExp(
+      `(?:^|[;}\\n\\r])\\s*(?:export\\s+)?function\\s+${escapeRegExpLiteral(getterTarget)}\\s*\\(`,
+      "gu",
+    );
+    const fnMatch = fnDecl.exec(body);
+    if (!fnMatch || fnDecl.exec(body)) return;
+    const fnStart = body.indexOf("function", fnMatch.index);
+    const paramsOpen = body.indexOf("(", fnStart);
+    const paramsClose = scanBalancedEnd(body, paramsOpen);
+    if (paramsClose === -1) return;
+    const bodyOpen = skipWhitespaceAndComments(body, paramsClose);
+    if (body[bodyOpen] !== "{") return;
+    const bodyClose = scanBalancedEnd(body, bodyOpen);
+    if (bodyClose === -1) return;
+    return body.slice(fnStart, bodyClose);
+  }
+  return;
+}
+
+function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): boolean {
+  const identWord = new RegExp(
+    `(?:(?<![\\w$.])|\\.\\.\\.)${escapeRegExpLiteral(ident)}(?![\\w$])`,
+    "u",
+  );
+  let prevToken: "dot" | "other" = "other";
+  let prevWord = "";
+  let prevChar = "";
+  let regexAllowed = true;
+  let index = 0;
+
+  while (index < source.length) {
+    const ch = source[index];
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      index += 1;
+      continue;
+    }
+    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
+      index = skipWhitespaceAndComments(source, index);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      const end = scanQuotedStringEnd(source, index);
+      if (end === -1) return true;
+      index = end;
+      prevToken = "other";
+      prevWord = "";
+      prevChar = ch;
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "`") {
+      const end = scanTemplateLiteralEnd(source, index);
+      if (end === -1) return true;
+      const literal = source.slice(index, end);
+      if (literal.includes("${") && identWord.test(literal)) return true;
+      index = end;
+      prevToken = "other";
+      prevWord = "";
+      prevChar = "`";
+      regexAllowed = false;
+      continue;
+    }
+    if (ch === "/" && regexAllowed) {
+      const end = scanRegexLiteralEnd(source, index);
+      if (end !== -1) {
+        index = end;
+        prevToken = "other";
+        prevWord = "";
+        prevChar = "/";
+        regexAllowed = false;
+        continue;
+      }
+    }
+    if (ch === ".") {
+      index += 1;
+      prevToken = "dot";
+      prevWord = "";
+      prevChar = ".";
+      regexAllowed = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(ch ?? "")) {
+      const wordStart = index;
+      index += 1;
+      while (index < source.length && /[\w$]/u.test(source[index] ?? "")) index += 1;
+      const word = source.slice(wordStart, index);
+      if (prevToken !== "dot" && word === ident && wordStart !== skipOffset) {
+        const afterWord = skipWhitespaceAndComments(source, index);
+        const isObjectKey = (prevChar === "{" || prevChar === ",") && source[afterWord] === ":";
+        if (!isObjectKey) {
+          if (
+            prevWord === "delete" ||
+            prevChar === "+" ||
+            prevChar === "-" ||
+            isAssignmentOperatorAt(source, afterWord)
+          ) {
+            return true;
+          }
+          // Check member/index writes such as `tree[2] = ...` or `tree.foo = ...`
+          if (source[afterWord] === "[") {
+            const bracketEnd = scanBalancedEnd(source, afterWord);
+            if (bracketEnd === -1) return true;
+            const afterBracket = skipWhitespaceAndComments(source, bracketEnd);
+            if (isAssignmentOperatorAt(source, afterBracket)) return true;
+          } else if (source[afterWord] === ".") {
+            let propEnd = skipWhitespaceAndComments(source, afterWord + 1);
+            while (propEnd < source.length && /[\w$]/u.test(source[propEnd] ?? "")) propEnd += 1;
+            const afterProp = skipWhitespaceAndComments(source, propEnd);
+            if (isAssignmentOperatorAt(source, afterProp)) return true;
+          }
+        }
+      }
+      prevToken = "other";
+      prevWord = word;
+      prevChar = word.at(-1) ?? "";
+      regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+      continue;
+    }
+    index += 1;
+    prevToken = "other";
+    prevWord = "";
+    prevChar = ch ?? "";
+    regexAllowed = "([{=,:;!?&|^~+-*%<>".includes(ch ?? "");
+  }
+  return false;
+}
+
+function verifyTurbopackAppPageRuntimeExport(
+  runtimeModuleId: string,
+  exportName: string,
+  resolveModule: TurbopackModuleResolver,
+): boolean {
+  const factory = resolveModule(runtimeModuleId);
+  if (!factory) return false;
+  const parsed = parseTurbopackFactory(factory);
+  if (!parsed) return false;
+  const fnSource = extractTurbopackExportedFunction(parsed.body, parsed.param, exportName);
+  if (!fnSource) return false;
+
+  // Verify signature: `function({ tree: O, page: P, pathname: Q, require: R, loadChunk: S, interopDefault: T }) { ... }`
+  const openParen = fnSource.indexOf("(");
+  if (openParen === -1) return false;
+  const closeParen = scanBalancedEnd(fnSource, openParen);
+  if (closeParen === -1) return false;
+  const paramText = fnSource.slice(openParen + 1, closeParen - 1).trim();
+  const paramProps = parseTopLevelObjectProperties(paramText);
+  if (!paramProps) return false;
+  const treeParam = paramProps.get("tree");
+  const pageParam = paramProps.get("page");
+  const pathnameParam = paramProps.get("pathname");
+  const reqParam = paramProps.get("require");
+  const loadChunkParam = paramProps.get("loadChunk");
+  const interopParam = paramProps.get("interopDefault");
+  const identRe = /^[A-Za-z_$][\w$]*$/u;
+  if (
+    !treeParam ||
+    !pageParam ||
+    !pathnameParam ||
+    !reqParam ||
+    !loadChunkParam ||
+    !interopParam ||
+    !identRe.test(treeParam) ||
+    !identRe.test(pageParam) ||
+    !identRe.test(pathnameParam) ||
+    !identRe.test(reqParam) ||
+    !identRe.test(loadChunkParam) ||
+    !identRe.test(interopParam)
+  ) {
+    return false;
+  }
+
+  const bodyOpen = skipWhitespaceAndComments(fnSource, closeParen);
+  if (fnSource[bodyOpen] !== "{") return false;
+  const bodyClose = scanBalancedEnd(fnSource, bodyOpen);
+  if (bodyClose !== fnSource.length) return false;
+  const fnBody = fnSource.slice(bodyOpen + 1, bodyClose - 1);
+
+  // Verify the straight-line prefix at function entry constructs Next's
+  // `AppPageRouteModule` directly from the unmodified `tree`, `page`, and
+  // `pathname` parameters.
+  const prefixMatch = new RegExp(
+    `^\\s*(?:["']use strict["']\\s*;?\\s*)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*\\{\\s*require\\s*:\\s*${escapeRegExpLiteral(reqParam)}\\s*,\\s*loadChunk\\s*:\\s*${escapeRegExpLiteral(loadChunkParam)}\\s*,?\\s*\\}\\s*(?:,\\s*|;\\s*(?:const|let|var)\\s+)([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+([A-Za-z_$][\\w$]*)\\s*\\.\\s*AppPageRouteModule\\s*\\(`,
+    "u",
+  ).exec(fnBody);
+  if (!prefixMatch) return false;
+  const [, nextAppVar, routeModVar, appPageNs] = prefixMatch;
+  const ctorParen = prefixMatch[0].length - 1;
+  const ctorEnd = scanBalancedEnd(fnBody, ctorParen);
+  if (ctorEnd === -1) return false;
+  const ctorArgsText = fnBody.slice(ctorParen + 1, ctorEnd - 1).trim();
+  const ctorArgs = parseTopLevelObjectProperties(ctorArgsText);
+  if (!ctorArgs) return false;
+  const defProps = parseTopLevelObjectProperties(ctorArgs.get("definition") ?? "");
+  const userlandProps = parseTopLevelObjectProperties(ctorArgs.get("userland") ?? "");
+  if (!defProps || !userlandProps) return false;
+  if (userlandProps.get("loaderTree")?.trim() !== treeParam) return false;
+  if (defProps.get("page")?.trim() !== pageParam) return false;
+  if (defProps.get("pathname")?.trim() !== pathnameParam) return false;
+  if (
+    !/^(?:[A-Za-z_$][\w$]*\s*\.\s*)?RouteKind\s*\.\s*APP_PAGE$/u.test(defProps.get("kind") ?? "")
+  ) {
+    return false;
+  }
+
+  // Verify the function returns `{ __next_app__: nextAppVar, routeModule: routeModVar, handler: ... }`
+  // and neither `treeParam` nor `routeModVar` is mutated or reassigned.
+  const returnMatch = /return\s*(\{[^{}]*\})\s*;?\s*$/u.exec(fnBody);
+  if (!returnMatch) return false;
+  const returnProps = parseTopLevelObjectProperties(returnMatch[1]!);
+  if (
+    !returnProps ||
+    returnProps.get("__next_app__")?.trim() !== nextAppVar ||
+    returnProps.get("routeModule")?.trim() !== routeModVar ||
+    !identRe.test(returnProps.get("handler")?.trim() ?? "")
+  ) {
+    return false;
+  }
+  const routeModDeclOffset = fnBody.indexOf(
+    routeModVar!,
+    prefixMatch[0].indexOf(nextAppVar!) + nextAppVar!.length,
+  );
+  if (hasWriteToIdentifier(fnBody, treeParam)) return false;
+  if (hasWriteToIdentifier(fnBody, routeModVar!, routeModDeclOffset)) return false;
+
+  // Finally, prove `appPageNs` in `runtimeModuleId` resolves to Next's real
+  // external `AppPageRouteModule` runtime module.
+  const appPageModId = resolveUniqueTopLevelImportSource(parsed.body, appPageNs!, parsed.param);
+  if (!appPageModId) return false;
+  return isNextAppPageExternalModule(appPageModId, resolveModule);
 }
 
 function verifyCalleeIsNextEntrypoint(
   scopeSource: string,
   calleeText: string,
   moduleParam: string | undefined,
+  resolveTurbopackModule: TurbopackModuleResolver,
 ): boolean {
   const indirectMatch = /^\(\s*0\s*,\s*([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\)$/u.exec(
     calleeText,
   );
-  if (indirectMatch) {
-    const [, ns, prop] = indirectMatch;
-    if (moduleParam === undefined && prop !== "createAppPageEntrypoint") return false;
-    return isUniqueTopLevelImportedNamespace(scopeSource, ns!, moduleParam);
-  }
-  const memberMatch = /^([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)$/u.exec(calleeText);
+  const memberMatch =
+    indirectMatch ?? /^([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)$/u.exec(calleeText);
   if (memberMatch) {
     const [, ns, prop] = memberMatch;
-    if (moduleParam === undefined && prop !== "createAppPageEntrypoint") return false;
-    return isUniqueTopLevelImportedNamespace(scopeSource, ns!, moduleParam);
+    const importSource = resolveUniqueTopLevelImportSource(scopeSource, ns!, moduleParam);
+    if (!importSource) return false;
+    if (moduleParam !== undefined) {
+      return verifyTurbopackAppPageRuntimeExport(importSource, prop!, resolveTurbopackModule);
+    }
+    return prop === "createAppPageEntrypoint" && NEXT_APP_PAGE_RUNTIME_SPECIFIER.test(importSource);
   }
   if (moduleParam === undefined && calleeText === "createAppPageEntrypoint") {
     return isImportedDirectCreateAppPageEntrypoint(scopeSource);
@@ -2240,6 +2727,7 @@ function findTreeExpressionForPage(
   source: string,
   expectedPage: string,
   expectedModuleId?: string,
+  resolveTurbopackModule: TurbopackModuleResolver = createTurbopackModuleResolver([source]),
 ): string | undefined {
   const matches: Array<string | undefined> = [];
   let prevNonWsChar = "";
@@ -2328,6 +2816,7 @@ function findTreeExpressionForPage(
                   scopeSource,
                   callBinding.calleeText,
                   moduleCtx.moduleParam,
+                  resolveTurbopackModule,
                 ) &&
                 verifyEntrypointExportsInScope(
                   scopeSource,
@@ -2403,8 +2892,14 @@ export function compiledLoaderTreeHasOptionalRootLocale(
   source: string,
   expectedPage: string,
   expectedModuleId?: string,
+  resolveTurbopackModule?: TurbopackModuleResolver,
 ): boolean | undefined {
-  const treeExpr = findTreeExpressionForPage(source, expectedPage, expectedModuleId);
+  const treeExpr = findTreeExpressionForPage(
+    source,
+    expectedPage,
+    expectedModuleId,
+    resolveTurbopackModule,
+  );
   if (!treeExpr) return;
   return walkCompiledLoaderTree(treeExpr, 0, false);
 }
@@ -2442,11 +2937,15 @@ export function compiledRouteHasOptionalRootLocale(
     /module\.exports\s*=\s*[A-Za-z_$][\w$]*\.m\(\s*(\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*\)\.exports/u.exec(
       entrySource,
     )?.[1];
+  const loadedChunks: string[] = [];
   const templateChunks: string[] = [];
   for (const match of entrySource.matchAll(/\.c\(\s*["']([^"']+\.js)["']\s*\)/gu)) {
     const chunkRel = match[1];
-    if (chunkRel && NEXT_APP_PAGE_TEMPLATE_CHUNK_PATTERN.test(path.basename(chunkRel))) {
-      templateChunks.push(path.join(distDir, chunkRel));
+    if (!chunkRel) continue;
+    const chunkPath = path.join(distDir, chunkRel);
+    loadedChunks.push(chunkPath);
+    if (NEXT_APP_PAGE_TEMPLATE_CHUNK_PATTERN.test(path.basename(chunkRel))) {
+      templateChunks.push(chunkPath);
     }
   }
 
@@ -2456,15 +2955,31 @@ export function compiledRouteHasOptionalRootLocale(
   // chunk exists (single-file entries).
   if (templateChunks.length > 1) return;
   if (templateChunks.length === 1) {
+    if (expectedModuleId === undefined) return;
     let chunkSource: string;
     try {
       chunkSource = readFileSync(templateChunks[0]!, "utf8");
     } catch {
       return;
     }
-    return compiledLoaderTreeHasOptionalRootLocale(chunkSource, expectedPage, expectedModuleId);
+    const resolveModule = createTurbopackModuleResolver(
+      [chunkSource],
+      loadedChunks.filter((chunkPath) => chunkPath !== templateChunks[0]),
+    );
+    return compiledLoaderTreeHasOptionalRootLocale(
+      chunkSource,
+      expectedPage,
+      expectedModuleId,
+      resolveModule,
+    );
   }
-  return compiledLoaderTreeHasOptionalRootLocale(entrySource, expectedPage);
+  const resolveEntryModule = createTurbopackModuleResolver([entrySource], loadedChunks);
+  return compiledLoaderTreeHasOptionalRootLocale(
+    entrySource,
+    expectedPage,
+    expectedModuleId,
+    resolveEntryModule,
+  );
 }
 
 function directoryHasRouteEntry(

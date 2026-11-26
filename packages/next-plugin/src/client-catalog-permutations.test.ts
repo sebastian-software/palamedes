@@ -793,9 +793,12 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
           entryJSFiles: { "[project]/app/[[...locale]]/page": ["static/chunks/page.js"] },
         })};`,
       );
+      const runtimeModules = `59745,a=>{"use strict";var b=a.i(19317),d=a.i(38525);a.s(["f",0,function({tree:O,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){let U={require:R,loadChunk:S},V=new b.AppPageRouteModule({definition:{kind:d.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:O},distDir:".next",relativeProjectDir:""});async function Z(){return null}return{__next_app__:U,routeModule:V,handler:Z}}])},19317,(a,b)=>{b.exports=a.r(18622)},18622,(a,b)=>{b.exports=a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",()=>require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js"))}`;
+      const runtimeChunk = path.join(distDir, "server/chunks/ssr/next_app_page_runtime.js");
+      writeFileSync(runtimeChunk, `module.exports=[${runtimeModules}];\n`);
       writeFileSync(
         path.join(distDir, "server/app/[[...locale]]/page.js"),
-        `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(1).exports\n`,
+        `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_app_page_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(1).exports\n`,
       );
       const templateChunk = path.join(
         distDir,
@@ -865,6 +868,21 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
         `module.exports=[2,a=>{let j=["",{},{layout:[l,"[project]/app/layout.page.tsx"]},[]];${tpExports(2, "tree:j")}},1,a=>{var c=a.i(59745);let m=(0,c.f)(dynamicOpts),mp=m.__next_app__,mq=m.routeModule,mr=m.handler;a.s(["__next_app__",0,mp,"handler",0,mr,"routeModule",0,mq],1);}];`,
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
+      // Single-file page.js entry: preserve expectedModuleId from R.m(1).exports
+      // so a non-exported module 2 in the same file cannot override an inconclusive
+      // exported module 1.
+      const singleFilePageEntry = path.join(distDir, "server/app/[[...locale]]/page.js");
+      const savedPageEntry = readFileSync(singleFilePageEntry, "utf8");
+      try {
+        writeFileSync(
+          singleFilePageEntry,
+          `module.exports=[2,a=>{let j=["",{},{layout:[l,"[project]/app/layout.page.tsx"]},[]];${tpExports(2, "tree:j")}},1,a=>{var c=a.i(59745);let m=(0,c.f)(dynamicOpts),mp=m.__next_app__,mq=m.routeModule,mr=m.handler;a.s(["__next_app__",0,mp,"handler",0,mr,"routeModule",0,mq],1);},${runtimeModules}];\nmodule.exports=R.m(1).exports\n`,
+        );
+        expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+      } finally {
+        writeFileSync(singleFilePageEntry, savedPageEntry);
+      }
 
       // Unminified ESM output (`experimental.turbopackMinify: false`) uses
       // shorthand properties such as `{ tree, page: "...", interopDefault }`.
@@ -955,7 +973,7 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       );
       writeFileSync(
         path.join(specialManifestDir, "page.js"),
-        `var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/Bob's recs/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_special.js")\nmodule.exports=R.m(2).exports\n`,
+        `var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/Bob's recs/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_app_page_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_special.js")\nmodule.exports=R.m(2).exports\n`,
       );
       writeFileSync(
         path.join(distDir, "server/chunks/ssr/next_dist_esm_build_templates_app-page_special.js"),
@@ -964,15 +982,14 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       expect(compiledRouteHasOptionalRootLocale(distDir, specialManifestPath)).toBe(true);
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `module.exports=[2,a=>{let j=["",{children:['Bob\\'s "recs"',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s "recs"/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s "recs"/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];${tpExports(2, "tree:j", "'/Bob\\'s \"recs\"/[[...locale]]/page'", "'/Bob\\'s \"recs\"/[[...locale]]'")}}];`,
+          `module.exports=[2,a=>{let j=["",{children:['Bob\\'s "recs"',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s "recs"/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s "recs"/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];${tpExports(2, "tree:j", "'/Bob\\'s \"recs\"/[[...locale]]/page'", "'/Bob\\'s \"recs\"/[[...locale]]'")}},${runtimeModules}];`,
           '/Bob\'s "recs"/[[...locale]]/page',
         ),
       ).toBe(true);
 
       // Diagnostic or unrelated calls — even when carrying all six entrypoint
-      // argument fields — must NOT impersonate the route entrypoint when the
-      // actual exported entrypoint receives a variable, is reassigned, or uses
-      // a local wrapper function.
+      // argument fields — and imported wrappers that do not come from Next's
+      // app-page-runtime must NOT impersonate the route entrypoint.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
           `logDiagnostic({ tree: ["", {}, { layout: [l, "root"] }], page: "/[[...locale]]/page" }); const entrypoint = createAppPageEntrypoint(optionsObj);`,
@@ -1011,9 +1028,38 @@ export const handler = entrypoint.handler;`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
+      // Imported wrappers (ESM, CJS, and Turbopack) that replace `tree` before
+      // calling Next must be rejected by provenance verification.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `module.exports=[1,a=>{var c=a.i(59745);let j=["",{},{layout:[l,"root"]}];let unexported=${ep("tree:j")};}];`,
+          `import { createAppPageEntrypoint } from "./custom-wrapper";
+const entrypoint = createAppPageEntrypoint({ tree: ["", {}, { layout: [l, "root"] }], page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: r, loadChunk: lc, interopDefault: id });
+export const __next_app__ = entrypoint.__next_app__;
+export const routeModule = entrypoint.routeModule;
+export const handler = entrypoint.handler;`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `_export(exports, { __next_app__: () => __next_app__, handler: () => handler, routeModule: () => routeModule });
+const _wrapper = require("./custom-wrapper");
+const entrypoint = (0, _wrapper.createAppPageEntrypoint)({ tree: ["", {}, { layout: [l, "root"] }], page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: r, loadChunk: lc, interopDefault: id });
+const __next_app__ = entrypoint.__next_app__;
+const routeModule = entrypoint.routeModule;
+const handler = entrypoint.handler;`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `module.exports=[1,a=>{var c=a.i(99999);let j=["",{},{layout:[l,"root"]}];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:r,loadChunk:lc,interopDefault:id}),mp=m.__next_app__,mq=m.routeModule,mr=m.handler;a.s(["__next_app__",0,mp,"handler",0,mr,"routeModule",0,mq],1);},99999,a=>{var real=a.i(59745);a.s(["f",0,function(opts){return(0,real.f)({...opts,tree:otherTree})}])},${runtimeModules}];`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `module.exports=[1,a=>{var c=a.i(59745);let j=["",{},{layout:[l,"root"]}];let unexported=${ep("tree:j")};},${runtimeModules}];`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -1101,7 +1147,7 @@ export const handler = entrypoint.handler;`,
       ).toBe(true);
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `module.exports=[1,a=>{let j=["",{},{layout:[l,"a"]}];${tpExports(1, "tree:j", '"/other/page"', '"/other"')}},2,a=>{let x=1,j=["",{children:["[[...locale]]",{},{layout:[l,"b"]}]},{}];${tpExports(2, "tree:j")}}];`,
+          `module.exports=[1,a=>{let j=["",{},{layout:[l,"a"]}];${tpExports(1, "tree:j", '"/other/page"', '"/other"')}},2,a=>{let x=1,j=["",{children:["[[...locale]]",{},{layout:[l,"b"]}]},{}];${tpExports(2, "tree:j")}},${runtimeModules}];`,
           "/[[...locale]]/page",
         ),
       ).toBe(true);
