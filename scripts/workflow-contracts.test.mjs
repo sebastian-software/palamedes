@@ -2047,6 +2047,11 @@ describe("workflow contracts", () => {
           "          buildah --storage-driver vfs pull ubuntu:24.04",
           "          docker build --build-arg BUILDKIT_SYNTAX=docker/dockerfile:1.9 .",
           "          podman build --build-context pctx=container-image://traefik:3 .",
+          "          docker buildx create --use --bootstrap",
+          "          docker buildx create --driver-opt image=moby/buildkit:v0.35.1",
+          `          docker buildx create --driver-opt network=host,image=moby/buildkit:v0.35.1@${digest}`,
+          "          docker buildx create --driver docker",
+          `          docker run --cpu-count 2 --cpu-percent 50 --io-maxbandwidth 1M --io-maxiops 100 node:24@${digest} node -v`,
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "        with:",
@@ -2076,6 +2081,19 @@ describe("workflow contracts", () => {
           "      - run: docker run ${{ env.RUN_FLAGS }} caddy:2 node -v",
           `      - run: docker run \${{ matrix.flags }} node:24@${digest} node -v`,
           "      - run: docker run ${{ matrix.flags }} debian:12 node -v",
+          "  isolated-matrix-github-env:",
+          "    runs-on: ubuntu-24.04",
+          "    strategy:",
+          "      matrix:",
+          "        include:",
+          "          - mode: display",
+          "            ref: node:24",
+          "          - mode: run",
+          `            ref: node:24@${digest}`,
+          "    steps:",
+          '      - run: echo "IMAGE=${{ matrix.ref }}" >> "$GITHUB_ENV"',
+          "      - if: matrix.mode == 'run'",
+          '        run: docker pull "$IMAGE"',
           "",
         ].join("\n"),
       ),
@@ -2088,13 +2106,15 @@ describe("workflow contracts", () => {
       "<memory>:20: ubuntu:24.04 is not pinned to a sha256 digest",
       "<memory>:21: docker/dockerfile:1.9 is not pinned to a sha256 digest",
       "<memory>:22: traefik:3 is not pinned to a sha256 digest",
-      "<memory>:23: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
-      "<memory>:26: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
-      "<memory>:35: docker/dockerfile:1.10 is not pinned to a sha256 digest",
-      "<memory>:43: alpine:3.20 is not pinned to a sha256 digest",
-      "<memory>:47: busybox:1.37 is not pinned to a sha256 digest",
-      "<memory>:49: caddy:2 is not pinned to a sha256 digest",
-      "<memory>:51: debian:12 is not pinned to a sha256 digest",
+      "<memory>:23: docker buildx create uses unpinned default BuildKit image (pass --driver-opt image=...@sha256:...)",
+      "<memory>:24: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
+      "<memory>:28: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
+      "<memory>:31: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
+      "<memory>:40: docker/dockerfile:1.10 is not pinned to a sha256 digest",
+      "<memory>:48: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:52: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:54: caddy:2 is not pinned to a sha256 digest",
+      "<memory>:56: debian:12 is not pinned to a sha256 digest",
     ]);
     const buildFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-builds-"));
     try {
@@ -2145,6 +2165,7 @@ describe("workflow contracts", () => {
       );
       await writeFile(join(buildFixture, "ci", "cmdsub", "sub.recipe"), "FROM ruby:3.4\n");
       await writeFile(join(buildFixture, "ci", "popd.recipe"), "FROM perl:5.40\n");
+      await writeFile(join(buildFixture, "ci", "short-eq.recipe"), "FROM elixir:1.18\n");
       await writeFile(
         join(buildFixture, ".github", "workflows", "cd-and-ctx.yml"),
         [
@@ -2183,6 +2204,7 @@ describe("workflow contracts", () => {
           "          IMAGE_ID=$(docker build -q -f sub.recipe .)",
           "          popd",
           "          docker build -f ci/popd.recipe .",
+          "          docker build -f=ci/short-eq.recipe .",
           "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
           "        with:",
           `          build-contexts: rootctx=docker-image://node:24@${digest}`,
@@ -2200,6 +2222,7 @@ describe("workflow contracts", () => {
         "ci/nested-b/cd.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
         "ci/popd.recipe:1: perl:5.40 is not pinned to a sha256 digest",
         "ci/shared.recipe:1: maybectx is not pinned to a sha256 digest",
+        "ci/short-eq.recipe:1: elixir:1.18 is not pinned to a sha256 digest",
         "ci/stdin-attached.recipe:1: debian:12 is not pinned to a sha256 digest",
         "ci/win/win.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
         "ci/arg-env.recipe:2: redis:7 is not pinned to a sha256 digest",

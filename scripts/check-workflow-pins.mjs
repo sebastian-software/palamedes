@@ -93,6 +93,16 @@ const DOCKER_GLOBAL_VALUE_FLAGS = new Set([
   "--tlskey",
 ]);
 const DOCKER_BUILDX_GLOBAL_VALUE_FLAGS = new Set(["--builder"]);
+const DOCKER_BUILDX_CREATE_VALUE_FLAGS = new Set([
+  "--buildkitd-config",
+  "--buildkitd-flags",
+  "--config",
+  "--driver",
+  "--driver-opt",
+  "--name",
+  "--node",
+  "--platform",
+]);
 const PODMAN_GLOBAL_VALUE_FLAGS = new Set([
   ...DOCKER_GLOBAL_VALUE_FLAGS,
   "--cdi-spec-dir",
@@ -162,6 +172,8 @@ const DOCKER_RUN_VALUE_FLAGS = new Set([
   "--cgroup-parent",
   "--cgroupns",
   "--cidfile",
+  "--cpu-count",
+  "--cpu-percent",
   "--cpu-period",
   "--cpu-quota",
   "--cpu-rt-period",
@@ -197,6 +209,8 @@ const DOCKER_RUN_VALUE_FLAGS = new Set([
   "--health-timeout",
   "-h",
   "--hostname",
+  "--io-maxbandwidth",
+  "--io-maxiops",
   "--ip",
   "--ip6",
   "--ipc",
@@ -1469,17 +1483,15 @@ function resolveContainerBuildCommand(
     if (buildxSubcommand === "build") {
       return { kind: "build", argStart: buildxIndex + 1 };
     }
+    if (buildxSubcommand === "create") {
+      return { kind: "buildx-create", argStart: buildxIndex + 1 };
+    }
   }
   return null;
 }
 
 function parseShortBuildFlagBundle(token, nextToken) {
-  if (
-    !token.startsWith("-") ||
-    token.startsWith("--") ||
-    token.length <= 2 ||
-    token.includes("=")
-  ) {
+  if (!token.startsWith("-") || token.startsWith("--") || token.length <= 2) {
     return null;
   }
   for (let index = 1; index < token.length; index += 1) {
@@ -1487,6 +1499,9 @@ function parseShortBuildFlagBundle(token, nextToken) {
     if (ch === "f") {
       if (index === token.length - 1) {
         return { file: nextToken ?? null, consumedNext: true };
+      }
+      if (token[index + 1] === "=") {
+        return { file: token.slice(index + 2), consumedNext: false };
       }
       return { file: token.slice(index + 1), consumedNext: false };
     }
@@ -3837,6 +3852,143 @@ function inspectShellText(
       );
       continue;
     }
+    if (buildCommand?.kind === "buildx-create") {
+      let rawDriver = null;
+      const rawDriverOpts = [];
+      for (let index = buildCommand.argStart; index < tokens.length; index += 1) {
+        const redirConsumed = consumeShellRedirection(tokens, index);
+        if (redirConsumed > 0) {
+          index += redirConsumed - 1;
+          continue;
+        }
+        const token = tokens[index];
+        if (token === "--") {
+          break;
+        }
+        if (token === "--driver") {
+          if (tokens[index + 1] !== undefined) {
+            rawDriver = tokens[index + 1];
+          }
+          index += 1;
+          continue;
+        }
+        if (token.startsWith("--driver=")) {
+          rawDriver = token.slice("--driver=".length);
+          continue;
+        }
+        if (token === "--driver-opt") {
+          if (tokens[index + 1] !== undefined) {
+            rawDriverOpts.push(tokens[index + 1]);
+          }
+          index += 1;
+          continue;
+        }
+        if (token.startsWith("--driver-opt=")) {
+          rawDriverOpts.push(token.slice("--driver-opt=".length));
+          continue;
+        }
+        if (token.startsWith("-") && flagConsumesNextArg(token, DOCKER_BUILDX_CREATE_VALUE_FLAGS)) {
+          index += 1;
+        }
+      }
+
+      const createRows = matrixRows.length > 0 ? matrixRows : [null];
+      const seenCreateProblems = new Set();
+      const pushCreateProblem = (message) => {
+        if (!seenCreateProblems.has(message)) {
+          seenCreateProblems.add(message);
+          problems.push(message);
+        }
+      };
+
+      for (const row of createRows) {
+        const rowList = row ? [row] : [];
+        const driverCandidates = rawDriver
+          ? resolveImageTokenCandidates(
+              rawDriver,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            ).candidates.flatMap((varCandidate) =>
+              expandMatrixReferences(varCandidate.text, rowList, varCandidate.line),
+            )
+          : [{ text: "docker-container", line: lineNumber }];
+
+        const usesContainerDriver = driverCandidates.some((candidate) => {
+          const normalizedDriver = candidate.text.trim().toLowerCase();
+          return (
+            normalizedDriver === "" ||
+            normalizedDriver === "docker-container" ||
+            normalizedDriver === "kubernetes"
+          );
+        });
+        if (!usesContainerDriver) {
+          continue;
+        }
+
+        let effectiveImageCandidates = [];
+        for (const rawOpt of rawDriverOpts) {
+          const expandedOpt = resolveImageTokenCandidates(
+            rawOpt,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          if (expandedOpt.truncated) {
+            pushCreateProblem(
+              `${filePath}:${lineNumber}: ${rawOpt} exceeds expansion limit and cannot be verified exhaustively`,
+            );
+          }
+          const flagImages = [];
+          for (const varCandidate of expandedOpt.candidates) {
+            for (const candidate of expandMatrixReferences(
+              varCandidate.text,
+              rowList,
+              varCandidate.line,
+            )) {
+              for (const rawPart of candidate.text.split(",")) {
+                const part = stripQuotes(rawPart.trim());
+                const imageMatch = /^image=(?<image>.*)$/iu.exec(part);
+                if (imageMatch) {
+                  flagImages.push({
+                    text: stripQuotes(imageMatch.groups.image),
+                    line: candidate.line,
+                  });
+                }
+              }
+            }
+          }
+          if (flagImages.length > 0) {
+            effectiveImageCandidates = flagImages;
+          }
+        }
+
+        if (effectiveImageCandidates.length === 0) {
+          pushCreateProblem(
+            `${filePath}:${lineNumber}: ${normalizedCli} buildx create uses unpinned default BuildKit image (pass --driver-opt image=...@sha256:...)`,
+          );
+          continue;
+        }
+
+        for (const imageCandidate of effectiveImageCandidates) {
+          const imageRef = imageCandidate.text.trim();
+          if (!imageRef) {
+            pushCreateProblem(
+              `${filePath}:${lineNumber}: ${normalizedCli} buildx create uses unpinned default BuildKit image (pass --driver-opt image=...@sha256:...)`,
+            );
+            continue;
+          }
+          if (!isDynamicReference(imageRef, shellMode) && !isPinnedDigest(imageRef)) {
+            pushCreateProblem(
+              `${filePath}:${imageCandidate.line}: ${imageRef} is not pinned to a sha256 digest`,
+            );
+          }
+        }
+      }
+      continue;
+    }
     if (buildCommand?.kind === "build") {
       const buildArgStart = buildCommand.argStart;
       const rawFiles = [];
@@ -4604,15 +4756,15 @@ function resolveStepExecutionGroups(
   explicitDefaultShell,
   stepWorkingDirNode,
   defaultWorkingDir,
-  stepEnv,
+  getRowStepEnv,
   applicableContexts,
   matrixRows,
   root,
 ) {
-  const expandShellTemplate = (template, fallbackLine, row) => {
+  const expandShellTemplate = (template, fallbackLine, row, rowStepEnv) => {
     const rowList = row ? [row] : [];
     const modes = [];
-    for (const envCandidate of resolveEnvExpressionCandidates(template, stepEnv, fallbackLine)
+    for (const envCandidate of resolveEnvExpressionCandidates(template, rowStepEnv, fallbackLine)
       .candidates) {
       for (const candidate of expandMatrixReferences(
         envCandidate.text,
@@ -4634,18 +4786,24 @@ function resolveStepExecutionGroups(
         : [{ row: null, runnerOs: null, defaultShell: "posix" }];
 
   for (const ctx of contexts) {
+    const rowStepEnv = getRowStepEnv(ctx.row);
     let modes;
     if (stepShellNode?.kind === "scalar") {
-      modes = expandShellTemplate(String(stepShellNode.value).trim(), stepShellNode.line, ctx.row);
+      modes = expandShellTemplate(
+        String(stepShellNode.value).trim(),
+        stepShellNode.line,
+        ctx.row,
+        rowStepEnv,
+      );
     } else if (explicitDefaultShell) {
-      modes = expandShellTemplate(explicitDefaultShell, 1, ctx.row);
+      modes = expandShellTemplate(explicitDefaultShell, 1, ctx.row, rowStepEnv);
     } else {
       modes = [ctx.defaultShell];
     }
     const workingDirs = resolveWorkingDirsForRow(
       stepWorkingDirNode,
       defaultWorkingDir,
-      stepEnv,
+      rowStepEnv,
       ctx.row,
       root,
       ctx.runnerOs === "Windows",
@@ -4680,12 +4838,17 @@ function checkStepsList(
   if (stepsNode?.kind !== "seq") {
     return;
   }
-  const runningEnv = cloneVarMap(baseEnv);
+  const allRows = matrixRows.length > 0 ? matrixRows : [null];
+  const rowRunningEnvs = new Map();
+  for (const row of allRows) {
+    rowRunningEnvs.set(row, cloneVarMap(baseEnv));
+  }
   for (const stepNode of stepsNode.value) {
     if (stepNode?.kind !== "map") {
       continue;
     }
-    const stepEnv = extractEnvMap(getMapField(stepNode, "env"), runningEnv);
+    const stepEnvNode = getMapField(stepNode, "env");
+    const getRowStepEnv = (row) => extractEnvMap(stepEnvNode, rowRunningEnvs.get(row) ?? baseEnv);
     const stepIfNode = getMapField(stepNode, "if");
     const stepConditional = stepIfNode !== null;
     const stepShellNode = getMapField(stepNode, "shell");
@@ -4721,12 +4884,16 @@ function checkStepsList(
       };
 
       for (const row of actionRows) {
+        const rowStepEnv = getRowStepEnv(row);
         const rowList = row ? [row] : [];
         const rawDriver = driverNode?.kind === "scalar" ? String(driverNode.value).trim() : "";
         const driverCandidates = rawDriver
-          ? resolveEnvExpressionCandidates(rawDriver, stepEnv, driverNode.line).candidates.flatMap(
-              (envCandidate) =>
-                expandMatrixReferences(envCandidate.text, rowList, envCandidate.line),
+          ? resolveEnvExpressionCandidates(
+              rawDriver,
+              rowStepEnv,
+              driverNode.line,
+            ).candidates.flatMap((envCandidate) =>
+              expandMatrixReferences(envCandidate.text, rowList, envCandidate.line),
             )
           : [{ text: "docker-container", line: usesNode.line }];
 
@@ -4769,7 +4936,7 @@ function checkStepsList(
         const effectiveImage = rawImageValues.at(-1);
         const expandedImage = resolveEnvExpressionCandidates(
           effectiveImage.text,
-          stepEnv,
+          rowStepEnv,
           effectiveImage.line,
         );
         if (expandedImage.truncated) {
@@ -4811,6 +4978,7 @@ function checkStepsList(
       const seenActionSyntaxProblems = new Set();
 
       for (const row of actionRows) {
+        const rowStepEnv = getRowStepEnv(row);
         const rowList = row ? [row] : [];
         const namedContexts = new Set();
         if (buildContextsNode?.kind === "scalar") {
@@ -4822,8 +4990,8 @@ function checkStepsList(
             }
             inspectBuildContextSpec(
               trimmedLine,
-              stepEnv,
-              stepEnv,
+              rowStepEnv,
+              rowStepEnv,
               rowList,
               filePath,
               buildContextsNode.line,
@@ -4848,9 +5016,9 @@ function checkStepsList(
             }
             const parsedArg = expandBuildArgSpec(
               trimmedLine,
-              stepEnv,
-              stepEnv,
-              stepEnv,
+              rowStepEnv,
+              rowStepEnv,
+              rowStepEnv,
               rowList,
               buildArgsNode.line,
               "posix",
@@ -4886,7 +5054,7 @@ function checkStepsList(
         if (fileNode?.kind === "scalar") {
           for (const envCandidate of resolveEnvExpressionCandidates(
             String(fileNode.value).trim(),
-            stepEnv,
+            rowStepEnv,
             fileNode.line,
           ).candidates) {
             for (const candidate of expandMatrixReferences(
@@ -4912,7 +5080,7 @@ function checkStepsList(
           if (contextNode?.kind === "scalar") {
             for (const envCandidate of resolveEnvExpressionCandidates(
               String(contextNode.value).trim(),
-              stepEnv,
+              rowStepEnv,
               contextNode.line,
             ).candidates) {
               for (const candidate of expandMatrixReferences(
@@ -4963,60 +5131,85 @@ function checkStepsList(
       explicitDefaultShell,
       stepWorkingDirNode,
       defaultWorkingDir,
-      stepEnv,
+      getRowStepEnv,
       applicableContexts,
       applicableMatrixRows,
       buildFileContext?.root ?? null,
     );
 
-    const emittedGithubEnv = new Map();
+    const perRowEmittedEnv = new Map();
     const runNode = getMapField(stepNode, "run");
     if (runNode?.kind === "scalar") {
-      if (executionGroups.length === 1) {
-        const [{ shellMode, workingDir, rows }] = executionGroups;
+      const seenAcrossStepRuns = new Set();
+      for (const { shellMode, workingDir, rows } of executionGroups) {
         const groupBuildContext = buildFileContext ? { ...buildFileContext, workingDir } : null;
-        inspectShellRunScript(
-          runNode,
-          stepEnv,
-          rows,
-          filePath,
-          problems,
-          emittedGithubEnv,
-          shellMode,
-          groupBuildContext,
-        );
-      } else {
-        const seenAcrossGroups = new Set();
-        for (const { shellMode, workingDir, rows } of executionGroups) {
-          const groupBuildContext = buildFileContext ? { ...buildFileContext, workingDir } : null;
-          const groupProblems = [];
+        const groupRows = rows.length > 0 ? rows : [null];
+        for (const row of groupRows) {
+          const rowStepEnv = getRowStepEnv(row);
+          const rowProblems = [];
+          const rowEmitted = new Map();
           inspectShellRunScript(
             runNode,
-            stepEnv,
-            rows,
+            rowStepEnv,
+            row ? [row] : [],
             filePath,
-            groupProblems,
-            emittedGithubEnv,
+            rowProblems,
+            rowEmitted,
             shellMode,
             groupBuildContext,
           );
-          for (const message of groupProblems) {
-            if (!seenAcrossGroups.has(message)) {
-              seenAcrossGroups.add(message);
+          for (const message of rowProblems) {
+            if (!seenAcrossStepRuns.has(message)) {
               problems.push(message);
             }
+          }
+          for (const message of rowProblems) {
+            seenAcrossStepRuns.add(message);
+          }
+          if (rowEmitted.size > 0) {
+            const existingRowWrites = perRowEmittedEnv.get(row) ?? [];
+            existingRowWrites.push(rowEmitted);
+            perRowEmittedEnv.set(row, existingRowWrites);
           }
         }
       }
     }
-    for (const [name, write] of emittedGithubEnv) {
-      if (stepConditional || write.conditional) {
-        const existing = runningEnv.has(name)
-          ? runningEnv.get(name)
-          : [{ value: "", line: 0, unset: true }];
-        runningEnv.set(name, mergeVarEntries(existing, write.entries));
-      } else {
-        runningEnv.set(name, write.entries);
+    for (const [row, writeMaps] of perRowEmittedEnv) {
+      const targetEnv = rowRunningEnvs.get(row);
+      if (!targetEnv) {
+        continue;
+      }
+      const allWrittenNames = new Set();
+      for (const writeMap of writeMaps) {
+        for (const name of writeMap.keys()) {
+          allWrittenNames.add(name);
+        }
+      }
+      for (const name of allWrittenNames) {
+        let mergedEntries = [];
+        let conditionalAcrossGroups = stepConditional;
+        for (const writeMap of writeMaps) {
+          const write = writeMap.get(name);
+          if (!write) {
+            conditionalAcrossGroups = true;
+            continue;
+          }
+          if (write.conditional) {
+            conditionalAcrossGroups = true;
+          }
+          mergedEntries = mergeVarEntries(mergedEntries, write.entries);
+        }
+        if (mergedEntries.length === 0) {
+          continue;
+        }
+        if (conditionalAcrossGroups) {
+          const existing = targetEnv.has(name)
+            ? targetEnv.get(name)
+            : [{ value: "", line: 0, unset: true }];
+          targetEnv.set(name, mergeVarEntries(existing, mergedEntries));
+        } else {
+          targetEnv.set(name, mergedEntries);
+        }
       }
     }
   }
