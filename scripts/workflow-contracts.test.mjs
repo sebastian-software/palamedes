@@ -1099,6 +1099,8 @@ describe("workflow contracts", () => {
     expect(report.if).toContain("github.event_name == 'schedule'");
     expect(report.text).toMatch(/permissions:\n {6}contents: read\n {6}issues: write/u);
     expect(report.text).toContain("scripts/open-or-refresh-issue.mjs");
+    expect(report.text).toContain("const failures = [];");
+    expect(report.text).toContain("if (failures.length > 0)");
   });
 
   it("scopes GitHub Pages write permissions strictly to the site deploy job", async () => {
@@ -1226,10 +1228,22 @@ describe("workflow contracts", () => {
     ]);
 
     // Workflow and composite-action container references must carry a sha256 digest.
+    expect(unpinnedWorkflowContainerReferences("    container: node:24\n")).toEqual([
+      "<memory>:1: node:24 is not pinned to a sha256 digest",
+    ]);
+    expect(unpinnedWorkflowContainerReferences(`    container: node:24@${digest}\n`)).toEqual([]);
     expect(unpinnedWorkflowContainerReferences("    image: node:24-alpine\n")).toHaveLength(1);
     expect(unpinnedWorkflowContainerReferences(`    image: node:24-alpine@${digest}\n`)).toEqual(
       [],
     );
+    expect(
+      unpinnedWorkflowContainerReferences("runs:\n  using: docker\n  image: Dockerfile\n"),
+    ).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        "runs:\n  using: docker\n  image: docker://alpine:3.20\n",
+      ),
+    ).toEqual(["<memory>:3: docker://alpine:3.20 is not pinned to a sha256 digest"]);
     expect(
       unpinnedWorkflowContainerReferences(
         '      - name: Pull\n        run: |\n          image=rust:1.96-alpine\n          docker pull "$image"\n',
@@ -1242,6 +1256,16 @@ describe("workflow contracts", () => {
     ).toEqual([]);
     expect(
       unpinnedWorkflowContainerReferences(
+        "      - name: Multi\n        run: docker version && docker pull node:24\n",
+      ),
+    ).toEqual(["<memory>:2: node:24 is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        `      - name: Multi\n        run: docker pull rust:1.96-alpine@${digest} && docker run --rm node:24-alpine node -v\n`,
+      ),
+    ).toEqual(["<memory>:2: node:24-alpine is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
         '      - name: Smoke\n        run: >\n          docker run --rm\n          -v "$PWD:/workspace"\n          node:24-alpine\n          node -v\n',
       ),
     ).toEqual(["<memory>:5: node:24-alpine is not pinned to a sha256 digest"]);
@@ -1252,20 +1276,43 @@ describe("workflow contracts", () => {
     ).toEqual([]);
 
     // Containerfiles/Dockerfiles must pin FROM and external COPY --from stages,
-    // while allowing `scratch` and internal build stage aliases.
+    // resolve static ARG defaults embedded in image references, reject self-named
+    // unpinned stages, and allow `scratch` and earlier build stage aliases.
     expect(
       unpinnedContainerfileReferences(
-        `FROM rust:1.96-bookworm AS toolchain\nFROM node:24-bookworm@${digest} AS build\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nCOPY --from=busybox:1.37 /bin/sh /bin/sh\nFROM scratch\n`,
+        `ARG NODE_VERSION=24\nFROM alpine AS alpine\nFROM node:\${NODE_VERSION} AS build\nCOPY --from=build /app /app\nCOPY --from=busybox:1.37 /bin/sh /bin/sh\nFROM scratch\n`,
       ),
     ).toEqual([
-      "<memory>:1: rust:1.96-bookworm is not pinned to a sha256 digest",
-      "<memory>:4: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:2: alpine is not pinned to a sha256 digest",
+      "<memory>:3: node:24 is not pinned to a sha256 digest",
+      "<memory>:5: busybox:1.37 is not pinned to a sha256 digest",
     ]);
     expect(
       unpinnedContainerfileReferences(
         `FROM rust:1.96-bookworm@${digest} AS toolchain\nFROM node:24-bookworm@${digest} AS build\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nFROM build AS runtime\n`,
       ),
     ).toEqual([]);
+
+    // Renovate custom manager extracts the digest-pinned musl action images.
+    const [renovateConfig, verifyMuslAction] = await Promise.all([
+      readRepositoryFile("renovate.json").then(JSON.parse),
+      readRepositoryFile(".github/actions/verify-musl-native/action.yml"),
+    ]);
+    const manager = renovateConfig.customManagers?.find(
+      (entry) => entry.customType === "regex" && entry.datasourceTemplate === "docker",
+    );
+    expect(manager).toBeDefined();
+    const pattern = new RegExp(manager.matchStrings[0], "gu");
+    const extracted = [...verifyMuslAction.matchAll(pattern)].map((match) => ({
+      depName: match.groups.depName,
+      currentValue: match.groups.currentValue,
+      hasDigest: /^sha256:[0-9a-f]{64}$/u.test(match.groups.currentDigest),
+    }));
+    expect(extracted).toEqual([
+      { depName: "rust", currentValue: `${rustVersion}-alpine`, hasDigest: true },
+      { depName: "node", currentValue: "24-alpine", hasDigest: true },
+      { depName: "node", currentValue: "24-alpine", hasDigest: true },
+    ]);
   });
 
   it("runs the dependency policy and the pin check in CI", async () => {

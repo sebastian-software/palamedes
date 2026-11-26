@@ -156,69 +156,80 @@ jobs:
             { delivery: "permutations", label: "permutation" },
           ];
           const VERSION_PATTERN = /^[A-Za-z0-9._-]+$/u;
+          const failures = [];
 
           for (const { delivery, label } of DELIVERIES) {
-            const outcomePath = path.join("canary-outcomes", `canary-outcome-${delivery}.json`);
-            if (!fs.existsSync(outcomePath)) {
-              continue;
-            }
+            try {
+              const outcomePath = path.join("canary-outcomes", `canary-outcome-${delivery}.json`);
+              if (!fs.existsSync(outcomePath)) {
+                continue;
+              }
 
-            const outcome = JSON.parse(fs.readFileSync(outcomePath, "utf8"));
-            const title = `fix(next-plugin): Next.js canary breaks the client catalog ${label} contract`;
+              const outcome = JSON.parse(fs.readFileSync(outcomePath, "utf8"));
+              const title = `fix(next-plugin): Next.js canary breaks the client catalog ${label} contract`;
 
-            if (outcome.action === "close") {
-              execFileSync(
-                process.execPath,
-                [
-                  "./scripts/open-or-refresh-issue.mjs",
-                  "--title",
-                  title,
-                  "--label",
-                  "stability",
-                  "--close-comment",
-                  `The scheduled Next.js canary run passes the client catalog ${label} contract again.`,
-                ],
-                { stdio: "inherit" },
-              );
-              continue;
-            }
+              if (outcome.action === "close") {
+                execFileSync(
+                  process.execPath,
+                  [
+                    "./scripts/open-or-refresh-issue.mjs",
+                    "--title",
+                    title,
+                    "--label",
+                    "stability",
+                    "--close-comment",
+                    `The scheduled Next.js canary run passes the client catalog ${label} contract again.`,
+                  ],
+                  { stdio: "inherit" },
+                );
+                continue;
+              }
 
-            if (outcome.action === "open") {
-              if (process.env.CONTRACT_RESULT !== "failure") {
-                throw new Error(
-                  `Refusing to open tracking issue for ${delivery} when contract job result is ${process.env.CONTRACT_RESULT}`,
+              if (outcome.action === "open") {
+                if (process.env.CONTRACT_RESULT !== "failure") {
+                  throw new Error(
+                    `Refusing to open tracking issue for ${delivery} when contract job result is ${process.env.CONTRACT_RESULT}`,
+                  );
+                }
+                const nextVersion =
+                  typeof outcome.nextVersion === "string" && VERSION_PATTERN.test(outcome.nextVersion)
+                    ? outcome.nextVersion
+                    : "unknown";
+                const bodyFile = `issue-body-${delivery}.md`;
+                const body = [
+                  `\`pnpm --dir examples/nextjs-route build:catalog-${delivery}\` failed against \`next@${nextVersion}\`.`,
+                  "",
+                  "Check emitted markers and, for permutations, manifest selection, request isolation",
+                  "and lazy chunk URLs before this release reaches the `next` peer range. See",
+                  `[ADR-030](https://github.com/${process.env.REPOSITORY}/blob/main/adr/030-next-client-catalogs-outside-the-bundler-graph.md) and`,
+                  `[ADR-031](https://github.com/${process.env.REPOSITORY}/blob/main/adr/031-next-server-selected-client-chunk-permutations.md).`,
+                  "",
+                  `Run: ${process.env.RUN_URL}`,
+                  "",
+                ].join("\n");
+                fs.writeFileSync(bodyFile, body);
+                execFileSync(
+                  process.execPath,
+                  [
+                    "./scripts/open-or-refresh-issue.mjs",
+                    "--title",
+                    title,
+                    "--body-file",
+                    bodyFile,
+                    "--label",
+                    "stability",
+                  ],
+                  { stdio: "inherit" },
                 );
               }
-              const nextVersion =
-                typeof outcome.nextVersion === "string" && VERSION_PATTERN.test(outcome.nextVersion)
-                  ? outcome.nextVersion
-                  : "unknown";
-              const bodyFile = `issue-body-${delivery}.md`;
-              const body = [
-                `\`pnpm --dir examples/nextjs-route build:catalog-${delivery}\` failed against \`next@${nextVersion}\`.`,
-                "",
-                "Check emitted markers and, for permutations, manifest selection, request isolation",
-                "and lazy chunk URLs before this release reaches the `next` peer range. See",
-                `[ADR-030](https://github.com/${process.env.REPOSITORY}/blob/main/adr/030-next-client-catalogs-outside-the-bundler-graph.md) and`,
-                `[ADR-031](https://github.com/${process.env.REPOSITORY}/blob/main/adr/031-next-server-selected-client-chunk-permutations.md).`,
-                "",
-                `Run: ${process.env.RUN_URL}`,
-                "",
-              ].join("\n");
-              fs.writeFileSync(bodyFile, body);
-              execFileSync(
-                process.execPath,
-                [
-                  "./scripts/open-or-refresh-issue.mjs",
-                  "--title",
-                  title,
-                  "--body-file",
-                  bodyFile,
-                  "--label",
-                  "stability",
-                ],
-                { stdio: "inherit" },
-              );
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              console.error(`Failed to update tracking issue for ${delivery}: ${message}`);
+              failures.push(`${delivery}: ${message}`);
             }
+          }
+
+          if (failures.length > 0) {
+            process.exitCode = 1;
           }
           NODE

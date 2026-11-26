@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 // GitHub resolves a tag at run time, so a compromised or moved tag silently
@@ -9,11 +10,17 @@ import path from "node:path";
 const USES_PATTERN = /^\s*(?:-\s+)?uses:\s*(?<value>\S+)(?<rest>.*)$/u;
 const PINNED_ACTION_PATTERN = /^[^\s@]+@[0-9a-f]{40}$/u;
 const PINNED_DIGEST_PATTERN = /@sha256:[0-9a-f]{64}$/u;
-const YAML_IMAGE_PATTERN = /^\s*(?:-\s+)?image:\s*(?<value>[^#\s]+)(?:\s+#.*)?$/u;
+const YAML_CONTAINER_SHORTHAND_PATTERN =
+  /^(?<indent>\s*)container:\s*(?<value>[^#\s][^#]*?)\s*(?:#.*)?$/u;
+const YAML_IMAGE_PATTERN = /^(?<indent>\s*)(?:-\s+)?image:\s*(?<value>[^#\s][^#]*?)\s*(?:#.*)?$/u;
+const YAML_KEY_PATTERN = /^(?<indent>\s*)(?:-\s+)?(?<key>[A-Za-z0-9_-]+):\s*(?<rest>.*)$/u;
 const SHELL_ASSIGNMENT_PATTERN =
   /^\s*(?:export\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<raw>[^\s#].*)$/u;
 const SHELL_VAR_REFERENCE_PATTERN =
   /^\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))$/u;
+const EMBEDDED_VAR_PATTERN =
+  /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu;
+const ENV_PREFIX_ASSIGNMENT_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 const CONTAINER_FILENAME_PATTERN =
   /^(?:Containerfile|Dockerfile)(?:\..+)?$|\.(?:Containerfile|Dockerfile)$/u;
 const IGNORED_DIRECTORIES = new Set([
@@ -139,13 +146,33 @@ function stripQuotes(value) {
   return trimmed;
 }
 
-function tokenizeShell(command) {
-  const tokens = [];
+// Split a shell snippet into command token arrays on unquoted command separators
+// (`&&`, `||`, `;`, `|`, `&`, newline) while preserving quoting.
+function splitShellCommands(command) {
+  const commands = [];
+  let tokens = [];
   let current = "";
   let quote = null;
   let escaping = false;
 
-  for (const ch of command) {
+  const flushToken = () => {
+    if (current.length > 0) {
+      tokens.push(current);
+      current = "";
+    }
+  };
+
+  const flushCommand = () => {
+    flushToken();
+    if (tokens.length > 0) {
+      commands.push(tokens);
+      tokens = [];
+    }
+  };
+
+  for (let index = 0; index < command.length; index += 1) {
+    const ch = command[index];
+
     if (escaping) {
       current += ch;
       escaping = false;
@@ -171,22 +198,29 @@ function tokenizeShell(command) {
       continue;
     }
 
-    if (/\s/u.test(ch)) {
-      if (current.length > 0) {
-        tokens.push(current);
-        current = "";
+    if (ch === "\n" || ch === ";") {
+      flushCommand();
+      continue;
+    }
+
+    if (ch === "&" || ch === "|") {
+      flushCommand();
+      if (command[index + 1] === ch) {
+        index += 1;
       }
+      continue;
+    }
+
+    if (/\s/u.test(ch)) {
+      flushToken();
       continue;
     }
 
     current += ch;
   }
 
-  if (current.length > 0) {
-    tokens.push(current);
-  }
-
-  return tokens;
+  flushCommand();
+  return commands;
 }
 
 function isPinnedDigest(imageReference) {
@@ -197,38 +231,66 @@ function isDynamicReference(value) {
   return value.includes("${{") || value.includes("$");
 }
 
-function extractDockerCommandImage(command) {
-  const tokens = tokenizeShell(command);
-  const cliIndex = tokens.findIndex((token) => token === "docker" || token === "podman");
-  if (cliIndex === -1) {
-    return null;
+function isLocalDockerActionImage(imageReference) {
+  if (imageReference.startsWith("docker://")) {
+    return false;
   }
+  return (
+    imageReference.startsWith("./") ||
+    imageReference.startsWith("../") ||
+    CONTAINER_FILENAME_PATTERN.test(path.basename(imageReference))
+  );
+}
 
-  const subcommand = tokens[cliIndex + 1];
-  if (subcommand !== "pull" && subcommand !== "run") {
-    return null;
-  }
+function extractDockerCommandImages(command) {
+  const images = [];
 
-  const valueFlags = subcommand === "pull" ? DOCKER_PULL_VALUE_FLAGS : DOCKER_RUN_VALUE_FLAGS;
-
-  for (let index = cliIndex + 2; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (token === "--") {
-      return tokens[index + 1] ?? null;
+  for (const tokens of splitShellCommands(command)) {
+    let cursor = 0;
+    while (
+      cursor < tokens.length &&
+      (tokens[cursor] === "sudo" ||
+        tokens[cursor] === "env" ||
+        ENV_PREFIX_ASSIGNMENT_PATTERN.test(tokens[cursor]))
+    ) {
+      cursor += 1;
     }
-    if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
+
+    const cli = tokens[cursor];
+    if (cli !== "docker" && cli !== "podman") {
       continue;
     }
-    if (token.startsWith("-")) {
-      if (!token.includes("=") && valueFlags.has(token)) {
-        index += 1;
+
+    const subcommand = tokens[cursor + 1];
+    if (subcommand !== "pull" && subcommand !== "run") {
+      continue;
+    }
+
+    const valueFlags = subcommand === "pull" ? DOCKER_PULL_VALUE_FLAGS : DOCKER_RUN_VALUE_FLAGS;
+
+    for (let index = cursor + 2; index < tokens.length; index += 1) {
+      const token = tokens[index];
+      if (token === "--") {
+        if (tokens[index + 1]) {
+          images.push(tokens[index + 1]);
+        }
+        break;
       }
-      continue;
+      if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
+        continue;
+      }
+      if (token.startsWith("-")) {
+        if (!token.includes("=") && valueFlags.has(token)) {
+          index += 1;
+        }
+        continue;
+      }
+      images.push(token);
+      break;
     }
-    return token;
   }
 
-  return null;
+  return images;
 }
 
 export function collectWorkflowFiles(directory) {
@@ -250,28 +312,63 @@ export function collectWorkflowFiles(directory) {
   return entries.sort();
 }
 
-export function collectContainerFiles(directory) {
+function collectContainerFilesFromFilesystem(directory) {
   const entries = [];
 
   for (const entry of readdirSync(directory)) {
-    if (IGNORED_DIRECTORIES.has(entry)) {
+    if (IGNORED_DIRECTORIES.has(entry) || entry.startsWith(".")) {
       continue;
     }
 
     const entryPath = path.join(directory, entry);
-    const stats = statSync(entryPath);
+    const stats = lstatSync(entryPath);
 
-    if (stats.isDirectory()) {
-      entries.push(...collectContainerFiles(entryPath));
+    if (stats.isSymbolicLink()) {
       continue;
     }
 
-    if (CONTAINER_FILENAME_PATTERN.test(entry)) {
+    if (stats.isDirectory()) {
+      entries.push(...collectContainerFilesFromFilesystem(entryPath));
+      continue;
+    }
+
+    if (stats.isFile() && CONTAINER_FILENAME_PATTERN.test(entry)) {
       entries.push(entryPath);
     }
   }
 
   return entries.sort();
+}
+
+export function collectContainerFiles(root) {
+  const gitResult = spawnSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    },
+  );
+
+  if (gitResult.status === 0 && typeof gitResult.stdout === "string") {
+    const entries = [];
+    for (const relativePath of gitResult.stdout.split("\0")) {
+      if (!relativePath || !CONTAINER_FILENAME_PATTERN.test(path.basename(relativePath))) {
+        continue;
+      }
+      const fullPath = path.join(root, relativePath);
+      if (!existsSync(fullPath)) {
+        continue;
+      }
+      const stats = lstatSync(fullPath);
+      if (!stats.isSymbolicLink() && stats.isFile()) {
+        entries.push(fullPath);
+      }
+    }
+    return entries.sort();
+  }
+
+  return collectContainerFilesFromFilesystem(root);
 }
 
 export function unpinnedActionReferences(source, filePath = "<memory>") {
@@ -315,6 +412,7 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
   const problems = [];
   const lines = source.split(/\r?\n/u);
   const stepVariables = new Map();
+  const yamlContext = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
@@ -328,18 +426,36 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
       continue;
     }
 
-    const yamlImage = YAML_IMAGE_PATTERN.exec(line);
-    if (yamlImage) {
-      const imageRef = stripQuotes(yamlImage.groups.value);
+    const indent = line.length - line.trimStart().length;
+    while (yamlContext.length > 0 && yamlContext.at(-1).indent >= indent) {
+      yamlContext.pop();
+    }
+
+    const containerShorthand = YAML_CONTAINER_SHORTHAND_PATTERN.exec(line);
+    if (containerShorthand) {
+      const imageRef = stripQuotes(containerShorthand.groups.value);
       if (!isDynamicReference(imageRef) && !isPinnedDigest(imageRef)) {
         problems.push(`${filePath}:${index + 1}: ${imageRef} is not pinned to a sha256 digest`);
       }
       continue;
     }
 
-    // YAML folded/literal scalar `run: >` or `run: |` may contain a multi-line
-    // `docker run`/`docker pull` invocation. Folded scalars join indented lines
-    // with spaces without trailing backslashes.
+    const yamlImage = YAML_IMAGE_PATTERN.exec(line);
+    if (yamlImage) {
+      const imageRef = stripQuotes(yamlImage.groups.value);
+      const inRunsSection = yamlContext.some((entry) => entry.key === "runs");
+      if (
+        (!inRunsSection || !isLocalDockerActionImage(imageRef)) &&
+        !isDynamicReference(imageRef) &&
+        !isPinnedDigest(imageRef)
+      ) {
+        problems.push(`${filePath}:${index + 1}: ${imageRef} is not pinned to a sha256 digest`);
+      }
+      continue;
+    }
+
+    // YAML folded scalar `run: >` joins indented lines with spaces without
+    // trailing backslashes and may contain one or more docker/podman commands.
     const foldedRunMatch = /^(?<indent>\s*)(?:-\s+)?run:\s*>[+-]?\s*$/u.exec(line);
     if (foldedRunMatch) {
       const baseIndent = foldedRunMatch.groups.indent.length;
@@ -356,14 +472,18 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
         cursor += 1;
       }
       const joined = bodyLines.map((entry) => entry.text).join(" ");
-      const imageToken = extractDockerCommandImage(joined);
-      if (imageToken) {
+      for (const imageToken of extractDockerCommandImages(joined)) {
         const matchingLine =
           bodyLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? index + 1;
         checkDockerImageToken(imageToken, matchingLine, stepVariables, filePath, problems);
       }
       index = cursor - 1;
       continue;
+    }
+
+    const keyMatch = YAML_KEY_PATTERN.exec(line);
+    if (keyMatch && keyMatch.groups.rest.trim() === "") {
+      yamlContext.push({ indent: keyMatch.groups.indent.length, key: keyMatch.groups.key });
     }
 
     const assignment = SHELL_ASSIGNMENT_PATTERN.exec(line);
@@ -383,8 +503,8 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
         combined = `${combined.slice(0, -1)} ${lines[index + 1].trim()}`;
         index += 1;
       }
-      const imageToken = extractDockerCommandImage(combined);
-      if (imageToken) {
+      const commandText = combined.replace(/^(?:-\s+)?run:\s*/u, "");
+      for (const imageToken of extractDockerCommandImages(commandText)) {
         checkDockerImageToken(imageToken, startLine, stepVariables, filePath, problems);
       }
     }
@@ -436,17 +556,30 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
   }
 
   const stages = new Set();
-  const buildArgs = new Map();
+  const globalArgs = new Map();
+  let stageArgs = new Map();
+  let seenFrom = false;
 
   for (const { lineNumber, text } of logicalLines) {
-    const argMatch = /^ARG\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.+)$/iu.exec(text);
+    const argMatch = /^ARG\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:=(?<value>.+))?$/iu.exec(text);
     if (argMatch) {
-      buildArgs.set(argMatch.groups.name, stripQuotes(argMatch.groups.value));
+      const targetArgs = seenFrom ? stageArgs : globalArgs;
+      if (argMatch.groups.value !== undefined) {
+        const mergedArgs = seenFrom ? new Map([...globalArgs, ...stageArgs]) : globalArgs;
+        targetArgs.set(
+          argMatch.groups.name,
+          resolveBuildArgs(stripQuotes(argMatch.groups.value), mergedArgs),
+        );
+      } else if (seenFrom && globalArgs.has(argMatch.groups.name)) {
+        targetArgs.set(argMatch.groups.name, globalArgs.get(argMatch.groups.name));
+      }
       continue;
     }
 
     const fromMatch = /^FROM\s+(?<rest>.+)$/iu.exec(text);
     if (fromMatch) {
+      seenFrom = true;
+      stageArgs = new Map();
       const tokens = fromMatch.groups.rest.trim().split(/\s+/u);
       let cursor = 0;
       while (cursor < tokens.length && tokens[cursor].startsWith("--")) {
@@ -456,28 +589,34 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
       if (!imageToken) {
         continue;
       }
-      if (tokens[cursor + 1] && tokens[cursor + 1].toLowerCase() === "as" && tokens[cursor + 2]) {
-        stages.add(tokens[cursor + 2].toLowerCase());
-      }
 
-      const resolved = resolveBuildArg(imageToken, buildArgs);
+      const stageAlias =
+        tokens[cursor + 1] && tokens[cursor + 1].toLowerCase() === "as" && tokens[cursor + 2]
+          ? tokens[cursor + 2].toLowerCase()
+          : null;
+
+      // Resolve against global ARGs and check against previously declared stages
+      // BEFORE registering the new stage alias so `FROM alpine AS alpine` fails.
+      const resolved = resolveBuildArgs(imageToken, globalArgs);
       if (
-        resolved.toLowerCase() === "scratch" ||
-        stages.has(resolved.toLowerCase()) ||
-        isDynamicReference(resolved)
+        resolved.toLowerCase() !== "scratch" &&
+        !stages.has(resolved.toLowerCase()) &&
+        !isDynamicReference(resolved) &&
+        !isPinnedDigest(resolved)
       ) {
-        continue;
+        problems.push(`${filePath}:${lineNumber}: ${resolved} is not pinned to a sha256 digest`);
       }
 
-      if (!isPinnedDigest(resolved)) {
-        problems.push(`${filePath}:${lineNumber}: ${resolved} is not pinned to a sha256 digest`);
+      if (stageAlias) {
+        stages.add(stageAlias);
       }
       continue;
     }
 
     const copyFromMatch = /^(?:COPY|ADD)\s+.*--from=(?<source>\S+)/iu.exec(text);
     if (copyFromMatch) {
-      const sourceRef = resolveBuildArg(stripQuotes(copyFromMatch.groups.source), buildArgs);
+      const mergedArgs = new Map([...globalArgs, ...stageArgs]);
+      const sourceRef = resolveBuildArgs(stripQuotes(copyFromMatch.groups.source), mergedArgs);
       if (
         /^\d+$/u.test(sourceRef) ||
         stages.has(sourceRef.toLowerCase()) ||
@@ -494,13 +633,11 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
   return problems;
 }
 
-function resolveBuildArg(token, buildArgs) {
-  const varMatch = SHELL_VAR_REFERENCE_PATTERN.exec(token);
-  if (!varMatch) {
-    return token;
-  }
-  const name = varMatch.groups.braced ?? varMatch.groups.bare;
-  return buildArgs.get(name) ?? token;
+function resolveBuildArgs(token, buildArgs) {
+  return token.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
+    const name = groups.braced ?? groups.bare;
+    return buildArgs.has(name) ? buildArgs.get(name) : match;
+  });
 }
 
 export function checkWorkflowPins(root = process.cwd()) {

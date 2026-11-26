@@ -24,7 +24,11 @@
 
 # --- Rust toolchain stage ----------------------------------------------------
 # Digest-pinned official Rust toolchain image avoids remote shell installers.
+# Move its sysroot to a fixed path so the build stage invokes the exact
+# digest-pinned compiler binaries directly rather than letting rustup download
+# a separate toolchain from rust-toolchain.toml.
 FROM rust:1.96-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 AS rust-toolchain
+RUN mv "$(rustc --print sysroot)" /usr/local/rust
 
 # --- Build stage -------------------------------------------------------------
 # glibc (Debian) base so the native @palamedes/core-node addon builds for
@@ -32,15 +36,12 @@ FROM rust:1.96-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a
 FROM node:24-bookworm@sha256:49f7adaf9f1574bc45c20ea317139b39a59d7e758d0e93745e112fd85cb42623 AS build
 
 # Build essentials for compiling the native N-API addon plus the Rust toolchain
-# copied from the digest-pinned official image above.
+# copied directly from the digest-pinned official image above.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends build-essential ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
-COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
-ENV RUSTUP_HOME="/usr/local/rustup" \
-    CARGO_HOME="/usr/local/cargo" \
-    PATH="/usr/local/cargo/bin:${PATH}"
+COPY --from=rust-toolchain /usr/local/rust /usr/local/rust
+ENV PATH="/usr/local/rust/bin:${PATH}"
 
 # Build the native addon in release mode (build-native.mjs reads this).
 ENV PALAMEDES_RUST_PROFILE=release \
@@ -55,11 +56,12 @@ RUN corepack enable \
   && corepack prepare --activate \
   && chmod -R a+rX /usr/local/share/corepack
 
-# Materialize the workspace-pinned toolchain before pnpm launches the CLI and
-# Node native builds concurrently. Otherwise both cargo proxies can race while
-# rustup installs the same missing toolchain in a fresh image.
+# Verify the copied Rust compiler satisfies the workspace MSRV in Cargo.toml
+# before pnpm launches the CLI and Node native builds concurrently.
+COPY Cargo.toml ./
 COPY rust-toolchain.toml ./
-RUN cargo --version
+RUN cargo --version \
+  && node -e 'const fs=require("node:fs"),{execFileSync}=require("node:child_process");const msrv=fs.readFileSync("Cargo.toml","utf8").match(/^rust-version\s*=\s*"([^"]+)"/mu)?.[1];const actual=execFileSync("rustc",["--version"],{encoding:"utf8"}).match(/rustc (\d+\.\d+\.\d+)/u)?.[1];if(!msrv||!actual)process.exit(1);const toNums=(v)=>v.split(".").map(Number);const [aMaj,aMin,aPat]=toNums(actual);const [mMaj,mMin,mPat=0]=toNums(msrv);const ok=aMaj>mMaj||(aMaj===mMaj&&(aMin>mMin||(aMin===mMin&&aPat>=mPat)));if(!ok){console.error(`Pinned rustc ${actual} is older than Cargo.toml rust-version ${msrv}`);process.exit(1);}'
 
 COPY . .
 
@@ -93,7 +95,8 @@ FROM node:24-bookworm-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338
 ENV NODE_ENV=production \
     COREPACK_HOME="/usr/local/share/corepack" \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
-    COREPACK_ENABLE_NETWORK=0
+    COREPACK_ENABLE_NETWORK=0 \
+    pnpm_config_verify_deps_before_run=false
 
 # tini as PID 1 reaps reparented grandchildren reliably, even when the container
 # is started without `podman run --init` (e.g. later via Compose/Quadlet).

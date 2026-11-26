@@ -12,11 +12,13 @@ import {
 } from "./start-plan.mjs";
 
 describe("buildStartArgs", () => {
-  it("runs vite preview directly for tanstack with a single host/port", () => {
+  it("runs vite preview directly for tanstack with native config loading and a single host/port", () => {
     expect(buildStartArgs({ framework: "tanstack", start: ["preview"], port: 4020 })).toEqual([
       "exec",
       "vite",
       "preview",
+      "--configLoader",
+      "native",
       "--host",
       CONTAINER_HOST,
       "--port",
@@ -24,11 +26,13 @@ describe("buildStartArgs", () => {
     ]);
   });
 
-  it("runs Vite MDX directly with a container-reachable host and fixed port", () => {
+  it("runs Vite MDX directly with native config loading, a container-reachable host, and fixed port", () => {
     expect(buildStartArgs({ framework: "vite", start: ["preview"], port: 4070 })).toEqual([
       "exec",
       "vite",
       "preview",
+      "--configLoader",
+      "native",
       "--host",
       CONTAINER_HOST,
       "--port",
@@ -92,6 +96,8 @@ describe("container publish contract", () => {
       "exec",
       "vite",
       "preview",
+      "--configLoader",
+      "native",
       "--host",
       CONTAINER_HOST,
       "--port",
@@ -119,9 +125,12 @@ describe("container publish contract", () => {
 
     expect(nonCommentLines).not.toContain("sh.rustup.rs");
     expect(nonCommentLines).not.toContain("npm install -g");
+    expect(nonCommentLines).not.toContain("/usr/local/rustup");
     expect(containerfile).toMatch(/^FROM rust:\S+@sha256:[0-9a-f]{64} AS rust-toolchain$/mu);
     expect(containerfile).toMatch(/^FROM node:24-bookworm@sha256:[0-9a-f]{64} AS build$/mu);
     expect(containerfile).toMatch(/^FROM node:24-bookworm-slim@sha256:[0-9a-f]{64} AS runtime$/mu);
+    expect(containerfile).toContain("COPY --from=rust-toolchain /usr/local/rust /usr/local/rust");
+    expect(containerfile).toContain("pnpm_config_verify_deps_before_run=false");
     expect(containerfile).toContain("COPY --from=build --chown=root:root /app /app");
     expect(containerfile).not.toContain("--chown=node:node");
     expect(containerfile).toContain("USER node");
