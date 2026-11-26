@@ -147,6 +147,55 @@ fn normalize_anchor_root(root_dir: &Path) -> &Path {
 #[cfg(any(unix, windows))]
 const DIR_LOCK_MAGIC: &[u8] = b"palamedes-dir-lock-v1\n";
 
+fn is_reserved_lock_file_name(file_name: &OsStr) -> bool {
+    let Some(text) = file_name.to_str() else {
+        return false;
+    };
+    let trimmed = text.trim_end_matches(['.', ' ']);
+    let mut normalized = String::with_capacity(trimmed.len());
+    for ch in trimmed.chars() {
+        if matches!(
+            ch,
+            '\u{00ad}'
+                | '\u{034f}'
+                | '\u{061c}'
+                | '\u{115f}'..='\u{1160}'
+                | '\u{17b4}'..='\u{17b5}'
+                | '\u{180b}'..='\u{180f}'
+                | '\u{200b}'..='\u{200f}'
+                | '\u{202a}'..='\u{202e}'
+                | '\u{2060}'..='\u{206f}'
+                | '\u{3164}'
+                | '\u{fe00}'..='\u{fe0f}'
+                | '\u{feff}'
+                | '\u{ffa0}'
+                | '\u{fff0}'..='\u{fff8}'
+                | '\u{1bca0}'..='\u{1bca3}'
+                | '\u{1d173}'..='\u{1d17a}'
+                | '\u{e0000}'..='\u{e0fff}'
+        ) {
+            continue;
+        }
+        match ch {
+            '\u{017f}' => normalized.push('s'),
+            '\u{212a}' => normalized.push('k'),
+            other => normalized.push(other.to_ascii_lowercase()),
+        }
+    }
+    normalized == ".pmds-lock"
+}
+
+fn validate_writable_file_name(file_name: &OsStr) -> Result<(), ContainedFsError> {
+    validate_single_file_name(file_name)?;
+    if is_reserved_lock_file_name(file_name) {
+        return Err(ContainedFsError::Containment(format!(
+            "refusing to write reserved catalog lock filename \"{}\"",
+            file_name.to_string_lossy()
+        )));
+    }
+    Ok(())
+}
+
 /// Stable on-disk file identity used to detect hard-linked input/output aliases.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileIdentity {
@@ -1264,7 +1313,7 @@ mod platform {
             new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
-            validate_single_file_name(file_name)?;
+            super::validate_writable_file_name(file_name)?;
             let _target_lock = self.lock_target(file_name)?;
             let c_target = os_str_to_cstring(file_name)?;
 
@@ -2716,6 +2765,51 @@ mod platform {
         }
     }
 
+    fn is_smb_share(dir_fd: std::os::fd::RawFd) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            const SMB_SUPER_MAGIC: u64 = 0x517b;
+            const CIFS_SUPER_MAGIC: u64 = 0xff53_4d42;
+            const SMB2_SUPER_MAGIC: u64 = 0xfe53_4d42;
+            let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
+            // SAFETY: `dir_fd` is open and `fs_stat` is writable.
+            if unsafe { libc::fstatfs(dir_fd, fs_stat.as_mut_ptr()) } == 0 {
+                // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
+                let fs_stat = unsafe { fs_stat.assume_init() };
+                #[allow(clippy::unnecessary_cast)]
+                let f_type = fs_stat.f_type as u64;
+                return matches!(
+                    f_type,
+                    SMB_SUPER_MAGIC | CIFS_SUPER_MAGIC | SMB2_SUPER_MAGIC
+                );
+            }
+            false
+        }
+        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
+        {
+            let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
+            // SAFETY: `dir_fd` is open and `fs_stat` is writable.
+            if unsafe { libc::fstatfs(dir_fd, fs_stat.as_mut_ptr()) } == 0 {
+                // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
+                let fs_stat = unsafe { fs_stat.assume_init() };
+                // SAFETY: `f_fstypename` is a NUL-terminated fixed C char array.
+                let fs_name = unsafe { std::ffi::CStr::from_ptr(fs_stat.f_fstypename.as_ptr()) };
+                return fs_name.to_bytes().eq_ignore_ascii_case(b"smbfs");
+            }
+            false
+        }
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "freebsd"
+        )))]
+        {
+            let _ = dir_fd;
+            false
+        }
+    }
+
     fn acquire_unix_dir_lock(
         dir: &ContainedDir,
         key: FileIdentity,
@@ -2730,6 +2824,9 @@ mod platform {
         // SAFETY: `dup_raw` is a newly duplicated valid file descriptor.
         let dir_fd = unsafe { OwnedFd::from_raw_fd(dup_raw) };
         let pid = std::process::id();
+        let smb_share = is_smb_share(dir.fd.as_raw_fd());
+        let mut smb_open_deadline: Option<std::time::Instant> = None;
+        let mut smb_open_backoff_ms: u64 = 2;
 
         loop {
             let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
@@ -2854,7 +2951,8 @@ mod platform {
             }
             if existing_raw < 0 {
                 let error = io::Error::last_os_error();
-                match error.raw_os_error() {
+                let raw_err = error.raw_os_error();
+                match raw_err {
                     Some(libc::ENOENT) => continue,
                     Some(libc::ELOOP) => {
                         return Err(ContainedFsError::Containment(
@@ -2866,6 +2964,47 @@ mod platform {
                             io::ErrorKind::AlreadyExists,
                             "refusing to overwrite existing directory \".pmds-lock\"",
                         )));
+                    }
+                    _ if raw_err == Some(libc::ETXTBSY)
+                        || (smb_share
+                            && (raw_err == Some(libc::EACCES)
+                                || raw_err == Some(libc::EAGAIN)
+                                || raw_err == Some(libc::EWOULDBLOCK))) =>
+                    {
+                        // A Windows writer on an SMB share opens `.pmds-lock`
+                        // with zero share access, which causes `openat` itself
+                        // to fail with `EACCES`/`ETXTBSY` until the Windows
+                        // holder releases and deletes the lock.
+                        match fstatat_nofollow(dir.fd.as_raw_fd(), UNIX_DIR_LOCK_NAME) {
+                            Ok(stat) if (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK => {
+                                return Err(ContainedFsError::Containment(
+                                    "refusing to use symlink as catalog lock \".pmds-lock\""
+                                        .to_owned(),
+                                ));
+                            }
+                            Ok(stat) if (stat.st_mode & libc::S_IFMT) == libc::S_IFDIR => {
+                                return Err(ContainedFsError::Io(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    "refusing to overwrite existing directory \".pmds-lock\"",
+                                )));
+                            }
+                            Err(stat_err) if stat_err.raw_os_error() == Some(libc::ENOENT) => {
+                                continue;
+                            }
+                            _ => {}
+                        }
+                        let deadline = *smb_open_deadline.get_or_insert_with(|| {
+                            std::time::Instant::now() + std::time::Duration::from_secs(30)
+                        });
+                        if std::time::Instant::now() >= deadline {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::TimedOut,
+                                "timed out waiting for exclusive SMB catalog lock \".pmds-lock\"",
+                            )));
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(smb_open_backoff_ms));
+                        smb_open_backoff_ms = (smb_open_backoff_ms * 2).min(50);
+                        continue;
                     }
                     _ => return Err(ContainedFsError::Io(error)),
                 }
@@ -3130,23 +3269,31 @@ mod platform {
                     return Some(DirFilenameEquivalence::Exact);
                 }
             }
-            probe_directory_case_insensitivity(dir, readable.as_raw_fd()).map(|probed| {
-                if probed {
-                    DirFilenameEquivalence::CaseInsensitiveNtfs
-                } else {
-                    DirFilenameEquivalence::Exact
-                }
+            let case_insensitive = probe_directory_case_insensitivity(dir, readable.as_raw_fd())
+                .or_else(|| dir.probe_names_equivalent(OsStr::new("a"), OsStr::new("A")))?;
+            let unicode_normalizing = dir
+                .probe_names_equivalent(OsStr::new("caf\u{00e9}"), OsStr::new("cafe\u{0301}"))
+                .unwrap_or(false);
+            Some(match (case_insensitive, unicode_normalizing) {
+                (false, false) => DirFilenameEquivalence::Exact,
+                (false, true) => DirFilenameEquivalence::UnicodeNfd,
+                (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
+                (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
             })
         }
         #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
         {
             let readable = open_readable_self(dir)?;
-            probe_directory_case_insensitivity(dir, readable.as_raw_fd()).map(|probed| {
-                if probed {
-                    DirFilenameEquivalence::CaseInsensitiveNtfs
-                } else {
-                    DirFilenameEquivalence::Exact
-                }
+            let case_insensitive = probe_directory_case_insensitivity(dir, readable.as_raw_fd())
+                .or_else(|| dir.probe_names_equivalent(OsStr::new("a"), OsStr::new("A")))?;
+            let unicode_normalizing = dir
+                .probe_names_equivalent(OsStr::new("caf\u{00e9}"), OsStr::new("cafe\u{0301}"))
+                .unwrap_or(false);
+            Some(match (case_insensitive, unicode_normalizing) {
+                (false, false) => DirFilenameEquivalence::Exact,
+                (false, true) => DirFilenameEquivalence::UnicodeNfd,
+                (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
+                (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
             })
         }
     }
@@ -4858,7 +5005,7 @@ mod platform {
                         // Stamp the shared Palamedes lock signature so Unix
                         // clients on the same SMB share also recognize this
                         // lock file if the connection drops abruptly.
-                        let mut file = fs::File::from(handle);
+                        let mut file = File::from(handle);
                         let _ = io::Write::write_all(&mut file, super::DIR_LOCK_MAGIC);
                         break OwnedHandle::from(file);
                     }
@@ -4919,7 +5066,7 @@ mod platform {
                                                 && usize::try_from(info.file_size_low).ok()
                                                     == Some(super::DIR_LOCK_MAGIC.len())
                                         });
-                                let mut existing_file = fs::File::from(existing_handle);
+                                let mut existing_file = File::from(existing_handle);
                                 if is_abandoned_lock {
                                     let mut magic = [0_u8; super::DIR_LOCK_MAGIC.len()];
                                     match io::Read::read_exact(&mut existing_file, &mut magic) {
@@ -5164,7 +5311,7 @@ mod platform {
             _new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
-            validate_single_file_name(file_name)?;
+            super::validate_writable_file_name(file_name)?;
             let _target_lock = self.lock_target(file_name)?;
             for _ in 0..8 {
                 let existing_entry = self.inspect_entry(file_name, true)?;
@@ -6046,6 +6193,7 @@ mod platform {
             _new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
+            super::validate_writable_file_name(file_name)?;
             self.reject_symlink(file_name)?;
             let destination = self.dir.join(file_name);
             let mut temporary = tempfile::NamedTempFile::new_in(&self.dir)?;
@@ -6958,5 +7106,33 @@ mod tests {
             dir.probe_names_equivalent(OsStr::new("same.po"), OsStr::new("same.po")),
             Some(true)
         );
+
+        // 7. Reserved lock filename (including case/ignorable/trailing-dot
+        //    variants) is rejected before acquiring or overwriting `.pmds-lock`.
+        for reserved in [
+            ".pmds-lock",
+            ".PMDS-LOCK",
+            ".pmds-lock.",
+            ".pmds-\u{200c}lock",
+            ".pmd\u{017f}-loc\u{212a}",
+        ] {
+            let err = dir
+                .write_file_atomically(
+                    OsStr::new(reserved),
+                    b"user-bytes",
+                    ContainedNewFileMode::RespectUmask,
+                    ContainedWriteDurability::Rename,
+                )
+                .expect_err("reserved lock filename must be rejected");
+            assert!(matches!(err, ContainedFsError::Containment(_)));
+        }
+        assert!(!lock_path.exists());
+        dir.write_file_atomically(
+            OsStr::new("after-reserved.po"),
+            b"still-writable",
+            ContainedNewFileMode::RespectUmask,
+            ContainedWriteDurability::Rename,
+        )
+        .expect("subsequent catalog writes must still succeed");
     }
 }
