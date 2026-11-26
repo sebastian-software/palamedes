@@ -2022,6 +2022,34 @@ describe("workflow contracts", () => {
         ]),
       }),
     ).toEqual(["<memory>:1: docker/dockerfile:1 is not pinned to a sha256 digest"]);
+    // `ONBUILD` triggers check external images while permitting downstream stage names.
+    expect(
+      unpinnedContainerfileReferences(
+        [
+          `FROM node:24@${digest}`,
+          "ONBUILD COPY --from=builder /app /app",
+          `ONBUILD COPY --from=alpine:3.20@${digest} /bin/sh /tmp/sh`,
+          "ONBUILD COPY --from=alpine:3.20 /bin/sh /tmp/sh",
+          "ONBUILD RUN --mount=type=bind,from=golang:1.24,source=/bin,target=/tmp/bin true",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:4: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:5: golang:1.24 is not pinned to a sha256 digest",
+    ]);
+    // Bash argument arrays preserve expansion truncation across loops.
+    const arrayOverflowList = [
+      ...Array.from({ length: 32 }, (_, idx) => `node:${idx}@${digest}`),
+      "alpine:3.20",
+    ].join(" ");
+    expect(
+      unpinnedWorkflowContainerReferences(
+        `steps:\n  - run: |\n      for img in ${arrayOverflowList}; do\n        args=(--rm "$img")\n        docker run "\${args[@]}"\n      done\n`,
+      ),
+    ).toEqual([
+      "<memory>:5: ${args[@]} exceeds expansion limit and cannot be verified exhaustively",
+    ]);
     expect(
       unpinnedWorkflowContainerReferences(
         [
@@ -2051,7 +2079,7 @@ describe("workflow contracts", () => {
           "          docker buildx create --driver-opt image=moby/buildkit:v0.35.1",
           `          docker buildx create --driver-opt network=host,image=moby/buildkit:v0.35.1@${digest}`,
           "          docker buildx create --driver docker",
-          `          docker run --cpu-count 2 --cpu-percent 50 --io-maxbandwidth 1M --io-maxiops 100 node:24@${digest} node -v`,
+          `          docker run --cpu-count 2 --cpu-percent 50 --io-maxbandwidth 1M --io-maxiops 100 --dns-opt ndots:1 node:24@${digest} node -v`,
           "          sudo -E docker run --rm haproxy:3",
           "          env -i -u HOME docker pull memcached:1.6",
           "          command -v docker",
@@ -2069,6 +2097,8 @@ describe("workflow contracts", () => {
           `          export REMOVED_IMG=node:24@${digest}`,
           `          env -u REMOVED_IMG sh -c 'docker pull "\${REMOVED_IMG:-nats:2.10}"'`,
           `          env -i sh -c 'docker pull "\${REMOVED_IMG:-etcd:3.5}"'`,
+          "          readonly RO_IMG=clickhouse:25",
+          '          docker pull "$RO_IMG"',
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "        with:",
@@ -2142,13 +2172,14 @@ describe("workflow contracts", () => {
       "<memory>:41: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:43: nats:2.10 is not pinned to a sha256 digest",
       "<memory>:44: etcd:3.5 is not pinned to a sha256 digest",
-      "<memory>:45: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
-      "<memory>:48: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
-      "<memory>:57: docker/dockerfile:1.10 is not pinned to a sha256 digest",
-      "<memory>:65: alpine:3.20 is not pinned to a sha256 digest",
-      "<memory>:69: busybox:1.37 is not pinned to a sha256 digest",
-      "<memory>:71: caddy:2 is not pinned to a sha256 digest",
-      "<memory>:73: debian:12 is not pinned to a sha256 digest",
+      "<memory>:45: clickhouse:25 is not pinned to a sha256 digest",
+      "<memory>:47: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
+      "<memory>:50: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
+      "<memory>:59: docker/dockerfile:1.10 is not pinned to a sha256 digest",
+      "<memory>:67: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:71: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:73: caddy:2 is not pinned to a sha256 digest",
+      "<memory>:75: debian:12 is not pinned to a sha256 digest",
     ]);
     const buildFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-builds-"));
     try {
@@ -2255,9 +2286,13 @@ describe("workflow contracts", () => {
           "          env -C ci docker build -f env-chdir.recipe .",
           "          docker builder build -f ci/builder-alias.recipe .",
           "          podman build --format docker --build-arg FMT_BASE=mariadb:11 ci/podman-fmt",
+          "          docker build --file ci/generated.Dockerfile .",
           "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
           "        with:",
           "          file: ${{ github.workspace }}/ci/workspace.recipe",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          file: ci/action-generated.Dockerfile",
           "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
           "        with:",
           "          context: '{{defaultContext}}:ci/gitctx'",
@@ -2277,7 +2312,9 @@ describe("workflow contracts", () => {
         ".github/workflows/cd-and-ctx.yml:24: stdin containerfile input ci/missing.recipe cannot be verified statically",
         ".github/workflows/cd-and-ctx.yml:25: stdin build context archive cannot be verified statically",
         ".github/workflows/cd-and-ctx.yml:26: stdin build context archive ci/context.tar.gz cannot be verified statically",
-        ".github/workflows/cd-and-ctx.yml:49: build context https://github.com/example/remote.git#main cannot be verified statically",
+        ".github/workflows/cd-and-ctx.yml:40: build file ci/generated.Dockerfile cannot be verified statically",
+        ".github/workflows/cd-and-ctx.yml:46: build file ci/action-generated.Dockerfile cannot be verified statically",
+        ".github/workflows/cd-and-ctx.yml:53: build context https://github.com/example/remote.git#main cannot be verified statically",
         "Dockerfile:1: rootctx is not pinned to a sha256 digest",
         "ci/builder-alias.recipe:1: swift:6.0 is not pinned to a sha256 digest",
         "ci/cmdsub/sub.recipe:1: ruby:3.4 is not pinned to a sha256 digest",

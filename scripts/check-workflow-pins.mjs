@@ -192,6 +192,7 @@ const DOCKER_RUN_VALUE_FLAGS = new Set([
   "--device-write-bps",
   "--device-write-iops",
   "--dns",
+  "--dns-opt",
   "--dns-option",
   "--dns-search",
   "--domainname",
@@ -3291,6 +3292,7 @@ const PODMAN_BUILD_VALUE_FLAGS = new Set([
   "--decryption-key",
   "--device",
   "--dns",
+  "--dns-opt",
   "--dns-option",
   "--dns-search",
   "--env",
@@ -3433,6 +3435,7 @@ const BUILDAH_FROM_VALUE_FLAGS = new Set([
   "--cpuset-mems",
   "--device",
   "--dns",
+  "--dns-opt",
   "--dns-option",
   "--dns-search",
   "--format",
@@ -3707,11 +3710,11 @@ function inspectShellText(
   );
   const cloneArrayMap = (arrayMap) => {
     const copy = new Map();
-    for (const [key, variants] of arrayMap) {
-      copy.set(
-        key,
-        variants.map((list) => list.map((item) => ({ ...item }))),
-      );
+    for (const [key, entry] of arrayMap) {
+      copy.set(key, {
+        variants: entry.variants.map((list) => list.map((item) => ({ ...item }))),
+        truncated: entry.truncated,
+      });
     }
     return copy;
   };
@@ -4050,16 +4053,20 @@ function inspectShellText(
             });
           }
         }
+        let arrayTruncated = false;
         let expandedVariants = [[]];
         for (const elem of rawElements) {
-          const elemCandidates = elem.singleQuoted
-            ? [{ text: elem.text, line: elem.line }]
-            : resolveImageTokenCandidates(elem.text, stepEnv, frame.vars, elem.line, shellMode)
-                .candidates;
+          const elemExpanded = elem.singleQuoted
+            ? { candidates: [{ text: elem.text, line: elem.line }], truncated: false }
+            : resolveImageTokenCandidates(elem.text, stepEnv, frame.vars, elem.line, shellMode);
+          if (elemExpanded.truncated) {
+            arrayTruncated = true;
+          }
           const nextVariants = [];
           for (const variant of expandedVariants) {
-            for (const candidate of elemCandidates) {
+            for (const candidate of elemExpanded.candidates) {
               if (nextVariants.length >= MAX_VAR_VALUES) {
+                arrayTruncated = true;
                 break;
               }
               nextVariants.push([
@@ -4070,38 +4077,125 @@ function inspectShellText(
           }
           expandedVariants = nextVariants;
         }
+        const existingEntry = frame.arrays.get(name);
         const existingVariants =
           op === "+="
-            ? (frame.arrays.get(name) ?? [[]])
+            ? (existingEntry?.variants ?? [[]])
             : conditional || frame.branches.length > 0
-              ? (frame.arrays.get(name) ?? [[]])
+              ? (existingEntry?.variants ?? [[]])
               : [];
+        if (existingEntry?.truncated && (op === "+=" || conditional || frame.branches.length > 0)) {
+          arrayTruncated = true;
+        }
         if (op === "+=") {
           const combined = [];
           for (const base of existingVariants) {
             for (const added of expandedVariants) {
               if (combined.length >= MAX_VAR_VALUES) {
+                arrayTruncated = true;
                 break;
               }
               combined.push([...base, ...added]);
             }
           }
-          if (conditional || frame.branches.length > 0) {
-            frame.arrays.set(name, [...existingVariants, ...combined].slice(0, MAX_VAR_VALUES));
-          } else {
-            frame.arrays.set(name, combined);
+          const merged =
+            conditional || frame.branches.length > 0
+              ? [...existingVariants, ...combined]
+              : combined;
+          if (merged.length > MAX_VAR_VALUES) {
+            arrayTruncated = true;
           }
+          frame.arrays.set(name, {
+            variants: merged.slice(0, MAX_VAR_VALUES),
+            truncated: arrayTruncated,
+          });
         } else {
-          frame.arrays.set(
-            name,
-            (conditional || frame.branches.length > 0
+          const merged =
+            conditional || frame.branches.length > 0
               ? [...existingVariants, ...expandedVariants]
-              : expandedVariants
-            ).slice(0, MAX_VAR_VALUES),
-          );
+              : expandedVariants;
+          if (merged.length > MAX_VAR_VALUES) {
+            arrayTruncated = true;
+          }
+          frame.arrays.set(name, {
+            variants: merged.slice(0, MAX_VAR_VALUES),
+            truncated: arrayTruncated,
+          });
         }
       }
       continue;
+    }
+
+    // Scalar variable declaration builtins (`readonly IMAGE=...`,
+    // `declare -r IMAGE=...`, `declare -x IMAGE=...`, `local IMAGE=...`).
+    if (
+      shellMode === "posix" &&
+      (tokens[0] === "readonly" ||
+        tokens[0] === "declare" ||
+        tokens[0] === "local" ||
+        tokens[0] === "typeset") &&
+      tokens.length > 1
+    ) {
+      let skipDeclaration = false;
+      let marksExported = false;
+      const declOperands = [];
+      let afterDoubleDash = false;
+      for (const token of tokens.slice(1)) {
+        if (!afterDoubleDash && token === "--") {
+          afterDoubleDash = true;
+          continue;
+        }
+        if (!afterDoubleDash && token.startsWith("-")) {
+          if (token.includes("f") || token.includes("F") || token.includes("p")) {
+            skipDeclaration = true;
+            break;
+          }
+          if (token.includes("x")) {
+            marksExported = true;
+          }
+          continue;
+        }
+        declOperands.push(token);
+      }
+      if (
+        !skipDeclaration &&
+        declOperands.length > 0 &&
+        declOperands.every(
+          (token) =>
+            ENV_PREFIX_ASSIGNMENT_PATTERN.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
+        )
+      ) {
+        for (const token of declOperands) {
+          const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+          if (match) {
+            const resolved = candidatesToVarEntries(
+              resolveImageTokenCandidates(
+                match.groups.value,
+                stepEnv,
+                frame.vars,
+                lineNumber,
+                shellMode,
+              ),
+              lineNumber,
+            );
+            if (marksExported) {
+              frame.exportedVars.add(match.groups.name);
+            }
+            if (conditional) {
+              const existing = frame.vars.has(match.groups.name)
+                ? frame.vars.get(match.groups.name)
+                : [{ value: "", line: 0, unset: true }];
+              frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
+            } else {
+              frame.vars.set(match.groups.name, resolved);
+              frame.arrays.delete(match.groups.name);
+            }
+          } else if (marksExported) {
+            frame.exportedVars.add(token);
+          }
+        }
+        continue;
+      }
     }
 
     // Pure shell-local variable assignment (`image=rust:1.96-alpine`).
@@ -4993,28 +5087,57 @@ function inspectShellText(
               lineNumber,
               shellMode,
             );
+            if (expanded.truncated) {
+              const limitMsg = `${filePath}:${lineNumber}: ${rawFile} exceeds expansion limit and cannot be verified exhaustively`;
+              if (!seenContextProblems.has(limitMsg)) {
+                seenContextProblems.add(limitMsg);
+                problems.push(limitMsg);
+              }
+            }
             for (const varCandidate of expanded.candidates) {
               for (const candidate of expandMatrixReferences(
                 varCandidate.text,
                 rowList,
                 varCandidate.line,
               )) {
-                const recorded = recordExplicitBuildFile(
+                const resolvedPath = resolveContainedPath(
                   candidate.text,
                   activeWorkingDir,
                   buildFileContext.root,
-                  buildFileContext.explicitBuildFiles,
                   { windowsPath: isWindowsShell },
                 );
-                if (recorded) {
-                  dirResolvedFiles.push(recorded);
-                  pushResolvedFile(recorded);
+                if (!resolvedPath || resolvedPath === path.resolve(buildFileContext.root)) {
+                  const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
+                  if (!seenContextProblems.has(unverifiableMsg)) {
+                    seenContextProblems.add(unverifiableMsg);
+                    problems.push(unverifiableMsg);
+                  }
+                  continue;
+                }
+                const targetProblems = [];
+                const safeFile = resolveSafeContainerFile(
+                  resolvedPath,
+                  buildFileContext.root,
+                  targetProblems,
+                );
+                if (safeFile) {
+                  buildFileContext.explicitBuildFiles.add(resolvedPath);
+                  dirResolvedFiles.push(resolvedPath);
+                  pushResolvedFile(resolvedPath);
+                } else if (targetProblems.length > 0) {
+                  buildFileContext.explicitBuildFiles.add(resolvedPath);
+                } else {
+                  const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
+                  if (!seenContextProblems.has(unverifiableMsg)) {
+                    seenContextProblems.add(unverifiableMsg);
+                    problems.push(unverifiableMsg);
+                  }
                 }
               }
             }
           }
 
-          if (dirResolvedFiles.length === 0) {
+          if (rawFiles.length === 0 && dirResolvedFiles.length === 0) {
             const contextDirs = [];
             const seenContextDirs = new Set();
             let hadRemoteContext = false;
@@ -5157,9 +5280,16 @@ function inspectShellText(
 
       let expandedSlices = null;
       if (arrayExpMatch) {
-        const knownArrayVariants = frame.arrays.get(arrayExpMatch.groups.name);
-        if (knownArrayVariants && knownArrayVariants.length > 0) {
-          expandedSlices = knownArrayVariants;
+        const knownArrayEntry = frame.arrays.get(arrayExpMatch.groups.name);
+        if (knownArrayEntry && knownArrayEntry.variants.length > 0) {
+          if (knownArrayEntry.truncated) {
+            const limitMessage = `${filePath}:${fallbackLine}: ${token} exceeds expansion limit and cannot be verified exhaustively`;
+            if (!seenProblems.has(limitMessage)) {
+              seenProblems.add(limitMessage);
+              problems.push(limitMessage);
+            }
+          }
+          expandedSlices = knownArrayEntry.variants;
         } else {
           unknownArrayTokens.push(token);
         }
@@ -5885,30 +6015,65 @@ function checkStepsList(
           continue;
         }
         const resolvedActionFiles = [];
+        let hasExplicitActionFile = false;
         if (fileNode?.kind === "scalar") {
-          for (const envCandidate of resolveEnvExpressionCandidates(
-            String(fileNode.value).trim(),
-            rowStepEnv,
-            fileNode.line,
-          ).candidates) {
-            for (const candidate of expandMatrixReferences(
-              envCandidate.text,
-              rowList,
-              envCandidate.line,
-            )) {
-              const recorded = recordExplicitBuildFile(
-                candidate.text,
-                buildFileContext.root,
-                buildFileContext.root,
-                buildFileContext.explicitBuildFiles,
-              );
-              if (recorded) {
-                resolvedActionFiles.push(recorded);
+          const rawActionFile = String(fileNode.value).trim();
+          if (rawActionFile) {
+            hasExplicitActionFile = true;
+            const expandedActionFile = resolveEnvExpressionCandidates(
+              rawActionFile,
+              rowStepEnv,
+              fileNode.line,
+            );
+            if (expandedActionFile.truncated) {
+              const limitMsg = `${filePath}:${fileNode.line}: ${rawActionFile} exceeds expansion limit and cannot be verified exhaustively`;
+              if (!seenActionContextProblems.has(limitMsg)) {
+                seenActionContextProblems.add(limitMsg);
+                problems.push(limitMsg);
+              }
+            }
+            for (const envCandidate of expandedActionFile.candidates) {
+              for (const candidate of expandMatrixReferences(
+                envCandidate.text,
+                rowList,
+                envCandidate.line,
+              )) {
+                const resolvedPath = resolveContainedPath(
+                  candidate.text,
+                  buildFileContext.root,
+                  buildFileContext.root,
+                );
+                if (!resolvedPath || resolvedPath === path.resolve(buildFileContext.root)) {
+                  const unverifiableMsg = `${filePath}:${fileNode.line}: build file ${candidate.text} cannot be verified statically`;
+                  if (!seenActionContextProblems.has(unverifiableMsg)) {
+                    seenActionContextProblems.add(unverifiableMsg);
+                    problems.push(unverifiableMsg);
+                  }
+                  continue;
+                }
+                const targetProblems = [];
+                const safeFile = resolveSafeContainerFile(
+                  resolvedPath,
+                  buildFileContext.root,
+                  targetProblems,
+                );
+                if (safeFile) {
+                  buildFileContext.explicitBuildFiles.add(resolvedPath);
+                  resolvedActionFiles.push(resolvedPath);
+                } else if (targetProblems.length > 0) {
+                  buildFileContext.explicitBuildFiles.add(resolvedPath);
+                } else {
+                  const unverifiableMsg = `${filePath}:${fileNode.line}: build file ${candidate.text} cannot be verified statically`;
+                  if (!seenActionContextProblems.has(unverifiableMsg)) {
+                    seenActionContextProblems.add(unverifiableMsg);
+                    problems.push(unverifiableMsg);
+                  }
+                }
               }
             }
           }
         }
-        if (resolvedActionFiles.length === 0) {
+        if (!hasExplicitActionFile && resolvedActionFiles.length === 0) {
           const contextDirs = [];
           const seenDirs = new Set();
           let hadExplicitContext = false;
@@ -7034,8 +7199,27 @@ export function unpinnedContainerfileReferences(
       continue;
     }
 
-    const rawCopySource = extractCopyFromSource(text);
+    const onbuildMatch = /^ONBUILD\s+(?<nested>.+)$/iu.exec(text);
+    const isOnbuild = Boolean(onbuildMatch);
+    const effectiveText = onbuildMatch ? onbuildMatch.groups.nested.trimStart() : text;
+    const isExternalOnbuildImage = (ref) =>
+      ref.includes(":") || ref.includes("/") || ref.includes("@");
+
+    const rawCopySource = extractCopyFromSource(effectiveText);
     if (rawCopySource) {
+      if (isOnbuild) {
+        if (
+          rawCopySource.length > 0 &&
+          !isDynamicReference(rawCopySource) &&
+          isExternalOnbuildImage(rawCopySource) &&
+          !isPinnedDigest(rawCopySource)
+        ) {
+          problems.push(
+            `${filePath}:${lineNumber}: ${rawCopySource} is not pinned to a sha256 digest`,
+          );
+        }
+        continue;
+      }
       const mergedArgs = new Map([...globalArgs, ...stageArgs]);
       const dynamicOverrideName = referencesDynamicOverride(rawCopySource);
       if (dynamicOverrideName && sourceFile && sourceLine) {
@@ -7066,9 +7250,22 @@ export function unpinnedContainerfileReferences(
       continue;
     }
 
-    if (/^RUN\s+/iu.test(text)) {
+    if (/^RUN\s+/iu.test(effectiveText)) {
       const mergedArgs = new Map([...globalArgs, ...stageArgs]);
-      for (const rawSource of extractRunMountSources(text)) {
+      for (const rawSource of extractRunMountSources(effectiveText)) {
+        if (isOnbuild) {
+          if (
+            rawSource.length > 0 &&
+            !isDynamicReference(rawSource) &&
+            isExternalOnbuildImage(rawSource) &&
+            !isPinnedDigest(rawSource)
+          ) {
+            problems.push(
+              `${filePath}:${lineNumber}: ${rawSource} is not pinned to a sha256 digest`,
+            );
+          }
+          continue;
+        }
         const dynamicOverrideName = referencesDynamicOverride(rawSource);
         if (dynamicOverrideName && sourceFile && sourceLine) {
           problems.push(
