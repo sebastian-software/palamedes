@@ -69,11 +69,10 @@ pub fn inspect_catalog_machine_translations(
         // machine review is exposed, without inventing a previous-state baseline.
         let report = ferrocat::review_catalogs(&state, &state, &options)?;
         for locale in report.locales {
+            let target_path = resolve_catalog_path(&request.config, catalog, &locale.locale)?;
             catalogs.push(CatalogMachineTranslationInspection {
                 catalog: catalog.path.clone(),
-                target_path: resolve_catalog_path(&request.config, catalog, &locale.locale)
-                    .to_string_lossy()
-                    .into_owned(),
+                target_path: target_path.to_string_lossy().into_owned(),
                 locale: locale.locale,
                 machine_translation: locale.machine_translation,
             });

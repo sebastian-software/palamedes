@@ -1,18 +1,22 @@
 //! Directory-handle-pinned filesystem operations for catalog reads and writes.
 //!
-//! On Unix, directory traversal, creation, reads, identity checks, and atomic
-//! replacements run relative to an open directory file descriptor with
-//! `O_NOFOLLOW`.
+//! On Unix, directory traversal uses search-only handles (`O_PATH` on Linux,
+//! `O_SEARCH` on BSD/macOS) with `O_NOFOLLOW`, and reads, identity checks, and
+//! atomic replacements execute directly against the verified directory file
+//! descriptor while preserving original ownership and permissions safely.
 //!
-//! On Windows, every directory along the traversal chain is opened with
-//! `FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT` and without
-//! `FILE_SHARE_DELETE`, pinning the directory chain against concurrent rename,
-//! deletion, or reparse-point redirection for the lifetime of [`ContainedDir`].
+//! On Windows, child directory traversal, directory creation, reads, identity
+//! checks, temporary-file creation (with preserved DACL security descriptors),
+//! and atomic renames execute handle-relatively via `NtCreateFile` and
+//! `NtSetInformationFile` with `RootDirectory` and `FILE_OPEN_REPARSE_POINT`,
+//! never re-resolving ancestor pathnames.
 
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io;
 use std::path::{Component, Path, PathBuf};
+
+use crate::error::{PalamedesError, PalamedesResult};
 
 /// Failure returned by [`ContainedDir`] operations.
 #[derive(Debug)]
@@ -61,9 +65,8 @@ impl From<io::Error> for ContainedFsError {
 
 /// Permissions policy for newly created files written via [`ContainedDir`].
 ///
-/// Existing files always preserve their previous mode and are populated in a
-/// `0600` temporary file before permissions are restored prior to rename, so
-/// private files are never exposed during replacement.
+/// Existing files always preserve their previous access controls and are
+/// populated privately before replacement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ContainedNewFileMode {
     /// Create new files with private `0600` permissions on Unix (matching
@@ -146,6 +149,60 @@ pub fn split_relative_catalog_path(
     Ok((parent, file_name))
 }
 
+/// Reads an optional catalog file through a verified [`ContainedDir`] handle
+/// chain anchored at `root_dir`.
+///
+/// Returns `Ok(None)` when either an intermediate directory or the target file
+/// does not exist.
+///
+/// # Errors
+///
+/// Returns [`PalamedesError::UnsafeCatalogPath`] when the path escapes
+/// `root_dir` or traverses a symlink/reparse point, or
+/// [`PalamedesError::ReadFile`] on OS read errors.
+pub(crate) fn read_optional_contained_catalog_file(
+    root_dir: &Path,
+    target: &Path,
+) -> PalamedesResult<Option<String>> {
+    let (relative_parent, file_name) =
+        split_relative_catalog_path(root_dir, target).map_err(|error| {
+            PalamedesError::UnsafeCatalogPath {
+                path: target.to_string_lossy().into_owned(),
+                reason: error.to_string(),
+            }
+        })?;
+    let parent_dir = match ContainedDir::open_subpath(root_dir, &relative_parent, false) {
+        Ok(Some(dir)) => dir,
+        Ok(None) => return Ok(None),
+        Err(ContainedFsError::Containment(reason)) => {
+            return Err(PalamedesError::UnsafeCatalogPath {
+                path: target.to_string_lossy().into_owned(),
+                reason,
+            });
+        }
+        Err(ContainedFsError::Io(source)) if source.kind() == io::ErrorKind::NotFound => {
+            return Ok(None);
+        }
+        Err(ContainedFsError::Io(source)) => {
+            return Err(PalamedesError::ReadFile {
+                path: target.to_path_buf(),
+                source,
+            });
+        }
+    };
+    match parent_dir.read_optional_file(&file_name) {
+        Ok(content) => Ok(content),
+        Err(ContainedFsError::Containment(reason)) => Err(PalamedesError::UnsafeCatalogPath {
+            path: target.to_string_lossy().into_owned(),
+            reason,
+        }),
+        Err(ContainedFsError::Io(source)) => Err(PalamedesError::ReadFile {
+            path: target.to_path_buf(),
+            source,
+        }),
+    }
+}
+
 fn validate_single_file_name(file_name: &OsStr) -> Result<(), ContainedFsError> {
     let mut components = Path::new(file_name).components();
     if matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none() {
@@ -192,6 +249,36 @@ mod platform {
 
     static TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
 
+    #[cfg(target_os = "linux")]
+    const DIR_TRAVERSAL_FLAGS: libc::c_int = libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC;
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    ))]
+    const DIR_TRAVERSAL_FLAGS: libc::c_int = libc::O_SEARCH | libc::O_DIRECTORY | libc::O_CLOEXEC;
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    )))]
+    const DIR_TRAVERSAL_FLAGS: libc::c_int = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC;
+
+    #[derive(Clone, Copy)]
+    struct ExistingEntry {
+        mode: libc::mode_t,
+        uid: libc::uid_t,
+        gid: libc::gid_t,
+        identity: FileIdentity,
+    }
+
     /// Open handle to a verified directory used for containment-enforcing I/O.
     pub struct ContainedDir {
         fd: OwnedFd,
@@ -200,18 +287,17 @@ mod platform {
     impl ContainedDir {
         /// Opens `root_dir` as the anchor directory for contained operations.
         ///
+        /// Uses a search-only handle where supported so traversing execute-only
+        /// (`0111`) directories succeeds without requiring directory-listing
+        /// permissions.
+        ///
         /// # Errors
         ///
         /// Returns an error when `root_dir` cannot be opened as a directory.
         pub fn open_root(root_dir: &Path) -> Result<Self, ContainedFsError> {
             let c_path = os_str_to_cstring(root_dir.as_os_str())?;
             // SAFETY: `c_path` is a valid NUL-terminated path string.
-            let raw = unsafe {
-                libc::open(
-                    c_path.as_ptr(),
-                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
-                )
-            };
+            let raw = unsafe { libc::open(c_path.as_ptr(), DIR_TRAVERSAL_FLAGS) };
             if raw < 0 {
                 return Err(ContainedFsError::Io(io::Error::last_os_error()));
             }
@@ -252,7 +338,7 @@ mod platform {
                     libc::openat(
                         current.fd.as_raw_fd(),
                         c_segment.as_ptr(),
-                        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                        DIR_TRAVERSAL_FLAGS | libc::O_NOFOLLOW,
                     )
                 };
                 if next < 0 {
@@ -299,7 +385,7 @@ mod platform {
             file_name: &OsStr,
         ) -> Result<Option<FileIdentity>, ContainedFsError> {
             validate_single_file_name(file_name)?;
-            Ok(self.inspect_entry(file_name)?.map(|(_, identity)| identity))
+            Ok(self.inspect_entry(file_name)?.map(|entry| entry.identity))
         }
 
         /// Reads `file_name` directly from this directory without following symlinks.
@@ -346,9 +432,10 @@ mod platform {
         /// atomically replaces `file_name`.
         ///
         /// When replacing an existing file, the temporary file is created as
-        /// `0600`, populated, and only then updated to the destination's prior
-        /// mode via `fchmod`, so private contents are never readable by other
-        /// users during replacement.
+        /// `0600`, populated, ownership/group is restored when needed, and only
+        /// then are the prior mode bits applied via `fchmod`. If the original
+        /// principals cannot be preserved safely, replacement fails without
+        /// modifying the destination.
         ///
         /// # Errors
         ///
@@ -362,10 +449,10 @@ mod platform {
             durability: ContainedWriteDurability,
         ) -> Result<(), ContainedFsError> {
             validate_single_file_name(file_name)?;
-            let existing_mode = self.inspect_entry(file_name)?.map(|(mode, _)| mode);
+            let existing = self.inspect_entry(file_name)?;
             let c_target = os_str_to_cstring(file_name)?;
 
-            let create_mode: libc::c_uint = match (existing_mode, new_file_mode) {
+            let create_mode: libc::c_uint = match (existing, new_file_mode) {
                 (None, ContainedNewFileMode::RespectUmask) => 0o666,
                 _ => 0o600,
             };
@@ -376,16 +463,8 @@ mod platform {
                 if durability == ContainedWriteDurability::Full {
                     temp_file.sync_all()?;
                 }
-                if let Some(mode) = existing_mode
-                    && mode != 0o600
-                {
-                    // Restore existing file permissions only after the private
-                    // temporary file is fully written.
-                    // SAFETY: `temp_file` holds an open file descriptor.
-                    let rc = unsafe { libc::fchmod(temp_file.as_raw_fd(), mode) };
-                    if rc != 0 {
-                        return Err(io::Error::last_os_error());
-                    }
+                if let Some(existing) = existing {
+                    restore_existing_ownership_and_mode(temp_file.as_raw_fd(), existing)?;
                 }
                 Ok(())
             })();
@@ -411,16 +490,40 @@ mod platform {
                 return Err(ContainedFsError::Io(error));
             }
             if durability == ContainedWriteDurability::Full {
+                self.sync_directory()?;
+            }
+            Ok(())
+        }
+
+        fn sync_directory(&self) -> Result<(), ContainedFsError> {
+            // Search-only descriptors (`O_PATH` on Linux, `O_SEARCH` on BSD/macOS)
+            // may not accept `fsync`. Open a readable handle to the same pinned
+            // directory when possible and fsync it.
+            let dot = c".";
+            // SAFETY: `self.fd` is an open directory descriptor and `dot` is a valid C string.
+            let raw = unsafe {
+                libc::openat(
+                    self.fd.as_raw_fd(),
+                    dot.as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+                )
+            };
+            let sync_rc = if raw >= 0 {
+                // SAFETY: `raw` is a newly opened valid file descriptor.
+                let readable = unsafe { OwnedFd::from_raw_fd(raw) };
+                // SAFETY: `readable` is an open directory descriptor.
+                unsafe { libc::fsync(readable.as_raw_fd()) }
+            } else {
                 // SAFETY: `self.fd` is an open directory descriptor.
-                let rc = unsafe { libc::fsync(self.fd.as_raw_fd()) };
-                if rc != 0 {
-                    let error = io::Error::last_os_error();
-                    if !matches!(
-                        error.raw_os_error(),
-                        Some(libc::EINVAL | libc::EBADF | libc::EROFS)
-                    ) {
-                        return Err(ContainedFsError::Io(error));
-                    }
+                unsafe { libc::fsync(self.fd.as_raw_fd()) }
+            };
+            if sync_rc != 0 {
+                let error = io::Error::last_os_error();
+                if !matches!(
+                    error.raw_os_error(),
+                    Some(libc::EINVAL | libc::EBADF | libc::EROFS | libc::EACCES)
+                ) {
+                    return Err(ContainedFsError::Io(error));
                 }
             }
             Ok(())
@@ -429,7 +532,7 @@ mod platform {
         fn inspect_entry(
             &self,
             file_name: &OsStr,
-        ) -> Result<Option<(libc::mode_t, FileIdentity)>, ContainedFsError> {
+        ) -> Result<Option<ExistingEntry>, ContainedFsError> {
             let c_name = os_str_to_cstring(file_name)?;
             let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
             // SAFETY: `self.fd` is open, `c_name` is valid, and `stat` is writable.
@@ -461,7 +564,12 @@ mod platform {
                 dev: stat.st_dev as u64,
                 ino: stat.st_ino as u64,
             };
-            Ok(Some((stat.st_mode & 0o7777, identity)))
+            Ok(Some(ExistingEntry {
+                mode: stat.st_mode & 0o7777,
+                uid: stat.st_uid,
+                gid: stat.st_gid,
+                identity,
+            }))
         }
 
         fn create_temp_file(
@@ -512,6 +620,53 @@ mod platform {
         }
     }
 
+    fn restore_existing_ownership_and_mode(
+        temp_fd: std::os::fd::RawFd,
+        existing: ExistingEntry,
+    ) -> io::Result<()> {
+        let mut temp_stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: `temp_fd` is an open file descriptor and `temp_stat` is writable.
+        if unsafe { libc::fstat(temp_fd, temp_stat.as_mut_ptr()) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `fstat` succeeded and initialized `temp_stat`.
+        let temp_stat = unsafe { temp_stat.assume_init() };
+        let uid_differs = temp_stat.st_uid != existing.uid;
+        let gid_differs = temp_stat.st_gid != existing.gid;
+        if uid_differs || gid_differs {
+            let target_uid = if uid_differs {
+                existing.uid
+            } else {
+                libc::uid_t::MAX
+            };
+            let target_gid = if gid_differs {
+                existing.gid
+            } else {
+                libc::gid_t::MAX
+            };
+            // SAFETY: `temp_fd` is an open file descriptor.
+            if unsafe { libc::fchown(temp_fd, target_uid, target_gid) } != 0 {
+                let error = io::Error::last_os_error();
+                let grants_group_or_special = (existing.mode & 0o6070) != 0;
+                if uid_differs || grants_group_or_special {
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        format!(
+                            "cannot safely preserve original file ownership/group permissions on replacement: {error}"
+                        ),
+                    ));
+                }
+            }
+        }
+        if (temp_stat.st_mode & 0o7777) != existing.mode {
+            // SAFETY: `temp_fd` is an open file descriptor.
+            if unsafe { libc::fchmod(temp_fd, existing.mode) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        Ok(())
+    }
+
     fn os_str_to_cstring(value: &OsStr) -> Result<CString, ContainedFsError> {
         CString::new(value.as_bytes()).map_err(|_| {
             ContainedFsError::Containment("path component contains an interior NUL byte".to_owned())
@@ -521,29 +676,81 @@ mod platform {
 
 #[cfg(windows)]
 mod platform {
-    use std::ffi::{OsStr, OsString};
-    use std::fs::{self, File, OpenOptions};
+    use std::ffi::{OsStr, OsString, c_void};
+    use std::fs::File;
     use std::io::{self, Read, Write};
-    use std::os::windows::ffi::{OsStrExt, OsStringExt};
-    use std::os::windows::fs::OpenOptionsExt;
+    use std::os::windows::ffi::OsStrExt;
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{
         ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, FileIdentity,
         validate_relative_dir_segments, validate_single_file_name,
     };
 
+    static TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
+
+    type NtStatus = i32;
+
+    const STATUS_OBJECT_NAME_NOT_FOUND: NtStatus = 0xC000_0034_u32 as i32;
+    const STATUS_OBJECT_PATH_NOT_FOUND: NtStatus = 0xC000_003A_u32 as i32;
+    const STATUS_OBJECT_NAME_COLLISION: NtStatus = 0xC000_0035_u32 as i32;
+    const ERROR_INVALID_FUNCTION: i32 = 1;
+    const ERROR_NOT_SUPPORTED: i32 = 50;
+    const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
+
     const FILE_READ_ATTRIBUTES: u32 = 0x0000_0080;
+    const FILE_TRAVERSE: u32 = 0x0000_0020;
+    const READ_CONTROL: u32 = 0x0002_0000;
+    const DELETE: u32 = 0x0001_0000;
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
     const FILE_SHARE_READ: u32 = 0x0000_0001;
     const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+    const FILE_SHARE_DELETE: u32 = 0x0000_0004;
     const OPEN_EXISTING: u32 = 3;
     const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0000_0010;
+    const FILE_ATTRIBUTE_NORMAL: u32 = 0x0000_0080;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-    const FILE_NAME_NORMALIZED: u32 = 0x0;
-    const INVALID_HANDLE_VALUE: *mut std::ffi::c_void = (-1_isize) as *mut std::ffi::c_void;
+    const INVALID_HANDLE_VALUE: *mut c_void = (-1_isize) as *mut c_void;
+
+    const FILE_OPEN: u32 = 0x0000_0001;
+    const FILE_CREATE: u32 = 0x0000_0002;
+    const FILE_OPEN_IF: u32 = 0x0000_0003;
+    const FILE_DIRECTORY_FILE: u32 = 0x0000_0001;
+    const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x0000_0020;
+    const FILE_NON_DIRECTORY_FILE: u32 = 0x0000_0040;
+    const FILE_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const OBJ_CASE_INSENSITIVE: u32 = 0x0000_0040;
+    const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
+    const FILE_DISPOSITION_INFORMATION_CLASS: u32 = 13;
+    const DACL_SECURITY_INFORMATION: u32 = 0x0000_0004;
+
+    #[repr(C)]
+    struct UnicodeString {
+        length: u16,
+        maximum_length: u16,
+        buffer: *mut u16,
+    }
+
+    #[repr(C)]
+    struct ObjectAttributes {
+        length: u32,
+        root_directory: *mut c_void,
+        object_name: *mut UnicodeString,
+        attributes: u32,
+        security_descriptor: *mut c_void,
+        security_quality_of_service: *mut c_void,
+    }
+
+    #[repr(C)]
+    struct IoStatusBlock {
+        status_or_pointer: usize,
+        information: usize,
+    }
 
     #[repr(C)]
     struct FileTime {
@@ -565,54 +772,117 @@ mod platform {
         file_index_low: u32,
     }
 
+    #[repr(C)]
+    struct FileDispositionInformation {
+        delete_file: u8,
+    }
+
+    #[repr(C)]
+    struct FileRenameInformation {
+        replace_if_exists: u8,
+        root_directory: *mut c_void,
+        file_name_length: u32,
+        file_name: [u16; 1],
+    }
+
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn CreateFileW(
             file_name: *const u16,
             desired_access: u32,
             share_mode: u32,
-            security_attributes: *mut std::ffi::c_void,
+            security_attributes: *mut c_void,
             creation_disposition: u32,
             flags_and_attributes: u32,
-            template_file: *mut std::ffi::c_void,
-        ) -> *mut std::ffi::c_void;
+            template_file: *mut c_void,
+        ) -> *mut c_void;
         fn GetFileInformationByHandle(
-            file: *mut std::ffi::c_void,
+            file: *mut c_void,
             file_information: *mut ByHandleFileInformation,
         ) -> i32;
-        fn GetFinalPathNameByHandleW(
-            file: *mut std::ffi::c_void,
-            file_path: *mut u16,
-            file_path_len: u32,
-            flags: u32,
-        ) -> u32;
     }
 
-    /// Pinned directory chain on Windows. Holding non-`FILE_SHARE_DELETE`
-    /// handles to every ancestor from `root_dir` through `dir` prevents
-    /// concurrent rename, deletion, or reparse-point substitution while active.
+    #[link(name = "advapi32")]
+    unsafe extern "system" {
+        fn GetKernelObjectSecurity(
+            handle: *mut c_void,
+            requested_information: u32,
+            security_descriptor: *mut c_void,
+            length: u32,
+            length_needed: *mut u32,
+        ) -> i32;
+    }
+
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtCreateFile(
+            file_handle: *mut *mut c_void,
+            desired_access: u32,
+            object_attributes: *mut ObjectAttributes,
+            io_status_block: *mut IoStatusBlock,
+            allocation_size: *mut i64,
+            file_attributes: u32,
+            share_access: u32,
+            create_disposition: u32,
+            create_options: u32,
+            ea_buffer: *mut c_void,
+            ea_length: u32,
+        ) -> NtStatus;
+        fn NtSetInformationFile(
+            file_handle: *mut c_void,
+            io_status_block: *mut IoStatusBlock,
+            file_information: *mut c_void,
+            length: u32,
+            file_information_class: u32,
+        ) -> NtStatus;
+        fn RtlNtStatusToDosError(status: NtStatus) -> u32;
+    }
+
+    /// Open directory handle on Windows used for strictly handle-relative child
+    /// operations via `NtCreateFile` and `NtSetInformationFile`.
     pub struct ContainedDir {
-        _pinned_handles: Vec<OwnedHandle>,
-        dir: PathBuf,
+        handle: OwnedHandle,
     }
 
     impl ContainedDir {
-        /// Opens and pins `root_dir`.
+        /// Opens `root_dir` as the anchor directory handle.
         ///
         /// # Errors
         ///
         /// Returns an error when `root_dir` cannot be opened as a directory.
         pub fn open_root(root_dir: &Path) -> Result<Self, ContainedFsError> {
-            let (handle, final_path) = open_pinned_directory(root_dir, false)?;
-            Ok(Self {
-                _pinned_handles: vec![handle],
-                dir: final_path,
-            })
+            let mut wide = encode_utf16_no_nul(root_dir.as_os_str())?;
+            wide.push(0);
+            // SAFETY: `wide` is NUL-terminated UTF-16.
+            let raw = unsafe {
+                CreateFileW(
+                    wide.as_ptr(),
+                    FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    std::ptr::null_mut(),
+                    OPEN_EXISTING,
+                    FILE_FLAG_BACKUP_SEMANTICS,
+                    std::ptr::null_mut(),
+                )
+            };
+            if raw == INVALID_HANDLE_VALUE {
+                return Err(ContainedFsError::Io(io::Error::last_os_error()));
+            }
+            // SAFETY: `raw` is a newly opened valid Windows handle.
+            let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+            let info = file_information(handle.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::NotADirectory,
+                    format!("{} is not a directory", root_dir.display()),
+                )));
+            }
+            Ok(Self { handle })
         }
 
-        /// Opens and pins `relative_dir` under `root_dir`, refusing symlinks
-        /// and junctions at every component and handling concurrent directory
-        /// creation (`AlreadyExists`) cleanly.
+        /// Opens `relative_dir` under `root_dir` handle-relatively without
+        /// following symlinks or junctions, optionally creating missing
+        /// directories atomically (`FILE_OPEN_IF`).
         ///
         /// # Errors
         ///
@@ -624,43 +894,45 @@ mod platform {
             create_missing: bool,
         ) -> Result<Option<Self>, ContainedFsError> {
             let segments = validate_relative_dir_segments(relative_dir)?;
-            let (root_handle, root_final) = open_pinned_directory(root_dir, false)?;
-            let mut handles = vec![root_handle];
-            let mut current = root_final.clone();
-
+            let mut current = Self::open_root(root_dir)?;
             for segment in segments {
-                current.push(&segment);
-                if create_missing {
-                    match fs::create_dir(&current) {
-                        Ok(()) => {}
-                        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-                        Err(error) => return Err(ContainedFsError::Io(error)),
-                    }
-                }
-                let (handle, final_path) = match open_pinned_directory(&current, true) {
-                    Ok(opened) => opened,
-                    Err(ContainedFsError::Io(error))
-                        if !create_missing && error.kind() == io::ErrorKind::NotFound =>
-                    {
+                let disposition = if create_missing {
+                    FILE_OPEN_IF
+                } else {
+                    FILE_OPEN
+                };
+                let next = match nt_create_relative(
+                    current.handle.as_raw_handle(),
+                    &segment,
+                    FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE,
+                    FILE_ATTRIBUTE_DIRECTORY,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    disposition,
+                    FILE_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                    std::ptr::null_mut(),
+                ) {
+                    Ok(handle) => handle,
+                    Err(status) if !create_missing && is_not_found_status(status) => {
                         return Ok(None);
                     }
-                    Err(error) => return Err(error),
+                    Err(status) => return Err(ContainedFsError::Io(nt_status_to_io_error(status))),
                 };
-                if !final_path.starts_with(&root_final) {
+                let info = file_information(next.as_raw_handle())?;
+                if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
                     return Err(ContainedFsError::Containment(format!(
-                        "directory {} escapes root directory {}",
-                        current.display(),
-                        root_final.display()
+                        "refusing to follow symlink or junction at directory component \"{}\"",
+                        segment.to_string_lossy()
                     )));
                 }
-                handles.push(handle);
-                current = final_path;
+                if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::NotADirectory,
+                        format!("\"{}\" is not a directory", segment.to_string_lossy()),
+                    )));
+                }
+                current = Self { handle: next };
             }
-
-            Ok(Some(Self {
-                _pinned_handles: handles,
-                dir: current,
-            }))
+            Ok(Some(current))
         }
 
         /// Rejects `file_name` if it exists as a symlink or reparse point.
@@ -671,7 +943,7 @@ mod platform {
         /// or refers to a reparse point.
         pub fn reject_symlink(&self, file_name: &OsStr) -> Result<(), ContainedFsError> {
             validate_single_file_name(file_name)?;
-            let _ = self.file_identity(file_name)?;
+            let _ = self.inspect_entry(file_name, false)?;
             Ok(())
         }
 
@@ -687,32 +959,12 @@ mod platform {
             file_name: &OsStr,
         ) -> Result<Option<FileIdentity>, ContainedFsError> {
             validate_single_file_name(file_name)?;
-            let path = self.dir.join(file_name);
-            let file = match OpenOptions::new()
-                .access_mode(FILE_READ_ATTRIBUTES)
-                .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-                .open(&path)
-            {
-                Ok(file) => file,
-                Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-                Err(error) => return Err(ContainedFsError::Io(error)),
-            };
-            let info = file_information(file.as_raw_handle())?;
-            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
-                return Err(ContainedFsError::Containment(format!(
-                    "refusing to write through symlink \"{}\"",
-                    file_name.to_string_lossy()
-                )));
-            }
-            Ok(Some(FileIdentity {
-                volume_serial: info.volume_serial_number,
-                file_index_high: info.file_index_high,
-                file_index_low: info.file_index_low,
-            }))
+            Ok(self
+                .inspect_entry(file_name, false)?
+                .map(|(identity, _)| identity))
         }
 
-        /// Reads `file_name` directly from an opened non-reparse handle inside
-        /// this pinned directory.
+        /// Reads `file_name` handle-relatively without following reparse points.
         ///
         /// # Errors
         ///
@@ -723,29 +975,36 @@ mod platform {
             file_name: &OsStr,
         ) -> Result<Option<String>, ContainedFsError> {
             validate_single_file_name(file_name)?;
-            let path = self.dir.join(file_name);
-            let mut file = match OpenOptions::new()
-                .read(true)
-                .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-                .open(&path)
-            {
-                Ok(file) => file,
-                Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-                Err(error) => return Err(ContainedFsError::Io(error)),
+            let handle = match nt_create_relative(
+                self.handle.as_raw_handle(),
+                file_name,
+                GENERIC_READ | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                FILE_ATTRIBUTE_NORMAL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_OPEN,
+                FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            ) {
+                Ok(handle) => handle,
+                Err(status) if is_not_found_status(status) => return Ok(None),
+                Err(status) => return Err(ContainedFsError::Io(nt_status_to_io_error(status))),
             };
-            let info = file_information(file.as_raw_handle())?;
+            let info = file_information(handle.as_raw_handle())?;
             if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
                 return Err(ContainedFsError::Containment(format!(
                     "refusing to follow symlink \"{}\"",
                     file_name.to_string_lossy()
                 )));
             }
+            let mut file = File::from(handle);
             let mut content = String::new();
             file.read_to_string(&mut content)?;
             Ok(Some(content))
         }
 
-        /// Atomically writes `bytes` to `file_name` inside this pinned directory.
+        /// Atomically writes `bytes` to `file_name` inside this directory
+        /// handle, preserving any existing destination DACL from the moment the
+        /// temporary file is created.
         ///
         /// # Errors
         ///
@@ -758,75 +1017,289 @@ mod platform {
             _new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
         ) -> Result<(), ContainedFsError> {
-            self.reject_symlink(file_name)?;
-            let destination = self.dir.join(file_name);
-            let mut temporary = tempfile::NamedTempFile::new_in(&self.dir)?;
-            temporary.write_all(bytes)?;
-            temporary.flush()?;
-            if durability == ContainedWriteDurability::Full {
-                temporary.as_file().sync_all()?;
+            validate_single_file_name(file_name)?;
+            let mut existing_dacl = self
+                .inspect_entry(file_name, true)?
+                .and_then(|(_, dacl)| dacl);
+            let security_descriptor = existing_dacl
+                .as_mut()
+                .map_or(std::ptr::null_mut(), |buffer| {
+                    buffer.as_mut_ptr().cast::<c_void>()
+                });
+
+            let mut temp_file = self.create_temp_file(security_descriptor)?;
+            let write_result = (|| -> io::Result<()> {
+                temp_file.write_all(bytes)?;
+                temp_file.flush()?;
+                if durability == ContainedWriteDurability::Full {
+                    temp_file.sync_all()?;
+                }
+                nt_rename_relative(
+                    temp_file.as_raw_handle(),
+                    self.handle.as_raw_handle(),
+                    file_name,
+                )
+            })();
+            if let Err(error) = write_result {
+                let _ = nt_mark_delete_on_close(temp_file.as_raw_handle());
+                return Err(ContainedFsError::Io(error));
             }
-            temporary
-                .persist(&destination)
-                .map_err(|error| ContainedFsError::Io(error.error))?;
             Ok(())
         }
+
+        fn inspect_entry(
+            &self,
+            file_name: &OsStr,
+            capture_dacl: bool,
+        ) -> Result<Option<(FileIdentity, Option<Vec<usize>>)>, ContainedFsError> {
+            let access = if capture_dacl {
+                FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE
+            } else {
+                FILE_READ_ATTRIBUTES | SYNCHRONIZE
+            };
+            let handle = match nt_create_relative(
+                self.handle.as_raw_handle(),
+                file_name,
+                access,
+                FILE_ATTRIBUTE_NORMAL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_OPEN,
+                FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            ) {
+                Ok(handle) => handle,
+                Err(status) if is_not_found_status(status) => return Ok(None),
+                Err(status) => return Err(ContainedFsError::Io(nt_status_to_io_error(status))),
+            };
+            let info = file_information(handle.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to write through symlink \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
+            let dacl = if capture_dacl {
+                read_dacl_security_descriptor(handle.as_raw_handle())?
+            } else {
+                None
+            };
+            Ok(Some((
+                FileIdentity {
+                    volume_serial: info.volume_serial_number,
+                    file_index_high: info.file_index_high,
+                    file_index_low: info.file_index_low,
+                },
+                dacl,
+            )))
+        }
+
+        fn create_temp_file(
+            &self,
+            security_descriptor: *mut c_void,
+        ) -> Result<File, ContainedFsError> {
+            let pid = std::process::id();
+            for _ in 0..128 {
+                let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
+                let name = OsString::from(format!(".pmds-tmp-{pid}-{nonce}"));
+                match nt_create_relative(
+                    self.handle.as_raw_handle(),
+                    &name,
+                    GENERIC_WRITE | DELETE | SYNCHRONIZE,
+                    FILE_ATTRIBUTE_NORMAL,
+                    0,
+                    FILE_CREATE,
+                    FILE_NON_DIRECTORY_FILE
+                        | FILE_OPEN_REPARSE_POINT
+                        | FILE_SYNCHRONOUS_IO_NONALERT,
+                    security_descriptor,
+                ) {
+                    Ok(handle) => return Ok(File::from(handle)),
+                    Err(STATUS_OBJECT_NAME_COLLISION) => continue,
+                    Err(status) => return Err(ContainedFsError::Io(nt_status_to_io_error(status))),
+                }
+            }
+            Err(ContainedFsError::Io(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "could not allocate a unique temporary file in destination directory",
+            )))
+        }
     }
 
-    fn open_pinned_directory(
-        path: &Path,
-        reject_reparse_point: bool,
-    ) -> Result<(OwnedHandle, PathBuf), ContainedFsError> {
-        let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
-        if wide.contains(&0) {
-            return Err(ContainedFsError::Containment(
-                "path component contains an interior NUL byte".to_owned(),
-            ));
-        }
-        wide.push(0);
-        let mut flags = FILE_FLAG_BACKUP_SEMANTICS;
-        if reject_reparse_point {
-            flags |= FILE_FLAG_OPEN_REPARSE_POINT;
-        }
-        // Omitting FILE_SHARE_DELETE pins this directory against concurrent
-        // rename, deletion, or junction replacement while the handle is open.
-        // SAFETY: `wide` is NUL-terminated UTF-16.
-        let raw = unsafe {
-            CreateFileW(
-                wide.as_ptr(),
-                FILE_READ_ATTRIBUTES,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
+    #[allow(clippy::too_many_arguments)]
+    fn nt_create_relative(
+        root_handle: *mut c_void,
+        name: &OsStr,
+        desired_access: u32,
+        file_attributes: u32,
+        share_access: u32,
+        create_disposition: u32,
+        create_options: u32,
+        security_descriptor: *mut c_void,
+    ) -> Result<OwnedHandle, NtStatus> {
+        let mut wide = encode_utf16_no_nul(name).map_err(|_| STATUS_OBJECT_PATH_NOT_FOUND)?;
+        let byte_len = u16::try_from(wide.len().saturating_mul(2))
+            .map_err(|_| STATUS_OBJECT_PATH_NOT_FOUND)?;
+        let mut unicode = UnicodeString {
+            length: byte_len,
+            maximum_length: byte_len,
+            buffer: wide.as_mut_ptr(),
+        };
+        let mut attributes = ObjectAttributes {
+            length: u32::try_from(std::mem::size_of::<ObjectAttributes>()).unwrap_or(0),
+            root_directory: root_handle,
+            object_name: &mut unicode,
+            attributes: OBJ_CASE_INSENSITIVE,
+            security_descriptor,
+            security_quality_of_service: std::ptr::null_mut(),
+        };
+        let mut iosb = IoStatusBlock {
+            status_or_pointer: 0,
+            information: 0,
+        };
+        let mut handle: *mut c_void = std::ptr::null_mut();
+        // SAFETY: all pointers remain valid for the duration of `NtCreateFile`.
+        let status = unsafe {
+            NtCreateFile(
+                &mut handle,
+                desired_access,
+                &mut attributes,
+                &mut iosb,
                 std::ptr::null_mut(),
-                OPEN_EXISTING,
-                flags,
+                file_attributes,
+                share_access,
+                create_disposition,
+                create_options,
                 std::ptr::null_mut(),
+                0,
             )
         };
-        if raw == INVALID_HANDLE_VALUE {
-            return Err(ContainedFsError::Io(io::Error::last_os_error()));
+        if status < 0 {
+            return Err(status);
         }
-        // SAFETY: `raw` is a newly opened valid Windows handle.
-        let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
-        let info = file_information(handle.as_raw_handle())?;
-        if reject_reparse_point && (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
-            return Err(ContainedFsError::Containment(format!(
-                "refusing to follow symlink or junction at {}",
-                path.display()
-            )));
-        }
-        if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 {
-            return Err(ContainedFsError::Io(io::Error::new(
-                io::ErrorKind::NotADirectory,
-                format!("{} is not a directory", path.display()),
-            )));
-        }
-        let final_path = final_path_name(handle.as_raw_handle())?;
-        Ok((handle, final_path))
+        // SAFETY: `NtCreateFile` succeeded and returned a newly opened handle.
+        Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
     }
 
-    fn file_information(
-        handle: *mut std::ffi::c_void,
-    ) -> Result<ByHandleFileInformation, ContainedFsError> {
+    fn nt_rename_relative(
+        file_handle: *mut c_void,
+        root_directory: *mut c_void,
+        target_name: &OsStr,
+    ) -> io::Result<()> {
+        let wide = encode_utf16_no_nul(target_name).map_err(ContainedFsError::into_io_error)?;
+        let name_bytes_len = u32::try_from(wide.len().saturating_mul(2)).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "destination filename too long")
+        })?;
+        let name_offset = std::mem::offset_of!(FileRenameInformation, file_name);
+        let total_size = (name_offset + usize::try_from(name_bytes_len).unwrap_or(0))
+            .max(std::mem::size_of::<FileRenameInformation>());
+        // Ensure pointer alignment for `FileRenameInformation`.
+        let word_count = total_size.div_ceil(std::mem::size_of::<usize>());
+        let mut storage = vec![0usize; word_count];
+        let ptr = storage.as_mut_ptr().cast::<u8>();
+        // SAFETY: `storage` is zero-initialized, aligned for `usize` (and thus
+        // `FileRenameInformation`), and large enough to hold all fields plus
+        // the UTF-16 filename bytes starting at `name_offset`.
+        unsafe {
+            let info = ptr.cast::<FileRenameInformation>();
+            std::ptr::addr_of_mut!((*info).replace_if_exists).write(1);
+            std::ptr::addr_of_mut!((*info).root_directory).write(root_directory);
+            std::ptr::addr_of_mut!((*info).file_name_length).write(name_bytes_len);
+            std::ptr::copy_nonoverlapping(
+                wide.as_ptr().cast::<u8>(),
+                ptr.add(name_offset),
+                usize::try_from(name_bytes_len).unwrap_or(0),
+            );
+        }
+        let mut iosb = IoStatusBlock {
+            status_or_pointer: 0,
+            information: 0,
+        };
+        // SAFETY: `file_handle` and `storage` are valid for `total_size` bytes.
+        let status = unsafe {
+            NtSetInformationFile(
+                file_handle,
+                &mut iosb,
+                ptr.cast::<c_void>(),
+                u32::try_from(total_size).unwrap_or(u32::MAX),
+                FILE_RENAME_INFORMATION_CLASS,
+            )
+        };
+        if status < 0 {
+            return Err(nt_status_to_io_error(status));
+        }
+        Ok(())
+    }
+
+    fn nt_mark_delete_on_close(file_handle: *mut c_void) -> io::Result<()> {
+        let mut disposition = FileDispositionInformation { delete_file: 1 };
+        let mut iosb = IoStatusBlock {
+            status_or_pointer: 0,
+            information: 0,
+        };
+        // SAFETY: `file_handle` is open and `disposition` has the required size.
+        let status = unsafe {
+            NtSetInformationFile(
+                file_handle,
+                &mut iosb,
+                (&mut disposition as *mut FileDispositionInformation).cast::<c_void>(),
+                u32::try_from(std::mem::size_of::<FileDispositionInformation>()).unwrap_or(1),
+                FILE_DISPOSITION_INFORMATION_CLASS,
+            )
+        };
+        if status < 0 {
+            return Err(nt_status_to_io_error(status));
+        }
+        Ok(())
+    }
+
+    fn read_dacl_security_descriptor(
+        handle: *mut c_void,
+    ) -> Result<Option<Vec<usize>>, ContainedFsError> {
+        let mut needed: u32 = 0;
+        // SAFETY: querying required buffer size with null output pointer.
+        let ok = unsafe {
+            GetKernelObjectSecurity(
+                handle,
+                DACL_SECURITY_INFORMATION,
+                std::ptr::null_mut(),
+                0,
+                &mut needed,
+            )
+        };
+        if ok != 0 {
+            return Ok(None);
+        }
+        let error = io::Error::last_os_error();
+        if matches!(
+            error.raw_os_error(),
+            Some(ERROR_INVALID_FUNCTION | ERROR_NOT_SUPPORTED)
+        ) {
+            return Ok(None);
+        }
+        if error.raw_os_error() != Some(ERROR_INSUFFICIENT_BUFFER) || needed == 0 {
+            return Err(ContainedFsError::Io(error));
+        }
+        let word_count = usize::try_from(needed)
+            .unwrap_or(0)
+            .div_ceil(std::mem::size_of::<usize>());
+        let mut buffer = vec![0usize; word_count];
+        // SAFETY: `buffer` is pointer-aligned and has at least `needed` writable bytes.
+        let ok = unsafe {
+            GetKernelObjectSecurity(
+                handle,
+                DACL_SECURITY_INFORMATION,
+                buffer.as_mut_ptr().cast::<c_void>(),
+                needed,
+                &mut needed,
+            )
+        };
+        if ok == 0 {
+            return Err(ContainedFsError::Io(io::Error::last_os_error()));
+        }
+        Ok(Some(buffer))
+    }
+
+    fn file_information(handle: *mut c_void) -> Result<ByHandleFileInformation, ContainedFsError> {
         let mut info = std::mem::MaybeUninit::<ByHandleFileInformation>::uninit();
         // SAFETY: `handle` is open and `info` is writable.
         let ok = unsafe { GetFileInformationByHandle(handle, info.as_mut_ptr()) };
@@ -837,28 +1310,24 @@ mod platform {
         Ok(unsafe { info.assume_init() })
     }
 
-    fn final_path_name(handle: *mut std::ffi::c_void) -> Result<PathBuf, ContainedFsError> {
-        let mut buffer = vec![0_u16; 260];
-        loop {
-            // SAFETY: `handle` is open and `buffer` has `buffer.len()` writable UTF-16 units.
-            let written = unsafe {
-                GetFinalPathNameByHandleW(
-                    handle,
-                    buffer.as_mut_ptr(),
-                    u32::try_from(buffer.len()).unwrap_or(u32::MAX),
-                    FILE_NAME_NORMALIZED,
-                )
-            };
-            if written == 0 {
-                return Err(ContainedFsError::Io(io::Error::last_os_error()));
-            }
-            let written_usize = usize::try_from(written).unwrap_or(usize::MAX);
-            if written_usize < buffer.len() {
-                buffer.truncate(written_usize);
-                return Ok(PathBuf::from(OsString::from_wide(&buffer)));
-            }
-            buffer.resize(written_usize + 1, 0);
+    fn encode_utf16_no_nul(value: &OsStr) -> Result<Vec<u16>, ContainedFsError> {
+        let wide: Vec<u16> = value.encode_wide().collect();
+        if wide.contains(&0) {
+            return Err(ContainedFsError::Containment(
+                "path component contains an interior NUL byte".to_owned(),
+            ));
         }
+        Ok(wide)
+    }
+
+    const fn is_not_found_status(status: NtStatus) -> bool {
+        status == STATUS_OBJECT_NAME_NOT_FOUND || status == STATUS_OBJECT_PATH_NOT_FOUND
+    }
+
+    fn nt_status_to_io_error(status: NtStatus) -> io::Error {
+        // SAFETY: pure conversion from NTSTATUS to Win32 error code.
+        let dos_error = unsafe { RtlNtStatusToDosError(status) };
+        io::Error::from_raw_os_error(i32::try_from(dos_error).unwrap_or(1))
     }
 }
 
@@ -996,3 +1465,51 @@ mod platform {
 }
 
 pub use platform::ContainedDir;
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::ffi::OsStr;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+
+    use super::{ContainedDir, ContainedNewFileMode, ContainedWriteDurability};
+
+    #[test]
+    fn traverses_search_only_unix_directories_for_reads_and_writes() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let hidden = root.path().join("restricted");
+        let leaf = hidden.join("locales");
+        fs::create_dir_all(&leaf).expect("create directories");
+        fs::write(leaf.join("en.po"), "hello").expect("write catalog");
+        // Make intermediate directory execute-only (searchable, not listable).
+        fs::set_permissions(&hidden, fs::Permissions::from_mode(0o111)).expect("chmod search-only");
+
+        let dir = ContainedDir::open_subpath(root.path(), Path::new("restricted/locales"), false)
+            .expect("traverse search-only directory")
+            .expect("directory exists");
+        assert_eq!(
+            dir.read_optional_file(OsStr::new("en.po"))
+                .expect("read through search-only directory")
+                .as_deref(),
+            Some("hello")
+        );
+        dir.write_file_atomically(
+            OsStr::new("de.po"),
+            b"hallo",
+            ContainedNewFileMode::Private,
+            ContainedWriteDurability::Full,
+        )
+        .expect("write and sync under search-only parent");
+        assert_eq!(
+            dir.read_optional_file(OsStr::new("de.po"))
+                .expect("read written file")
+                .as_deref(),
+            Some("hallo")
+        );
+
+        // Restore permissions so TempDir cleanup succeeds cleanly.
+        fs::set_permissions(&hidden, fs::Permissions::from_mode(0o755))
+            .expect("restore permissions");
+    }
+}

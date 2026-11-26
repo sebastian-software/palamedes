@@ -10,8 +10,8 @@ use super::load::{
 };
 use super::types::{CatalogArtifactConfig, CatalogConfig, FallbackLocales};
 use super::{
-    PreparedCompilation, ensure_catalog_path_contained, is_valid_locale, resolve_catalog_file_path,
-    resolve_contained_catalog_file_path, validate_catalog_path_pattern,
+    PreparedCompilation, is_valid_locale, resolve_catalog_file_path, try_resolve_catalog_file_path,
+    validate_catalog_path_pattern,
 };
 
 #[derive(Debug, Clone)]
@@ -176,7 +176,7 @@ fn resolve_catalog_request(
                     resource_path: resource_path.to_path_buf(),
                 });
             }
-            let expected_primary = resolve_contained_catalog_file_path(
+            let expected_primary = try_resolve_catalog_file_path(
                 Path::new(&config.root_dir),
                 &catalog.path,
                 &locale,
@@ -207,7 +207,6 @@ fn collect_watch_files(
     catalog: &CatalogConfig,
     locale_chain: &[String],
 ) -> PalamedesResult<Vec<ResolvedCatalogFile>> {
-    ensure_catalog_path_contained(root_dir, &resolved.primary_file)?;
     let mut files = vec![ResolvedCatalogFile {
         path: resolved.primary_file.clone(),
         locale: resolved.locale.clone(),
@@ -215,8 +214,11 @@ fn collect_watch_files(
     }];
 
     for locale in locale_chain {
+        if locale == &resolved.locale {
+            continue;
+        }
         let candidate =
-            resolve_contained_catalog_file_path(root_dir, &catalog.path, locale, catalog.format)?;
+            try_resolve_catalog_file_path(root_dir, &catalog.path, locale, catalog.format)?;
         if !files.iter().any(|existing| existing.path == candidate) {
             files.push(ResolvedCatalogFile {
                 path: candidate,

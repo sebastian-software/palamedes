@@ -14,15 +14,14 @@ use std::path::{Component, Path, PathBuf};
 use clap::{Args, ValueEnum};
 use palamedes::{
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSourceKey,
-    CatalogParseRequest, ContainedDir, ContainedNewFileMode, ContainedWriteDurability,
-    FallbackLocales, compile_catalog_artifact, compiled_message_key, is_valid_locale,
-    parse_catalog, render_catalog_module,
+    ContainedDir, ContainedNewFileMode, ContainedWriteDurability, FallbackLocales,
+    compile_catalog_artifact, is_valid_locale, render_catalog_module,
 };
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
 
 use crate::command::{Command, Context, VersionedJson, render_json};
-use crate::config::{ConfigCatalog, LoadedConfig};
+use crate::config::LoadedConfig;
 use crate::error::CliError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -588,7 +587,7 @@ fn compile_js(
                             catalog_path: Some(resource_path.clone()),
                             locale: Some(locale.clone()),
                             requested_locale: Some(locale.clone()),
-                            source_key: find_source_key(config, catalog, &resource, locale, entry.key()),
+                            source_key: artifact.source_keys.get(entry.key()).cloned(),
                             conflicting_catalog_path: Some(existing.catalog_path.clone()),
                         });
                     }
@@ -707,35 +706,6 @@ fn clone_source_key(source_key: &CatalogArtifactSourceKey) -> CatalogArtifactSou
         message: source_key.message.clone(),
         context: source_key.context.clone(),
     }
-}
-
-/// Recovers the source message behind a runtime ID from the catalog that
-/// compiled it. Only conflicts need this, so the extra parse stays off the
-/// successful path.
-fn find_source_key(
-    config: &LoadedConfig,
-    catalog: &ConfigCatalog,
-    resource: &Path,
-    locale: &str,
-    compiled_id: &str,
-) -> Option<CatalogArtifactSourceKey> {
-    let parsed = parse_catalog(&CatalogParseRequest {
-        target_path: resource.to_string_lossy().into_owned(),
-        locale: locale.to_owned(),
-        source_locale: config.source_locale.clone(),
-        format: catalog.format,
-    })
-    .ok()?;
-    parsed
-        .messages
-        .into_iter()
-        .find(|message| {
-            compiled_message_key(&message.message, message.context.as_deref()) == compiled_id
-        })
-        .map(|message| CatalogArtifactSourceKey {
-            message: message.message,
-            context: message.context,
-        })
 }
 
 impl CompileOptions {

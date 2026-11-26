@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::io;
 use std::path::Path;
 
 use ferrocat::po::diagnostic_codes::catalog::FUZZY_FLAG;
@@ -9,9 +8,8 @@ use ferrocat::{
 };
 use sha2::{Digest, Sha256};
 
-use super::ensure_catalog_path_contained;
 use super::types::{CatalogArtifactConfig, PalamedesCatalogFormat};
-use crate::contained_fs::{ContainedDir, ContainedFsError, split_relative_catalog_path};
+use crate::contained_fs::read_optional_contained_catalog_file;
 use crate::error::{PalamedesError, PalamedesResult};
 
 pub(super) type LocaleCatalogs = BTreeMap<String, NormalizedParsedCatalog>;
@@ -52,63 +50,14 @@ pub(super) fn read_catalog_sources(
     let root_dir = Path::new(&config.root_dir);
 
     for (index, file) in files.iter().enumerate() {
-        ensure_catalog_path_contained(root_dir, &file.path)?;
-        let (relative_parent, file_name) = split_relative_catalog_path(root_dir, &file.path)
-            .map_err(|error| PalamedesError::UnsafeCatalogPath {
-                path: file.path.to_string_lossy().into_owned(),
-                reason: error.to_string(),
-            })?;
-        let parent_dir = match ContainedDir::open_subpath(root_dir, &relative_parent, false) {
-            Ok(Some(dir)) => dir,
-            Ok(None) if index == 0 => {
+        let content = match read_optional_contained_catalog_file(root_dir, &file.path)? {
+            Some(content) => content,
+            None if index == 0 => {
                 return Err(PalamedesError::CatalogFileNotFound {
                     path: file.path.clone(),
                 });
             }
-            Ok(None) => continue,
-            Err(ContainedFsError::Containment(reason)) => {
-                return Err(PalamedesError::UnsafeCatalogPath {
-                    path: file.path.to_string_lossy().into_owned(),
-                    reason,
-                });
-            }
-            Err(ContainedFsError::Io(source))
-                if source.kind() == io::ErrorKind::NotFound && index == 0 =>
-            {
-                return Err(PalamedesError::CatalogFileNotFound {
-                    path: file.path.clone(),
-                });
-            }
-            Err(ContainedFsError::Io(source)) if source.kind() == io::ErrorKind::NotFound => {
-                continue;
-            }
-            Err(ContainedFsError::Io(source)) => {
-                return Err(PalamedesError::ReadFile {
-                    path: file.path.clone(),
-                    source,
-                });
-            }
-        };
-        let content = match parent_dir.read_optional_file(&file_name) {
-            Ok(Some(content)) => content,
-            Ok(None) if index == 0 => {
-                return Err(PalamedesError::CatalogFileNotFound {
-                    path: file.path.clone(),
-                });
-            }
-            Ok(None) => continue,
-            Err(ContainedFsError::Containment(reason)) => {
-                return Err(PalamedesError::UnsafeCatalogPath {
-                    path: file.path.to_string_lossy().into_owned(),
-                    reason,
-                });
-            }
-            Err(ContainedFsError::Io(source)) => {
-                return Err(PalamedesError::ReadFile {
-                    path: file.path.clone(),
-                    source,
-                });
-            }
+            None => continue,
         };
         let digest = Sha256::digest(content.as_bytes()).into();
         sources.push(CatalogSource {

@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use ferrocat::{
     CatalogMessageKey, CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, Header, MsgStr,
@@ -30,6 +30,7 @@ thread_local! {
 
 use crate::catalog_artifact::resolve_catalog_path;
 use crate::catalog_update::{AiProvenance, MachineMetadata, po_serialize_options};
+use crate::contained_fs::read_optional_contained_catalog_file;
 use crate::icu_compatibility::compare_runtime_icu;
 use crate::icu_text::parse_runtime_icu;
 use crate::{
@@ -786,11 +787,15 @@ fn load_catalog(
     catalog: &CatalogConfig,
     locale: &str,
 ) -> PalamedesResult<LoadedCatalog> {
-    let path = resolve_catalog_path(config, catalog, locale);
-    let original = fs::read_to_string(&path).map_err(|source| PalamedesError::ReadFile {
-        path: path.clone(),
-        source,
-    })?;
+    let path = resolve_catalog_path(config, catalog, locale)?;
+    let original = read_optional_contained_catalog_file(Path::new(&config.root_dir), &path)?
+        .ok_or_else(|| PalamedesError::ReadFile {
+            path: path.clone(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "catalog file does not exist",
+            ),
+        })?;
     let po = parse_catalog_as_po(&original, &config.source_locale, locale, catalog.format)?;
     let mut messages = BTreeMap::new();
     let mut ambiguous_messages = BTreeSet::new();

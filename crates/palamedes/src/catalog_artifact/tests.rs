@@ -259,7 +259,7 @@ fn compile_catalog_artifact_rejects_symlinked_source_and_fallback_catalogs() {
 
     let error = compile_catalog_artifact(&request).expect_err("escaping fallback must be rejected");
     assert!(
-        error.to_string().contains("escapes root directory"),
+        error.to_string().contains("Unsafe catalog path"),
         "unexpected error: {error}"
     );
 }
