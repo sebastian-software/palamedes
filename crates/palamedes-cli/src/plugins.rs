@@ -745,6 +745,10 @@ fn invoke_binary(
     })?;
     request_bytes.push(b'\n');
     let mut command = Command::new(&resolved.binary_path);
+    #[cfg(unix)]
+    if resolved.invocation_path != resolved.binary_path {
+        command.arg0(&resolved.invocation_path);
+    }
     command
         .current_dir(cwd)
         .env(NATIVE_EXECUTABLE_ENV, native_executable)
@@ -1292,8 +1296,9 @@ fn resolve_package_plugin(
         .as_ref()
         .and_then(|palamedes| palamedes.plugin_binary.as_deref())
     {
-        let binary_path = resolve_contained_package_binary(specifier, &package_dir, binary)?;
-        return resolved_executable(specifier, binary_path);
+        let (binary_path, invocation_path) =
+            resolve_contained_package_binary(specifier, &package_dir, binary)?;
+        return resolved_executable_with_invocation(specifier, binary_path, invocation_path);
     }
 
     let canonical_dir = fs::canonicalize(&package_dir).unwrap_or(package_dir);
@@ -1323,7 +1328,9 @@ fn resolve_package_plugin(
     }
 
     match candidates.as_slice() {
-        [binary] => resolved_executable(specifier, binary.clone()),
+        [(binary, invocation)] => {
+            resolved_executable_with_invocation(specifier, binary.clone(), invocation.clone())
+        }
         [] => Err(PluginFailure::new(
             "PLUGIN_BINARY_MISSING",
             format!(
@@ -1343,7 +1350,7 @@ fn resolve_contained_package_binary(
     specifier: &str,
     package_dir: &Path,
     binary: &str,
-) -> Result<PathBuf, PluginFailure> {
+) -> Result<(PathBuf, PathBuf), PluginFailure> {
     let relative = validate_plugin_binary_relative_path(specifier, binary)?;
     let candidate = package_dir.join(&relative);
     if is_blocked_script_extension(&candidate) {
@@ -1399,7 +1406,7 @@ fn resolve_contained_package_binary(
             ),
         ));
     }
-    Ok(canonical_binary)
+    Ok((canonical_binary, candidate))
 }
 
 fn validate_plugin_binary_relative_path(
@@ -1478,7 +1485,16 @@ fn resolved_executable(
     specifier: &str,
     binary_path: PathBuf,
 ) -> Result<ResolvedPlugin, PluginFailure> {
-    if is_blocked_script_extension(&binary_path) {
+    let invocation_path = binary_path.clone();
+    resolved_executable_with_invocation(specifier, binary_path, invocation_path)
+}
+
+fn resolved_executable_with_invocation(
+    specifier: &str,
+    binary_path: PathBuf,
+    invocation_path: PathBuf,
+) -> Result<ResolvedPlugin, PluginFailure> {
+    if is_blocked_script_extension(&binary_path) || is_blocked_script_extension(&invocation_path) {
         return Err(script_plugin_failure(specifier, &binary_path));
     }
     if !binary_path.is_file() {
@@ -1498,6 +1514,7 @@ fn resolved_executable(
     Ok(ResolvedPlugin {
         specifier: specifier.to_owned(),
         binary_path,
+        invocation_path,
     })
 }
 
@@ -2019,6 +2036,7 @@ struct LoadedPlugin {
 struct ResolvedPlugin {
     specifier: String,
     binary_path: PathBuf,
+    invocation_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -2159,6 +2177,7 @@ mod tests {
         let resolved = ResolvedPlugin {
             specifier: "@acme/plugin".to_owned(),
             binary_path: "/fixture/plugin".into(),
+            invocation_path: "/fixture/plugin".into(),
         };
         for namespace in ["check", "internal-check", "summary"] {
             let manifest = PluginManifest {
@@ -2264,6 +2283,7 @@ mod tests {
         let resolved = ResolvedPlugin {
             specifier: "@acme/plugin".to_owned(),
             binary_path: "/fixture/plugin".into(),
+            invocation_path: "/fixture/plugin".into(),
         };
         let output = finish_run(
             &resolved,
@@ -2623,6 +2643,7 @@ mod tests {
         let resolved = ResolvedPlugin {
             specifier: "@acme/plugin".to_owned(),
             binary_path: "/fixture/plugin".into(),
+            invocation_path: "/fixture/plugin".into(),
         };
         let manifest = |name: &str, protocol_version: u64| PluginManifest {
             name: name.to_owned(),
@@ -2690,6 +2711,7 @@ mod tests {
         });
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
         };
 
@@ -2725,6 +2747,7 @@ mod tests {
         );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
         };
 
@@ -2758,6 +2781,7 @@ mod tests {
         );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
         };
 
@@ -2788,6 +2812,7 @@ mod tests {
         );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
         };
         let policy = InvocationPolicy::new(Some(Duration::from_millis(500)), "describe");
@@ -2821,6 +2846,7 @@ mod tests {
         );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
         };
         let mut policy = InvocationPolicy::run(None);
@@ -3370,5 +3396,68 @@ catalogs:
                 "diagnostics": [{ "severity": "error", "message": "failed", "code": "PLUGIN_TEST" }],
             })
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_in_package_plugin_binary_preserves_declared_argv0() {
+        let root = temp_dir("plugin-symlink-argv0");
+        let pkg_dir = root.join("node_modules/acme-multicall");
+        let bin_dir = pkg_dir.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"name":"acme-multicall","palamedes":{"pluginBinary":"bin/acme-plugin"}}"#,
+        )
+        .expect("write package.json");
+        let target_bin = bin_dir.join("multicall-runner");
+        let source_path = root.join("multicall.c");
+        fs::write(
+            &source_path,
+            concat!(
+                "#include <stdio.h>\n",
+                "#include <string.h>\n",
+                "int main(int argc, char **argv) {\n",
+                "  const char *arg0 = argc > 0 && argv[0] ? argv[0] : \"\";\n",
+                "  const char *slash = strrchr(arg0, '/');\n",
+                "  const char *base = slash ? slash + 1 : arg0;\n",
+                "  if (strcmp(base, \"acme-plugin\") == 0) {\n",
+                "    puts(\"{\\\"event\\\":\\\"manifest\\\",\\\"name\\\":\\\"acme\\\",\\\"protocolVersion\\\":1,\\\"commands\\\":{\\\"ping\\\":{}}}\");\n",
+                "    return 0;\n",
+                "  }\n",
+                "  fprintf(stderr, \"unexpected argv0: %s\\n\", arg0);\n",
+                "  return 42;\n",
+                "}\n",
+            ),
+        )
+        .expect("write C fixture source");
+        let compiled = std::process::Command::new("cc")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&target_bin)
+            .status()
+            .is_ok_and(|status| status.success());
+        if !compiled {
+            // Fallback placeholder executable when no C compiler is on PATH.
+            write_executable_fixture(&target_bin, "#!/bin/sh\nexit 0\n");
+        }
+        let symlink_path = bin_dir.join("acme-plugin");
+        std::os::unix::fs::symlink(&target_bin, &symlink_path).expect("create in-package symlink");
+        let config_path = root.join("palamedes.yaml");
+        fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
+
+        let resolved =
+            super::resolve_binary_plugin("acme-multicall", &config_path).expect("resolve plugin");
+        assert_eq!(
+            resolved.binary_path,
+            fs::canonicalize(&target_bin).expect("canonical target")
+        );
+        assert_eq!(resolved.invocation_path, symlink_path);
+
+        if compiled {
+            let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
+                .expect("multicall symlinked native plugin must receive declared argv0");
+            assert_eq!(manifest.name, "acme");
+        }
     }
 }

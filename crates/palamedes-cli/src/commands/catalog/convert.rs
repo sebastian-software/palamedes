@@ -155,6 +155,13 @@ impl Command for ConvertOptions {
                                     source: error.into_io_error(),
                                 })?
                                 .expect("create_missing always opens destination directory");
+                        let _target_lock =
+                            output_dir
+                                .lock_target(&output_file)
+                                .map_err(|error| CliError::Io {
+                                    path: output.clone(),
+                                    source: error.into_io_error(),
+                                })?;
                         let output_identity =
                             output_dir.file_identity(&output_file).map_err(|error| {
                                 CliError::Io {

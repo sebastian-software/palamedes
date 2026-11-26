@@ -553,7 +553,7 @@ where
         ));
     }
 
-    let mut target_batches: HashMap<(PathBuf, OsString), Vec<CatalogBatchKey>> = HashMap::new();
+    let mut target_batches: BTreeMap<(PathBuf, OsString), Vec<CatalogBatchKey>> = BTreeMap::new();
     for batch in groups.keys() {
         let catalog = &request.config.catalogs[batch.catalog_index];
         let path = resolve_catalog_path(&request.config, catalog, &batch.locale)?;
@@ -593,6 +593,55 @@ where
     }
 
     let mut pinned_dirs: HashMap<PathBuf, Arc<ContainedDir>> = HashMap::new();
+    let mut target_locks = Vec::with_capacity(target_batches.len());
+    let root_dir = Path::new(&request.config.root_dir);
+    for (relative_parent, file_name) in target_batches.keys() {
+        let full_path = root_dir.join(relative_parent).join(file_name);
+        let parent_dir = if let Some(cached) = pinned_dirs.get(relative_parent) {
+            Arc::clone(cached)
+        } else {
+            let opened = match ContainedDir::open_subpath(root_dir, relative_parent, false) {
+                Ok(Some(dir)) => Arc::new(dir),
+                Ok(None) => {
+                    return Err(PalamedesError::ReadFile {
+                        path: full_path,
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            "catalog file does not exist",
+                        ),
+                    });
+                }
+                Err(ContainedFsError::Containment(reason)) => {
+                    return Err(PalamedesError::UnsafeCatalogPath {
+                        path: full_path.to_string_lossy().into_owned(),
+                        reason,
+                    });
+                }
+                Err(ContainedFsError::Io(source)) => {
+                    return Err(PalamedesError::ReadFile {
+                        path: full_path,
+                        source,
+                    });
+                }
+            };
+            pinned_dirs.insert(relative_parent.clone(), Arc::clone(&opened));
+            opened
+        };
+        let lock = parent_dir
+            .lock_target(file_name)
+            .map_err(|error| match error {
+                ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
+                    path: full_path.to_string_lossy().into_owned(),
+                    reason,
+                },
+                ContainedFsError::Io(source) => PalamedesError::WriteFile {
+                    path: full_path,
+                    source,
+                },
+            })?;
+        target_locks.push(lock);
+    }
+    let _target_locks = target_locks;
     let mut seen_identities: HashMap<FileIdentity, Vec<usize>> = HashMap::new();
     let mut prepared = Vec::new();
     for (batch, patch_indexes) in groups {

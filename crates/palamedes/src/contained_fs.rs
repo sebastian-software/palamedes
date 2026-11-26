@@ -108,6 +108,25 @@ pub enum ContainedWriteOutcome {
     CommittedWithoutDirSync(io::Error),
 }
 
+/// Filename equivalence policy detected for a directory's filesystem.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DirFilenameEquivalence {
+    /// Exact byte-for-byte comparison (standard Linux ext4/xfs/btrfs/tmpfs or
+    /// Windows NTFS with per-directory case sensitivity enabled).
+    Exact,
+    /// Case-sensitive, Unicode NFD normalization-insensitive (APFS/HFS+ Case-Sensitive).
+    UnicodeNfd,
+    /// Case-insensitive 1-to-1 uppercase without Unicode normalization
+    /// (Windows NTFS, FAT/exFAT, SMB/CIFS).
+    CaseInsensitiveNtfs,
+    /// Case-insensitive full Unicode casefold + NFD preserving default-ignorable
+    /// code points (default macOS/iOS APFS and HFS+).
+    CaseInsensitiveUnicodeNfd,
+    /// Linux `FS_CASEFOLD_FL` NFDICF: full Unicode casefold + NFD with
+    /// `Default_Ignorable_Code_Point` removal (ext4/f2fs/tmpfs casefold).
+    CaseInsensitiveUnicodeNfdicf,
+}
+
 /// Stable on-disk file identity used to detect hard-linked input/output aliases.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FileIdentity {
@@ -277,7 +296,8 @@ fn validate_relative_dir_segments(relative_dir: &Path) -> Result<Vec<OsString>, 
 
 #[cfg(unix)]
 mod platform {
-    use std::collections::hash_map::RandomState;
+    use std::cell::RefCell;
+    use std::collections::{HashMap, HashSet, hash_map::RandomState};
     use std::ffi::{CString, OsStr, OsString};
     use std::fs::File;
     use std::hash::{BuildHasher, Hasher};
@@ -289,8 +309,38 @@ mod platform {
 
     use super::{
         ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
-        FileIdentity, validate_relative_dir_segments, validate_single_file_name,
+        DirFilenameEquivalence, FileIdentity, validate_relative_dir_segments,
+        validate_single_file_name,
     };
+
+    thread_local! {
+        static HELD_UNIX_DIR_LOCKS: RefCell<HashMap<FileIdentity, usize>> =
+            RefCell::new(HashMap::new());
+    }
+
+    /// Exclusive cross-process and cross-thread guard serializing catalog
+    /// read-modify-write operations targeting a [`ContainedDir`].
+    #[derive(Debug)]
+    pub struct ContainedTargetLock {
+        key: Option<FileIdentity>,
+        _fd: Option<OwnedFd>,
+    }
+
+    impl Drop for ContainedTargetLock {
+        fn drop(&mut self) {
+            if let Some(key) = self.key {
+                HELD_UNIX_DIR_LOCKS.with(|held| {
+                    let mut map = held.borrow_mut();
+                    if let Some(count) = map.get_mut(&key) {
+                        *count = count.saturating_sub(1);
+                        if *count == 0 {
+                            map.remove(&key);
+                        }
+                    }
+                });
+            }
+        }
+    }
 
     static TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
 
@@ -586,9 +636,12 @@ mod platform {
             for segment in segments {
                 let c_segment = os_str_to_cstring(&segment)?;
                 if create_missing {
+                    // Use `0755` rather than `0777` so a common `0002` umask
+                    // does not create a group-writable directory that later
+                    // fails `parent_allows_safe_staging`.
                     // SAFETY: `current.fd` is an open directory descriptor and `c_segment` is valid.
                     let rc =
-                        unsafe { libc::mkdirat(current.fd.as_raw_fd(), c_segment.as_ptr(), 0o777) };
+                        unsafe { libc::mkdirat(current.fd.as_raw_fd(), c_segment.as_ptr(), 0o755) };
                     if rc != 0 {
                         let error = io::Error::last_os_error();
                         if error.raw_os_error() != Some(libc::EEXIST) {
@@ -693,6 +746,13 @@ mod platform {
             }))
         }
 
+        /// Detects the filename equivalence policy of this directory's
+        /// filesystem without mutating the filesystem.
+        #[must_use]
+        pub fn filename_equivalence(&self) -> Option<DirFilenameEquivalence> {
+            detect_unix_dir_filename_equivalence(self)
+        }
+
         /// Detects whether filenames in this specific directory are compared
         /// case-insensitively without mutating the filesystem.
         ///
@@ -700,14 +760,135 @@ mod platform {
         /// (for example, an empty directory on an unrecognized mount).
         #[must_use]
         pub fn is_case_insensitive(&self) -> Option<bool> {
-            detect_unix_dir_case_insensitivity(self)
+            self.filename_equivalence().map(|eq| {
+                matches!(
+                    eq,
+                    DirFilenameEquivalence::CaseInsensitiveNtfs
+                        | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+                        | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
+                )
+            })
         }
 
         /// Detects whether canonically equivalent Unicode filenames (NFC vs
         /// NFD) resolve to the same entry in this directory.
         #[must_use]
         pub fn is_unicode_normalizing(&self) -> Option<bool> {
-            detect_unix_dir_unicode_normalizing(self)
+            self.filename_equivalence().map(|eq| {
+                matches!(
+                    eq,
+                    DirFilenameEquivalence::UnicodeNfd
+                        | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+                        | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
+                )
+            })
+        }
+
+        /// Acquires an exclusive cross-process and cross-thread lock covering
+        /// read-modify-write operations on `file_name` in this directory.
+        ///
+        /// Re-entrant on the same thread so callers may hold the lock across
+        /// read, merge, and [`Self::write_file_atomically`] without deadlocking.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
+        /// or [`ContainedFsError::Io`] on OS lock failures.
+        pub fn lock_target(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<ContainedTargetLock, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            let dir_id = self.self_identity()?;
+            if let Some(key) = dir_id {
+                let already_held = HELD_UNIX_DIR_LOCKS.with(|held| {
+                    let mut map = held.borrow_mut();
+                    if let Some(count) = map.get_mut(&key) {
+                        *count += 1;
+                        true
+                    } else {
+                        false
+                    }
+                });
+                if already_held {
+                    return Ok(ContainedTargetLock {
+                        key: Some(key),
+                        _fd: None,
+                    });
+                }
+            }
+
+            let dot = c".";
+            // Open a fresh open file description for this directory so `flock`
+            // serializes both distinct processes and distinct threads sharing
+            // one `ContainedDir`.
+            // SAFETY: `self.fd` is an open directory descriptor and `dot` is valid.
+            let mut raw = unsafe {
+                libc::openat(
+                    self.fd.as_raw_fd(),
+                    dot.as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+                )
+            };
+            if raw < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EACCES) && USES_SEARCH_ONLY_DIR_HANDLE {
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        // On BSD/macOS, `O_SEARCH` allows locking execute-only
+                        // (`0311`) directories without read permission.
+                        // SAFETY: `self.fd` is open and `dot` is valid.
+                        raw = unsafe {
+                            libc::openat(self.fd.as_raw_fd(), dot.as_ptr(), DIR_TRAVERSAL_FLAGS)
+                        };
+                    }
+                    #[cfg(target_os = "linux")]
+                    {
+                        // Linux `O_PATH` handles do not support `flock`; allow
+                        // `0311` unreadable directories to proceed using
+                        // no-replace / snapshot checks.
+                        return Ok(ContainedTargetLock {
+                            key: None,
+                            _fd: None,
+                        });
+                    }
+                }
+                if raw < 0 {
+                    return Err(ContainedFsError::Io(io::Error::last_os_error()));
+                }
+            }
+            // SAFETY: `raw` is a newly opened valid directory descriptor.
+            let lock_fd = unsafe { OwnedFd::from_raw_fd(raw) };
+            loop {
+                // SAFETY: `lock_fd` is an open directory descriptor.
+                let rc = unsafe { libc::flock(lock_fd.as_raw_fd(), libc::LOCK_EX) };
+                if rc == 0 {
+                    break;
+                }
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                if matches!(
+                    error.raw_os_error(),
+                    Some(libc::EOPNOTSUPP | libc::ENOTSUP | libc::ENOSYS)
+                ) {
+                    return Ok(ContainedTargetLock {
+                        key: None,
+                        _fd: None,
+                    });
+                }
+                return Err(ContainedFsError::Io(error));
+            }
+            if let Some(key) = dir_id {
+                HELD_UNIX_DIR_LOCKS.with(|held| {
+                    held.borrow_mut().insert(key, 1);
+                });
+            }
+            Ok(ContainedTargetLock {
+                key: dir_id,
+                _fd: Some(lock_fd),
+            })
         }
 
         /// Rejects `file_name` if it already exists in this directory as a symlink.
@@ -938,6 +1119,7 @@ mod platform {
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             validate_single_file_name(file_name)?;
+            let _target_lock = self.lock_target(file_name)?;
             let c_target = os_str_to_cstring(file_name)?;
 
             for _ in 0..8 {
@@ -1426,7 +1608,10 @@ mod platform {
                     )
                 };
                 if raw < 0 {
-                    return Err(ContainedFsError::Io(io::Error::last_os_error()));
+                    let error = io::Error::last_os_error();
+                    let _ =
+                        self.rmdir_created_stage_on_open_error(&c_name, parent_stat.st_dev, euid);
+                    return Err(ContainedFsError::Io(error));
                 }
                 // SAFETY: `raw` is a newly opened valid directory descriptor.
                 let fd = unsafe { OwnedFd::from_raw_fd(raw) };
@@ -1436,7 +1621,11 @@ mod platform {
                 let mut stage_stat = std::mem::MaybeUninit::<libc::stat>::uninit();
                 // SAFETY: `fd` is open and `stage_stat` is writable.
                 if unsafe { libc::fstat(fd.as_raw_fd(), stage_stat.as_mut_ptr()) } != 0 {
-                    return Err(ContainedFsError::Io(io::Error::last_os_error()));
+                    let error = io::Error::last_os_error();
+                    drop(fd);
+                    let _ =
+                        self.rmdir_created_stage_on_open_error(&c_name, parent_stat.st_dev, euid);
+                    return Err(ContainedFsError::Io(error));
                 }
                 // SAFETY: `fstat` succeeded and initialized `stage_stat`.
                 let stage_stat = unsafe { stage_stat.assume_init() };
@@ -1582,6 +1771,45 @@ mod platform {
                 dev: stat.st_dev as u64,
                 ino: stat.st_ino as u64,
             })
+        }
+
+        fn rmdir_created_stage_on_open_error(
+            &self,
+            stage_name: &CString,
+            expected_dev: libc::dev_t,
+            expected_uid: libc::uid_t,
+        ) -> io::Result<()> {
+            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // SAFETY: `self.fd` is open, `stage_name` is valid, and `stat` is writable.
+            if unsafe {
+                libc::fstatat(
+                    self.fd.as_raw_fd(),
+                    stage_name.as_ptr(),
+                    stat.as_mut_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            } != 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: `fstatat` succeeded and initialized `stat`.
+            let stat = unsafe { stat.assume_init() };
+            if (stat.st_mode & libc::S_IFMT) != libc::S_IFDIR
+                || stat.st_dev != expected_dev
+                || stat.st_uid != expected_uid
+            {
+                return Ok(());
+            }
+            // `unlinkat(..., AT_REMOVEDIR)` only removes empty directories.
+            // SAFETY: `self.fd` is an open directory descriptor and `stage_name` is valid.
+            let rc = unsafe {
+                libc::unlinkat(self.fd.as_raw_fd(), stage_name.as_ptr(), libc::AT_REMOVEDIR)
+            };
+            if rc == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
         }
 
         fn rmdir_stage_if_same(
@@ -1765,7 +1993,8 @@ mod platform {
             }
             return None;
         }
-        let mut detected = None;
+        let mut entries = Vec::new();
+        let mut all_names: HashSet<Vec<u8>> = HashSet::new();
         loop {
             // SAFETY: `dir_ptr` is a valid `DIR*`.
             let entry = unsafe { libc::readdir(dir_ptr) };
@@ -1777,7 +2006,17 @@ mod platform {
             if name == c"." || name == c".." {
                 continue;
             }
-            let Ok(name_str) = name.to_str() else {
+            let bytes = name.to_bytes().to_vec();
+            all_names.insert(bytes.clone());
+            entries.push(bytes);
+        }
+        // SAFETY: `dir_ptr` is a valid `DIR*` owned by this function.
+        unsafe {
+            libc::closedir(dir_ptr);
+        }
+
+        for bytes in &entries {
+            let Ok(name_str) = std::str::from_utf8(bytes) else {
                 continue;
             };
             let Some((idx, ch)) = name_str
@@ -1795,7 +2034,7 @@ mod platform {
             variant.push_str(&name_str[..idx]);
             variant.push(flipped);
             variant.push_str(&name_str[idx + ch.len_utf8()..]);
-            let Ok(original_c) = CString::new(name.to_bytes()) else {
+            let Ok(original_c) = CString::new(bytes.as_slice()) else {
                 continue;
             };
             let Ok(variant_c) = CString::new(variant.as_bytes()) else {
@@ -1803,16 +2042,22 @@ mod platform {
             };
             let original_id = dir.entry_identity(&original_c);
             let variant_id = dir.entry_identity(&variant_c);
-            if original_id.is_some() {
-                detected = Some(original_id == variant_id);
-                break;
+            if original_id.is_none() {
+                continue;
             }
+            if all_names.contains(variant.as_bytes()) {
+                // Both spellings exist as separate listing entries: distinct
+                // inodes prove case sensitivity, while equal inodes may be a
+                // hard-linked pair on a case-sensitive filesystem, so treat
+                // that entry as inconclusive and keep checking other entries.
+                if original_id != variant_id {
+                    return Some(false);
+                }
+                continue;
+            }
+            return Some(original_id == variant_id);
         }
-        // SAFETY: `dir_ptr` is a valid `DIR*` owned by this function.
-        unsafe {
-            libc::closedir(dir_ptr);
-        }
-        detected
+        None
     }
 
     fn open_readable_self(dir: &ContainedDir) -> Option<OwnedFd> {
@@ -1833,7 +2078,7 @@ mod platform {
         }
     }
 
-    fn detect_unix_dir_case_insensitivity(dir: &ContainedDir) -> Option<bool> {
+    fn detect_unix_dir_filename_equivalence(dir: &ContainedDir) -> Option<DirFilenameEquivalence> {
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         {
             // SAFETY: `dir.fd` is an open directory descriptor.
@@ -1848,14 +2093,47 @@ mod platform {
                         unsafe { libc::fpathconf(readable.as_raw_fd(), libc::_PC_CASE_SENSITIVE) };
                 }
             }
-            if value > 0 {
-                return Some(false);
+            let case_insensitive = if value > 0 {
+                Some(false)
+            } else if value == 0 {
+                Some(true)
+            } else {
+                let readable = readable_fd.as_ref().or(None);
+                if let Some(readable) = readable {
+                    probe_directory_case_insensitivity(dir, readable.as_raw_fd())
+                } else {
+                    open_readable_self(dir)
+                        .and_then(|r| probe_directory_case_insensitivity(dir, r.as_raw_fd()))
+                }
+            }?;
+
+            let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
+            // SAFETY: `dir.fd` is an open directory descriptor and `fs_stat` is writable.
+            let mut rc = unsafe { libc::fstatfs(dir.fd.as_raw_fd(), fs_stat.as_mut_ptr()) };
+            if rc != 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EBADF) {
+                if readable_fd.is_none() {
+                    readable_fd = open_readable_self(dir);
+                }
+                if let Some(ref readable) = readable_fd {
+                    // SAFETY: `readable` is an open directory descriptor and `fs_stat` is writable.
+                    rc = unsafe { libc::fstatfs(readable.as_raw_fd(), fs_stat.as_mut_ptr()) };
+                }
             }
-            if value == 0 {
-                return Some(true);
-            }
-            let readable = readable_fd.or_else(|| open_readable_self(dir))?;
-            probe_directory_case_insensitivity(dir, readable.as_raw_fd())
+            let is_apple_normalizing = if rc == 0 {
+                // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
+                let fs_stat = unsafe { fs_stat.assume_init() };
+                // SAFETY: `f_fstypename` is a NUL-terminated ASCII C string in `statfs`.
+                let fs_type = unsafe { std::ffi::CStr::from_ptr(fs_stat.f_fstypename.as_ptr()) };
+                fs_type == c"apfs" || fs_type == c"hfs"
+            } else {
+                true
+            };
+            Some(match (case_insensitive, is_apple_normalizing) {
+                (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfd,
+                (false, true) => DirFilenameEquivalence::UnicodeNfd,
+                (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
+                (false, false) => DirFilenameEquivalence::Exact,
+            })
         }
         #[cfg(target_os = "linux")]
         {
@@ -1868,11 +2146,16 @@ mod platform {
             {
                 checked_casefold_flag = true;
                 if (flags & FS_CASEFOLD_FL) != 0 {
-                    return Some(true);
+                    // Linux ext4/f2fs/tmpfs casefold uses NFDICF (strips default-ignorables).
+                    return Some(DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf);
                 }
             }
             if let Some(probed) = probe_directory_case_insensitivity(dir, readable.as_raw_fd()) {
-                return Some(probed);
+                return Some(if probed {
+                    DirFilenameEquivalence::CaseInsensitiveNtfs
+                } else {
+                    DirFilenameEquivalence::Exact
+                });
             }
             let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
             // SAFETY: `readable` is open and `fs_stat` is writable.
@@ -1904,7 +2187,7 @@ mod platform {
                         | NTFS_SB_MAGIC
                         | NTFS3_SUPER_MAGIC
                 ) {
-                    return Some(true);
+                    return Some(DirFilenameEquivalence::CaseInsensitiveNtfs);
                 }
                 if matches!(
                     f_type,
@@ -1912,7 +2195,7 @@ mod platform {
                 ) || (checked_casefold_flag
                     && matches!(f_type, EXT4_SUPER_MAGIC | TMPFS_MAGIC | F2FS_SUPER_MAGIC))
                 {
-                    return Some(false);
+                    return Some(DirFilenameEquivalence::Exact);
                 }
             }
             None
@@ -1920,51 +2203,13 @@ mod platform {
         #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
         {
             let readable = open_readable_self(dir)?;
-            probe_directory_case_insensitivity(dir, readable.as_raw_fd())
-        }
-    }
-
-    fn detect_unix_dir_unicode_normalizing(dir: &ContainedDir) -> Option<bool> {
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        {
-            let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
-            // SAFETY: `dir.fd` is an open directory descriptor and `fs_stat` is writable.
-            let mut rc = unsafe { libc::fstatfs(dir.fd.as_raw_fd(), fs_stat.as_mut_ptr()) };
-            if rc != 0
-                && io::Error::last_os_error().raw_os_error() == Some(libc::EBADF)
-                && let Some(readable) = open_readable_self(dir)
-            {
-                // SAFETY: `readable` is an open directory descriptor and `fs_stat` is writable.
-                rc = unsafe { libc::fstatfs(readable.as_raw_fd(), fs_stat.as_mut_ptr()) };
-            }
-            if rc == 0 {
-                // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
-                let fs_stat = unsafe { fs_stat.assume_init() };
-                // SAFETY: `f_fstypename` is a NUL-terminated ASCII C string in `statfs`.
-                let fs_type = unsafe { std::ffi::CStr::from_ptr(fs_stat.f_fstypename.as_ptr()) };
-                if fs_type == c"apfs" || fs_type == c"hfs" {
-                    return Some(true);
+            probe_directory_case_insensitivity(dir, readable.as_raw_fd()).map(|probed| {
+                if probed {
+                    DirFilenameEquivalence::CaseInsensitiveNtfs
+                } else {
+                    DirFilenameEquivalence::Exact
                 }
-                return Some(false);
-            }
-            None
-        }
-        #[cfg(target_os = "linux")]
-        {
-            let readable = open_readable_self(dir)?;
-            const FS_CASEFOLD_FL: libc::c_long = 0x4000_0000;
-            let mut flags: libc::c_long = 0;
-            // SAFETY: `FS_IOC_GETFLAGS` writes a single `c_long` flag bitmask.
-            if unsafe { libc::ioctl(readable.as_raw_fd(), libc::FS_IOC_GETFLAGS, &mut flags) } == 0
-            {
-                return Some((flags & FS_CASEFOLD_FL) != 0);
-            }
-            Some(false)
-        }
-        #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
-        {
-            let _ = dir;
-            None
+            })
         }
     }
 
@@ -3237,12 +3482,23 @@ mod platform {
         file_name: [u16; 1],
     }
 
+    const INFINITE: u32 = 0xFFFF_FFFF;
+    const WAIT_OBJECT_0: u32 = 0x0000_0000;
+    const WAIT_ABANDONED: u32 = 0x0000_0080;
+
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn GetFileInformationByHandle(
             file: *mut c_void,
             file_information: *mut ByHandleFileInformation,
         ) -> i32;
+        fn CreateMutexW(
+            mutex_attributes: *mut c_void,
+            initial_owner: i32,
+            name: *const u16,
+        ) -> *mut c_void;
+        fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
+        fn ReleaseMutex(mutex: *mut c_void) -> i32;
     }
 
     #[link(name = "advapi32")]
@@ -3316,6 +3572,59 @@ mod platform {
             file_information_class: u32,
         ) -> NtStatus;
         fn RtlNtStatusToDosError(status: NtStatus) -> u32;
+        fn RtlUpcaseUnicodeChar(source_character: u16) -> u16;
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    struct WindowsLockKey {
+        dir_id: FileIdentity,
+        name_hash: u64,
+    }
+
+    thread_local! {
+        static HELD_WINDOWS_LOCKS: std::cell::RefCell<std::collections::HashMap<WindowsLockKey, usize>> =
+            std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+
+    /// Exclusive cross-process and cross-thread guard serializing catalog
+    /// read-modify-write operations on Windows via a per-target named mutex.
+    #[derive(Debug)]
+    pub struct ContainedTargetLock {
+        key: WindowsLockKey,
+        mutex: Option<OwnedHandle>,
+    }
+
+    impl Drop for ContainedTargetLock {
+        fn drop(&mut self) {
+            if let Some(ref mutex) = self.mutex {
+                // SAFETY: this thread acquired ownership via `WaitForSingleObject`.
+                unsafe {
+                    let _ = ReleaseMutex(mutex.as_raw_handle());
+                }
+            }
+            HELD_WINDOWS_LOCKS.with(|held| {
+                let mut map = held.borrow_mut();
+                if let Some(count) = map.get_mut(&self.key) {
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        map.remove(&self.key);
+                    }
+                }
+            });
+        }
+    }
+
+    fn windows_target_name_hash(file_name: &OsStr) -> u64 {
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for unit in file_name.encode_wide() {
+            // SAFETY: `RtlUpcaseUnicodeChar` is a pure code-unit lookup.
+            let up = unsafe { RtlUpcaseUnicodeChar(unit) };
+            for byte in up.to_le_bytes() {
+                hash ^= u64::from(byte);
+                hash = hash.wrapping_mul(0x0100_0000_01b3);
+            }
+        }
+        hash
     }
 
     /// Open directory handle on Windows used for strictly handle-relative child
@@ -3462,10 +3771,10 @@ mod platform {
             }))
         }
 
-        /// Detects whether filenames in this directory are compared
-        /// case-insensitively, respecting NTFS per-directory case sensitivity.
+        /// Detects the filename equivalence policy of this Windows directory,
+        /// respecting NTFS per-directory case sensitivity.
         #[must_use]
-        pub fn is_case_insensitive(&self) -> Option<bool> {
+        pub fn filename_equivalence(&self) -> Option<super::DirFilenameEquivalence> {
             let mut iosb = IoStatusBlock {
                 status_or_pointer: 0,
                 information: 0,
@@ -3481,11 +3790,19 @@ mod platform {
                     FILE_CASE_SENSITIVE_INFORMATION_CLASS,
                 )
             };
-            if status >= 0 {
-                Some((info.flags & FILE_CS_FLAG_CASE_SENSITIVE_DIR) == 0)
+            if status >= 0 && (info.flags & FILE_CS_FLAG_CASE_SENSITIVE_DIR) != 0 {
+                Some(super::DirFilenameEquivalence::Exact)
             } else {
-                Some(true)
+                Some(super::DirFilenameEquivalence::CaseInsensitiveNtfs)
             }
+        }
+
+        /// Detects whether filenames in this directory are compared
+        /// case-insensitively, respecting NTFS per-directory case sensitivity.
+        #[must_use]
+        pub fn is_case_insensitive(&self) -> Option<bool> {
+            self.filename_equivalence()
+                .map(|eq| eq != super::DirFilenameEquivalence::Exact)
         }
 
         /// Windows filesystems preserve Unicode normalization forms as distinct
@@ -3493,6 +3810,65 @@ mod platform {
         #[must_use]
         pub fn is_unicode_normalizing(&self) -> Option<bool> {
             Some(false)
+        }
+
+        /// Acquires an exclusive cross-process and cross-thread named mutex
+        /// covering read-modify-write operations on `file_name` in this directory.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
+        /// or [`ContainedFsError::Io`] on OS lock failures.
+        pub fn lock_target(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<ContainedTargetLock, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            let dir_id = self.self_identity()?.ok_or_else(|| {
+                ContainedFsError::Io(io::Error::other("missing Windows directory identity"))
+            })?;
+            let key = WindowsLockKey {
+                dir_id,
+                name_hash: windows_target_name_hash(file_name),
+            };
+            let already_held = HELD_WINDOWS_LOCKS.with(|held| {
+                let mut map = held.borrow_mut();
+                if let Some(count) = map.get_mut(&key) {
+                    *count += 1;
+                    true
+                } else {
+                    false
+                }
+            });
+            if already_held {
+                return Ok(ContainedTargetLock { key, mutex: None });
+            }
+            let mut wide_name: Vec<u16> = format!(
+                "Local\\PalamedesCatalogLock-{:08x}-{:08x}-{:08x}-{:016x}",
+                dir_id.volume_serial, dir_id.file_index_high, dir_id.file_index_low, key.name_hash
+            )
+            .encode_utf16()
+            .collect();
+            wide_name.push(0);
+            // SAFETY: `wide_name` is a valid NUL-terminated UTF-16 string.
+            let raw = unsafe { CreateMutexW(std::ptr::null_mut(), 0, wide_name.as_ptr()) };
+            if raw.is_null() {
+                return Err(ContainedFsError::Io(io::Error::last_os_error()));
+            }
+            // SAFETY: `raw` is a newly created valid Windows kernel handle.
+            let mutex = unsafe { OwnedHandle::from_raw_handle(raw) };
+            // SAFETY: `mutex` is a valid mutex handle.
+            let wait = unsafe { WaitForSingleObject(mutex.as_raw_handle(), INFINITE) };
+            if wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED {
+                return Err(ContainedFsError::Io(io::Error::last_os_error()));
+            }
+            HELD_WINDOWS_LOCKS.with(|held| {
+                held.borrow_mut().insert(key, 1);
+            });
+            Ok(ContainedTargetLock {
+                key,
+                mutex: Some(mutex),
+            })
         }
 
         /// Rejects `file_name` if it exists as a symlink or reparse point.
@@ -3672,6 +4048,7 @@ mod platform {
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             validate_single_file_name(file_name)?;
+            let _target_lock = self.lock_target(file_name)?;
             for _ in 0..8 {
                 let existing_entry = self.inspect_entry(file_name, true)?;
                 let existing_identity = existing_entry.as_ref().map(|(identity, _)| *identity);
@@ -4320,8 +4697,13 @@ mod platform {
 
     use super::{
         ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
-        FileIdentity, validate_relative_dir_segments, validate_single_file_name,
+        DirFilenameEquivalence, FileIdentity, validate_relative_dir_segments,
+        validate_single_file_name,
     };
+
+    /// Target lock guard fallback for platforms without Unix/Windows locking.
+    #[derive(Debug)]
+    pub struct ContainedTargetLock;
 
     /// Verified directory handle fallback for platforms without Unix/Windows APIs.
     #[derive(Debug)]
@@ -4422,6 +4804,12 @@ mod platform {
             Ok(None)
         }
 
+        /// Unsupported directory filename-equivalence lookup fallback.
+        #[must_use]
+        pub fn filename_equivalence(&self) -> Option<DirFilenameEquivalence> {
+            None
+        }
+
         /// Unsupported directory case-sensitivity lookup fallback.
         #[must_use]
         pub fn is_case_insensitive(&self) -> Option<bool> {
@@ -4432,6 +4820,15 @@ mod platform {
         #[must_use]
         pub fn is_unicode_normalizing(&self) -> Option<bool> {
             None
+        }
+
+        /// No-op target lock fallback for platforms without Unix/Windows locking.
+        pub fn lock_target(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<ContainedTargetLock, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            Ok(ContainedTargetLock)
         }
 
         /// Rejects `file_name` if it exists as a symlink.
@@ -4523,7 +4920,7 @@ mod platform {
     }
 }
 
-pub use platform::ContainedDir;
+pub use platform::{ContainedDir, ContainedTargetLock};
 
 #[cfg(all(test, unix))]
 mod tests {
@@ -4952,5 +5349,73 @@ mod tests {
         assert_eq!(fs::read_to_string(&target).expect("read updated"), "after");
 
         fs::set_permissions(&shared, fs::Permissions::from_mode(0o755)).expect("restore");
+    }
+
+    #[test]
+    fn open_subpath_creates_stageable_directories_and_serializes_concurrent_updates() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let leaf = ContainedDir::open_subpath(root.path(), Path::new("nested/locales"), true)
+            .expect("create nested catalog dirs")
+            .expect("directory opened");
+        let leaf_mode = fs::metadata(root.path().join("nested/locales"))
+            .expect("stat leaf")
+            .permissions()
+            .mode();
+        assert_eq!(
+            leaf_mode & 0o0022,
+            0,
+            "newly created catalog directory must not be group/world-writable"
+        );
+        leaf.write_file_atomically(
+            OsStr::new("counter.po"),
+            b"0",
+            ContainedNewFileMode::Private,
+            ContainedWriteDurability::Rename,
+        )
+        .expect("initial write in newly created directory");
+
+        let root_path = Arc::new(root.path().to_path_buf());
+        let mut handles = Vec::new();
+        for _ in 0..4 {
+            let root_path = Arc::clone(&root_path);
+            handles.push(thread::spawn(move || {
+                let dir =
+                    ContainedDir::open_subpath(&root_path, Path::new("nested/locales"), false)
+                        .expect("open leaf")
+                        .expect("exists");
+                for _ in 0..5 {
+                    let _lock = dir
+                        .lock_target(OsStr::new("counter.po"))
+                        .expect("acquire target lock");
+                    let current: usize = dir
+                        .read_optional_file(OsStr::new("counter.po"))
+                        .expect("read counter")
+                        .expect("counter exists")
+                        .trim()
+                        .parse()
+                        .expect("numeric counter");
+                    let next = (current + 1).to_string();
+                    dir.write_file_atomically(
+                        OsStr::new("counter.po"),
+                        next.as_bytes(),
+                        ContainedNewFileMode::Private,
+                        ContainedWriteDurability::Rename,
+                    )
+                    .expect("serialized atomic update");
+                }
+            }));
+        }
+        for handle in handles {
+            handle.join().expect("worker completed");
+        }
+        assert_eq!(
+            fs::read_to_string(root.path().join("nested/locales/counter.po"))
+                .expect("read final counter"),
+            "20",
+            "cross-thread/process target lock must prevent lost catalog updates"
+        );
     }
 }

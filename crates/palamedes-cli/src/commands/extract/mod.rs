@@ -21,10 +21,10 @@ use std::time::Instant;
 use clap::Args;
 use palamedes::{
     CatalogUpdateMessage, CatalogUpdateRequest, ContainedDir, ContainedFsError,
-    ContainedNewFileMode, ContainedWriteDurability, ExtractCache, ExtractCatalogFileFailure,
-    FileIdentity, SourceFileAnalysisRequest, collect_runtime_macro_manifest,
-    extract_catalog_messages_cached, preview_catalog_update_from_content,
-    split_relative_catalog_path,
+    ContainedNewFileMode, ContainedWriteDurability, DirFilenameEquivalence, ExtractCache,
+    ExtractCatalogFileFailure, FileIdentity, SourceFileAnalysisRequest,
+    collect_runtime_macro_manifest, extract_catalog_messages_cached,
+    preview_catalog_update_from_content, split_relative_catalog_path,
 };
 use serde::Serialize;
 use unicode_normalization::UnicodeNormalization;
@@ -602,21 +602,41 @@ fn process_catalogs(
     Ok(drift)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct DirectoryEquivalence {
-    case_insensitive: bool,
-    unicode_normalizing: bool,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum ExtractTargetAnchor {
     Identity(FileIdentity),
     Path(PathBuf),
 }
 
-fn unicode_full_casefold_nfd(text: &str) -> String {
+fn is_default_ignorable_code_point(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{00ad}'
+            | '\u{034f}'
+            | '\u{061c}'
+            | '\u{115f}'..='\u{1160}'
+            | '\u{17b4}'..='\u{17b5}'
+            | '\u{180b}'..='\u{180f}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{206f}'
+            | '\u{3164}'
+            | '\u{fe00}'..='\u{fe0f}'
+            | '\u{feff}'
+            | '\u{ffa0}'
+            | '\u{fff0}'..='\u{fff8}'
+            | '\u{1bca0}'..='\u{1bca3}'
+            | '\u{1d173}'..='\u{1d17a}'
+            | '\u{e0000}'..='\u{e0fff}'
+    )
+}
+
+fn unicode_full_casefold_nfd(text: &str, strip_default_ignorables: bool) -> String {
     let mut folded = String::with_capacity(text.len());
     for ch in text.nfd() {
+        if strip_default_ignorables && is_default_ignorable_code_point(ch) {
+            continue;
+        }
         match ch {
             // Cherokee case folding maps to uppercase (U+13A0..=U+13F5).
             '\u{13a0}'..='\u{13f5}' => folded.push(ch),
@@ -713,33 +733,50 @@ fn ntfs_casefold(text: &str) -> String {
     folded
 }
 
-fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirectoryEquivalence) -> OsString {
-    if !equivalence.case_insensitive && !equivalence.unicode_normalizing {
+fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirFilenameEquivalence) -> OsString {
+    if equivalence == DirFilenameEquivalence::Exact {
         return segment.to_os_string();
     }
     segment.to_str().map_or_else(
         || segment.to_os_string(),
         |text| {
-            let normalized = match (
-                equivalence.case_insensitive,
-                equivalence.unicode_normalizing,
-            ) {
-                (true, true) => unicode_full_casefold_nfd(text),
-                (false, true) => text.nfd().collect(),
-                (true, false) => ntfs_casefold(text),
-                (false, false) => text.to_owned(),
+            let normalized = match equivalence {
+                DirFilenameEquivalence::Exact => text.to_owned(),
+                DirFilenameEquivalence::UnicodeNfd => text.nfd().collect(),
+                DirFilenameEquivalence::CaseInsensitiveNtfs => ntfs_casefold(text),
+                DirFilenameEquivalence::CaseInsensitiveUnicodeNfd => {
+                    unicode_full_casefold_nfd(text, false)
+                }
+                DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf => {
+                    unicode_full_casefold_nfd(text, true)
+                }
             };
             OsString::from(normalized)
         },
     )
 }
 
+fn default_platform_equivalence() -> DirFilenameEquivalence {
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+    }
+    #[cfg(target_os = "windows")]
+    {
+        DirFilenameEquivalence::CaseInsensitiveNtfs
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
+    {
+        DirFilenameEquivalence::Exact
+    }
+}
+
 fn resolve_directory_equivalence(
     dir: &ContainedDir,
     identity: Option<FileIdentity>,
-    parent: Option<(Option<FileIdentity>, DirectoryEquivalence)>,
-    cache: &mut HashMap<FileIdentity, DirectoryEquivalence>,
-) -> DirectoryEquivalence {
+    parent: Option<(Option<FileIdentity>, DirFilenameEquivalence)>,
+    cache: &mut HashMap<FileIdentity, DirFilenameEquivalence>,
+) -> DirFilenameEquivalence {
     if let Some(id) = identity
         && let Some(&cached) = cache.get(&id)
     {
@@ -751,19 +788,10 @@ fn resolve_directory_equivalence(
         }
         _ => None,
     };
-    let case_insensitive = dir.is_case_insensitive().unwrap_or_else(|| {
-        same_vol_parent.map_or(
-            cfg!(any(target_os = "macos", target_os = "windows")),
-            |eq| eq.case_insensitive,
-        )
-    });
-    let unicode_normalizing = dir.is_unicode_normalizing().unwrap_or_else(|| {
-        same_vol_parent.map_or(cfg!(target_os = "macos"), |eq| eq.unicode_normalizing)
-    });
-    let equivalence = DirectoryEquivalence {
-        case_insensitive,
-        unicode_normalizing,
-    };
+    let equivalence = dir
+        .filename_equivalence()
+        .or(same_vol_parent)
+        .unwrap_or_else(default_platform_equivalence);
     if let Some(id) = identity {
         cache.insert(id, equivalence);
     }
@@ -774,7 +802,7 @@ fn reject_colliding_extract_targets(
     write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
     config: &LoadedConfig,
 ) -> Result<(), CliError> {
-    let mut dir_eq_cache: HashMap<FileIdentity, DirectoryEquivalence> = HashMap::new();
+    let mut dir_eq_cache: HashMap<FileIdentity, DirFilenameEquivalence> = HashMap::new();
     let mut seen_paths: HashMap<(ExtractTargetAnchor, Vec<OsString>, OsString), &str> =
         HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
@@ -921,6 +949,13 @@ fn process_catalog(
                     source: error.into_io_error(),
                 })?
                 .expect("create_missing always opens the destination directory");
+            let _target_lock =
+                parent_dir
+                    .lock_target(&file_name)
+                    .map_err(|error| CliError::Io {
+                        path: catalog_path.clone(),
+                        source: error.into_io_error(),
+                    })?;
             let existing =
                 parent_dir
                     .read_optional_file(&file_name)
@@ -1681,12 +1716,10 @@ catalogs:
 
     #[test]
     fn fold_os_segment_matches_filesystem_equivalence_rules() {
+        use palamedes::DirFilenameEquivalence;
         use std::ffi::OsStr;
 
-        let ntfs = super::DirectoryEquivalence {
-            case_insensitive: true,
-            unicode_normalizing: false,
-        };
+        let ntfs = DirFilenameEquivalence::CaseInsensitiveNtfs;
         assert_eq!(
             super::fold_os_segment(OsStr::new("\u{03c3}.po"), ntfs),
             super::fold_os_segment(OsStr::new("\u{03c2}.po"), ntfs),
@@ -1698,10 +1731,7 @@ catalogs:
             "NTFS 1-to-1 uppercase folding keeps ß and ss distinct"
         );
 
-        let apfs = super::DirectoryEquivalence {
-            case_insensitive: true,
-            unicode_normalizing: true,
-        };
+        let apfs = DirFilenameEquivalence::CaseInsensitiveUnicodeNfd;
         assert_eq!(
             super::fold_os_segment(OsStr::new("stra\u{00df}e.po"), apfs),
             super::fold_os_segment(OsStr::new("strasse.po"), apfs),
@@ -1717,11 +1747,24 @@ catalogs:
             super::fold_os_segment(OsStr::new("\u{03c2}.po"), apfs),
             "APFS full case folding must equate Greek sigma and final sigma"
         );
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("foo\u{00ad}bar.po"), apfs),
+            super::fold_os_segment(OsStr::new("foobar.po"), apfs),
+            "APFS keeps default-ignorable soft hyphens distinct"
+        );
 
-        let apfs_cs = super::DirectoryEquivalence {
-            case_insensitive: false,
-            unicode_normalizing: true,
-        };
+        let linux_casefold = DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf;
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("foo\u{00ad}bar.po"), linux_casefold),
+            super::fold_os_segment(OsStr::new("foobar.po"), linux_casefold),
+            "Linux NFDICF casefold removes default-ignorable code points such as U+00AD"
+        );
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("stra\u{00df}e.po"), linux_casefold),
+            super::fold_os_segment(OsStr::new("strasse.po"), linux_casefold)
+        );
+
+        let apfs_cs = DirFilenameEquivalence::UnicodeNfd;
         assert_eq!(
             super::fold_os_segment(OsStr::new("caf\u{00e9}.po"), apfs_cs),
             super::fold_os_segment(OsStr::new("cafe\u{0301}.po"), apfs_cs)
@@ -1731,10 +1774,7 @@ catalogs:
             super::fold_os_segment(OsStr::new("messages.po"), apfs_cs)
         );
 
-        let linux = super::DirectoryEquivalence {
-            case_insensitive: false,
-            unicode_normalizing: false,
-        };
+        let linux = DirFilenameEquivalence::Exact;
         assert_ne!(
             super::fold_os_segment(OsStr::new("Messages.po"), linux),
             super::fold_os_segment(OsStr::new("messages.po"), linux)
