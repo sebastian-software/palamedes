@@ -877,10 +877,16 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
-      // Conditional or subsequent assignments in the same scope are inconclusive.
+      // Conditional, chained, or subsequent assignments in the same scope are inconclusive.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
           `let t=["[[...locale]]",{},{layout:root}]; if (flag) t=["",{},{layout:otherRoot}]; start({tree:t,page:"/[[...locale]]/page"});`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `const tree = ["", { children: ["[[...locale]]", {}, { layout: [l, "inner"] }] }, {}].with(2, { layout: [r, "root"] }); start({ tree, page: "/[[...locale]]/page" });`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -910,8 +916,9 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
-      // An ordinary file colocated with an escaped `%5F` segment directory must
-      // not shadow the escaped route directory in the filesystem fallback.
+      // An ordinary file OR an empty colocated directory named `app/shop_front`
+      // must not shadow `app/shop%5Ffront/[[...locale]]/layout.tsx` in the
+      // filesystem fallback.
       const escapedProject = mkdtempSync(path.join(os.tmpdir(), "palamedes-escaped-file-shadow-"));
       try {
         mkdirSync(path.join(escapedProject, "app/shop%5Ffront/[[...locale]]"), { recursive: true });
@@ -926,18 +933,44 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
             "shop_front/[[...locale]]/page_client-reference-manifest.js",
           ),
         ).toBe(true);
+        rmSync(path.join(escapedProject, "app/shop_front"));
+        mkdirSync(path.join(escapedProject, "app/shop_front"), { recursive: true });
+        expect(
+          routeHasOptionalRootLocale(
+            escapedProject,
+            "shop_front/[[...locale]]/page_client-reference-manifest.js",
+          ),
+        ).toBe(true);
+        // Even if `app/shop_front/[[...locale]]` also exists without a page entry,
+        // matching the leaf `page.tsx` selects `app/shop%5Ffront/[[...locale]]`.
+        mkdirSync(path.join(escapedProject, "app/shop_front/[[...locale]]"), { recursive: true });
+        writeFileSync(
+          path.join(escapedProject, "app/shop_front/layout.tsx"),
+          "export default function ShadowLayout({ children }) { return children; }\n",
+        );
+        writeFileSync(
+          path.join(escapedProject, "app/shop%5Ffront/[[...locale]]/page.tsx"),
+          "export default function Page() { return null; }\n",
+        );
+        expect(
+          routeHasOptionalRootLocale(
+            escapedProject,
+            "shop_front/[[...locale]]/page_client-reference-manifest.js",
+          ),
+        ).toBe(true);
       } finally {
         rmSync(escapedProject, { recursive: true, force: true });
       }
-      // When the app-page template chunk is inconclusive, unrelated non-template
-      // chunks referenced by page.js must not supply a false positive/negative.
+      // When the Next app-page template chunk is inconclusive, unrelated user
+      // chunks — even ones whose filename contains `app-page` — must not supply
+      // a false positive/negative.
       writeFileSync(
-        path.join(distDir, "server/chunks/ssr/unrelated_user_chunk.js"),
+        path.join(distDir, "server/chunks/ssr/my_app-page_helper.js"),
         `const example = start({ tree: ["", {}, { layout: [l, "root"] }], page: "/[[...locale]]/page" });`,
       );
       writeFileSync(
         path.join(distDir, "server/app/[[...locale]]/page.js"),
-        `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nR.c("server/chunks/ssr/unrelated_user_chunk.js")\n`,
+        `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nR.c("server/chunks/ssr/my_app-page_helper.js")\n`,
       );
 
       // End-to-end check: when the compiled loaderTree has a nonliteral child AND

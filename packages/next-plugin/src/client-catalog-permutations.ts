@@ -164,12 +164,16 @@ function isDirectoryTarget(entryPath: string): boolean {
   }
 }
 
-function directoryHasLayout(directory: string, extensions: readonly string[]): boolean {
+function directoryHasNamedFile(
+  directory: string,
+  stem: string,
+  extensions: readonly string[],
+): boolean {
   const expectedNames = new Set(
     extensions
       .map((ext) => (ext.startsWith(".") ? ext.slice(1) : ext))
       .filter((ext) => ext.length > 0)
-      .map((ext) => `layout.${ext}`),
+      .map((ext) => `${stem}.${ext}`),
   );
   if (expectedNames.size === 0) return false;
   let entries: Dirent[];
@@ -184,6 +188,10 @@ function directoryHasLayout(directory: string, extensions: readonly string[]): b
       (entry.isFile() ||
         (entry.isSymbolicLink() && isRegularFileTarget(path.join(directory, entry.name)))),
   );
+}
+
+function directoryHasLayout(directory: string, extensions: readonly string[]): boolean {
+  return directoryHasNamedFile(directory, "layout", extensions);
 }
 
 function skipWhitespaceAndComments(source: string, start: number): number {
@@ -769,8 +777,9 @@ function resolveIdentifierArrayInScope(
             const blockScoped =
               isDeclarator && (top.declKind === "let" || top.declKind === "const");
             const rhsStart = skipWhitespaceAndComments(source, afterWord + 1);
-            // Accept only a single, unconditional declaration initializer with
-            // no prior or later writes to `ident` in this scope.
+            // Accept only a single, unconditional declaration initializer whose
+            // entire right-hand side is an array literal (not chained or
+            // computed like `[...].with(...)`) with no prior or later writes.
             let value: string | null = null;
             if (
               isDeclarator &&
@@ -781,7 +790,18 @@ function resolveIdentifierArrayInScope(
             ) {
               const arrayEnd = scanBalancedEnd(source, rhsStart);
               if (arrayEnd !== -1 && arrayEnd <= objectStart) {
-                value = source.slice(rhsStart, arrayEnd);
+                const afterArray = skipWhitespaceAndComments(source, arrayEnd);
+                const nextChar = afterArray < objectStart ? source[afterArray] : undefined;
+                const hasNewline = /[\r\n]/u.test(source.slice(arrayEnd, afterArray));
+                const endsInitializer =
+                  afterArray >= objectStart ||
+                  nextChar === ";" ||
+                  nextChar === "," ||
+                  nextChar === "}" ||
+                  (hasNewline && !/^[.[(?+\-*/%&|^=<>!:]/u.test(nextChar ?? ""));
+                if (endsInitializer) {
+                  value = source.slice(rhsStart, arrayEnd);
+                }
                 index = arrayEnd;
               }
             }
@@ -826,6 +846,7 @@ function resolveIdentifierArrayInScope(
 function findTreeExpressionForPage(source: string, expectedPage: string): string | undefined {
   const matches: Array<string | undefined> = [];
   let prevNonWsChar = "";
+  let prevBeforeParenChar = "";
   let regexAllowed = true;
   let index = 0;
 
@@ -864,7 +885,14 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
         continue;
       }
     }
-    if (ch === "{" && prevNonWsChar === "(") {
+    if (ch === "(") {
+      prevBeforeParenChar = prevNonWsChar;
+      prevNonWsChar = "(";
+      regexAllowed = true;
+      index += 1;
+      continue;
+    }
+    if (ch === "{" && prevNonWsChar === "(" && /[\w$)\]]/u.test(prevBeforeParenChar)) {
       const objectStart = index;
       const objectEnd = scanBalancedEnd(source, objectStart);
       if (objectEnd !== -1) {
@@ -929,6 +957,8 @@ export function compiledLoaderTreeHasOptionalRootLocale(
   return walkCompiledLoaderTree(treeExpr, 0, false);
 }
 
+const NEXT_APP_PAGE_TEMPLATE_CHUNK_PATTERN = /(?:^|_)next_dist_(?:esm_)?build_templates_app-page_/u;
+
 /**
  * Inspects Next.js's compiled `loaderTree` for a route manifest to determine
  * whether an optional catch-all `[[...locale]]` segment sits at or above the
@@ -959,56 +989,77 @@ export function compiledRouteHasOptionalRootLocale(
   const templateChunks: string[] = [];
   for (const match of entrySource.matchAll(/\.c\(\s*["']([^"']+\.js)["']\s*\)/gu)) {
     const chunkRel = match[1];
-    if (chunkRel && path.basename(chunkRel).includes("app-page")) {
+    if (chunkRel && NEXT_APP_PAGE_TEMPLATE_CHUNK_PATTERN.test(path.basename(chunkRel))) {
       templateChunks.push(path.join(distDir, chunkRel));
     }
   }
 
-  // Inspect only Next's app-page template chunk(s) so unrelated user/runtime
-  // chunks can never masquerade as the route entrypoint when the template is
-  // inconclusive. Fall back to entrySource only when no template chunk exists.
-  if (templateChunks.length > 0) {
-    for (const chunkPath of templateChunks) {
-      let chunkSource: string;
-      try {
-        chunkSource = readFileSync(chunkPath, "utf8");
-      } catch {
-        continue;
-      }
-      const result = compiledLoaderTreeHasOptionalRootLocale(chunkSource, expectedPage);
-      if (result !== undefined) return result;
+  // Require an unambiguous generated Next app-page template chunk so user
+  // chunks whose names happen to contain `app-page` can never masquerade as
+  // Next's route entrypoint. Fall back to entrySource only when no template
+  // chunk exists (single-file entries).
+  if (templateChunks.length > 1) return;
+  if (templateChunks.length === 1) {
+    let chunkSource: string;
+    try {
+      chunkSource = readFileSync(templateChunks[0]!, "utf8");
+    } catch {
+      return;
     }
-    return;
+    return compiledLoaderTreeHasOptionalRootLocale(chunkSource, expectedPage);
   }
   return compiledLoaderTreeHasOptionalRootLocale(entrySource, expectedPage);
 }
 
-function resolveSourceSegmentDirectory(
-  parentDir: string,
-  emittedSegment: string,
-): string | undefined {
+function directoryHasRouteEntry(
+  directory: string,
+  entryStem: string,
+  pageExtensions: readonly string[],
+): boolean {
+  return directoryHasNamedFile(directory, entryStem, pageExtensions);
+}
+
+function resolveSourceSegmentDirectories(parentDir: string, emittedSegment: string): string[] {
   // Next.js treats folders starting with `_` as private non-route folders and
   // decodes `%5F` back to `_` in emitted manifest paths. Never match a private
   // `_` folder when resolving an emitted route segment.
+  const candidates: string[] = [];
   if (!emittedSegment.startsWith("_")) {
     const direct = path.join(parentDir, emittedSegment);
-    if (isDirectoryTarget(direct)) return direct;
+    if (isDirectoryTarget(direct)) candidates.push(direct);
   }
-  if (!emittedSegment.includes("_")) return;
+  if (!emittedSegment.includes("_")) return candidates;
   let entries: Dirent[];
   try {
     entries = readdirSync(parentDir, { withFileTypes: true });
   } catch {
-    return;
+    return candidates;
   }
-  const match = entries.find(
-    (entry) =>
-      !entry.name.startsWith("_") &&
-      entry.name.replace(/%5F/giu, "_") === emittedSegment &&
-      (entry.isDirectory() ||
-        (entry.isSymbolicLink() && isDirectoryTarget(path.join(parentDir, entry.name)))),
-  );
-  return match ? path.join(parentDir, match.name) : undefined;
+  for (const entry of entries) {
+    if (entry.name.startsWith("_") || entry.name === emittedSegment) continue;
+    if (entry.name.replace(/%5F/giu, "_") !== emittedSegment) continue;
+    const candidate = path.join(parentDir, entry.name);
+    if (entry.isDirectory() || (entry.isSymbolicLink() && isDirectoryTarget(candidate))) {
+      candidates.push(candidate);
+    }
+  }
+  return candidates;
+}
+
+function collectRouteDirectoryChains(appDir: string, segments: readonly string[]): string[][] {
+  let chains: string[][] = [[appDir]];
+  for (const segment of segments) {
+    const nextChains: string[][] = [];
+    for (const chain of chains) {
+      const parent = chain.at(-1)!;
+      for (const dir of resolveSourceSegmentDirectories(parent, segment)) {
+        nextChains.push([...chain, dir]);
+      }
+    }
+    if (nextChains.length === 0) return [];
+    chains = nextChains;
+  }
+  return chains;
 }
 
 function canonicalPath(filePath: string): string {
@@ -1107,7 +1158,8 @@ export function routeHasOptionalRootLocale(
 ): boolean {
   const appDir = resolveAppDirectory(projectRoot);
   if (!appDir) return false;
-  const routeDir = path.posix.dirname(manifestRelativePath.replaceAll("\\", "/"));
+  const normalized = manifestRelativePath.replaceAll("\\", "/");
+  const routeDir = path.posix.dirname(normalized);
   if (routeDir === "." || routeDir === "") return false;
   const segments = routeDir.split("/").filter(Boolean);
   const localeIndex = segments.indexOf("[[...locale]]");
@@ -1119,32 +1171,30 @@ export function routeHasOptionalRootLocale(
     if (segments[index]!.startsWith("@")) return false;
   }
 
-  // If any ancestor directory strictly above `[[...locale]]` defines a layout,
-  // that layout is the root layout and `[[...locale]]` is below it.
-  let current = appDir;
-  if (directoryHasLayout(current, pageExtensions)) return false;
-  for (let index = 0; index < localeIndex; index += 1) {
-    const nextDir = resolveSourceSegmentDirectory(current, segments[index]!);
-    if (!nextDir) return false;
-    current = nextDir;
-    if (directoryHasLayout(current, pageExtensions)) return false;
-  }
+  // If `app/` itself defines a layout, that layout is the root layout and
+  // `[[...locale]]` is strictly below it.
+  if (directoryHasLayout(appDir, pageExtensions)) return false;
 
-  // At least one layout must exist at `[[...locale]]` or a descendant along the
-  // route; otherwise Next injects its built-in root layout above the route.
-  const localeDir = resolveSourceSegmentDirectory(current, segments[localeIndex]!);
-  if (!localeDir) return false;
-  current = localeDir;
-  if (directoryHasLayout(current, pageExtensions)) return true;
-  for (let index = localeIndex + 1; index < segments.length; index += 1) {
-    const segment = segments[index]!;
-    if (segment.startsWith("@")) return false;
-    const nextDir = resolveSourceSegmentDirectory(current, segment);
-    if (!nextDir) return false;
-    current = nextDir;
-    if (directoryHasLayout(current, pageExtensions)) return true;
-  }
-  return false;
+  const allChains = collectRouteDirectoryChains(appDir, segments);
+  if (allChains.length === 0) return false;
+
+  const entryStem = path.posix.basename(normalized).replace(/_client-reference-manifest\.js$/u, "");
+  const entryChains = entryStem
+    ? allChains.filter((chain) => directoryHasRouteEntry(chain.at(-1)!, entryStem, pageExtensions))
+    : [];
+  const chains = entryChains.length > 0 ? entryChains : allChains;
+
+  return chains.some((chain) => {
+    for (let index = 0; index < localeIndex; index += 1) {
+      if (directoryHasLayout(chain[index + 1]!, pageExtensions)) return false;
+    }
+    if (directoryHasLayout(chain[localeIndex + 1]!, pageExtensions)) return true;
+    for (let index = localeIndex + 1; index < segments.length; index += 1) {
+      if (segments[index]!.startsWith("@")) return false;
+      if (directoryHasLayout(chain[index + 1]!, pageExtensions)) return true;
+    }
+    return false;
+  });
 }
 
 /*
