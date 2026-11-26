@@ -1,12 +1,45 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { registerHooks } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "next/dist/server/node-environment.js";
 
+const APP_ORIGIN = "https://app.example";
 let distDir: string;
+let deregisterHooks: (() => void) | undefined;
+
+class FakeHTMLLinkElement {
+  public href: string;
+  public rel = "modulepreload";
+  public parentElement: unknown;
+
+  public constructor(href: string, parentElement: unknown) {
+    this.href = href;
+    this.parentElement = parentElement;
+  }
+}
+
+beforeAll(() => {
+  const hooks = registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (specifier.startsWith(`${APP_ORIGIN}/_next/static/palamedes/`) && distDir) {
+        const parsed = new URL(specifier);
+        const fileName = parsed.pathname.slice(parsed.pathname.lastIndexOf("/") + 1);
+        const target = `${pathToFileURL(path.join(distDir, "palamedes", fileName)).href}${parsed.search}`;
+        return { shortCircuit: true, url: target };
+      }
+      return nextResolve(specifier, context);
+    },
+  });
+  deregisterHooks = () => hooks.deregister();
+});
+
+afterAll(() => {
+  deregisterHooks?.();
+});
 
 beforeEach(async () => {
   distDir = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-client-catalogs-"));
@@ -70,11 +103,16 @@ describe("loadClientCatalog", () => {
       path.join(assets, "lone.de-2.mjs"),
       'export const messages = { b: "Allein" };\n',
     );
-    const href = pathToFileURL(path.join(assets, "catalogs.de.0123456789ab.mjs")).href;
+    const head = { tagName: "HEAD" };
+    const href = `${APP_ORIGIN}/_next/static/palamedes/catalogs.de.0123456789ab.mjs`;
+    const link = new FakeHTMLLinkElement(href, head);
+    vi.stubGlobal("HTMLLinkElement", FakeHTMLLinkElement);
+    vi.stubGlobal("location", { href: `${APP_ORIGIN}/${lang}`, origin: APP_ORIGIN });
     vi.stubGlobal("document", {
+      head,
       readyState: "complete",
       documentElement: { lang },
-      getElementById: (id: string) => (id === "palamedes-client-catalogs" ? { href } : null),
+      getElementById: (id: string) => (id === "palamedes-client-catalogs" ? link : null),
     });
     const helper = new URL("../client-catalog.mjs", import.meta.url).href;
     return import(helper) as Promise<{ loadClientCatalog(marker: string): Promise<unknown> }>;

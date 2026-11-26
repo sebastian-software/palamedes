@@ -350,27 +350,54 @@ It looks for the build output under `process.cwd()` and the configured
 supported. A render in a process without a binding throws instead of serving
 locale-neutral chunks.
 
-The server picks the locale before any layout runs, in this order:
+The server picks the locale before any layout runs, in this order by default
+(`localeSource: "route-first"`):
 
-1. the `x-palamedes-locale` request header, which the app's Proxy sets from
-   its own strategy (cookie, subdomain, domain, or anything else), overwriting
-   whatever the client sent;
-2. otherwise the root route param named `locale`, so an app under
-   `app/[locale]/` needs no Proxy;
+1. the root route param named `locale`, so an app under `app/[locale]/` needs
+   no Proxy and an untrusted incoming `x-palamedes-locale` request header cannot
+   override a route-segment locale or poison route-keyed caches;
+2. otherwise the `x-palamedes-locale` request header, which the app's Proxy sets
+   from its own strategy (cookie, subdomain, domain, or anything else);
 3. otherwise the source locale from `palamedes.yaml`.
 
 Other param names are not guessed at: name the segment `[locale]` or set the
-header. Setting the header takes two lines in `proxy.ts`, optionally together
-with a rewrite to an internal route:
+header. Apps that only use `[locale]` routes can pass
+`bindClientCatalogPermutations({ localeSource: "route" })` to ignore
+`x-palamedes-locale` on every route (including routes outside `[locale]`). Apps
+whose Proxy should take precedence over route params can opt in with
+`bindClientCatalogPermutations({ localeSource: "header" })`.
+
+Whenever an app reads `x-palamedes-locale`, ensure the Proxy overwrites or
+strips any client-supplied `x-palamedes-locale` header across all matched routes
+(or sign it with `signClientCatalogLocaleHeader()` and verify it with
+`headerSecret`):
 
 ```ts
+// proxy.ts
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  CLIENT_CATALOG_LOCALE_HEADER,
+  signClientCatalogLocaleHeader,
+} from "@palamedes/next-plugin/server";
 
 export function proxy(request: NextRequest) {
   const headers = new Headers(request.headers);
-  headers.set("x-palamedes-locale", resolveLocale(request));
+  headers.delete(CLIENT_CATALOG_LOCALE_HEADER);
+  headers.set(
+    CLIENT_CATALOG_LOCALE_HEADER,
+    signClientCatalogLocaleHeader(resolveLocale(request), process.env.PALAMEDES_LOCALE_SECRET!),
+  );
   return NextResponse.next({ request: { headers } });
 }
+```
+
+And pass the matching secret in `instrumentation.ts`:
+
+```ts
+bindClientCatalogPermutations({
+  localeSource: "header",
+  headerSecret: process.env.PALAMEDES_LOCALE_SECRET!,
+});
 ```
 
 A route that gets its locale from the header alone, such as a cookie strategy

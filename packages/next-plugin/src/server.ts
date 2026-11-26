@@ -15,7 +15,10 @@ import { clientCatalogMapName } from "./client-catalog-map";
 
 export {
   bindClientCatalogPermutations,
+  CLIENT_CATALOG_LOCALE_HEADER,
+  signClientCatalogLocaleHeader,
   type BindClientCatalogPermutationsOptions,
+  type ClientCatalogLocaleSource,
 } from "./client-catalog-binding";
 
 /** The element ID that `@palamedes/next-plugin/client-catalog` looks up. */

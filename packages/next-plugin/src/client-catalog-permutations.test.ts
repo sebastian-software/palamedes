@@ -3,7 +3,11 @@ import vm from "node:vm";
 
 import { describe, expect, it } from "vitest";
 
-import { resolveRenderLocale } from "./client-catalog-binding";
+import {
+  bindClientCatalogPermutationsAt,
+  resolveRenderLocale,
+  signClientCatalogLocaleHeader,
+} from "./client-catalog-binding";
 import {
   type ChunkGraph,
   affectedChunks,
@@ -235,7 +239,7 @@ describe("locale resolution", () => {
   const unit = (fields: Record<string, unknown>) => fields as unknown as Unit;
   const header = (locale: string) => new Headers({ "x-palamedes-locale": locale });
 
-  it("prefers the Proxy header over the root param named locale", () => {
+  it("prefers the root param named locale over an untrusted incoming header by default", () => {
     expect(
       resolveRenderLocale(
         locales,
@@ -243,10 +247,102 @@ describe("locale resolution", () => {
         undefined,
         unit({ rootParams: { locale: "de" }, headers: header("en") }),
       ),
+    ).toBe("de");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ rootParams: { locale: "zz" }, headers: header("de") }),
+      ),
     ).toBe("en");
     expect(
       resolveRenderLocale(locales, "en", undefined, unit({ rootParams: { locale: "de" } })),
     ).toBe("de");
+    expect(resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de") }))).toBe(
+      "de",
+    );
+  });
+
+  it("supports opting into header precedence or route-only resolution", () => {
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ rootParams: { locale: "de" }, headers: header("en") }),
+        { localeSource: "header" },
+      ),
+    ).toBe("en");
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ rootParams: { locale: "de" } }), {
+        localeSource: "header",
+      }),
+    ).toBe("de");
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de") }), {
+        localeSource: "route",
+      }),
+    ).toBe("en");
+  });
+
+  it("verifies HMAC-signed Proxy locale headers when headerSecret is configured", () => {
+    const secret = "test-proxy-secret";
+    const signedDe = signClientCatalogLocaleHeader("de", secret);
+    const signedEn = signClientCatalogLocaleHeader("en", secret);
+
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ headers: header(signedDe) }), {
+        headerSecret: secret,
+      }),
+    ).toBe("de");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ rootParams: { locale: "de" }, headers: header(signedEn) }),
+        { localeSource: "header", headerSecret: secret },
+      ),
+    ).toBe("en");
+    // Unsigned, tampered, or wrong-secret headers are ignored.
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de") }), {
+        headerSecret: secret,
+      }),
+    ).toBe("en");
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de.tampered") }), {
+        headerSecret: secret,
+      }),
+    ).toBe("en");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ headers: header(signClientCatalogLocaleHeader("de", "other-secret")) }),
+        { headerSecret: secret },
+      ),
+    ).toBe("en");
+    expect(
+      resolveRenderLocale(
+        locales,
+        "en",
+        undefined,
+        unit({ rootParams: { locale: "de" }, headers: header("en") }),
+        { localeSource: "header", headerSecret: secret },
+      ),
+    ).toBe("de");
+    expect(() => signClientCatalogLocaleHeader("de", "")).toThrow(/non-empty secret/u);
+    expect(() => bindClientCatalogPermutationsAt("/nonexistent", { headerSecret: "" })).toThrow(
+      /non-empty string/u,
+    );
+    expect(
+      resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de") }), {
+        headerSecret: "",
+      }),
+    ).toBe("en");
   });
 
   it("does not guess from other params and falls back for unknown or missing locales", () => {

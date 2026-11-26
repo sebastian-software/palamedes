@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { type Dirent, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -8,6 +9,61 @@ import type { workUnitAsyncStorage as workUnitAsyncStorageType } from "next/dist
 
 /** The request header an app's Proxy sets with the locale it resolved. */
 export const CLIENT_CATALOG_LOCALE_HEADER = "x-palamedes-locale";
+
+/**
+ * Precedence between the `locale` root route param and the
+ * `x-palamedes-locale` request header when selecting client chunk permutations:
+ * - `"route-first"` (default): prefers `rootParams.locale` when present and
+ *   only reads `x-palamedes-locale` when no `locale` root param exists.
+ * - `"route"`: reads `rootParams.locale` only and ignores `x-palamedes-locale`.
+ * - `"header"`: prefers `x-palamedes-locale` over `rootParams.locale` for
+ *   applications whose Proxy always sets or strips that header on every route.
+ */
+export type ClientCatalogLocaleSource = "route-first" | "route" | "header";
+
+export type ResolveRenderLocaleOptions = {
+  /**
+   * Precedence between `rootParams.locale` and `x-palamedes-locale`.
+   * @default "route-first"
+   */
+  localeSource?: ClientCatalogLocaleSource;
+  /**
+   * Optional HMAC secret shared with `proxy.ts` via
+   * `signClientCatalogLocaleHeader()`. When configured, `x-palamedes-locale`
+   * is accepted only when its signature verifies; unsigned or forged headers
+   * are ignored.
+   */
+  headerSecret?: string;
+};
+
+/**
+ * Signs a locale value for the internal `x-palamedes-locale` Proxy header with
+ * HMAC-SHA256 so forged incoming headers are ignored when
+ * `bindClientCatalogPermutations({ headerSecret })` is configured.
+ */
+export function signClientCatalogLocaleHeader(locale: string, secret: string): string {
+  if (!secret) {
+    throw new Error("signClientCatalogLocaleHeader() requires a non-empty secret.");
+  }
+  const mac = createHmac("sha256", secret).update(locale).digest("base64url");
+  return `${locale}.${mac}`;
+}
+
+function parseLocaleHeader(raw: string | null, secret?: string): string | undefined {
+  if (!raw) return;
+  if (secret === undefined) return raw;
+  if (!secret) return;
+  const separator = raw.lastIndexOf(".");
+  if (separator <= 0) return;
+  const locale = raw.slice(0, separator);
+  const providedMac = raw.slice(separator + 1);
+  if (!locale || !providedMac) return;
+  const expectedMac = createHmac("sha256", secret).update(locale).digest("base64url");
+  const providedBytes = Buffer.from(providedMac, "utf8");
+  const expectedBytes = Buffer.from(expectedMac, "utf8");
+  if (providedBytes.length !== expectedBytes.length) return;
+  return timingSafeEqual(providedBytes, expectedBytes) ? locale : undefined;
+}
 
 /*
  * Binds the locale resolver into the client reference manifests of a
@@ -34,31 +90,47 @@ type UnitStore = ReturnType<typeof workUnitAsyncStorageType.getStore>;
 const localeByRender = new WeakMap<object, string>();
 
 /*
- * The header wins: the app's Proxy sets it from its own strategy and
- * overwrites any incoming value, so it is the explicit, trusted choice. Without
- * it, the root route param named `locale` decides; another param name or a
- * param value that happens to look like a locale is not guessed at. Anything
- * else, including an unknown locale, renders with the fallback locale, so
- * `notFound()`, `_not-found`, and `_global-error` work without the app
- * validating locales in the Proxy. The result is memoized per render because
- * Next serializes segment prefetch files and ISR output after the request
- * store is gone.
+ * By default (`localeSource: "route-first"`), a present root route param named
+ * `locale` wins so an untrusted incoming `x-palamedes-locale` header cannot
+ * override `app/[locale]/` routes or poison route-keyed ISR/CDN caches. When
+ * no `locale` root param exists, the Proxy header decides (unless
+ * `localeSource: "route"` disables headers). Apps that explicitly opt into
+ * `localeSource: "header"` let the Proxy header take precedence, and any
+ * header-reading mode can require an HMAC signature via `headerSecret`. Other
+ * param names are never guessed at, and unknown or missing locales fall back
+ * to the source locale so `notFound()`, `_not-found`, and `_global-error` work
+ * without Proxy validation. The result is memoized per render because Next
+ * serializes segment prefetch files and ISR output after the request store is
+ * gone.
  */
 export function resolveRenderLocale(
   locales: readonly string[],
   fallback: string,
   render: RenderStore,
   unit: UnitStore,
+  options: ResolveRenderLocaleOptions = {},
 ): string {
   const memoized = render && localeByRender.get(render);
   if (memoized) return memoized;
 
+  const localeSource = options.localeSource ?? "route-first";
+  const rootLocale =
+    unit && "rootParams" in unit && unit.rootParams ? unit.rootParams.locale : undefined;
+  const hasRootLocale = typeof rootLocale === "string" && rootLocale.length > 0;
+  const headerLocale =
+    localeSource === "route"
+      ? undefined
+      : unit && "headers" in unit && unit.headers
+        ? parseLocaleHeader(unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER), options.headerSecret)
+        : undefined;
+
   let candidate: unknown;
-  if (unit && "headers" in unit && unit.headers) {
-    candidate = unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER);
-  }
-  if (!candidate && unit && "rootParams" in unit && unit.rootParams) {
-    candidate = unit.rootParams.locale;
+  if (localeSource === "header") {
+    candidate = headerLocale ?? (hasRootLocale ? rootLocale : undefined);
+  } else if (localeSource === "route") {
+    candidate = hasRootLocale ? rootLocale : undefined;
+  } else {
+    candidate = hasRootLocale ? rootLocale : headerLocale;
   }
   const locale =
     typeof candidate === "string" && locales.includes(candidate) ? candidate : fallback;
@@ -84,7 +156,15 @@ function manifestFiles(directory: string): string[] {
  * the bound manifests; an empty list means the directory has none, which is
  * the case in processes that never render.
  */
-export function bindClientCatalogPermutationsAt(distDir: string): string[] {
+export function bindClientCatalogPermutationsAt(
+  distDir: string,
+  options: ResolveRenderLocaleOptions = {},
+): string[] {
+  if (options.headerSecret !== undefined && options.headerSecret.length === 0) {
+    throw new Error(
+      "Palamedes client catalog permutations: headerSecret must be a non-empty string when provided.",
+    );
+  }
   // Resolve Next from the build output, so a monorepo with several Next
   // copies binds the instance that serves this app.
   const nextRequire = createRequire(path.join(distDir, "package.json"));
@@ -108,6 +188,10 @@ export function bindClientCatalogPermutationsAt(distDir: string): string[] {
     storages = loaded;
     return loaded;
   }
+  const resolveOptions: ResolveRenderLocaleOptions = {
+    ...(options.localeSource ? { localeSource: options.localeSource } : {}),
+    ...(options.headerSecret !== undefined ? { headerSecret: options.headerSecret } : {}),
+  };
   const resolve: LocaleResolver = (locales, fallback) => {
     const { workAsyncStorage, workUnitAsyncStorage } = loadStorages();
     return resolveRenderLocale(
@@ -115,6 +199,7 @@ export function bindClientCatalogPermutationsAt(distDir: string): string[] {
       fallback,
       workAsyncStorage.getStore(),
       workUnitAsyncStorage.getStore(),
+      resolveOptions,
     );
   };
 
@@ -129,7 +214,7 @@ export function bindClientCatalogPermutationsAt(distDir: string): string[] {
   return bound;
 }
 
-export type BindClientCatalogPermutationsOptions = {
+export type BindClientCatalogPermutationsOptions = ResolveRenderLocaleOptions & {
   /** The Next project directory that holds `distDir`. Defaults to `process.cwd()`. */
   dir?: string;
 };
@@ -146,7 +231,7 @@ export function bindClientCatalogPermutations(
   const distDir = process.env[CLIENT_CATALOG_PERMUTATIONS_ENV];
   if (!distDir) return;
   const absoluteDistDir = path.join(options.dir ?? process.cwd(), distDir);
-  const bound = bindClientCatalogPermutationsAt(absoluteDistDir);
+  const bound = bindClientCatalogPermutationsAt(absoluteDistDir, options);
   if (bound.length === 0) {
     throw new Error(
       `Palamedes client catalog permutations: ${absoluteDistDir}/server/app has no client reference manifests with permutation tables. Start the server from the project directory, or pass { dir } to bindClientCatalogPermutations().`,
