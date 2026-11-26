@@ -483,7 +483,15 @@ function hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode = "posix") {
   }
   const colonIndex = tail.lastIndexOf(":");
   if (colonIndex === -1) {
-    return false;
+    return (
+      lastSlash !== -1 &&
+      tail.length > 0 &&
+      !tail.includes("\0") &&
+      !isDynamicReference(tail, shellMode) &&
+      !tail.includes("}}") &&
+      !tail.includes("}") &&
+      /^[A-Za-z0-9_][A-Za-z0-9._-]*$/u.test(tail)
+    );
   }
   const tagPart = tail.slice(colonIndex + 1);
   if (
@@ -2328,7 +2336,7 @@ const COMPOSE_GLOBAL_VALUE_FLAGS = new Set([
   "--log-level",
 ]);
 
-const COMPOSE_IMAGE_SUBCOMMANDS = new Set(["up", "run", "create", "pull", "build"]);
+const COMPOSE_IMAGE_SUBCOMMANDS = new Set(["up", "run", "create", "pull", "build", "watch"]);
 
 function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTargets = null) {
   let cursor = argIndex;
@@ -2345,8 +2353,7 @@ function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTarge
     return null;
   }
 
-  const rawFiles = [];
-  let rawProjectDir = null;
+  let isDryRun = false;
   while (cursor < tokens.length) {
     const redirConsumed = consumeShellRedirection(tokens, cursor, stdinRedirectTargets);
     if (redirConsumed > 0) {
@@ -2364,27 +2371,13 @@ function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTarge
     if (token === "--help" || token === "-h" || token === "--version" || token === "-v") {
       return { kind: "compose-noop" };
     }
-    if (token === "-f" || token === "--file") {
-      if (tokens[cursor + 1] !== undefined) {
-        rawFiles.push(tokens[cursor + 1]);
-      }
-      cursor += 2;
-      continue;
-    }
-    if (token.startsWith("--file=")) {
-      rawFiles.push(token.slice("--file=".length));
+    if (token === "--dry-run" || /^--dry-run=(?:true|1)$/iu.test(token)) {
+      isDryRun = true;
       cursor += 1;
       continue;
     }
-    if (token === "--project-directory") {
-      if (tokens[cursor + 1] !== undefined) {
-        rawProjectDir = tokens[cursor + 1];
-      }
-      cursor += 2;
-      continue;
-    }
-    if (token.startsWith("--project-directory=")) {
-      rawProjectDir = token.slice("--project-directory=".length);
+    if (/^--dry-run=(?:false|0)$/iu.test(token)) {
+      isDryRun = false;
       cursor += 1;
       continue;
     }
@@ -2409,65 +2402,25 @@ function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTarge
     if (token === "--help" || token === "-h") {
       return { kind: "compose-noop" };
     }
+    if (token === "--dry-run" || /^--dry-run=(?:true|1)$/iu.test(token)) {
+      isDryRun = true;
+      continue;
+    }
+    if (/^--dry-run=(?:false|0)$/iu.test(token)) {
+      isDryRun = false;
+      continue;
+    }
+  }
+
+  if (isDryRun) {
+    return { kind: "compose-noop" };
   }
 
   return {
     kind: "compose",
     displayCli,
     subcommand,
-    rawFiles,
-    rawProjectDir,
-    usesStdin: rawFiles.includes("-"),
   };
-}
-
-function isStdinComposeCommand(tokens) {
-  let cursor = 0;
-  while (cursor < tokens.length) {
-    const redirConsumed = consumeShellRedirection(tokens, cursor);
-    if (redirConsumed > 0) {
-      cursor += redirConsumed;
-      continue;
-    }
-    const afterWrapper = advanceWrapperPrefix(tokens, cursor);
-    if (afterWrapper !== null) {
-      cursor = afterWrapper;
-      continue;
-    }
-    if (ENV_PREFIX_ASSIGNMENT_PATTERN.test(tokens[cursor])) {
-      cursor += 1;
-      continue;
-    }
-    break;
-  }
-  const normalizedCli = normalizeExecutableName(tokens[cursor]);
-  if (
-    normalizedCli !== "docker" &&
-    normalizedCli !== "podman" &&
-    normalizedCli !== "docker-compose" &&
-    normalizedCli !== "podman-compose"
-  ) {
-    return false;
-  }
-  let argIndex = cursor + 1;
-  if (normalizedCli === "docker" || normalizedCli === "podman") {
-    const globalValueFlags =
-      normalizedCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
-    while (argIndex < tokens.length) {
-      const redirConsumed = consumeShellRedirection(tokens, argIndex);
-      if (redirConsumed > 0) {
-        argIndex += redirConsumed;
-        continue;
-      }
-      const flag = tokens[argIndex];
-      if (!flag.startsWith("-")) {
-        break;
-      }
-      argIndex += flagConsumesNextArg(flag, globalValueFlags) ? 2 : 1;
-    }
-  }
-  const parsed = parseComposeCommand(tokens, normalizedCli, argIndex);
-  return parsed?.kind === "compose" && parsed.usesStdin;
 }
 
 function isStdinContainerBuildCommand(tokens) {
@@ -2722,15 +2675,6 @@ function lexShellScript(text, startLine, shellMode = "posix") {
             conditional: spec.conditional,
           });
         }
-        if (!spec.executable && spec.isStdinFd && isStdinComposeCommand(spec.ownerTokens)) {
-          events.push({
-            kind: "stdin-compose-heredoc",
-            lines: [],
-            startLine: bodyStartLine,
-            quoted: spec.quoted,
-            conditional: spec.conditional,
-          });
-        }
         continue;
       }
       const bodyText = bodyLines.join("\n");
@@ -2763,15 +2707,6 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         if (spec.isStdinFd && isStdinContainerBuildCommand(spec.ownerTokens)) {
           events.push({
             kind: "stdin-containerfile-heredoc",
-            lines: bodyLines,
-            startLine: bodyStartLine,
-            quoted: spec.quoted,
-            conditional: spec.conditional,
-          });
-        }
-        if (spec.isStdinFd && isStdinComposeCommand(spec.ownerTokens)) {
-          events.push({
-            kind: "stdin-compose-heredoc",
             lines: bodyLines,
             startLine: bodyStartLine,
             quoted: spec.quoted,
@@ -4709,300 +4644,6 @@ function applyAssignDefaultParamExpansions(
   }
 }
 
-function unpinnedComposeReferences(
-  source,
-  filePath,
-  {
-    stepEnv = new Map(),
-    shellVars = new Map(),
-    matrixRows = [],
-    subcommand = "up",
-    composeDir = null,
-    buildFileContext = null,
-    sourceFile = filePath,
-    sourceLine = 1,
-    startLineOffset = 0,
-  } = {},
-) {
-  const problems = [];
-  const seenProblems = new Set();
-  const pushProblem = (message) => {
-    if (!seenProblems.has(message)) {
-      seenProblems.add(message);
-      problems.push(message);
-    }
-  };
-
-  const { doc, error } = parseWorkflowYaml(source);
-  if (error) {
-    pushProblem(`${filePath}:${error.line + startLineOffset}: ${error.message}`);
-  }
-  if (!doc || doc.kind !== "map") {
-    if (!error) {
-      pushProblem(
-        `${sourceFile}:${sourceLine}: compose configuration cannot be verified statically for container image digests`,
-      );
-    }
-    return problems;
-  }
-
-  const includeNode = getMapField(doc, "include");
-  if (includeNode) {
-    pushProblem(
-      `${filePath}:${includeNode.line + startLineOffset}: compose include directives cannot be verified statically for container image digests`,
-    );
-  }
-
-  const servicesNode = getMapField(doc, "services");
-  if (servicesNode?.kind !== "map") {
-    return problems;
-  }
-
-  const effectiveRows = matrixRows.length > 0 ? matrixRows : [null];
-  for (const [serviceName, serviceNode] of servicesNode.value) {
-    if (serviceNode?.kind !== "map") {
-      continue;
-    }
-    const extendsNode = getMapField(serviceNode, "extends");
-    if (extendsNode) {
-      pushProblem(
-        `${filePath}:${extendsNode.line + startLineOffset}: compose service ${serviceName} extends cannot be verified statically for container image digests`,
-      );
-    }
-
-    const imageNode = getMapField(serviceNode, "image");
-    if (imageNode?.kind === "scalar") {
-      const rawImage = String(imageNode.value).trim();
-      const imageLine = imageNode.line + startLineOffset;
-      if (rawImage) {
-        const varExpanded = resolveImageTokenCandidates(
-          rawImage,
-          stepEnv,
-          shellVars,
-          imageLine,
-          "posix",
-        );
-        if (varExpanded.truncated) {
-          pushProblem(
-            `${filePath}:${imageLine}: ${rawImage} exceeds expansion limit and cannot be verified exhaustively`,
-          );
-        }
-        for (const varCandidate of varExpanded.candidates) {
-          for (const row of effectiveRows) {
-            for (const candidate of expandMatrixReferences(
-              varCandidate.text,
-              row ? [row] : [],
-              imageLine,
-            )) {
-              const imageRef = candidate.text.trim();
-              if (!imageRef) {
-                continue;
-              }
-              if (
-                (!isDynamicReference(imageRef) || hasProvablyUnpinnedLiteralSuffix(imageRef)) &&
-                !isPinnedDigest(imageRef)
-              ) {
-                pushProblem(
-                  `${filePath}:${imageLine}: ${imageRef} is not pinned to a sha256 digest`,
-                );
-              }
-            }
-          }
-        }
-      }
-    }
-
-    const buildNode = getMapField(serviceNode, "build");
-    if (buildNode && subcommand !== "pull") {
-      const buildLine = buildNode.line + startLineOffset;
-      const namedContexts = new Set();
-      const buildArgs = new Map();
-      const buildPlatforms = [];
-      let rawContext = ".";
-      let rawDockerfile = "Dockerfile";
-      let inlineDockerfile = null;
-      let inlineStartLine = buildLine;
-
-      if (buildNode.kind === "scalar") {
-        rawContext = String(buildNode.value).trim() || ".";
-      } else if (buildNode.kind === "map") {
-        const contextNode = getMapField(buildNode, "context");
-        if (contextNode?.kind === "scalar") {
-          rawContext = String(contextNode.value).trim() || ".";
-        }
-        const dockerfileNode = getMapField(buildNode, "dockerfile");
-        if (dockerfileNode?.kind === "scalar") {
-          rawDockerfile = String(dockerfileNode.value).trim() || "Dockerfile";
-        }
-        const inlineNode = getMapField(buildNode, "dockerfile_inline");
-        if (inlineNode?.kind === "scalar") {
-          inlineDockerfile = String(inlineNode.value);
-          inlineStartLine = inlineNode.line + startLineOffset;
-        }
-        const additionalContextsNode = getMapField(buildNode, "additional_contexts");
-        if (additionalContextsNode?.kind === "map") {
-          for (const [ctxName, ctxValNode] of additionalContextsNode.value) {
-            namedContexts.add(ctxName.toLowerCase());
-            if (ctxValNode?.kind === "scalar") {
-              inspectBuildContextSpec(
-                `${ctxName}=${String(ctxValNode.value)}`,
-                stepEnv,
-                shellVars,
-                matrixRows,
-                filePath,
-                ctxValNode.line + startLineOffset,
-                "posix",
-                problems,
-                namedContexts,
-              );
-            }
-          }
-        } else if (additionalContextsNode?.kind === "seq") {
-          for (const item of additionalContextsNode.value) {
-            if (item?.kind === "scalar") {
-              inspectBuildContextSpec(
-                String(item.value),
-                stepEnv,
-                shellVars,
-                matrixRows,
-                filePath,
-                item.line + startLineOffset,
-                "posix",
-                problems,
-                namedContexts,
-              );
-            }
-          }
-        }
-        const argsNode = getMapField(buildNode, "args");
-        if (argsNode?.kind === "map") {
-          for (const [argKey, argValNode] of argsNode.value) {
-            if (argValNode?.kind === "scalar") {
-              const expanded = resolveImageTokenCandidates(
-                String(argValNode.value),
-                stepEnv,
-                shellVars,
-                argValNode.line + startLineOffset,
-                "posix",
-              );
-              buildArgs.set(argKey, {
-                values: expanded.candidates.map((entry) => entry.text),
-                truncated: expanded.truncated,
-              });
-            }
-          }
-        } else if (argsNode?.kind === "seq") {
-          for (const item of argsNode.value) {
-            if (item?.kind === "scalar") {
-              const spec = String(item.value);
-              const eqIndex = spec.indexOf("=");
-              if (eqIndex !== -1) {
-                const argKey = spec.slice(0, eqIndex).trim();
-                const expanded = resolveImageTokenCandidates(
-                  spec.slice(eqIndex + 1),
-                  stepEnv,
-                  shellVars,
-                  item.line + startLineOffset,
-                  "posix",
-                );
-                if (argKey) {
-                  buildArgs.set(argKey, {
-                    values: expanded.candidates.map((entry) => entry.text),
-                    truncated: expanded.truncated,
-                  });
-                }
-              }
-            }
-          }
-        }
-        const platformsNode = getMapField(buildNode, "platforms");
-        if (platformsNode?.kind === "seq") {
-          for (const item of platformsNode.value) {
-            if (item?.kind === "scalar") {
-              const value = String(item.value).trim();
-              if (value) {
-                buildPlatforms.push(value);
-              }
-            }
-          }
-        }
-      } else {
-        pushProblem(
-          `${filePath}:${buildLine}: compose service ${serviceName} build target cannot be verified statically`,
-        );
-        continue;
-      }
-
-      if (inlineDockerfile !== null) {
-        for (const msg of unpinnedContainerfileReferences(inlineDockerfile, filePath, {
-          argOverrides: buildArgs.size > 0 ? buildArgs : null,
-          namedContexts: namedContexts.size > 0 ? namedContexts : null,
-          platforms: buildPlatforms,
-          sourceFile: filePath,
-          sourceLine: inlineStartLine,
-          startLineOffset: inlineStartLine - 1,
-        })) {
-          pushProblem(msg);
-        }
-        continue;
-      }
-
-      if (
-        !buildFileContext?.root ||
-        !composeDir ||
-        isDynamicReference(rawContext) ||
-        isDynamicReference(rawDockerfile) ||
-        /^[a-z][a-z0-9+.-]*:\/\//iu.test(rawContext)
-      ) {
-        pushProblem(
-          `${filePath}:${buildLine}: compose service ${serviceName} build target cannot be verified statically`,
-        );
-        continue;
-      }
-
-      const resolvedContext = resolveContainedPath(rawContext, composeDir, buildFileContext.root);
-      const resolvedDockerfile = resolvedContext
-        ? resolveContainedPath(rawDockerfile, resolvedContext, buildFileContext.root)
-        : null;
-      if (!resolvedDockerfile) {
-        pushProblem(
-          `${filePath}:${buildLine}: compose service ${serviceName} build file ${rawDockerfile} cannot be verified statically`,
-        );
-        continue;
-      }
-      const targetProblems = [];
-      const safeFile = resolveSafeContainerFile(
-        resolvedDockerfile,
-        buildFileContext.root,
-        targetProblems,
-      );
-      for (const targetProblem of targetProblems) {
-        pushProblem(targetProblem);
-      }
-      if (!safeFile) {
-        if (targetProblems.length === 0) {
-          pushProblem(
-            `${filePath}:${buildLine}: compose service ${serviceName} build file ${rawDockerfile} cannot be verified statically`,
-          );
-        }
-        continue;
-      }
-      buildFileContext.explicitBuildFiles?.add(resolvedDockerfile);
-      recordBuildInvocation(
-        resolvedDockerfile,
-        buildArgs.size > 0 ? buildArgs : null,
-        namedContexts,
-        filePath,
-        buildLine,
-        buildFileContext.buildInvocations,
-        buildPlatforms,
-      );
-    }
-  }
-
-  return problems;
-}
-
 function inspectShellText(
   scriptText,
   startLine,
@@ -5084,7 +4725,6 @@ function inspectShellText(
       rowOldPwds: initialRowOldPwds,
       rowCwdsTruncated: initialRowCwdsTruncated,
       pendingStdinBuilds: [],
-      pendingStdinComposes: [],
     },
   ];
   const isWindowsShell = shellMode === "pwsh" || shellMode === "cmd";
@@ -5102,7 +4742,6 @@ function inspectShellText(
         rowOldPwds: cloneRowCwds(parent.rowOldPwds),
         rowCwdsTruncated: new Set(parent.rowCwdsTruncated),
         pendingStdinBuilds: [],
-        pendingStdinComposes: [],
       });
       continue;
     }
@@ -5120,52 +4759,6 @@ function inspectShellText(
       if (top?.kind === "case") {
         top.branchEndVars.push(cloneVarMap(frame.vars));
         frame.vars = cloneVarMap(top.entryVars);
-      }
-      continue;
-    }
-
-    if (event.kind === "stdin-compose-heredoc") {
-      const stdinCompose = frame.pendingStdinComposes.shift() ?? null;
-      const rawBody = event.lines.join("\n");
-      const seenComposeProblems = new Set();
-      const expandedBodies = event.quoted
-        ? resolveEnvExpressionCandidates(rawBody, stepEnv, event.startLine)
-        : resolveImageTokenCandidates(rawBody, stepEnv, frame.vars, event.startLine, shellMode);
-      if (expandedBodies.truncated) {
-        const limitMessage = `${filePath}:${event.startLine}: inline compose configuration exceeds expansion limit and cannot be verified exhaustively`;
-        if (!seenComposeProblems.has(limitMessage)) {
-          seenComposeProblems.add(limitMessage);
-          problems.push(limitMessage);
-        }
-      }
-      const seenBodies = new Set();
-      for (const bodyVarCandidate of expandedBodies.candidates) {
-        for (const bodyCandidate of expandMatrixReferences(
-          bodyVarCandidate.text,
-          matrixRows,
-          event.startLine,
-        )) {
-          if (seenBodies.has(bodyCandidate.text)) {
-            continue;
-          }
-          seenBodies.add(bodyCandidate.text);
-          for (const message of unpinnedComposeReferences(bodyCandidate.text, filePath, {
-            stepEnv,
-            shellVars: frame.vars,
-            matrixRows,
-            subcommand: stdinCompose?.subcommand ?? "up",
-            composeDir: stdinCompose?.composeDir ?? null,
-            buildFileContext,
-            sourceFile: filePath,
-            sourceLine: stdinCompose?.lineNumber ?? event.startLine,
-            startLineOffset: event.startLine - 1,
-          })) {
-            if (!seenComposeProblems.has(message)) {
-              seenComposeProblems.add(message);
-              problems.push(message);
-            }
-          }
-        }
       }
       continue;
     }
@@ -6100,249 +5693,9 @@ function inspectShellText(
       continue;
     }
     if (composeCommand?.kind === "compose") {
-      const seenComposeProblems = new Set();
-      const pushComposeProblem = (message) => {
-        if (!seenComposeProblems.has(message)) {
-          seenComposeProblems.add(message);
-          problems.push(message);
-        }
-      };
-      const hasStdinHeredoc = Boolean(event.hasStdinHeredoc);
-      const composeFallbackMsg = `${filePath}:${lineNumber}: ${composeCommand.displayCli} ${composeCommand.subcommand} configuration cannot be verified statically for container image digests`;
-      const composeRows = matrixRows.length > 0 ? matrixRows : [null];
-      const resolveComposeDirs = () => {
-        if (!buildFileContext?.root) {
-          return [];
-        }
-        const dirs = [];
-        const seenDirs = new Set();
-        for (const row of composeRows) {
-          const rowList = row ? [row] : [];
-          const { dirs: activeWorkingDirs } = resolveCommandWorkingDirs(row);
-          if (activeWorkingDirs.length === 0) {
-            return null;
-          }
-          const projectDirs = composeCommand.rawProjectDir
-            ? resolveImageTokenCandidates(
-                composeCommand.rawProjectDir,
-                stepEnv,
-                frame.vars,
-                lineNumber,
-                shellMode,
-              ).candidates.flatMap((entry) =>
-                expandMatrixReferences(entry.text, rowList, lineNumber).map((c) => c.text.trim()),
-              )
-            : [""];
-          for (const wd of activeWorkingDirs) {
-            if (wd === UNKNOWN_WORKING_DIR) {
-              return null;
-            }
-            for (const projDir of projectDirs) {
-              if (projDir && isDynamicReference(projDir, shellMode)) {
-                return null;
-              }
-              const wsRel = projDir
-                ? resolveWorkspaceRelativePath(projDir, wd, {
-                    windowsPath: isWindowsShell,
-                    actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
-                  })
-                : wd;
-              const mappedTargets = resolveWorkspaceTargetsInRepo(
-                wsRel,
-                buildFileContext.root,
-                buildFileContext.checkoutPrefixes,
-                buildFileContext.foreignCheckoutPrefixes,
-              );
-              if (mappedTargets.length === 0) {
-                return null;
-              }
-              for (const resolved of mappedTargets) {
-                if (!seenDirs.has(resolved)) {
-                  seenDirs.add(resolved);
-                  dirs.push(resolved);
-                }
-              }
-            }
-          }
-        }
-        return dirs;
-      };
-      const composeDirs = resolveComposeDirs();
-
-      if (composeCommand.usesStdin) {
-        if (hasStdinHeredoc) {
-          frame.pendingStdinComposes.push({
-            lineNumber,
-            subcommand: composeCommand.subcommand,
-            composeDir: composeDirs?.[0] ?? null,
-          });
-        } else if (stdinRedirectTargets.length > 0) {
-          if (!buildFileContext?.root || !composeDirs || composeDirs.length === 0) {
-            pushComposeProblem(composeFallbackMsg);
-          } else {
-            for (const rawRedirect of stdinRedirectTargets) {
-              const expandedRedirects = resolveImageTokenCandidates(
-                rawRedirect,
-                stepEnv,
-                frame.vars,
-                lineNumber,
-                shellMode,
-              ).candidates.flatMap((entry) =>
-                expandMatrixReferences(entry.text, matrixRows, lineNumber).map((c) =>
-                  c.text.trim(),
-                ),
-              );
-              for (const redirectTarget of expandedRedirects) {
-                if (!redirectTarget || isDynamicReference(redirectTarget, shellMode)) {
-                  pushComposeProblem(composeFallbackMsg);
-                  continue;
-                }
-                for (const dir of composeDirs) {
-                  const candidatePath = resolveContainedPath(
-                    redirectTarget,
-                    dir,
-                    buildFileContext.root,
-                  );
-                  const targetProblems = [];
-                  const safeFile = candidatePath
-                    ? resolveSafeContainerFile(candidatePath, buildFileContext.root, targetProblems)
-                    : null;
-                  for (const tp of targetProblems) {
-                    pushComposeProblem(tp);
-                  }
-                  if (!safeFile) {
-                    if (targetProblems.length === 0) {
-                      pushComposeProblem(composeFallbackMsg);
-                    }
-                    continue;
-                  }
-                  const relPath = formatPortableRelativePath(buildFileContext.root, safeFile);
-                  for (const msg of unpinnedComposeReferences(
-                    readFileSync(safeFile, "utf8"),
-                    relPath,
-                    {
-                      stepEnv,
-                      shellVars: frame.vars,
-                      matrixRows,
-                      subcommand: composeCommand.subcommand,
-                      composeDir: path.dirname(safeFile),
-                      buildFileContext,
-                      sourceFile: filePath,
-                      sourceLine: lineNumber,
-                    },
-                  )) {
-                    pushComposeProblem(msg);
-                  }
-                }
-              }
-            }
-          }
-        } else {
-          pushComposeProblem(composeFallbackMsg);
-        }
-      }
-
-      const explicitFiles = composeCommand.rawFiles.filter((file) => file !== "-");
-      if (explicitFiles.length > 0) {
-        if (!buildFileContext?.root || !composeDirs || composeDirs.length === 0) {
-          pushComposeProblem(composeFallbackMsg);
-        } else {
-          for (const rawFile of explicitFiles) {
-            const expandedFiles = resolveImageTokenCandidates(
-              rawFile,
-              stepEnv,
-              frame.vars,
-              lineNumber,
-              shellMode,
-            ).candidates.flatMap((entry) =>
-              expandMatrixReferences(entry.text, matrixRows, lineNumber).map((c) => c.text.trim()),
-            );
-            for (const fileCandidate of expandedFiles) {
-              if (!fileCandidate || isDynamicReference(fileCandidate, shellMode)) {
-                pushComposeProblem(composeFallbackMsg);
-                continue;
-              }
-              for (const dir of composeDirs) {
-                const candidatePath = resolveContainedPath(
-                  fileCandidate,
-                  dir,
-                  buildFileContext.root,
-                );
-                const targetProblems = [];
-                const safeFile = candidatePath
-                  ? resolveSafeContainerFile(candidatePath, buildFileContext.root, targetProblems)
-                  : null;
-                for (const tp of targetProblems) {
-                  pushComposeProblem(tp);
-                }
-                if (!safeFile) {
-                  if (targetProblems.length === 0) {
-                    pushComposeProblem(composeFallbackMsg);
-                  }
-                  continue;
-                }
-                const relPath = formatPortableRelativePath(buildFileContext.root, safeFile);
-                for (const msg of unpinnedComposeReferences(
-                  readFileSync(safeFile, "utf8"),
-                  relPath,
-                  {
-                    stepEnv,
-                    shellVars: frame.vars,
-                    matrixRows,
-                    subcommand: composeCommand.subcommand,
-                    composeDir: path.dirname(safeFile),
-                    buildFileContext,
-                    sourceFile: filePath,
-                    sourceLine: lineNumber,
-                  },
-                )) {
-                  pushComposeProblem(msg);
-                }
-              }
-            }
-          }
-        }
-      } else if (!composeCommand.usesStdin) {
-        if (!buildFileContext?.root || !composeDirs || composeDirs.length === 0) {
-          pushComposeProblem(composeFallbackMsg);
-        } else {
-          const defaultComposeNames = [
-            "compose.yaml",
-            "compose.yml",
-            "docker-compose.yaml",
-            "docker-compose.yml",
-          ];
-          for (const dir of composeDirs) {
-            const defaultFile = findDefaultBuildFile(dir, defaultComposeNames);
-            const targetProblems = [];
-            const safeFile = defaultFile
-              ? resolveSafeContainerFile(defaultFile, buildFileContext.root, targetProblems)
-              : null;
-            for (const tp of targetProblems) {
-              pushComposeProblem(tp);
-            }
-            if (!safeFile) {
-              if (targetProblems.length === 0) {
-                pushComposeProblem(composeFallbackMsg);
-              }
-              continue;
-            }
-            const relPath = formatPortableRelativePath(buildFileContext.root, safeFile);
-            for (const msg of unpinnedComposeReferences(readFileSync(safeFile, "utf8"), relPath, {
-              stepEnv,
-              shellVars: frame.vars,
-              matrixRows,
-              subcommand: composeCommand.subcommand,
-              composeDir: path.dirname(safeFile),
-              buildFileContext,
-              sourceFile: filePath,
-              sourceLine: lineNumber,
-            })) {
-              pushComposeProblem(msg);
-            }
-          }
-        }
-      }
+      problems.push(
+        `${filePath}:${lineNumber}: ${composeCommand.displayCli} ${composeCommand.subcommand} target definitions cannot be verified statically for container image digests`,
+      );
       continue;
     }
 

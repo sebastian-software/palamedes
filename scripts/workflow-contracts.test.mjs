@@ -1870,14 +1870,14 @@ describe("workflow contracts", () => {
           "      - run: |",
           "          docker compose down",
           "          docker compose logs",
+          "          docker compose config",
+          "          docker compose --dry-run up",
           "          docker compose up -d",
           "          docker-compose pull",
           "          docker compose -f - up <<'EOF'",
           "          services:",
           "            db:",
           "              image: postgres:16",
-          "            cache:",
-          `              image: redis:7@${digest}`,
           "          EOF",
           "",
         ].join("\n"),
@@ -1888,9 +1888,9 @@ describe("workflow contracts", () => {
       "<memory>:17: docker buildx bake target definitions cannot be verified statically for container image digests",
       "<memory>:18: docker buildx bake target definitions cannot be verified statically for container image digests",
       "<memory>:19: docker buildx bake target definitions cannot be verified statically for container image digests",
-      "<memory>:26: docker compose up configuration cannot be verified statically for container image digests",
-      "<memory>:27: docker-compose pull configuration cannot be verified statically for container image digests",
-      "<memory>:31: postgres:16 is not pinned to a sha256 digest",
+      "<memory>:28: docker compose up target definitions cannot be verified statically for container image digests",
+      "<memory>:29: docker-compose pull target definitions cannot be verified statically for container image digests",
+      "<memory>:30: docker compose up target definitions cannot be verified statically for container image digests",
     ]);
   });
 
@@ -3347,6 +3347,9 @@ describe("workflow contracts", () => {
           "  - run: |",
           '      docker pull "$REGISTRY/app:latest"',
           '      docker run --rm "$REGISTRY/app:v1.2" node -v',
+          '      docker pull "$REGISTRY/team/worker"',
+          '      docker run --rm "$REGISTRY/$IMAGE_NAME" node -v',
+          '      docker run --rm "$REGISTRY/team/worker$SUFFIX" node -v',
           '      docker run --rm "$IMAGE_ID" node -v',
           '      docker run --rm "ghcr.io/${{ github.repository_owner }}/app:sha-${{ github.sha }}" node -v',
           `      docker pull "$REGISTRY/app:latest@${digest}"`,
@@ -3356,6 +3359,7 @@ describe("workflow contracts", () => {
     ).toEqual([
       "<memory>:3: $REGISTRY/app:latest is not pinned to a sha256 digest",
       "<memory>:4: $REGISTRY/app:v1.2 is not pinned to a sha256 digest",
+      "<memory>:5: $REGISTRY/team/worker is not pinned to a sha256 digest",
     ]);
     expect(
       unpinnedContainerfileReferences(
@@ -3465,32 +3469,11 @@ describe("workflow contracts", () => {
     ]);
     // Reusable workflows inherit the caller's `github.event_name` (and treat it
     // as unknown during standalone checks), resolve implicit type defaults (`""`,
-    // `false`, `0`) for omitted optional `workflow_call` inputs, and repository
-    // Compose files invoked via `docker compose up` are verified end-to-end.
+    // `false`, `0`) for omitted optional `workflow_call` inputs, and Compose
+    // commands that pull/build/start services fail closed.
     const r43Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r43-"));
     try {
       await mkdir(join(r43Fixture, ".github", "workflows"), { recursive: true });
-      await writeFile(
-        join(r43Fixture, "app.recipe"),
-        [`ARG BASE=alpine:3.20@${digest}`, "FROM ${BASE}", ""].join("\n"),
-      );
-      await writeFile(
-        join(r43Fixture, "compose.yml"),
-        [
-          "services:",
-          "  ok:",
-          `    image: alpine:3.20@${digest}`,
-          "  bad:",
-          "    image: nginx:1.27",
-          "  built:",
-          "    build:",
-          "      context: .",
-          "      dockerfile: app.recipe",
-          "      args:",
-          "        BASE: alpine:3.21",
-          "",
-        ].join("\n"),
-      );
       await writeFile(
         join(r43Fixture, ".github", "workflows", "reusable.yml"),
         [
@@ -3530,8 +3513,7 @@ describe("workflow contracts", () => {
       const r43Result = checkWorkflowPins(r43Fixture);
       expect(r43Result.problems).toEqual([
         ".github/workflows/reusable.yml:12: alpine is not pinned to a sha256 digest",
-        "compose.yml:5: nginx:1.27 is not pinned to a sha256 digest",
-        "app.recipe:2: alpine:3.21 is not pinned to a sha256 digest",
+        ".github/workflows/caller.yml:8: docker compose up target definitions cannot be verified statically for container image digests",
       ]);
       // Standalone reusable workflow scan treats caller event_name as unknown,
       // so guarded jobs with literal unpinned images are still checked.
