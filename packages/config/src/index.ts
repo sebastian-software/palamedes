@@ -950,7 +950,7 @@ export function catalogResourcePath(
 ): string {
   const extension = catalog.format ?? "po";
   const configuredPath = resolveCatalogPath(config, catalog.path, locale);
-  if (path.extname(catalog.path) === `.${extension}`) {
+  if (path.posix.extname(catalog.path.replaceAll("\\", "/")) === `.${extension}`) {
     return configuredPath;
   }
   return `${configuredPath}.${extension}`;

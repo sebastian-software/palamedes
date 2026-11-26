@@ -997,6 +997,12 @@ describe("loadPalamedesConfig", () => {
       invalidLocales: string[];
       validCatalogPaths: string[];
       invalidCatalogPaths: string[];
+      resourcePathParity: Array<{
+        path: string;
+        locale: string;
+        format: "po" | "fcl";
+        expectedRelative: string;
+      }>;
     };
 
     const validLocalesDir = await createTempDir();
@@ -1061,6 +1067,16 @@ describe("loadPalamedesConfig", () => {
       expect(() => resolveCatalogPath({ rootDir: "/repo" }, invalidPath, "en")).toThrow(
         /Invalid catalog path/,
       );
+    }
+
+    for (const entry of parity.resourcePathParity) {
+      expect(
+        catalogResourcePath(
+          { rootDir: "/repo" },
+          { path: entry.path, format: entry.format, include: ["src"] },
+          entry.locale,
+        ),
+      ).toBe(path.resolve("/repo", entry.expectedRelative));
     }
   });
 });

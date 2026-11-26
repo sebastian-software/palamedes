@@ -109,7 +109,7 @@ pub enum ContainedWriteOutcome {
 }
 
 /// Stable on-disk file identity used to detect hard-linked input/output aliases.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FileIdentity {
     #[cfg(unix)]
     dev: u64,
@@ -354,6 +354,7 @@ mod platform {
     mod macos_acl {
         pub(super) const ACL_TYPE_EXTENDED: libc::c_int = 0x0000_0100;
         pub(super) const ACL_FIRST_ENTRY: libc::c_int = 0;
+        pub(super) const RENAME_EXCL: libc::c_uint = 0x0000_0004;
 
         unsafe extern "C" {
             pub(super) fn acl_init(count: libc::c_int) -> *mut libc::c_void;
@@ -369,6 +370,13 @@ mod platform {
                 entry_p: *mut *mut libc::c_void,
             ) -> libc::c_int;
             pub(super) fn acl_free(obj_p: *mut libc::c_void) -> libc::c_int;
+            pub(super) fn renameatx_np(
+                fromfd: libc::c_int,
+                from: *const libc::c_char,
+                tofd: libc::c_int,
+                to: *const libc::c_char,
+                flags: libc::c_uint,
+            ) -> libc::c_int;
         }
     }
 
@@ -577,9 +585,14 @@ mod platform {
 
             for _ in 0..8 {
                 let existing = self.open_existing_for_replace(file_name)?;
-                if let Some(existing) = existing.as_ref() {
-                    let (stage_name, stage_dir, stage_identity) = self.create_staging_dir()?;
-                    let result = (|| -> Result<(), ContainedFsError> {
+                let (stage_name, stage_dir, stage_identity) = self.create_staging_dir()?;
+                enum StageOutcome {
+                    Published,
+                    Retry,
+                }
+
+                let stage_result = if let Some(existing) = existing.as_ref() {
+                    (|| -> Result<StageOutcome, ContainedFsError> {
                         let (temp_name, mut temp_file) = stage_dir.create_temp_file(0o600)?;
                         let write_result = (|| -> io::Result<()> {
                             strip_inherited_acl(temp_file.as_raw_fd())?;
@@ -602,6 +615,13 @@ mod platform {
                             return Err(ContainedFsError::Io(error));
                         }
 
+                        // Guard against concurrent destination replacement or
+                        // access-control tightening while staging.
+                        if !self.destination_matches_snapshot(&c_target, existing.entry) {
+                            let _ = stage_dir.unlink_temp(&temp_name);
+                            return Ok(StageOutcome::Retry);
+                        }
+
                         // SAFETY: both directory descriptors and C strings are valid.
                         let rc = unsafe {
                             libc::renameat(
@@ -616,64 +636,67 @@ mod platform {
                             let _ = stage_dir.unlink_temp(&temp_name);
                             return Err(ContainedFsError::Io(error));
                         }
-                        Ok(())
-                    })();
-                    drop(stage_dir);
-                    let _ = self.rmdir_stage_if_same(&stage_name, stage_identity);
-                    result?;
+                        Ok(StageOutcome::Published)
+                    })()
                 } else {
-                    let create_mode: libc::c_uint = match new_file_mode {
-                        ContainedNewFileMode::RespectUmask => 0o666,
-                        ContainedNewFileMode::Private => 0o600,
-                    };
-                    let (temp_name, mut temp_file) = self.create_temp_file(create_mode)?;
-                    let write_result = (|| -> io::Result<()> {
-                        temp_file.write_all(bytes)?;
-                        temp_file.flush()?;
-                        if durability.syncs_file() {
-                            temp_file.sync_all()?;
+                    (|| -> Result<StageOutcome, ContainedFsError> {
+                        let create_mode: libc::c_uint = match new_file_mode {
+                            ContainedNewFileMode::RespectUmask => 0o666,
+                            ContainedNewFileMode::Private => 0o600,
+                        };
+                        let (temp_name, mut temp_file) = stage_dir.create_temp_file(create_mode)?;
+                        let write_result = (|| -> io::Result<()> {
+                            temp_file.write_all(bytes)?;
+                            temp_file.flush()?;
+                            if durability.syncs_file() {
+                                temp_file.sync_all()?;
+                            }
+                            Ok(())
+                        })();
+                        drop(temp_file);
+
+                        if let Err(error) = write_result {
+                            let _ = stage_dir.unlink_temp(&temp_name);
+                            return Err(ContainedFsError::Io(error));
                         }
-                        Ok(())
-                    })();
-                    drop(temp_file);
 
-                    if let Err(error) = write_result {
-                        let _ = self.unlink_temp(&temp_name);
-                        return Err(ContainedFsError::Io(error));
-                    }
-
-                    // Publish without overwriting a concurrently created target:
-                    // `linkat` fails atomically with `EEXIST` if another writer
-                    // created `c_target` in the meantime, in which case we
-                    // retry through `open_existing_for_replace` to preserve its
-                    // access controls and check write permissions.
-                    // SAFETY: `self.fd` is an open directory descriptor and both C strings are valid.
-                    let rc = unsafe {
-                        libc::linkat(
+                        // Publish from our private staging directory without
+                        // overwriting any concurrently created target, using
+                        // atomic no-replace rename where supported so creation
+                        // also works on filesystems without hard links (exFAT).
+                        match publish_file_noreplace(
+                            stage_dir.fd.as_raw_fd(),
+                            &temp_name,
                             self.fd.as_raw_fd(),
-                            temp_name.as_ptr(),
-                            self.fd.as_raw_fd(),
-                            c_target.as_ptr(),
-                            0,
-                        )
-                    };
-                    if rc != 0 {
-                        let error = io::Error::last_os_error();
-                        let _ = self.unlink_temp(&temp_name);
-                        if error.raw_os_error() == Some(libc::EEXIST) {
-                            continue;
+                            &c_target,
+                        ) {
+                            Ok(true) => Ok(StageOutcome::Published),
+                            Ok(false) => {
+                                let _ = stage_dir.unlink_temp(&temp_name);
+                                Ok(StageOutcome::Retry)
+                            }
+                            Err(error) => {
+                                let _ = stage_dir.unlink_temp(&temp_name);
+                                Err(ContainedFsError::Io(error))
+                            }
                         }
-                        return Err(ContainedFsError::Io(error));
-                    }
-                    let _ = self.unlink_temp(&temp_name);
-                }
+                    })()
+                };
 
-                if durability == ContainedWriteDurability::Full
-                    && let Err(error) = self.sync_directory()
-                {
-                    return Ok(ContainedWriteOutcome::CommittedWithoutDirSync(error));
+                drop(stage_dir);
+                let _ = self.rmdir_stage_if_same(&stage_name, stage_identity);
+
+                match stage_result? {
+                    StageOutcome::Retry => continue,
+                    StageOutcome::Published => {
+                        if durability == ContainedWriteDurability::Full
+                            && let Err(error) = self.sync_directory()
+                        {
+                            return Ok(ContainedWriteOutcome::CommittedWithoutDirSync(error));
+                        }
+                        return Ok(ContainedWriteOutcome::Committed);
+                    }
                 }
-                return Ok(ContainedWriteOutcome::Committed);
             }
 
             Err(ContainedFsError::Io(io::Error::new(
@@ -924,24 +947,46 @@ mod platform {
                     dev: stage_stat.st_dev as u64,
                     ino: stage_stat.st_ino as u64,
                 };
-                let is_trusted_fresh_dir = (stage_stat.st_mode & libc::S_IFMT) == libc::S_IFDIR
+                let is_owned_same_dir = (stage_stat.st_mode & libc::S_IFMT) == libc::S_IFDIR
                     && stage_stat.st_dev == parent_stat.st_dev
                     && stage_stat.st_uid == euid
-                    && (stage_stat.st_mode & 0o0077) == 0
-                    && stage_stat.st_nlink == 2
                     && self.entry_identity(&c_name) == Some(identity);
-                if !is_trusted_fresh_dir {
+                if !is_owned_same_dir {
                     return Err(ContainedFsError::Io(io::Error::new(
                         io::ErrorKind::PermissionDenied,
                         "refusing to use unverified staging directory in shared parent",
                     )));
                 }
+                // Check emptiness directly via `fdopendir`/`readdir` rather than
+                // `st_nlink == 2` so filesystems like Btrfs (`st_nlink == 1`) work.
+                let is_empty = match is_empty_dir(fd.as_raw_fd()) {
+                    Ok(empty) => empty,
+                    Err(error) => {
+                        drop(fd);
+                        let _ = self.rmdir_stage_if_same(&c_name, identity);
+                        return Err(ContainedFsError::Io(error));
+                    }
+                };
+                if !is_empty {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "refusing to use non-empty staging directory in shared parent",
+                    )));
+                }
 
                 let harden = (|| -> io::Result<()> {
                     strip_inherited_acl(fd.as_raw_fd())?;
-                    // SAFETY: `fd` has been verified as our fresh private directory.
+                    // SAFETY: `fd` has been verified as our fresh private empty directory.
                     if unsafe { libc::fchmod(fd.as_raw_fd(), 0o700) } != 0 {
-                        return Err(io::Error::last_os_error());
+                        let error = io::Error::last_os_error();
+                        // Filesystems without POSIX mode bits (e.g. exFAT) may
+                        // reject `fchmod` with `EOPNOTSUPP`/`ENOSYS`/`EINVAL`.
+                        if !matches!(
+                            error.raw_os_error(),
+                            Some(libc::EOPNOTSUPP | libc::ENOSYS | libc::EINVAL)
+                        ) {
+                            return Err(error);
+                        }
                     }
                     Ok(())
                 })();
@@ -956,6 +1001,34 @@ mod platform {
                 io::ErrorKind::AlreadyExists,
                 "could not allocate a unique private staging directory",
             )))
+        }
+
+        fn destination_matches_snapshot(&self, c_name: &CString, expected: ExistingEntry) -> bool {
+            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // SAFETY: `self.fd` is open, `c_name` is valid, and `stat` is writable.
+            let rc = unsafe {
+                libc::fstatat(
+                    self.fd.as_raw_fd(),
+                    c_name.as_ptr(),
+                    stat.as_mut_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            };
+            if rc != 0 {
+                return false;
+            }
+            // SAFETY: `fstatat` succeeded and initialized `stat`.
+            let stat = unsafe { stat.assume_init() };
+            #[allow(clippy::unnecessary_cast)]
+            let identity = FileIdentity {
+                dev: stat.st_dev as u64,
+                ino: stat.st_ino as u64,
+            };
+            (stat.st_mode & libc::S_IFMT) == libc::S_IFREG
+                && identity == expected.identity
+                && (stat.st_mode & 0o7777) == expected.mode
+                && stat.st_uid == expected.uid
+                && stat.st_gid == expected.gid
         }
 
         fn entry_identity(&self, c_name: &CString) -> Option<FileIdentity> {
@@ -1028,6 +1101,132 @@ mod platform {
             let stat = unsafe { stat.assume_init() };
             (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK
         }
+    }
+
+    fn is_empty_dir(fd: std::os::fd::RawFd) -> io::Result<bool> {
+        // SAFETY: `fd` is an open readable directory descriptor.
+        let dup_fd = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) };
+        if dup_fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `dup_fd` is a valid directory descriptor; `fdopendir` takes ownership on success.
+        let dir = unsafe { libc::fdopendir(dup_fd) };
+        if dir.is_null() {
+            let error = io::Error::last_os_error();
+            // SAFETY: `fdopendir` failed, so we still own `dup_fd`.
+            unsafe {
+                libc::close(dup_fd);
+            }
+            return Err(error);
+        }
+        let mut empty = true;
+        loop {
+            // SAFETY: `dir` is a valid `DIR*`.
+            let entry = unsafe { libc::readdir(dir) };
+            if entry.is_null() {
+                break;
+            }
+            // SAFETY: `entry` is non-null and `d_name` is a NUL-terminated C string.
+            let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
+            if name != c"." && name != c".." {
+                empty = false;
+                break;
+            }
+        }
+        // SAFETY: `dir` is a valid `DIR*` owned by this function.
+        unsafe {
+            libc::closedir(dir);
+        }
+        Ok(empty)
+    }
+
+    /// Publishes `temp_name` from `stage_fd` into `target_dir_fd` as `c_target`
+    /// without overwriting an existing destination.
+    ///
+    /// Returns `Ok(true)` when published, `Ok(false)` when `c_target` already
+    /// exists (caller should retry through the existing-target replacement
+    /// path), or `Err` on unexpected OS failures.
+    fn publish_file_noreplace(
+        stage_fd: std::os::fd::RawFd,
+        temp_name: &CString,
+        target_dir_fd: std::os::fd::RawFd,
+        c_target: &CString,
+    ) -> io::Result<bool> {
+        #[cfg(target_os = "linux")]
+        {
+            const RENAME_NOREPLACE: libc::c_uint = 1;
+            // SAFETY: both directory descriptors and C strings are valid.
+            let rc = unsafe {
+                libc::syscall(
+                    libc::SYS_renameat2,
+                    stage_fd,
+                    temp_name.as_ptr(),
+                    target_dir_fd,
+                    c_target.as_ptr(),
+                    RENAME_NOREPLACE,
+                )
+            };
+            if rc == 0 {
+                return Ok(true);
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EEXIST) {
+                return Ok(false);
+            }
+            if !matches!(
+                error.raw_os_error(),
+                Some(libc::ENOSYS | libc::EINVAL | libc::EOPNOTSUPP)
+            ) {
+                return Err(error);
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            // SAFETY: both directory descriptors and C strings are valid.
+            let rc = unsafe {
+                macos_acl::renameatx_np(
+                    stage_fd,
+                    temp_name.as_ptr(),
+                    target_dir_fd,
+                    c_target.as_ptr(),
+                    macos_acl::RENAME_EXCL,
+                )
+            };
+            if rc == 0 {
+                return Ok(true);
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EEXIST) {
+                return Ok(false);
+            }
+            if !matches!(
+                error.raw_os_error(),
+                Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::EINVAL)
+            ) {
+                return Err(error);
+            }
+        }
+        // Portable POSIX fallback when atomic no-replace rename is unavailable.
+        // SAFETY: both directory descriptors and C strings are valid.
+        let rc = unsafe {
+            libc::linkat(
+                stage_fd,
+                temp_name.as_ptr(),
+                target_dir_fd,
+                c_target.as_ptr(),
+                0,
+            )
+        };
+        if rc != 0 {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EEXIST) {
+                return Ok(false);
+            }
+            return Err(error);
+        }
+        // SAFETY: `stage_fd` is an open directory descriptor and `temp_name` is valid.
+        let _ = unsafe { libc::unlinkat(stage_fd, temp_name.as_ptr(), 0) };
+        Ok(true)
     }
 
     fn is_symlink_open_error(raw_os_error: Option<i32>) -> bool {
@@ -1826,7 +2025,8 @@ mod platform {
             validate_single_file_name(file_name)?;
             for _ in 0..8 {
                 let existing_entry = self.inspect_entry(file_name, true)?;
-                let target_existed = existing_entry.is_some();
+                let existing_identity = existing_entry.as_ref().map(|(identity, _)| *identity);
+                let target_existed = existing_identity.is_some();
                 let mut existing_security = existing_entry.and_then(|(_, security)| security);
                 let initial_dacl = existing_security
                     .as_mut()
@@ -1856,6 +2056,17 @@ mod platform {
                 if let Err(error) = write_result {
                     let _ = nt_mark_delete_on_close(temp_file.as_raw_handle());
                     return Err(ContainedFsError::Io(error));
+                }
+
+                if let Some(expected_identity) = existing_identity {
+                    let current_identity = self
+                        .inspect_entry(file_name, false)?
+                        .map(|(identity, _)| identity);
+                    if current_identity != Some(expected_identity) {
+                        let _ = nt_mark_delete_on_close(temp_file.as_raw_handle());
+                        drop(temp_file);
+                        continue;
+                    }
                 }
 
                 match nt_rename_relative(

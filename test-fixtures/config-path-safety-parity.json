@@ -38,5 +38,26 @@
     "locales/../../outside/{locale}",
     "locales\\..\\..\\outside\\{locale}",
     "locales/\u0000/{locale}"
+  ],
+  "resourcePathParity": [
+    { "path": "{locale}\\.po", "locale": "en", "format": "po", "expectedRelative": "en/.po.po" },
+    {
+      "path": "locales\\{locale}\\messages.po",
+      "locale": "en",
+      "format": "po",
+      "expectedRelative": "locales/en/messages.po"
+    },
+    {
+      "path": "locales\\{locale}\\messages.v2",
+      "locale": "pt.BR",
+      "format": "po",
+      "expectedRelative": "locales/pt.BR/messages.v2.po"
+    },
+    {
+      "path": "locales\\{locale}\\messages.fcl",
+      "locale": "de",
+      "format": "fcl",
+      "expectedRelative": "locales/de/messages.fcl"
+    }
   ]
 }

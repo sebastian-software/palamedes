@@ -31,7 +31,7 @@ thread_local! {
 use crate::catalog_artifact::resolve_catalog_path;
 use crate::catalog_update::{AiProvenance, MachineMetadata, po_serialize_options};
 use crate::contained_fs::{
-    ContainedDir, ContainedFsError, ContainedNewFileMode, ContainedWriteDurability,
+    ContainedDir, ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, FileIdentity,
     split_relative_catalog_path,
 };
 use crate::icu_compatibility::compare_runtime_icu;
@@ -593,11 +593,49 @@ where
     }
 
     let mut pinned_dirs: HashMap<PathBuf, Arc<ContainedDir>> = HashMap::new();
+    let mut seen_identities: HashMap<FileIdentity, Vec<usize>> = HashMap::new();
     let mut prepared = Vec::new();
     for (batch, patch_indexes) in groups {
         let catalog = &request.config.catalogs[batch.catalog_index];
         let mut loaded =
             load_catalog_with_dir_cache(&request.config, catalog, &batch.locale, &mut pinned_dirs)?;
+        let identity = loaded
+            .parent_dir
+            .file_identity(&loaded.file_name)
+            .map_err(|error| match error {
+                ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
+                    path: loaded.path.to_string_lossy().into_owned(),
+                    reason,
+                },
+                ContainedFsError::Io(source) => PalamedesError::ReadFile {
+                    path: loaded.path.clone(),
+                    source,
+                },
+            })?;
+        if let Some(identity) = identity {
+            let entry = seen_identities.entry(identity).or_default();
+            if !entry.is_empty() {
+                for &prior_index in entry.iter() {
+                    if rejected.insert(prior_index) {
+                        diagnostics.push(workflow_diagnostic(
+                            "translation.ambiguous_catalog",
+                            "Multiple configured catalog scopes resolve to the same target file.",
+                            Some(request.patches[prior_index].id.clone()),
+                        ));
+                    }
+                }
+                for &patch_index in &patch_indexes {
+                    if rejected.insert(patch_index) {
+                        diagnostics.push(workflow_diagnostic(
+                            "translation.ambiguous_catalog",
+                            "Multiple configured catalog scopes resolve to the same target file.",
+                            Some(request.patches[patch_index].id.clone()),
+                        ));
+                    }
+                }
+            }
+            entry.extend(patch_indexes.iter().copied());
+        }
         for &patch_index in &patch_indexes {
             if rejected.contains(&patch_index) {
                 continue;
@@ -3828,6 +3866,81 @@ mod tests {
         );
         assert_eq!(
             fs::read_to_string(&path).expect("read unchanged catalog"),
+            before
+        );
+    }
+
+    #[test]
+    fn rejects_batches_whose_catalog_scopes_alias_the_same_on_disk_file() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let primary = fixture.path().join("messages/de.po");
+        write_po_fixture(&primary, "de");
+        let alias_dir = fixture.path().join("alias");
+        fs::create_dir_all(&alias_dir).expect("alias dir");
+        fs::hard_link(&primary, alias_dir.join("de.po")).expect("hard link alias");
+        let before = fs::read_to_string(&primary).expect("read original catalog");
+
+        let config = CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "messages/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: "alias/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: CatalogArtifactConfig {
+                root_dir: config.root_dir.clone(),
+                locales: config.locales.clone(),
+                source_locale: config.source_locale.clone(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![CatalogConfig {
+                    path: "messages/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                }],
+            },
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list candidate");
+        let hello = candidate(&listed.candidates, "Hello");
+        let mut alias_patch = singular_patch(hello, "Servus");
+        alias_patch.id.catalog = "alias/{locale}".to_owned();
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config,
+            po: None,
+            patches: vec![singular_patch(hello, "Hallo"), alias_patch],
+        })
+        .expect("aliased on-disk targets must be rejected cleanly");
+
+        assert!(!result.updated);
+        assert_eq!(result.stats.applied, 0);
+        assert!(
+            result
+                .outcomes
+                .iter()
+                .all(|outcome| outcome.status == TranslationPatchOutcomeStatus::Rejected)
+        );
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diag| diag.code == "translation.ambiguous_catalog")
+        );
+        assert_eq!(
+            fs::read_to_string(&primary).expect("read unchanged catalog"),
             before
         );
     }

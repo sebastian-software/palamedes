@@ -2051,6 +2051,28 @@ catalogs:
             .expect("write invalid path config");
             load_config(&app, None).expect_err("parity invalid catalog path must be rejected");
         }
+
+        for entry in cases["resourcePathParity"]
+            .as_array()
+            .expect("resourcePathParity array")
+        {
+            let pattern = entry["path"].as_str().expect("path");
+            let locale = entry["locale"].as_str().expect("locale");
+            let format = match entry["format"].as_str().expect("format") {
+                "fcl" => palamedes::PalamedesCatalogFormat::Fcl,
+                _ => palamedes::PalamedesCatalogFormat::Po,
+            };
+            let expected_relative = entry["expectedRelative"]
+                .as_str()
+                .expect("expectedRelative");
+            let root = std::path::Path::new("/repo");
+            let actual = palamedes::try_resolve_catalog_file_path(root, pattern, locale, format)
+                .expect("parity resource path must resolve");
+            let expected = expected_relative
+                .split('/')
+                .fold(root.to_path_buf(), |acc, part| acc.join(part));
+            assert_eq!(actual, expected, "parity mismatch for pattern {pattern:?}");
+        }
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
