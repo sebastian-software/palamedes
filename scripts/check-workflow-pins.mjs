@@ -1,5 +1,15 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import path from "node:path";
 
 import { LineCounter, isAlias, isMap, isScalar, isSeq, parseDocument } from "yaml";
@@ -22,11 +32,11 @@ const PWSH_ASSIGN_LHS_PATTERN =
 const PWSH_INLINE_ASSIGN_PATTERN =
   /^\$(?:(?<envPrefix>env:)?(?:script:|global:|local:)?(?<bare>[A-Za-z_][A-Za-z0-9_]*)|\{(?<envPrefixBraced>env:)?(?:script:|global:|local:)?(?<braced>[A-Za-z_][A-Za-z0-9_]*)\})=(?<value>.*)$/iu;
 const ENV_EXPRESSION_PATTERN =
-  /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/gu;
+  /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/giu;
 const MATRIX_EXPRESSION_PATTERN =
-  /\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}/gu;
+  /\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}/giu;
 const SINGLE_MATRIX_EXPRESSION_PATTERN =
-  /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}$/u;
+  /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}$/iu;
 const MATRIX_SEGMENT_PATTERN = /\.([A-Za-z0-9_-]+)|\[(?:'([^']+)'|"([^"]+)")\]/gu;
 const ENV_PREFIX_ASSIGNMENT_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$/u;
 const SHELL_INTERPRETERS = new Set(["sh", "bash", "ash", "dash", "zsh", "ksh"]);
@@ -107,6 +117,24 @@ const PODMAN_GLOBAL_VALUE_FLAGS = new Set([
   "--tmpdir",
   "--url",
   "--volumepath",
+]);
+const BUILDAH_GLOBAL_VALUE_FLAGS = new Set([
+  "--cdi-config-dir",
+  "--cgroup-manager",
+  "--default-mounts-file",
+  "--hooks-dir",
+  "--imagestore",
+  "--log-level",
+  "--module",
+  "--registries-conf",
+  "--registries-conf-dir",
+  "--root",
+  "--runroot",
+  "--short-name-alias-conf",
+  "--storage-driver",
+  "--storage-opt",
+  "--userns-gid-map",
+  "--userns-uid-map",
 ]);
 const DOCKER_PULL_VALUE_FLAGS = new Set(["--platform"]);
 const PODMAN_PULL_VALUE_FLAGS = new Set([
@@ -709,7 +737,7 @@ function expandPatternCandidates(candidates, pattern, lookup, initialTruncated =
 function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
   return expandPatternCandidates(
     [{ text, line: fallbackLine }],
-    new RegExp(ENV_EXPRESSION_PATTERN.source, "u"),
+    new RegExp(ENV_EXPRESSION_PATTERN.source, "iu"),
     (match) => {
       const name = match.groups.dot ?? match.groups.sq ?? match.groups.dq;
       return lookupVarEntries(stepEnv, name, true);
@@ -1445,6 +1473,83 @@ function resolveContainerBuildCommand(
   return null;
 }
 
+function parseShortBuildFlagBundle(token, nextToken) {
+  if (
+    !token.startsWith("-") ||
+    token.startsWith("--") ||
+    token.length <= 2 ||
+    token.includes("=")
+  ) {
+    return null;
+  }
+  for (let index = 1; index < token.length; index += 1) {
+    const ch = token[index];
+    if (ch === "f") {
+      if (index === token.length - 1) {
+        return { file: nextToken ?? null, consumedNext: true };
+      }
+      return { file: token.slice(index + 1), consumedNext: false };
+    }
+    if (DOCKER_BUILD_VALUE_FLAGS.has(`-${ch}`)) {
+      return { file: null, consumedNext: index === token.length - 1 };
+    }
+  }
+  return { file: null, consumedNext: false };
+}
+
+function isArchiveOrBinaryFile(filePath) {
+  if (/\.(?:tar(?:\.(?:gz|bz2|xz|zst))?|tgz|tbz2|txz|tzst)$/iu.test(filePath)) {
+    return true;
+  }
+  let fd;
+  try {
+    fd = openSync(filePath, "r");
+    const buffer = Buffer.alloc(512);
+    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
+    if (bytesRead >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+      return true;
+    }
+    if (bytesRead >= 3 && buffer[0] === 0x42 && buffer[1] === 0x5a && buffer[2] === 0x68) {
+      return true;
+    }
+    if (
+      bytesRead >= 6 &&
+      buffer[0] === 0xfd &&
+      buffer[1] === 0x37 &&
+      buffer[2] === 0x7a &&
+      buffer[3] === 0x58 &&
+      buffer[4] === 0x5a &&
+      buffer[5] === 0x00
+    ) {
+      return true;
+    }
+    if (
+      bytesRead >= 4 &&
+      buffer[0] === 0x28 &&
+      buffer[1] === 0xb5 &&
+      buffer[2] === 0x2f &&
+      buffer[3] === 0xfd
+    ) {
+      return true;
+    }
+    if (bytesRead >= 262 && buffer.subarray(257, 262).toString("ascii") === "ustar") {
+      return true;
+    }
+    for (let index = 0; index < bytesRead; index += 1) {
+      if (buffer[index] === 0x00) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) {
+      closeSync(fd);
+    }
+  }
+}
+
 function isStdinContainerBuildCommand(tokens) {
   let cursor = 0;
   while (cursor < tokens.length) {
@@ -1465,7 +1570,11 @@ function isStdinContainerBuildCommand(tokens) {
     return false;
   }
   const globalValueFlags =
-    normalizedCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
+    normalizedCli === "buildah"
+      ? BUILDAH_GLOBAL_VALUE_FLAGS
+      : normalizedCli === "podman"
+        ? PODMAN_GLOBAL_VALUE_FLAGS
+        : DOCKER_GLOBAL_VALUE_FLAGS;
   let argIndex = cursor + 1;
   while (argIndex < tokens.length) {
     const redirConsumed = consumeShellRedirection(tokens, argIndex);
@@ -1483,6 +1592,8 @@ function isStdinContainerBuildCommand(tokens) {
   if (buildCommand?.kind !== "build") {
     return false;
   }
+  let hasStdinFile = false;
+  let hasExplicitFile = false;
   let contextArg = null;
   for (let index = buildCommand.argStart; index < tokens.length; index += 1) {
     const redirConsumed = consumeShellRedirection(tokens, index);
@@ -1505,32 +1616,33 @@ function isStdinContainerBuildCommand(tokens) {
     }
     if (token === "-f" || token === "--file") {
       if (tokens[index + 1] === "-") {
-        return true;
+        hasStdinFile = true;
+      } else if (tokens[index + 1]) {
+        hasExplicitFile = true;
       }
       index += 1;
       continue;
     }
-    if (token === "--file=-" || token === "-f-") {
-      return true;
-    }
-    if (
-      !token.startsWith("--") &&
-      token.startsWith("-") &&
-      token.length > 2 &&
-      !token.includes("=")
-    ) {
-      const fIndex = token.indexOf("f", 1);
-      if (fIndex !== -1) {
-        if (fIndex === token.length - 1) {
-          if (tokens[index + 1] === "-") {
-            return true;
-          }
-          index += 1;
-        } else if (token.slice(fIndex + 1) === "-") {
-          return true;
-        }
-        continue;
+    if (token.startsWith("--file=")) {
+      const value = token.slice("--file=".length);
+      if (value === "-") {
+        hasStdinFile = true;
+      } else if (value) {
+        hasExplicitFile = true;
       }
+      continue;
+    }
+    const shortBundle = parseShortBuildFlagBundle(token, tokens[index + 1]);
+    if (shortBundle) {
+      if (shortBundle.file === "-") {
+        hasStdinFile = true;
+      } else if (shortBundle.file) {
+        hasExplicitFile = true;
+      }
+      if (shortBundle.consumedNext) {
+        index += 1;
+      }
+      continue;
     }
     if (token.startsWith("-") && token !== "-") {
       if (flagConsumesNextArg(token, DOCKER_BUILD_VALUE_FLAGS)) {
@@ -1542,7 +1654,7 @@ function isStdinContainerBuildCommand(tokens) {
       contextArg = token;
     }
   }
-  return contextArg === "-";
+  return hasStdinFile || (!hasExplicitFile && contextArg === "-");
 }
 
 function redirectsToGithubEnv(tokens) {
@@ -2736,6 +2848,8 @@ const DOCKER_BUILD_VALUE_FLAGS = new Set([
   "--tag",
   "--target",
   "--ulimit",
+  "-v",
+  "--volume",
 ]);
 
 function resolveContainedPath(rawPath, baseDir, root, { windowsPath = false } = {}) {
@@ -3167,7 +3281,13 @@ function inspectShellText(
         emittedGithubEnv,
         shellMode,
         depth + 1,
-        buildFileContext,
+        buildFileContext
+          ? {
+              ...buildFileContext,
+              rowCwds: cloneRowCwds(frame.rowCwds),
+              rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
+            }
+          : null,
       );
     }
 
@@ -3533,7 +3653,11 @@ function inspectShellText(
     }
 
     const globalValueFlags =
-      normalizedCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
+      normalizedCli === "buildah"
+        ? BUILDAH_GLOBAL_VALUE_FLAGS
+        : normalizedCli === "podman"
+          ? PODMAN_GLOBAL_VALUE_FLAGS
+          : DOCKER_GLOBAL_VALUE_FLAGS;
     let argIndex = cursor + 1;
     while (argIndex < tokens.length) {
       const redirConsumed = consumeShellRedirection(tokens, argIndex, stdinRedirectTargets);
@@ -3597,24 +3721,15 @@ function inspectShellText(
           rawFiles.push(token.slice("--file=".length));
           continue;
         }
-        if (
-          !token.startsWith("--") &&
-          token.startsWith("-") &&
-          token.length > 2 &&
-          !token.includes("=")
-        ) {
-          const fIndex = token.indexOf("f", 1);
-          if (fIndex !== -1) {
-            if (fIndex === token.length - 1) {
-              if (tokens[index + 1]) {
-                rawFiles.push(tokens[index + 1]);
-              }
-              index += 1;
-            } else {
-              rawFiles.push(token.slice(fIndex + 1));
-            }
-            continue;
+        const shortBundle = parseShortBuildFlagBundle(token, tokens[index + 1]);
+        if (shortBundle) {
+          if (shortBundle.file) {
+            rawFiles.push(shortBundle.file);
           }
+          if (shortBundle.consumedNext) {
+            index += 1;
+          }
+          continue;
         }
         if (token === "--build-context") {
           if (tokens[index + 1] !== undefined) {
@@ -3658,10 +3773,20 @@ function inspectShellText(
           problems.push(message);
         }
       };
-      const usesStdinDockerfile = rawFiles.includes("-") || contextArg === "-";
+      const hasExplicitNonStdinFile = rawFiles.some((file) => file !== "-");
+      const usesStdinFile = rawFiles.includes("-");
+      const usesStdinContextArchive =
+        contextArg === "-" && hasExplicitNonStdinFile && !usesStdinFile;
+      const usesStdinDockerfile = usesStdinFile || (contextArg === "-" && !hasExplicitNonStdinFile);
       const hasStdinHeredoc = Boolean(event.hasStdinHeredoc);
       const hasStdinRedirect = stdinRedirectTargets.length > 0;
       const stdinInvocations = [];
+
+      if (usesStdinContextArchive) {
+        pushStdinProblem(
+          `${filePath}:${lineNumber}: stdin build context archive cannot be verified statically`,
+        );
+      }
 
       for (const row of buildRows) {
         const rowList = row ? [row] : [];
@@ -3685,6 +3810,10 @@ function inspectShellText(
             seenContextProblems.add(message);
             problems.push(message);
           }
+        }
+
+        if (usesStdinContextArchive) {
+          continue;
         }
 
         const buildArgsMap = new Map();
@@ -3766,6 +3895,12 @@ function inspectShellText(
                       targetProblems,
                     );
                     if (safeFile) {
+                      if (isArchiveOrBinaryFile(safeFile)) {
+                        pushStdinProblem(
+                          `${filePath}:${lineNumber}: stdin build context archive ${candidate.text} cannot be verified statically`,
+                        );
+                        continue;
+                      }
                       buildFileContext.explicitBuildFiles.add(resolvedPath);
                       if (!seenStdinFiles.has(resolvedPath)) {
                         seenStdinFiles.add(resolvedPath);
@@ -4301,8 +4436,7 @@ function checkStepsList(
       );
     } else if (
       usesNode?.kind === "scalar" &&
-      /^docker\/build-push-action@/iu.test(String(usesNode.value).trim()) &&
-      withNode?.kind === "map"
+      /^docker\/build-push-action@/iu.test(String(usesNode.value).trim())
     ) {
       const fileNode = getMapField(withNode, "file");
       const contextNode = getMapField(withNode, "context");

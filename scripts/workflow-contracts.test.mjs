@@ -2023,6 +2023,17 @@ describe("workflow contracts", () => {
           "          FROM redis:7",
           "          EOF",
           "          cat ci/build.recipe | docker build -f - .",
+          "          buildah --storage-driver vfs pull ubuntu:24.04",
+          "  case-insensitive-contexts:",
+          "    runs-on: ubuntu-24.04",
+          "    env:",
+          "      BASE_IMG: busybox:1.37",
+          "    strategy:",
+          "      matrix:",
+          "        image: [alpine:3.20]",
+          "    container: ${{ Matrix.image }}",
+          "    steps:",
+          "      - run: docker pull ${{ Env.BASE_IMG }}",
           "",
         ].join("\n"),
       ),
@@ -2032,6 +2043,9 @@ describe("workflow contracts", () => {
       "<memory>:15: docker buildx bake target definitions cannot be verified statically for container image digests",
       "<memory>:17: redis:7 is not pinned to a sha256 digest",
       "<memory>:19: stdin containerfile input cannot be verified statically",
+      "<memory>:20: ubuntu:24.04 is not pinned to a sha256 digest",
+      "<memory>:27: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:24: busybox:1.37 is not pinned to a sha256 digest",
     ]);
     const buildFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-builds-"));
     try {
@@ -2040,6 +2054,9 @@ describe("workflow contracts", () => {
       await mkdir(join(buildFixture, "ci", "nested-b"), { recursive: true });
       await mkdir(join(buildFixture, "ci", "win"), { recursive: true });
       await mkdir(join(buildFixture, "ci", "dual"), { recursive: true });
+      await mkdir(join(buildFixture, "ci", "tag-opt"), { recursive: true });
+      await mkdir(join(buildFixture, "ci", "cmdsub"), { recursive: true });
+      await writeFile(join(buildFixture, "Dockerfile"), "FROM rootctx\n");
       await writeFile(
         join(buildFixture, "ci", "nested-a", "cd.recipe"),
         `FROM node:24@${digest}\n`,
@@ -2060,6 +2077,7 @@ describe("workflow contracts", () => {
         "ARG STDIN_BASE=\nFROM ${STDIN_BASE:-scratch}\n",
       );
       await writeFile(join(buildFixture, "ci", "stdin-attached.recipe"), "FROM debian:12\n");
+      await writeFile(join(buildFixture, "ci", "context.tar.gz"), Buffer.from([0x1f, 0x8b, 0x08]));
       await writeFile(
         join(buildFixture, "ci", "arg-empty.recipe"),
         "ARG EMPTY_BASE=\nFROM ${EMPTY_BASE:-scratch}\n",
@@ -2072,6 +2090,11 @@ describe("workflow contracts", () => {
         join(buildFixture, "ci", "dual", "Dockerfile"),
         `ARG DOCKER_BASE=node:24@${digest}\nFROM \${DOCKER_BASE}\n`,
       );
+      await writeFile(
+        join(buildFixture, "ci", "tag-opt", "Dockerfile"),
+        `ARG TAG_BASE=node:24@${digest}\nFROM \${TAG_BASE}\n`,
+      );
+      await writeFile(join(buildFixture, "ci", "cmdsub", "sub.recipe"), "FROM ruby:3.4\n");
       await writeFile(
         join(buildFixture, ".github", "workflows", "cd-and-ctx.yml"),
         [
@@ -2099,16 +2122,29 @@ describe("workflow contracts", () => {
           "          docker build -f - --build-arg STDIN_BASE=fedora:41 . < ci/stdin.recipe",
           "          <ci/stdin-attached.recipe docker build -",
           "          docker build -f - . < ci/missing.recipe",
+          "          docker build -f sub/Dockerfile - < ci/context.tar.gz",
+          "          docker build - < ci/context.tar.gz",
           "          docker buildx --builder ci build --build-arg EMPTY_BASE=golang:1.24 -f ci/arg-empty.recipe .",
           "          podman build --build-arg PODMAN_BASE=postgres:17 ci/dual",
           "          buildah bud --build-arg BUILDAH_BASE=nginx:1.27 ci/dual",
           "          docker build --build-arg DOCKER_BASE=python:3.13 ci/dual",
+          "          docker build -tfrontend --build-arg TAG_BASE=erlang:27 ci/tag-opt",
+          "          cd ci/cmdsub",
+          "          IMAGE_ID=$(docker build -q -f sub.recipe .)",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          `          build-contexts: rootctx=docker-image://node:24@${digest}`,
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
           "",
         ].join("\n"),
       );
       const buildResult = checkWorkflowPins(buildFixture);
       expect(buildResult.problems).toEqual([
         ".github/workflows/cd-and-ctx.yml:24: stdin containerfile input ci/missing.recipe cannot be verified statically",
+        ".github/workflows/cd-and-ctx.yml:25: stdin build context archive cannot be verified statically",
+        ".github/workflows/cd-and-ctx.yml:26: stdin build context archive ci/context.tar.gz cannot be verified statically",
+        "Dockerfile:1: rootctx is not pinned to a sha256 digest",
+        "ci/cmdsub/sub.recipe:1: ruby:3.4 is not pinned to a sha256 digest",
         "ci/nested-b/cd.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
         "ci/shared.recipe:1: maybectx is not pinned to a sha256 digest",
         "ci/stdin-attached.recipe:1: debian:12 is not pinned to a sha256 digest",
@@ -2119,6 +2155,7 @@ describe("workflow contracts", () => {
         "ci/dual/Containerfile:3: postgres:17 is not pinned to a sha256 digest",
         "ci/dual/Containerfile:4: nginx:1.27 is not pinned to a sha256 digest",
         "ci/dual/Dockerfile:2: python:3.13 is not pinned to a sha256 digest",
+        "ci/tag-opt/Dockerfile:2: erlang:27 is not pinned to a sha256 digest",
       ]);
     } finally {
       await rm(buildFixture, { recursive: true, force: true });
