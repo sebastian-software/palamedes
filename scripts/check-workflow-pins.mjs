@@ -3651,13 +3651,20 @@ function extractRunMountImageSources(rawMountSpec) {
   return [];
 }
 
-function extractAttestGeneratorImages(rawSpec, { requireSbomType = false } = {}) {
+function inspectAttestSbomSpec(rawSpec, { requireSbomType = false } = {}) {
   const trimmed = String(rawSpec ?? "").trim();
-  if (!trimmed || trimmed.toLowerCase() === "true" || trimmed.toLowerCase() === "false") {
-    return [];
+  if (!trimmed || trimmed.toLowerCase() === "false") {
+    return { images: [], usesDefaultScanner: false };
+  }
+  if (isDynamicReference(trimmed)) {
+    return { images: [], usesDefaultScanner: false };
+  }
+  if (!requireSbomType && trimmed.toLowerCase() === "true") {
+    return { images: [], usesDefaultScanner: true };
   }
   let attestType = "";
   let generator = "";
+  let disabled = false;
   for (const field of parseCsvMountFields(trimmed)) {
     const eqIndex = field.indexOf("=");
     if (eqIndex === -1) {
@@ -3669,12 +3676,21 @@ function extractAttestGeneratorImages(rawSpec, { requireSbomType = false } = {})
       attestType = value.toLowerCase();
     } else if (key === "generator") {
       generator = value;
+    } else if (key === "disabled") {
+      disabled = value.toLowerCase() === "true";
     }
   }
-  if (generator && (!requireSbomType || attestType === "sbom")) {
-    return [generator];
+  if (disabled) {
+    return { images: [], usesDefaultScanner: false };
   }
-  return [];
+  const sbomEnabled = requireSbomType ? attestType === "sbom" : true;
+  if (!sbomEnabled) {
+    return { images: [], usesDefaultScanner: false };
+  }
+  if (generator) {
+    return { images: [generator], usesDefaultScanner: false };
+  }
+  return { images: [], usesDefaultScanner: true };
 }
 
 function findDefaultBuildFile(baseContext, defaultNames) {
@@ -5518,9 +5534,17 @@ function inspectShellText(
               rowList,
               varCandidate.line,
             )) {
-              for (const generatorImage of extractAttestGeneratorImages(candidate.text, {
+              const attestInspection = inspectAttestSbomSpec(candidate.text, {
                 requireSbomType,
-              })) {
+              });
+              if (attestInspection.usesDefaultScanner) {
+                const msg = `${filePath}:${candidate.line}: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)`;
+                if (!seenContextProblems.has(msg)) {
+                  seenContextProblems.add(msg);
+                  problems.push(msg);
+                }
+              }
+              for (const generatorImage of attestInspection.images) {
                 if (!generatorImage || isDynamicReference(generatorImage, shellMode)) {
                   continue;
                 }
@@ -6151,10 +6175,14 @@ function inspectShellText(
     };
 
     for (const argList of argTokenVariants) {
+      let usesPodmanRootfs = false;
       for (let index = 0; index < argList.length; index += 1) {
         const entry = argList[index];
         const token = entry.text;
         if (token === "--") {
+          if (usesPodmanRootfs) {
+            break;
+          }
           if (allowMultipleImages) {
             for (let restIndex = index + 1; restIndex < argList.length; restIndex += 1) {
               const restToken = argList[restIndex].text;
@@ -6190,6 +6218,16 @@ function inspectShellText(
         if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
           continue;
         }
+        if (subcommand === "run" && normalizedCli === "podman") {
+          if (token === "--rootfs" || token.toLowerCase() === "--rootfs=true") {
+            usesPodmanRootfs = true;
+            continue;
+          }
+          if (token.toLowerCase() === "--rootfs=false") {
+            usesPodmanRootfs = false;
+            continue;
+          }
+        }
         if (subcommand === "run" && normalizedCli !== "buildah") {
           if (token === "--mount") {
             if (argList[index + 1] !== undefined) {
@@ -6212,6 +6250,9 @@ function inspectShellText(
             index += 1;
           }
           continue;
+        }
+        if (usesPodmanRootfs) {
+          break;
         }
         pushImageEntry(entry);
         if (!allowMultipleImages) {
@@ -7068,9 +7109,17 @@ function checkStepsList(
                 rowList,
                 envCandidate.line,
               )) {
-                for (const generatorImage of extractAttestGeneratorImages(candidate.text, {
+                const attestInspection = inspectAttestSbomSpec(candidate.text, {
                   requireSbomType,
-                })) {
+                });
+                if (attestInspection.usesDefaultScanner) {
+                  const msg = `${filePath}:${candidate.line}: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)`;
+                  if (!seenActionContextProblems.has(msg)) {
+                    seenActionContextProblems.add(msg);
+                    problems.push(msg);
+                  }
+                }
+                for (const generatorImage of attestInspection.images) {
                   if (!generatorImage || isDynamicReference(generatorImage)) {
                     continue;
                   }
@@ -7780,7 +7829,7 @@ function collectContainerFilesFromFilesystem(directory, root = directory, proble
   const entries = [];
 
   for (const entry of readdirSync(directory)) {
-    if (IGNORED_DIRECTORIES.has(entry) || (entry.startsWith(".") && entry !== ".github")) {
+    if (IGNORED_DIRECTORIES.has(entry)) {
       continue;
     }
 
@@ -7813,10 +7862,20 @@ function collectContainerFilesFromFilesystem(directory, root = directory, proble
 export function collectContainerFiles(root, problems = null) {
   const gitResult = spawnSync(
     "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+    [
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      ":(icase)*dockerfile*",
+      ":(icase)*containerfile*",
+    ],
     {
       cwd: root,
       encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
     },
   );
 
@@ -7833,6 +7892,17 @@ export function collectContainerFiles(root, problems = null) {
       }
     }
     return [...entries].sort();
+  }
+
+  const isGitWorktree = existsSync(path.join(root, ".git"));
+  if (gitResult.error?.code === "ENOBUFS" || isGitWorktree) {
+    if (problems) {
+      const reason = gitResult.error?.code ?? `exit ${gitResult.status}`;
+      problems.push(
+        `git ls-files failed (${reason}) and repository container files could not be discovered reliably`,
+      );
+    }
+    return [];
   }
 
   return collectContainerFilesFromFilesystem(root, root, problems);
@@ -8058,6 +8128,116 @@ function collectReferencedInputNames(
   return found;
 }
 
+const CONTAINER_CLI_HINT_PATTERN = /\b(?:docker|podman|buildah)(?:\.exe)?\b/iu;
+
+function collectPinRelevantDispatchInputNames(doc) {
+  const referenced = new Set();
+  const addFromNode = (node) => {
+    collectReferencedInputNames(node, referenced, new Set(), { includeEventInputs: true });
+  };
+
+  addFromNode(getMapField(doc, "container"));
+  addFromNode(getMapField(doc, "services"));
+  addFromNode(getMapField(doc, "image"));
+
+  const isPinRelevantActionUses = (usesText) =>
+    usesText.startsWith("./") ||
+    /^docker\/(?:build-push-action|setup-buildx-action|bake-action)@/iu.test(usesText) ||
+    /^actions\/checkout@/iu.test(usesText);
+
+  const inspectStepsForRelevantInputs = (stepsNode, parentScopeNodes) => {
+    if (stepsNode?.kind !== "seq") {
+      return;
+    }
+    let hasContainerOrActionStep = false;
+    for (const stepNode of stepsNode.value) {
+      if (stepNode?.kind !== "map") {
+        continue;
+      }
+      const usesNode = getMapField(stepNode, "uses");
+      const runNode = getMapField(stepNode, "run");
+      if (usesNode?.kind === "scalar" && isPinRelevantActionUses(String(usesNode.value).trim())) {
+        hasContainerOrActionStep = true;
+        break;
+      }
+      if (runNode?.kind === "scalar" && CONTAINER_CLI_HINT_PATTERN.test(String(runNode.value))) {
+        hasContainerOrActionStep = true;
+        break;
+      }
+    }
+    if (!hasContainerOrActionStep) {
+      return;
+    }
+    for (const scopeNode of parentScopeNodes) {
+      addFromNode(scopeNode);
+    }
+    for (const stepNode of stepsNode.value) {
+      if (stepNode?.kind !== "map") {
+        continue;
+      }
+      const usesNode = getMapField(stepNode, "uses");
+      if (usesNode?.kind === "scalar" && isPinRelevantActionUses(String(usesNode.value).trim())) {
+        addFromNode(usesNode);
+        addFromNode(getMapField(stepNode, "with"));
+        addFromNode(getMapField(stepNode, "env"));
+      }
+      const runNode = getMapField(stepNode, "run");
+      if (runNode?.kind === "scalar") {
+        const runText = String(runNode.value);
+        if (CONTAINER_CLI_HINT_PATTERN.test(runText) || /GITHUB_ENV/iu.test(runText)) {
+          addFromNode(runNode);
+          addFromNode(getMapField(stepNode, "env"));
+          addFromNode(getMapField(stepNode, "working-directory"));
+          addFromNode(getMapField(stepNode, "shell"));
+        }
+      }
+    }
+  };
+
+  const workflowEnvNode = getMapField(doc, "env");
+  const workflowDefaultsNode = getMapField(doc, "defaults");
+  inspectStepsForRelevantInputs(getMapField(doc, "steps"), [workflowEnvNode, workflowDefaultsNode]);
+
+  const jobsNode = getMapField(doc, "jobs");
+  if (jobsNode?.kind === "map") {
+    for (const jobNode of jobsNode.value.values()) {
+      if (jobNode?.kind !== "map") {
+        continue;
+      }
+      const jobEnvNode = getMapField(jobNode, "env");
+      const jobStrategyNode = getMapField(jobNode, "strategy");
+      const jobDefaultsNode = getMapField(jobNode, "defaults");
+      const jobContainerNode = getMapField(jobNode, "container");
+      const jobServicesNode = getMapField(jobNode, "services");
+      if (jobContainerNode || jobServicesNode) {
+        addFromNode(jobContainerNode);
+        addFromNode(jobServicesNode);
+        addFromNode(workflowEnvNode);
+        addFromNode(jobEnvNode);
+        addFromNode(jobStrategyNode);
+      }
+      const jobUsesNode = getMapField(jobNode, "uses");
+      if (jobUsesNode?.kind === "scalar" && String(jobUsesNode.value).trim().startsWith("./")) {
+        addFromNode(jobUsesNode);
+        addFromNode(getMapField(jobNode, "with"));
+        addFromNode(workflowEnvNode);
+        addFromNode(jobEnvNode);
+        addFromNode(jobStrategyNode);
+        continue;
+      }
+      inspectStepsForRelevantInputs(getMapField(jobNode, "steps"), [
+        workflowEnvNode,
+        workflowDefaultsNode,
+        jobEnvNode,
+        jobDefaultsNode,
+        jobStrategyNode,
+      ]);
+    }
+  }
+
+  return referenced;
+}
+
 function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
   const onNode = getMapField(doc, "on");
   if (onNode?.kind !== "map") {
@@ -8072,9 +8252,10 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
     return [];
   }
 
-  const referenced = new Set();
+  const referenced = collectPinRelevantDispatchInputNames(doc);
+  const allReferenced = new Set();
   for (const fieldName of ["env", "container", "services", "image", "steps", "jobs"]) {
-    collectReferencedInputNames(getMapField(doc, fieldName), referenced, new Set(), {
+    collectReferencedInputNames(getMapField(doc, fieldName), allReferenced, new Set(), {
       includeEventInputs: true,
     });
   }
@@ -8085,9 +8266,6 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
       continue;
     }
     const lowerName = inputName.toLowerCase();
-    if (!referenced.has(lowerName)) {
-      continue;
-    }
     const values = [];
     const seenValues = new Set();
     const pushValue = (valueNode) => {
@@ -8106,6 +8284,12 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
       for (const optionItem of optionsNode.value) {
         pushValue(optionItem);
       }
+    }
+    const carriesContainerCli =
+      allReferenced.has(lowerName) &&
+      values.some((entry) => CONTAINER_CLI_HINT_PATTERN.test(entry.value));
+    if (!referenced.has(lowerName) && !carriesContainerCli) {
+      continue;
     }
     if (values.length > 0) {
       inputValueLists.push([lowerName, values]);

@@ -3039,6 +3039,75 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r36Fixture, { recursive: true, force: true });
     }
+    // Enabled SBOM attestations without an explicit digest-pinned generator fail
+    // closed; unrelated multi-choice `workflow_dispatch` inputs do not explode
+    // combinations; Podman `--rootfs` treats the operand as a local directory
+    // while still checking `--mount type=image`; and hidden `.devcontainer`
+    // Dockerfiles are discovered.
+    const seventeenChoices = Array.from({ length: 17 }, (_, idx) => `          - opt-${idx}`).join(
+      "\n",
+    );
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      a:",
+          "        type: choice",
+          "        default: opt-0",
+          "        options:",
+          seventeenChoices,
+          "      b:",
+          "        type: choice",
+          "        default: opt-0",
+          "        options:",
+          seventeenChoices,
+          "jobs:",
+          "  echo-only:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          '      - run: echo "${{ inputs.a }} ${{ inputs.b }}"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          "  - run: |",
+          "      docker buildx build --sbom=true .",
+          "      docker buildx build --sbom=false .",
+          "      docker buildx build --attest type=sbom .",
+          "      docker buildx build --attest type=sbom,disabled=true .",
+          "      podman run --rm --rootfs ./rootfs /bin/true",
+          "      podman run --rm --rootfs --mount type=image,source=alpine:3.20,destination=/mnt ./rootfs /bin/true",
+          "  - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "    with:",
+          "      sbom: true",
+          "      attests: type=sbom",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:3: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)",
+      "<memory>:5: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)",
+      "<memory>:8: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:11: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)",
+      "<memory>:12: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)",
+    ]);
+    const r37Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r37-"));
+    try {
+      await mkdir(join(r37Fixture, ".devcontainer"), { recursive: true });
+      await writeFile(join(r37Fixture, ".devcontainer", "Dockerfile"), "FROM alpine:3.20\n");
+      const r37Result = checkWorkflowPins(r37Fixture);
+      expect(r37Result.problems).toEqual([
+        ".devcontainer/Dockerfile:1: alpine:3.20 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r37Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
