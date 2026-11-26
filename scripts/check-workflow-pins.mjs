@@ -82,6 +82,7 @@ const DOCKER_GLOBAL_VALUE_FLAGS = new Set([
   "--tlscert",
   "--tlskey",
 ]);
+const DOCKER_BUILDX_GLOBAL_VALUE_FLAGS = new Set(["--builder"]);
 const PODMAN_GLOBAL_VALUE_FLAGS = new Set([
   ...DOCKER_GLOBAL_VALUE_FLAGS,
   "--cdi-spec-dir",
@@ -1351,9 +1352,107 @@ function isGithubEnvTarget(token) {
   );
 }
 
+function isRedirectionOperator(token) {
+  return (
+    token === ">" ||
+    token === ">>" ||
+    token === ">&" ||
+    token === "<" ||
+    token === "<>" ||
+    token === "<&"
+  );
+}
+
+function consumeShellRedirection(tokens, index, stdinRedirectTargets = null) {
+  const token = tokens[index];
+  if (isRedirectionOperator(token)) {
+    if (token === "<" && stdinRedirectTargets && tokens[index + 1] !== undefined) {
+      stdinRedirectTargets.push(tokens[index + 1]);
+    }
+    return 2;
+  }
+  if (/^\d+$/u.test(token ?? "") && isRedirectionOperator(tokens[index + 1])) {
+    if (
+      token === "0" &&
+      tokens[index + 1] === "<" &&
+      stdinRedirectTargets &&
+      tokens[index + 2] !== undefined
+    ) {
+      stdinRedirectTargets.push(tokens[index + 2]);
+    }
+    return 3;
+  }
+  return 0;
+}
+
+function resolveContainerBuildCommand(
+  tokens,
+  normalizedCli,
+  argIndex,
+  stdinRedirectTargets = null,
+) {
+  const subcommand = tokens[argIndex];
+  if (normalizedCli === "buildah") {
+    if (subcommand === "bud" || subcommand === "build") {
+      return { kind: "build", argStart: argIndex + 1 };
+    }
+    return null;
+  }
+
+  if (subcommand === "bake") {
+    return { kind: "bake", argStart: argIndex + 1 };
+  }
+  if (subcommand === "build") {
+    return { kind: "build", argStart: argIndex + 1 };
+  }
+  if (subcommand === "image") {
+    let imageSubIndex = argIndex + 1;
+    while (imageSubIndex < tokens.length) {
+      const redirConsumed = consumeShellRedirection(tokens, imageSubIndex, stdinRedirectTargets);
+      if (redirConsumed > 0) {
+        imageSubIndex += redirConsumed;
+        continue;
+      }
+      break;
+    }
+    if (tokens[imageSubIndex] === "build") {
+      return { kind: "build", argStart: imageSubIndex + 1 };
+    }
+    return null;
+  }
+  if (subcommand === "buildx") {
+    let buildxIndex = argIndex + 1;
+    while (buildxIndex < tokens.length) {
+      const redirConsumed = consumeShellRedirection(tokens, buildxIndex, stdinRedirectTargets);
+      if (redirConsumed > 0) {
+        buildxIndex += redirConsumed;
+        continue;
+      }
+      const flag = tokens[buildxIndex];
+      if (!flag.startsWith("-") || flag === "--") {
+        break;
+      }
+      buildxIndex += flagConsumesNextArg(flag, DOCKER_BUILDX_GLOBAL_VALUE_FLAGS) ? 2 : 1;
+    }
+    const buildxSubcommand = tokens[buildxIndex];
+    if (buildxSubcommand === "bake") {
+      return { kind: "bake", argStart: buildxIndex + 1 };
+    }
+    if (buildxSubcommand === "build") {
+      return { kind: "build", argStart: buildxIndex + 1 };
+    }
+  }
+  return null;
+}
+
 function isStdinContainerBuildCommand(tokens) {
   let cursor = 0;
   while (cursor < tokens.length) {
+    const redirConsumed = consumeShellRedirection(tokens, cursor);
+    if (redirConsumed > 0) {
+      cursor += redirConsumed;
+      continue;
+    }
     const token = tokens[cursor];
     if (SHELL_COMMAND_PREFIXES.has(token) || ENV_PREFIX_ASSIGNMENT_PATTERN.test(token)) {
       cursor += 1;
@@ -1369,37 +1468,40 @@ function isStdinContainerBuildCommand(tokens) {
     normalizedCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
   let argIndex = cursor + 1;
   while (argIndex < tokens.length) {
-    const flag = tokens[argIndex];
-    if (flag === ">" || flag === ">>" || flag === ">&" || flag === "<") {
-      argIndex += 2;
+    const redirConsumed = consumeShellRedirection(tokens, argIndex);
+    if (redirConsumed > 0) {
+      argIndex += redirConsumed;
       continue;
     }
+    const flag = tokens[argIndex];
     if (!flag.startsWith("-")) {
       break;
     }
     argIndex += flagConsumesNextArg(flag, globalValueFlags) ? 2 : 1;
   }
-  const subcommand = tokens[argIndex];
-  const isBuild =
-    (normalizedCli === "buildah" && (subcommand === "bud" || subcommand === "build")) ||
-    (normalizedCli !== "buildah" &&
-      (subcommand === "build" ||
-        ((subcommand === "buildx" || subcommand === "image") && tokens[argIndex + 1] === "build")));
-  if (!isBuild) {
+  const buildCommand = resolveContainerBuildCommand(tokens, normalizedCli, argIndex);
+  if (buildCommand?.kind !== "build") {
     return false;
   }
-  const buildArgStart =
-    subcommand === "buildx" || subcommand === "image" ? argIndex + 2 : argIndex + 1;
   let contextArg = null;
-  for (let index = buildArgStart; index < tokens.length; index += 1) {
+  for (let index = buildCommand.argStart; index < tokens.length; index += 1) {
+    const redirConsumed = consumeShellRedirection(tokens, index);
+    if (redirConsumed > 0) {
+      index += redirConsumed - 1;
+      continue;
+    }
     const token = tokens[index];
     if (token === "--") {
-      contextArg = tokens[index + 1] ?? contextArg;
+      for (let restIndex = index + 1; restIndex < tokens.length; restIndex += 1) {
+        const restRedir = consumeShellRedirection(tokens, restIndex);
+        if (restRedir > 0) {
+          restIndex += restRedir - 1;
+          continue;
+        }
+        contextArg = tokens[restIndex] ?? contextArg;
+        break;
+      }
       break;
-    }
-    if (token === ">" || token === ">>" || token === ">&" || token === "<") {
-      index += 1;
-      continue;
     }
     if (token === "-f" || token === "--file") {
       if (tokens[index + 1] === "-") {
@@ -1410,6 +1512,25 @@ function isStdinContainerBuildCommand(tokens) {
     }
     if (token === "--file=-" || token === "-f-") {
       return true;
+    }
+    if (
+      !token.startsWith("--") &&
+      token.startsWith("-") &&
+      token.length > 2 &&
+      !token.includes("=")
+    ) {
+      const fIndex = token.indexOf("f", 1);
+      if (fIndex !== -1) {
+        if (fIndex === token.length - 1) {
+          if (tokens[index + 1] === "-") {
+            return true;
+          }
+          index += 1;
+        } else if (token.slice(fIndex + 1) === "-") {
+          return true;
+        }
+        continue;
+      }
     }
     if (token.startsWith("-") && token !== "-") {
       if (flagConsumesNextArg(token, DOCKER_BUILD_VALUE_FLAGS)) {
@@ -1452,6 +1573,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   let commandSubstitutions = [];
   let commandLine = startLine;
   let commandConditional = false;
+  let commandHasStdinHeredoc = false;
   let nextConditional = false;
   let current = "";
   let tokenStarted = false;
@@ -1503,12 +1625,14 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         tokenSingleQuoted,
         lineNumber: commandLine,
         conditional: commandConditional,
+        hasStdinHeredoc: commandHasStdinHeredoc,
         substitutions: commandSubstitutions,
       });
       tokens = [];
       tokenSingleQuoted = [];
       commandSubstitutions = [];
       commandConditional = false;
+      commandHasStdinHeredoc = false;
     }
   };
 
@@ -1532,6 +1656,15 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         bodyLines.push(rawLine);
       }
       if (bodyLines.length === 0) {
+        if (!spec.executable && spec.isStdinFd && isStdinContainerBuildCommand(spec.ownerTokens)) {
+          events.push({
+            kind: "stdin-containerfile-heredoc",
+            lines: [],
+            startLine: bodyStartLine,
+            quoted: spec.quoted,
+            conditional: spec.conditional,
+          });
+        }
         continue;
       }
       const bodyText = bodyLines.join("\n");
@@ -1561,7 +1694,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
             conditional: spec.conditional,
           });
         }
-        if (isStdinContainerBuildCommand(spec.ownerTokens)) {
+        if (spec.isStdinFd && isStdinContainerBuildCommand(spec.ownerTokens)) {
           events.push({
             kind: "stdin-containerfile-heredoc",
             lines: bodyLines,
@@ -1872,16 +2005,46 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         cursor += 1;
       }
       if (delimiter.length > 0) {
+        const prevToken = tokens.at(-1);
+        const isStdinFd = !(/^\d+$/u.test(prevToken ?? "") && prevToken !== "0");
+        if (isStdinFd) {
+          commandHasStdinHeredoc = true;
+        }
         pendingHeredocs.push({
           delimiter,
           stripTabs,
           quoted: delimQuoted,
+          isStdinFd,
           executable: isShellInterpreterCommand(tokens),
           ownerTokens: tokens,
           conditional: commandConditional,
         });
       }
       index = cursor - 1;
+      continue;
+    }
+
+    // Input redirection `<` / `<&` / `<>` as distinct tokens so attached targets
+    // like `<ci/build.recipe` or `0<file` split cleanly.
+    if (!isPwsh && ch === "<") {
+      flushToken();
+      if (tokens.length === 0) {
+        commandLine = line;
+        commandConditional = nextConditional;
+        nextConditional = false;
+      }
+      if (text[index + 1] === "&") {
+        tokens.push("<&");
+        tokenSingleQuoted.push(false);
+        index += 1;
+      } else if (text[index + 1] === ">") {
+        tokens.push("<>");
+        tokenSingleQuoted.push(false);
+        index += 1;
+      } else {
+        tokens.push("<");
+        tokenSingleQuoted.push(false);
+      }
       continue;
     }
 
@@ -3201,8 +3364,14 @@ function inspectShellText(
         exportedCommandVars.set(key, [...entries]);
       }
     }
+    const stdinRedirectTargets = [];
     let cursor = 0;
     while (cursor < tokens.length) {
+      const redirConsumed = consumeShellRedirection(tokens, cursor, stdinRedirectTargets);
+      if (redirConsumed > 0) {
+        cursor += redirConsumed;
+        continue;
+      }
       const token = tokens[cursor];
       if (SHELL_COMMAND_PREFIXES.has(token)) {
         cursor += 1;
@@ -3367,49 +3536,55 @@ function inspectShellText(
       normalizedCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
     let argIndex = cursor + 1;
     while (argIndex < tokens.length) {
-      const flag = tokens[argIndex];
-      if (flag === ">" || flag === ">>" || flag === ">&" || flag === "<") {
-        argIndex += 2;
+      const redirConsumed = consumeShellRedirection(tokens, argIndex, stdinRedirectTargets);
+      if (redirConsumed > 0) {
+        argIndex += redirConsumed;
         continue;
       }
+      const flag = tokens[argIndex];
       if (!flag.startsWith("-")) {
         break;
       }
       argIndex += flagConsumesNextArg(flag, globalValueFlags) ? 2 : 1;
     }
 
-    let subcommand = tokens[argIndex];
-    if (
-      normalizedCli !== "buildah" &&
-      (subcommand === "bake" || (subcommand === "buildx" && tokens[argIndex + 1] === "bake"))
-    ) {
+    const buildCommand = resolveContainerBuildCommand(
+      tokens,
+      normalizedCli,
+      argIndex,
+      stdinRedirectTargets,
+    );
+    if (buildCommand?.kind === "bake") {
       problems.push(
         `${filePath}:${lineNumber}: ${normalizedCli} buildx bake target definitions cannot be verified statically for container image digests`,
       );
       continue;
     }
-    if (
-      (normalizedCli === "buildah" && (subcommand === "bud" || subcommand === "build")) ||
-      (normalizedCli !== "buildah" &&
-        (subcommand === "build" ||
-          ((subcommand === "buildx" || subcommand === "image") &&
-            tokens[argIndex + 1] === "build")))
-    ) {
-      const buildArgStart =
-        subcommand === "buildx" || subcommand === "image" ? argIndex + 2 : argIndex + 1;
+    if (buildCommand?.kind === "build") {
+      const buildArgStart = buildCommand.argStart;
       const rawFiles = [];
       const rawBuildContexts = [];
       const rawBuildArgs = [];
       let contextArg = null;
       for (let index = buildArgStart; index < tokens.length; index += 1) {
+        const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
+        if (redirConsumed > 0) {
+          index += redirConsumed - 1;
+          continue;
+        }
         const token = tokens[index];
         if (token === "--") {
-          contextArg = tokens[index + 1] ?? contextArg;
+          for (let restIndex = index + 1; restIndex < tokens.length; restIndex += 1) {
+            const restRedir = consumeShellRedirection(tokens, restIndex, stdinRedirectTargets);
+            if (restRedir > 0) {
+              restIndex += restRedir - 1;
+              continue;
+            }
+            if (contextArg === null) {
+              contextArg = tokens[restIndex];
+            }
+          }
           break;
-        }
-        if (token === ">" || token === ">>" || token === ">&" || token === "<") {
-          index += 1;
-          continue;
         }
         if (token === "-f" || token === "--file") {
           if (tokens[index + 1]) {
@@ -3476,7 +3651,16 @@ function inspectShellText(
 
       const buildRows = matrixRows.length > 0 ? matrixRows : [null];
       const seenContextProblems = new Set();
+      const seenStdinProblems = new Set();
+      const pushStdinProblem = (message) => {
+        if (!seenStdinProblems.has(message)) {
+          seenStdinProblems.add(message);
+          problems.push(message);
+        }
+      };
       const usesStdinDockerfile = rawFiles.includes("-") || contextArg === "-";
+      const hasStdinHeredoc = Boolean(event.hasStdinHeredoc);
+      const hasStdinRedirect = stdinRedirectTargets.length > 0;
       const stdinInvocations = [];
 
       for (const row of buildRows) {
@@ -3522,14 +3706,100 @@ function inspectShellText(
           }
         }
 
-        if (usesStdinDockerfile) {
-          stdinInvocations.push({ buildArgs: buildArgsMap, namedContexts, rowList });
-          continue;
-        }
-
         const activeWorkingDirs =
           frame.rowCwds.get(row) ??
           (buildFileContext?.workingDir ? [buildFileContext.workingDir] : []);
+
+        if (usesStdinDockerfile) {
+          if (hasStdinHeredoc) {
+            stdinInvocations.push({ buildArgs: buildArgsMap, namedContexts, rowList });
+          }
+          if (hasStdinRedirect) {
+            const rawStdinTarget = stdinRedirectTargets.at(-1);
+            if (!buildFileContext || activeWorkingDirs.length === 0) {
+              pushStdinProblem(
+                `${filePath}:${lineNumber}: stdin containerfile input ${rawStdinTarget} cannot be verified statically`,
+              );
+            } else {
+              if (frame.rowCwdsTruncated.has(row)) {
+                pushStdinProblem(
+                  `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
+                );
+              }
+              const expandedStdin = resolveImageTokenCandidates(
+                rawStdinTarget,
+                stepEnv,
+                frame.vars,
+                lineNumber,
+                shellMode,
+              );
+              if (expandedStdin.truncated) {
+                pushStdinProblem(
+                  `${filePath}:${lineNumber}: ${rawStdinTarget} exceeds expansion limit and cannot be verified exhaustively`,
+                );
+              }
+              const resolvedStdinFiles = [];
+              const seenStdinFiles = new Set();
+              for (const activeWorkingDir of activeWorkingDirs) {
+                for (const varCandidate of expandedStdin.candidates) {
+                  for (const candidate of expandMatrixReferences(
+                    varCandidate.text,
+                    rowList,
+                    varCandidate.line,
+                  )) {
+                    const resolvedPath = resolveContainedPath(
+                      candidate.text,
+                      activeWorkingDir,
+                      buildFileContext.root,
+                      { windowsPath: isWindowsShell },
+                    );
+                    if (!resolvedPath || resolvedPath === path.resolve(buildFileContext.root)) {
+                      pushStdinProblem(
+                        `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
+                      );
+                      continue;
+                    }
+                    const targetProblems = [];
+                    const safeFile = resolveSafeContainerFile(
+                      resolvedPath,
+                      buildFileContext.root,
+                      targetProblems,
+                    );
+                    if (safeFile) {
+                      buildFileContext.explicitBuildFiles.add(resolvedPath);
+                      if (!seenStdinFiles.has(resolvedPath)) {
+                        seenStdinFiles.add(resolvedPath);
+                        resolvedStdinFiles.push(resolvedPath);
+                      }
+                    } else if (targetProblems.length > 0) {
+                      buildFileContext.explicitBuildFiles.add(resolvedPath);
+                    } else {
+                      pushStdinProblem(
+                        `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
+                      );
+                    }
+                  }
+                }
+              }
+              for (const targetFile of resolvedStdinFiles) {
+                recordBuildInvocation(
+                  targetFile,
+                  buildArgsMap,
+                  namedContexts,
+                  filePath,
+                  lineNumber,
+                  buildFileContext.buildInvocations,
+                );
+              }
+            }
+          } else if (!hasStdinHeredoc) {
+            pushStdinProblem(
+              `${filePath}:${lineNumber}: stdin containerfile input cannot be verified statically`,
+            );
+          }
+          continue;
+        }
+
         if (!buildFileContext || activeWorkingDirs.length === 0) {
           continue;
         }
@@ -3613,8 +3883,12 @@ function inspectShellText(
             if (contextDirs.length === 0) {
               contextDirs.push(activeWorkingDir);
             }
+            const defaultNames =
+              normalizedCli === "podman" || normalizedCli === "buildah"
+                ? ["Containerfile", "Dockerfile"]
+                : ["Dockerfile", "Containerfile"];
             for (const baseContext of contextDirs) {
-              for (const defaultName of ["Dockerfile", "Containerfile"]) {
+              for (const defaultName of defaultNames) {
                 const candidateFile = path.join(baseContext, defaultName);
                 if (existsSync(candidateFile)) {
                   pushResolvedFile(candidateFile);
@@ -3636,11 +3910,13 @@ function inspectShellText(
           );
         }
       }
-      if (usesStdinDockerfile) {
+      if (usesStdinDockerfile && hasStdinHeredoc) {
         frame.pendingStdinBuilds.push({ lineNumber, invocations: stdinInvocations });
       }
       continue;
     }
+
+    let subcommand = tokens[argIndex];
 
     let allowScratchOperand = false;
     if (normalizedCli === "buildah") {
@@ -4743,6 +5019,105 @@ function extractDockerfileHeredocDelimiters(instructionText) {
   return delimiters;
 }
 
+function parseDockerfileArgDeclarations(rest) {
+  const declarations = [];
+  let index = 0;
+  while (index < rest.length) {
+    while (index < rest.length && /\s/u.test(rest[index])) {
+      index += 1;
+    }
+    if (index >= rest.length) {
+      break;
+    }
+    let cursor = index;
+    let quote = null;
+    while (cursor < rest.length) {
+      const ch = rest[cursor];
+      if (quote) {
+        if (ch === "\\" && quote === '"' && cursor + 1 < rest.length) {
+          cursor += 2;
+          continue;
+        }
+        if (ch === quote) {
+          quote = null;
+        }
+        cursor += 1;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        cursor += 1;
+        continue;
+      }
+      if (/\s/u.test(ch)) {
+        break;
+      }
+      cursor += 1;
+    }
+    const token = rest.slice(index, cursor);
+    index = cursor;
+    const match = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:=(?<value>.*))?$/su.exec(token);
+    if (match) {
+      declarations.push({
+        name: match.groups.name,
+        value: match.groups.value,
+      });
+    }
+  }
+  return declarations;
+}
+
+function extractCopyFromSource(instructionText) {
+  const match = /^(?:COPY|ADD)\s+(?<rest>.+)$/iu.exec(instructionText);
+  if (!match) {
+    return null;
+  }
+  const rest = match.groups.rest.trimStart();
+  if (rest.startsWith("[")) {
+    return null;
+  }
+  let index = 0;
+  let fromSource = null;
+  while (index < rest.length) {
+    while (index < rest.length && /\s/u.test(rest[index])) {
+      index += 1;
+    }
+    if (index >= rest.length || !rest.startsWith("--", index)) {
+      break;
+    }
+    let cursor = index;
+    let quote = null;
+    while (cursor < rest.length) {
+      const ch = rest[cursor];
+      if (quote) {
+        if (ch === quote) {
+          quote = null;
+        }
+        cursor += 1;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        cursor += 1;
+        continue;
+      }
+      if (/\s/u.test(ch)) {
+        break;
+      }
+      cursor += 1;
+    }
+    const optionToken = rest.slice(index, cursor);
+    index = cursor;
+    if (optionToken === "--") {
+      break;
+    }
+    if (optionToken.toLowerCase().startsWith("--from=")) {
+      fromSource = stripQuotes(optionToken.slice("--from=".length));
+    }
+  }
+  return fromSource;
+}
+
 function extractRunMountSources(runText) {
   const sources = [];
   const rest = runText.replace(/^RUN\s+/iu, "");
@@ -4987,33 +5362,37 @@ export function unpinnedContainerfileReferences(
   };
 
   for (const { lineNumber, text } of logicalLines) {
-    const argMatch = /^ARG\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:=(?<value>.+))?$/iu.exec(text);
+    const argMatch = /^ARG\s+(?<rest>.+)$/iu.exec(text);
     if (argMatch) {
-      const argName = argMatch.groups.name;
       const targetArgs = seenFrom ? stageArgs : globalArgs;
-      if (argOverrides?.has(argName)) {
-        const overrideEntry = argOverrides.get(argName);
-        const overrideValues = Array.isArray(overrideEntry) ? overrideEntry : overrideEntry.values;
-        const overrideTruncated = Array.isArray(overrideEntry)
-          ? false
-          : Boolean(overrideEntry.truncated);
-        const staticOverrides = overrideValues.filter((val) => !isDynamicReference(val));
-        if (overrideValues.some((val) => isDynamicReference(val))) {
-          dynamicOverriddenArgs.add(argName);
+      for (const declaration of parseDockerfileArgDeclarations(argMatch.groups.rest)) {
+        const argName = declaration.name;
+        if (argOverrides?.has(argName)) {
+          const overrideEntry = argOverrides.get(argName);
+          const overrideValues = Array.isArray(overrideEntry)
+            ? overrideEntry
+            : overrideEntry.values;
+          const overrideTruncated = Array.isArray(overrideEntry)
+            ? false
+            : Boolean(overrideEntry.truncated);
+          const staticOverrides = overrideValues.filter((val) => !isDynamicReference(val));
+          if (overrideValues.some((val) => isDynamicReference(val))) {
+            dynamicOverriddenArgs.add(argName);
+          }
+          if (staticOverrides.length > 0 || overrideTruncated) {
+            targetArgs.set(argName, { values: staticOverrides, truncated: overrideTruncated });
+          } else {
+            targetArgs.delete(argName);
+          }
+        } else if (declaration.value !== undefined) {
+          const mergedArgs = seenFrom ? new Map([...globalArgs, ...stageArgs]) : globalArgs;
+          targetArgs.set(
+            argName,
+            resolveBuildArgValues(stripQuotes(declaration.value), mergedArgs),
+          );
+        } else if (seenFrom && globalArgs.has(argName)) {
+          targetArgs.set(argName, globalArgs.get(argName));
         }
-        if (staticOverrides.length > 0 || overrideTruncated) {
-          targetArgs.set(argName, { values: staticOverrides, truncated: overrideTruncated });
-        } else {
-          targetArgs.delete(argName);
-        }
-      } else if (argMatch.groups.value !== undefined) {
-        const mergedArgs = seenFrom ? new Map([...globalArgs, ...stageArgs]) : globalArgs;
-        targetArgs.set(
-          argName,
-          resolveBuildArgValues(stripQuotes(argMatch.groups.value), mergedArgs),
-        );
-      } else if (seenFrom && globalArgs.has(argName)) {
-        targetArgs.set(argName, globalArgs.get(argName));
       }
       continue;
     }
@@ -5054,6 +5433,7 @@ export function unpinnedContainerfileReferences(
       }
       for (const resolved of expandedFrom.values) {
         if (
+          resolved.length > 0 &&
           resolved.toLowerCase() !== "scratch" &&
           !stages.has(resolved.toLowerCase()) &&
           !namedContexts?.has(resolved.toLowerCase()) &&
@@ -5070,24 +5450,24 @@ export function unpinnedContainerfileReferences(
       continue;
     }
 
-    const copyFromMatch = /^(?:COPY|ADD)\s+.*--from=(?<source>\S+)/iu.exec(text);
-    if (copyFromMatch) {
+    const rawCopySource = extractCopyFromSource(text);
+    if (rawCopySource) {
       const mergedArgs = new Map([...globalArgs, ...stageArgs]);
-      const rawSource = stripQuotes(copyFromMatch.groups.source);
-      const dynamicOverrideName = referencesDynamicOverride(rawSource);
+      const dynamicOverrideName = referencesDynamicOverride(rawCopySource);
       if (dynamicOverrideName && sourceFile && sourceLine) {
         problems.push(
           `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
         );
       }
-      const expandedCopy = resolveBuildArgValues(rawSource, mergedArgs);
+      const expandedCopy = resolveBuildArgValues(rawCopySource, mergedArgs);
       if (expandedCopy.truncated) {
         problems.push(
-          `${filePath}:${lineNumber}: ${rawSource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
+          `${filePath}:${lineNumber}: ${rawCopySource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
         );
       }
       for (const sourceRef of expandedCopy.values) {
         if (
+          sourceRef.length === 0 ||
           /^\d+$/u.test(sourceRef) ||
           allStages.has(sourceRef.toLowerCase()) ||
           namedContexts?.has(sourceRef.toLowerCase()) ||
@@ -5119,6 +5499,7 @@ export function unpinnedContainerfileReferences(
         }
         for (const sourceRef of expandedMount.values) {
           if (
+            sourceRef.length === 0 ||
             /^\d+$/u.test(sourceRef) ||
             allStages.has(sourceRef.toLowerCase()) ||
             namedContexts?.has(sourceRef.toLowerCase()) ||

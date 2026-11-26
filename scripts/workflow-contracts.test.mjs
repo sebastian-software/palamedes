@@ -1975,13 +1975,32 @@ describe("workflow contracts", () => {
     ]);
     // `docker buildx bake` CLI fails closed, `--blkio-weight-device` consumes
     // its value, `unset` clears/marks variables unset, unexported parent vars do
-    // not leak into single-quoted `sh -c`, and BuildKit forward `COPY --from`
-    // stage references are accepted.
+    // not leak into single-quoted `sh -c`, BuildKit forward `COPY --from` stage
+    // references are accepted, `COPY` matches `--from=` only in its option list,
+    // `ARG BASE=` preserves empty defaults vs undeclared ARGs, and `docker buildx`
+    // global options (`--builder`) are parsed before `build`/`bake`.
     expect(
       unpinnedContainerfileReferences(
-        "FROM scratch\nCOPY --from=assets /data /data\nFROM scratch AS assets\n",
+        [
+          "FROM scratch AS builder",
+          "COPY --from=assets /data /data",
+          "COPY ./files/from--from=stage /tmp/",
+          "COPY --from=alpine:3.20 ./files/x--from=builder /tmp/",
+          "FROM scratch AS assets",
+          "",
+        ].join("\n"),
       ),
-    ).toEqual([]);
+    ).toEqual(["<memory>:4: alpine:3.20 is not pinned to a sha256 digest"]);
+    expect(unpinnedContainerfileReferences("ARG BASE=\nFROM ${BASE:-scratch}\n")).toEqual([]);
+    expect(
+      unpinnedContainerfileReferences("ARG BASE=\nFROM ${BASE:-scratch}\n", "<memory>", {
+        argOverrides: new Map([["BASE", { values: ["alpine:3.20"], truncated: false }]]),
+      }),
+    ).toEqual(["<memory>:2: alpine:3.20 is not pinned to a sha256 digest"]);
+    expect(unpinnedContainerfileReferences("ARG BASE=\nFROM ${BASE+alpine:3.20}\n")).toEqual([
+      "<memory>:2: alpine:3.20 is not pinned to a sha256 digest",
+    ]);
+    expect(unpinnedContainerfileReferences("ARG BASE\nFROM ${BASE+alpine:3.20}\n")).toEqual([]);
     expect(
       unpinnedWorkflowContainerReferences(
         [
@@ -1999,12 +2018,20 @@ describe("workflow contracts", () => {
           '          [ "$CLEAR" = "1" ] && unset CLEARABLE',
           '          docker pull "${CLEARABLE:-alpine:3.20}"',
           "          docker buildx bake app",
+          "          docker buildx --builder ci bake app",
+          "          docker buildx --builder ci build -f - . <<'EOF'",
+          "          FROM redis:7",
+          "          EOF",
+          "          cat ci/build.recipe | docker build -f - .",
           "",
         ].join("\n"),
       ),
     ).toEqual([
       "<memory>:13: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:14: docker buildx bake target definitions cannot be verified statically for container image digests",
+      "<memory>:15: docker buildx bake target definitions cannot be verified statically for container image digests",
+      "<memory>:17: redis:7 is not pinned to a sha256 digest",
+      "<memory>:19: stdin containerfile input cannot be verified statically",
     ]);
     const buildFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-builds-"));
     try {
@@ -2012,6 +2039,7 @@ describe("workflow contracts", () => {
       await mkdir(join(buildFixture, "ci", "nested-a"), { recursive: true });
       await mkdir(join(buildFixture, "ci", "nested-b"), { recursive: true });
       await mkdir(join(buildFixture, "ci", "win"), { recursive: true });
+      await mkdir(join(buildFixture, "ci", "dual"), { recursive: true });
       await writeFile(
         join(buildFixture, "ci", "nested-a", "cd.recipe"),
         `FROM node:24@${digest}\n`,
@@ -2027,6 +2055,23 @@ describe("workflow contracts", () => {
         `ARG BASE=node:24@${digest}\nFROM \${BASE}\n`,
       );
       await writeFile(join(buildFixture, "ci", "shared.recipe"), "FROM maybectx\n");
+      await writeFile(
+        join(buildFixture, "ci", "stdin.recipe"),
+        "ARG STDIN_BASE=\nFROM ${STDIN_BASE:-scratch}\n",
+      );
+      await writeFile(join(buildFixture, "ci", "stdin-attached.recipe"), "FROM debian:12\n");
+      await writeFile(
+        join(buildFixture, "ci", "arg-empty.recipe"),
+        "ARG EMPTY_BASE=\nFROM ${EMPTY_BASE:-scratch}\n",
+      );
+      await writeFile(
+        join(buildFixture, "ci", "dual", "Containerfile"),
+        `ARG PODMAN_BASE=node:24@${digest}\nARG BUILDAH_BASE=node:24@${digest}\nFROM \${PODMAN_BASE}\nFROM \${BUILDAH_BASE}\n`,
+      );
+      await writeFile(
+        join(buildFixture, "ci", "dual", "Dockerfile"),
+        `ARG DOCKER_BASE=node:24@${digest}\nFROM \${DOCKER_BASE}\n`,
+      );
       await writeFile(
         join(buildFixture, ".github", "workflows", "cd-and-ctx.yml"),
         [
@@ -2050,15 +2095,30 @@ describe("workflow contracts", () => {
           "      - run: docker build -f ci/shared.recipe .",
           "      - shell: pwsh",
           "        run: docker build -f ci\\win\\win.recipe .",
+          "      - run: |",
+          "          docker build -f - --build-arg STDIN_BASE=fedora:41 . < ci/stdin.recipe",
+          "          <ci/stdin-attached.recipe docker build -",
+          "          docker build -f - . < ci/missing.recipe",
+          "          docker buildx --builder ci build --build-arg EMPTY_BASE=golang:1.24 -f ci/arg-empty.recipe .",
+          "          podman build --build-arg PODMAN_BASE=postgres:17 ci/dual",
+          "          buildah bud --build-arg BUILDAH_BASE=nginx:1.27 ci/dual",
+          "          docker build --build-arg DOCKER_BASE=python:3.13 ci/dual",
           "",
         ].join("\n"),
       );
       const buildResult = checkWorkflowPins(buildFixture);
       expect(buildResult.problems).toEqual([
+        ".github/workflows/cd-and-ctx.yml:24: stdin containerfile input ci/missing.recipe cannot be verified statically",
         "ci/nested-b/cd.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
         "ci/shared.recipe:1: maybectx is not pinned to a sha256 digest",
+        "ci/stdin-attached.recipe:1: debian:12 is not pinned to a sha256 digest",
         "ci/win/win.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
         "ci/arg-env.recipe:2: redis:7 is not pinned to a sha256 digest",
+        "ci/stdin.recipe:2: fedora:41 is not pinned to a sha256 digest",
+        "ci/arg-empty.recipe:2: golang:1.24 is not pinned to a sha256 digest",
+        "ci/dual/Containerfile:3: postgres:17 is not pinned to a sha256 digest",
+        "ci/dual/Containerfile:4: nginx:1.27 is not pinned to a sha256 digest",
+        "ci/dual/Dockerfile:2: python:3.13 is not pinned to a sha256 digest",
       ]);
     } finally {
       await rm(buildFixture, { recursive: true, force: true });
