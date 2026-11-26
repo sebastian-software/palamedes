@@ -75,7 +75,7 @@ impl WatchMatchers {
     }
 
     fn matches(&self, path: &Path) -> bool {
-        if is_catalog_storage_path(path) {
+        if is_catalog_storage_path(path) || is_internal_palamedes_path(path) {
             return false;
         }
         if self.matches_configured_path(path) {
@@ -106,6 +106,26 @@ fn is_catalog_storage_path(path: &Path) -> bool {
     [PalamedesCatalogFormat::Po, PalamedesCatalogFormat::Fcl]
         .into_iter()
         .any(|format| format.extension() == extension)
+}
+
+/// Whether a path refers to an internal Palamedes lock, staging directory,
+/// temporary file, or recovery claim created during catalog reads/writes or
+/// filesystem capability probes. Excluding these prevents broad source globs
+/// (such as `src/**/*` when catalogs live under `src/locales`) from feeding
+/// internal filesystem activity back into watch mode.
+fn is_internal_palamedes_path(path: &Path) -> bool {
+    path.components().any(|component| {
+        let std::path::Component::Normal(name) = component else {
+            return false;
+        };
+        let name = name.to_string_lossy();
+        name == ".pmds-lock"
+            || name.starts_with(".pmds-stage-")
+            || name.starts_with(".pmds-tmp-")
+            || name.starts_with(".pmds-ltmp-")
+            || name.starts_with(".pmds-ctmp-")
+            || name.starts_with(".pmds-claim-")
+    })
 }
 
 /// Every configured directory which can anchor a source glob. Keeping the
@@ -735,6 +755,12 @@ catalogs:
         assert!(matchers.matches(&app.join("src/page.tsx")));
         assert!(!matchers.matches(&app.join("src/locales/en/messages.po")));
         assert!(!matchers.matches(&app.join("src/locales/en/lines.fcl")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-lock")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-stage-123-0-abcd/a")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-tmp-123-0-abcd")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-ltmp-123-0")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-ctmp-123-0")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-claim-42-0")));
     }
 
     #[test]

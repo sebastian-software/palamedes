@@ -444,6 +444,11 @@ mod platform {
 
     static TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
 
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    static PROBED_DIR_EQUIVALENCE_CACHE: std::sync::LazyLock<
+        std::sync::Mutex<HashMap<FileIdentity, DirFilenameEquivalence>>,
+    > = std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
+
     #[cfg(target_os = "linux")]
     const DIR_TRAVERSAL_FLAGS: libc::c_int = libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC;
     #[cfg(any(
@@ -481,6 +486,7 @@ mod platform {
     struct ExistingTarget {
         entry: ExistingEntry,
         acl: Option<ExistingAcl>,
+        xattrs: Vec<(CString, Vec<u8>)>,
     }
 
     enum SnapshotMatch {
@@ -1501,7 +1507,8 @@ mod platform {
                 identity,
             };
             let acl = read_existing_acl(existing_fd.as_raw_fd())?;
-            Ok(Some(ExistingTarget { entry, acl }))
+            let xattrs = read_existing_user_xattrs(existing_fd.as_raw_fd())?;
+            Ok(Some(ExistingTarget { entry, acl, xattrs }))
         }
 
         fn inspect_entry(
@@ -1867,6 +1874,7 @@ mod platform {
             }
             if current.entry != expected.entry
                 || !acl_equals(current.acl.as_ref(), expected.acl.as_ref())?
+                || current.xattrs != expected.xattrs
             {
                 return Ok(SnapshotMatch::MetadataChanged);
             }
@@ -2327,11 +2335,11 @@ mod platform {
         let dir_group_writable = fstat_fd(dir_raw)
             .map(|stat| (stat.st_mode & 0o020) != 0)
             .unwrap_or(false);
-        let pid = std::process::id();
+        let smb_share = is_smb_share(dir_raw);
         let mut generation: u32 = 0;
         let mut verified_prior_claims: Vec<(CString, FileIdentity)> = Vec::new();
 
-        loop {
+        'recovery: loop {
             match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                 Ok(stat) if stat_identity(&stat) == existing_id => {}
                 Ok(_) => return Ok(()),
@@ -2351,52 +2359,11 @@ mod platform {
                 .expect("ASCII recovery claim name has no NUL bytes");
 
             // Create, stamp, and lock the recovery claim file BEFORE publishing
-            // it at `.pmds-claim-<ino>-<gen>`, so no concurrent waiter can ever
-            // observe an unlocked claim file.
-            let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
-            let temp_claim_name = CString::new(format!(".pmds-ctmp-{pid}-{nonce}"))
-                .expect("ASCII temp claim name has no NUL bytes");
-            // SAFETY: `dir_raw` is open and `temp_claim_name` is a valid C string.
-            let claim_raw = unsafe {
-                libc::openat(
-                    dir_raw,
-                    temp_claim_name.as_ptr(),
-                    libc::O_RDWR
-                        | libc::O_CREAT
-                        | libc::O_EXCL
-                        | libc::O_NOFOLLOW
-                        | libc::O_CLOEXEC,
-                    0o664 as libc::c_uint,
-                )
-            };
-            if claim_raw < 0 {
-                let error = io::Error::last_os_error();
-                if error.raw_os_error() == Some(libc::EEXIST) {
-                    continue;
-                }
-                return Err(ContainedFsError::Io(error));
-            }
-            // SAFETY: `claim_raw` is a newly opened valid file descriptor.
-            let claim_fd = unsafe { OwnedFd::from_raw_fd(claim_raw) };
-            let mut temp_claim_guard = UnixTempFileGuard::new(dir, temp_claim_name.clone());
-            if let Ok(claim_stat) = fstat_fd(claim_fd.as_raw_fd()) {
-                let mut target_mode = (claim_stat.st_mode & 0o664) | 0o644;
-                if dir_group_writable {
-                    target_mode |= 0o020;
-                }
-                if (claim_stat.st_mode & 0o777) != target_mode {
-                    // SAFETY: `claim_fd` is an open file we just created.
-                    let _ = unsafe { libc::fchmod(claim_fd.as_raw_fd(), target_mode) };
-                }
-            }
-            write_all_fd(claim_fd.as_raw_fd(), UNIX_DIR_LOCK_MAGIC)?;
-            flock_exclusive(claim_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
-            let claim_id = stat_identity(&fstat_fd(claim_fd.as_raw_fd())?);
-
-            let published = publish_file_noreplace(dir_raw, &temp_claim_name, dir_raw, &claim_name);
-            match published {
-                Ok(true) => {
-                    temp_claim_guard.disarm();
+            // it by handle or from a verified private staging directory so no
+            // concurrent writer or waiter can swap the entry before publication
+            // or observe an unlocked claim file.
+            match publish_locked_temp_file(dir, &claim_name, ".pmds-ctmp", dir_group_writable)? {
+                LockPublishResult::Published(claim_fd, claim_id) => {
                     let owns_claim = matches!(
                         fstatat_nofollow(dir_raw, &claim_name),
                         Ok(stat) if stat_identity(&stat) == claim_id
@@ -2447,49 +2414,124 @@ mod platform {
                     drop(claim_fd);
                     return result;
                 }
-                Ok(false) => {
-                    drop(temp_claim_guard);
-                    drop(claim_fd);
-                }
-                Err(error) => {
-                    drop(temp_claim_guard);
-                    drop(claim_fd);
+                LockPublishResult::AlreadyExists => {}
+                LockPublishResult::Unsupported(error) => {
                     return Err(ContainedFsError::Io(error));
                 }
             }
 
             // Another waiter already published `.pmds-claim-<ino>-<gen>`: wait
-            // on it via `LOCK_SH`. Never unlink a stale claim directly (which
-            // could race with another waiter); instead, if that claimant died
-            // without unlinking `existing_id`, advance to `generation + 1` so
-            // recovery stays single-winner across all clients.
-            // SAFETY: `dir_raw` is open and `claim_name` is a valid C string.
-            let other_raw = unsafe {
-                libc::openat(
-                    dir_raw,
-                    claim_name.as_ptr(),
-                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
-                )
-            };
-            if other_raw < 0 {
+            // on it via `LOCK_SH` (or bounded polling when a CIFS/SMB mandatory
+            // byte-range lock blocks `openat` or `pread`). Never unlink a stale
+            // claim directly (which could race with another waiter); instead,
+            // if that claimant died without unlinking `existing_id`, advance to
+            // `generation + 1` so recovery stays single-winner across all clients.
+            let claim_deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            let mut open_backoff_ms: u64 = 2;
+            let other_fd = loop {
+                // SAFETY: `dir_raw` is open and `claim_name` is a valid C string.
+                let other_raw = unsafe {
+                    libc::openat(
+                        dir_raw,
+                        claim_name.as_ptr(),
+                        libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                    )
+                };
+                if other_raw >= 0 {
+                    // SAFETY: `other_raw` is a newly opened valid file descriptor.
+                    break unsafe { OwnedFd::from_raw_fd(other_raw) };
+                }
                 let open_err = io::Error::last_os_error();
-                if open_err.raw_os_error() == Some(libc::ENOENT) {
+                let raw_err = open_err.raw_os_error();
+                if raw_err == Some(libc::ENOENT) {
+                    continue 'recovery;
+                }
+                if raw_err == Some(libc::ETXTBSY)
+                    || (smb_share
+                        && (raw_err == Some(libc::EACCES)
+                            || raw_err == Some(libc::EAGAIN)
+                            || raw_err == Some(libc::EWOULDBLOCK)))
+                {
+                    match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
+                        Ok(stat) if stat_identity(&stat) == existing_id => {}
+                        Ok(_) => return Ok(()),
+                        Err(err) if err.raw_os_error() == Some(libc::ENOENT) => return Ok(()),
+                        Err(err) => return Err(ContainedFsError::Io(err)),
+                    }
+                    match fstatat_nofollow(dir_raw, &claim_name) {
+                        Ok(_) => {}
+                        Err(err) if err.raw_os_error() == Some(libc::ENOENT) => {
+                            continue 'recovery;
+                        }
+                        Err(err) => return Err(ContainedFsError::Io(err)),
+                    }
+                    if std::time::Instant::now() >= claim_deadline {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "timed out waiting for exclusive SMB recovery claim to release",
+                        )));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(open_backoff_ms));
+                    open_backoff_ms = (open_backoff_ms * 2).min(50);
                     continue;
                 }
                 return Err(ContainedFsError::Io(open_err));
-            }
-            // SAFETY: `other_raw` is a newly opened valid file descriptor.
-            let other_fd = unsafe { OwnedFd::from_raw_fd(other_raw) };
+            };
+
             let other_stat = fstat_fd(other_fd.as_raw_fd())?;
-            if (other_stat.st_mode & libc::S_IFMT) != libc::S_IFREG
-                || !verify_lock_file_magic(other_fd.as_raw_fd(), &other_stat)?
-            {
+            if (other_stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
                 return Err(ContainedFsError::Io(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     "refusing to overwrite or remove pre-existing non-lock recovery claim file",
                 )));
             }
             let other_id = stat_identity(&other_stat);
+            let mut magic_backoff_ms: u64 = 2;
+            loop {
+                let cur_stat = fstat_fd(other_fd.as_raw_fd())?;
+                match verify_lock_file_magic(other_fd.as_raw_fd(), &cur_stat) {
+                    Ok(true) => break,
+                    Ok(false) => {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            "refusing to overwrite or remove pre-existing non-lock recovery claim file",
+                        )));
+                    }
+                    Err(read_err)
+                        if read_err.raw_os_error() == Some(libc::EACCES)
+                            || read_err.raw_os_error() == Some(libc::EAGAIN)
+                            || read_err.raw_os_error() == Some(libc::EWOULDBLOCK) =>
+                    {
+                        // Mandatory SMB byte-range locking can reject `pread`
+                        // while the winning claimant holds its exclusive lock.
+                        // Wait with bounded backoff while rechecking both
+                        // `.pmds-lock` and the claim identity.
+                        match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
+                            Ok(stat) if stat_identity(&stat) == existing_id => {}
+                            Ok(_) => return Ok(()),
+                            Err(err) if err.raw_os_error() == Some(libc::ENOENT) => return Ok(()),
+                            Err(err) => return Err(ContainedFsError::Io(err)),
+                        }
+                        match fstatat_nofollow(dir_raw, &claim_name) {
+                            Ok(stat) if stat_identity(&stat) == other_id => {}
+                            Ok(_) => continue 'recovery,
+                            Err(err) if err.raw_os_error() == Some(libc::ENOENT) => {
+                                continue 'recovery;
+                            }
+                            Err(err) => return Err(ContainedFsError::Io(err)),
+                        }
+                        if std::time::Instant::now() >= claim_deadline {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::TimedOut,
+                                "timed out waiting for mandatory lock on recovery claim to release",
+                            )));
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(magic_backoff_ms));
+                        magic_backoff_ms = (magic_backoff_ms * 2).min(50);
+                    }
+                    Err(read_err) => return Err(ContainedFsError::Io(read_err)),
+                }
+            }
             flock_shared(other_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
             let still_abandoned = match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                 Ok(stat) => stat_identity(&stat) == existing_id,
@@ -2639,10 +2681,12 @@ mod platform {
     }
 
     const UNIX_DIR_LOCK_TEMP_PREFIX: &[u8] = b".pmds-ltmp-";
+    const UNIX_STAGE_DIR_PREFIX: &[u8] = b".pmds-stage-";
 
-    /// Removes stale `.pmds-ltmp-*` hard links left behind if a previous writer
-    /// crashed between `linkat` and `unlinkat` on platforms without atomic
-    /// no-replace rename. Only unlinks entries whose name starts with
+    /// Removes stale `.pmds-ltmp-*` hard links (either directly in `dir` or
+    /// inside an owned `.pmds-stage-*` directory) left behind if a previous
+    /// writer crashed between `linkat` and `unlinkat` on platforms without
+    /// atomic no-replace rename. Only unlinks entries whose name starts with
     /// `.pmds-ltmp-` and whose `(dev, ino)` matches our locked, magic-verified
     /// `.pmds-lock` inode, so unrelated user files are never touched.
     fn reclaim_interrupted_lock_temp_links(dir: &ContainedDir, lock_id: FileIdentity) {
@@ -2663,7 +2707,10 @@ mod platform {
             }
             return;
         }
+        // SAFETY: `geteuid` has no preconditions.
+        let euid = unsafe { libc::geteuid() };
         let mut stale_names: Vec<CString> = Vec::new();
+        let mut stage_dirs: Vec<(CString, FileIdentity)> = Vec::new();
         loop {
             // SAFETY: `dir_ptr` is a valid `DIR*`.
             let entry = unsafe { libc::readdir(dir_ptr) };
@@ -2672,13 +2719,19 @@ mod platform {
             }
             // SAFETY: `entry` is non-null and `d_name` is a NUL-terminated C string.
             let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
-            if !name.to_bytes().starts_with(UNIX_DIR_LOCK_TEMP_PREFIX) {
-                continue;
-            }
-            if let Ok(stat) = fstatat_nofollow(dir.fd.as_raw_fd(), name)
-                && stat_identity(&stat) == lock_id
+            if name.to_bytes().starts_with(UNIX_DIR_LOCK_TEMP_PREFIX) {
+                if let Ok(stat) = fstatat_nofollow(dir.fd.as_raw_fd(), name)
+                    && stat_identity(&stat) == lock_id
+                {
+                    stale_names.push(name.to_owned());
+                }
+            } else if name.to_bytes().starts_with(UNIX_STAGE_DIR_PREFIX)
+                && let Ok(stat) = fstatat_nofollow(dir.fd.as_raw_fd(), name)
+                && (stat.st_mode & libc::S_IFMT) == libc::S_IFDIR
+                && stat.st_uid == euid
+                && (stat.st_mode & 0o0077) == 0
             {
-                stale_names.push(name.to_owned());
+                stage_dirs.push((name.to_owned(), stat_identity(&stat)));
             }
         }
         // SAFETY: `dir_ptr` is a valid `DIR*` owned by this function.
@@ -2691,6 +2744,276 @@ mod platform {
                 let _ = libc::unlinkat(dir.fd.as_raw_fd(), stale.as_ptr(), 0);
             }
         }
+        for (stage_name, stage_id) in stage_dirs {
+            // SAFETY: `dir.fd` is open and `stage_name` is a verified owned private stage dir.
+            let stage_raw = unsafe {
+                libc::openat(
+                    dir.fd.as_raw_fd(),
+                    stage_name.as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if stage_raw < 0 {
+                continue;
+            }
+            // SAFETY: `stage_raw` is a newly opened valid directory descriptor.
+            let stage_fd = unsafe { OwnedFd::from_raw_fd(stage_raw) };
+            if fstat_fd(stage_fd.as_raw_fd())
+                .map(|st| {
+                    (st.st_mode & libc::S_IFMT) == libc::S_IFDIR
+                        && stat_identity(&st) == stage_id
+                        && st.st_uid == euid
+                        && (st.st_mode & 0o0077) == 0
+                })
+                .unwrap_or(false)
+            {
+                // SAFETY: `stage_fd` is an open readable directory descriptor.
+                let stage_dup =
+                    unsafe { libc::fcntl(stage_fd.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
+                if stage_dup >= 0 {
+                    // SAFETY: `stage_dup` is valid; `fdopendir` takes ownership on success.
+                    let stage_ptr = unsafe { libc::fdopendir(stage_dup) };
+                    if stage_ptr.is_null() {
+                        // SAFETY: `fdopendir` failed, so we still own `stage_dup`.
+                        unsafe {
+                            libc::close(stage_dup);
+                        }
+                    } else {
+                        let mut inner_stale: Vec<CString> = Vec::new();
+                        loop {
+                            // SAFETY: `stage_ptr` is a valid `DIR*`.
+                            let entry = unsafe { libc::readdir(stage_ptr) };
+                            if entry.is_null() {
+                                break;
+                            }
+                            // SAFETY: `entry` is non-null and `d_name` is a valid C string.
+                            let name =
+                                unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
+                            if name.to_bytes().starts_with(UNIX_DIR_LOCK_TEMP_PREFIX)
+                                && let Ok(stat) = fstatat_nofollow(stage_fd.as_raw_fd(), name)
+                                && stat_identity(&stat) == lock_id
+                            {
+                                inner_stale.push(name.to_owned());
+                            }
+                        }
+                        // SAFETY: `stage_ptr` is a valid `DIR*` owned by this function.
+                        unsafe {
+                            libc::closedir(stage_ptr);
+                        }
+                        let removed_any = !inner_stale.is_empty();
+                        for stale in inner_stale {
+                            // SAFETY: `stage_fd` is open and `stale` is a verified `.pmds-ltmp-*`.
+                            unsafe {
+                                let _ = libc::unlinkat(stage_fd.as_raw_fd(), stale.as_ptr(), 0);
+                            }
+                        }
+                        drop(stage_fd);
+                        if removed_any {
+                            let _ = dir.rmdir_stage_if_same(&stage_name, stage_id);
+                        }
+                        continue;
+                    }
+                }
+            }
+            drop(stage_fd);
+        }
+    }
+
+    enum LockPublishResult {
+        Published(OwnedFd, FileIdentity),
+        AlreadyExists,
+        Unsupported(io::Error),
+    }
+
+    fn adjust_lock_file_mode(fd: std::os::fd::RawFd, dir_group_writable: bool) {
+        // Ensure the lock file is at least 0644 (and 0664 in group-writable
+        // directories, never world-writable) so other authorized users in
+        // shared sticky directories can open it (`O_RDWR` for same-group NFS
+        // locking, or `O_RDONLY` fallback) even under a 0022/0077 umask.
+        if let Ok(stat) = fstat_fd(fd) {
+            let mut target_mode = (stat.st_mode & 0o664) | 0o644;
+            if dir_group_writable {
+                target_mode |= 0o020;
+            }
+            if (stat.st_mode & 0o777) != target_mode {
+                // SAFETY: `fd` is an open file descriptor we just created.
+                let _ = unsafe { libc::fchmod(fd, target_mode) };
+            }
+        }
+    }
+
+    fn verify_dir_allows_lock_publication(dir: &ContainedDir) -> Result<bool, ContainedFsError> {
+        let parent_stat = fstat_fd(dir.fd.as_raw_fd())?;
+        // SAFETY: `geteuid` has no preconditions.
+        let euid = unsafe { libc::geteuid() };
+        if !dir.parent_allows_safe_staging(&parent_stat, euid)? {
+            return Err(ContainedFsError::Io(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "refusing to acquire catalog lock in non-sticky shared writable directory",
+            )));
+        }
+        Ok((parent_stat.st_mode & 0o020) != 0)
+    }
+
+    /// Creates, stamps, and exclusively locks a temporary lock/claim file, then
+    /// publishes it to `target_name` inside `dir` without overwriting any
+    /// existing entry.
+    ///
+    /// On Linux, first attempts handle-based unnamed `O_TMPFILE` publication
+    /// via `/proc/self/fd` (zero staging directory entry). Otherwise stages the
+    /// file inside a verified private `0700` staging directory (`create_staging_dir`)
+    /// so no concurrent principal can swap the entry before publication, and
+    /// verifies that the published `target_name` inode matches the locked
+    /// descriptor before returning `LockPublishResult::Published`.
+    fn publish_locked_temp_file(
+        dir: &ContainedDir,
+        target_name: &std::ffi::CStr,
+        temp_prefix: &str,
+        dir_group_writable: bool,
+    ) -> Result<LockPublishResult, ContainedFsError> {
+        verify_dir_allows_lock_publication(dir)?;
+
+        #[cfg(target_os = "linux")]
+        {
+            let dot = c".";
+            // SAFETY: `dir.fd` is open and `dot` is a valid C string.
+            let raw = unsafe {
+                libc::openat(
+                    dir.fd.as_raw_fd(),
+                    dot.as_ptr(),
+                    libc::O_TMPFILE | libc::O_RDWR | libc::O_CLOEXEC,
+                    0o664 as libc::c_uint,
+                )
+            };
+            if raw >= 0 {
+                // SAFETY: `raw` is a newly opened unnamed file descriptor.
+                let temp_fd = unsafe { OwnedFd::from_raw_fd(raw) };
+                adjust_lock_file_mode(temp_fd.as_raw_fd(), dir_group_writable);
+                write_all_fd(temp_fd.as_raw_fd(), UNIX_DIR_LOCK_MAGIC)?;
+                flock_exclusive(temp_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
+                let temp_id = stat_identity(&fstat_fd(temp_fd.as_raw_fd())?);
+                let proc_path = CString::new(format!("/proc/self/fd/{}", temp_fd.as_raw_fd()))
+                    .expect("proc fd path has no NUL bytes");
+                // SAFETY: `proc_path` and `target_name` are valid C strings;
+                // `dir.fd` is an open directory descriptor.
+                let rc = unsafe {
+                    libc::linkat(
+                        libc::AT_FDCWD,
+                        proc_path.as_ptr(),
+                        dir.fd.as_raw_fd(),
+                        target_name.as_ptr(),
+                        libc::AT_SYMLINK_FOLLOW,
+                    )
+                };
+                if rc == 0 {
+                    let published_matches = matches!(
+                        fstatat_nofollow(dir.fd.as_raw_fd(), target_name),
+                        Ok(stat) if stat_identity(&stat) == temp_id
+                    );
+                    if published_matches {
+                        return Ok(LockPublishResult::Published(temp_fd, temp_id));
+                    }
+                    return Ok(LockPublishResult::AlreadyExists);
+                }
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EEXIST) {
+                    return Ok(LockPublishResult::AlreadyExists);
+                }
+                if !matches!(
+                    error.raw_os_error(),
+                    Some(
+                        libc::ENOENT
+                            | libc::EACCES
+                            | libc::EPERM
+                            | libc::EXDEV
+                            | libc::ENOSYS
+                            | libc::EOPNOTSUPP
+                            | libc::EINVAL
+                    )
+                ) {
+                    return Err(ContainedFsError::Io(error));
+                }
+            }
+        }
+
+        let (stage_name, stage_dir, stage_identity) = dir.create_staging_dir(false)?;
+        let pid = std::process::id();
+        let publish_result = (|| -> Result<LockPublishResult, ContainedFsError> {
+            let (temp_name, temp_fd) = loop {
+                let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
+                let temp_name = CString::new(format!("{temp_prefix}-{pid}-{nonce}"))
+                    .expect("ASCII temp lock name has no NUL bytes");
+                // SAFETY: `stage_dir.fd` is our private 0700 staging directory.
+                let temp_raw = unsafe {
+                    libc::openat(
+                        stage_dir.fd.as_raw_fd(),
+                        temp_name.as_ptr(),
+                        libc::O_RDWR
+                            | libc::O_CREAT
+                            | libc::O_EXCL
+                            | libc::O_NOFOLLOW
+                            | libc::O_CLOEXEC,
+                        0o664 as libc::c_uint,
+                    )
+                };
+                if temp_raw >= 0 {
+                    // SAFETY: `temp_raw` is a newly opened valid file descriptor.
+                    break (temp_name, unsafe { OwnedFd::from_raw_fd(temp_raw) });
+                }
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::EEXIST) {
+                    return Err(ContainedFsError::Io(error));
+                }
+            };
+            let mut temp_guard = UnixTempFileGuard::new(&stage_dir, temp_name.clone());
+            adjust_lock_file_mode(temp_fd.as_raw_fd(), dir_group_writable);
+            write_all_fd(temp_fd.as_raw_fd(), UNIX_DIR_LOCK_MAGIC)?;
+            flock_exclusive(temp_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
+            let temp_id = stat_identity(&fstat_fd(temp_fd.as_raw_fd())?);
+
+            match publish_file_noreplace(
+                stage_dir.fd.as_raw_fd(),
+                &temp_name,
+                dir.fd.as_raw_fd(),
+                target_name,
+            ) {
+                Ok(true) => {
+                    temp_guard.disarm();
+                    let published_matches = matches!(
+                        fstatat_nofollow(dir.fd.as_raw_fd(), target_name),
+                        Ok(stat) if stat_identity(&stat) == temp_id
+                    );
+                    if published_matches {
+                        Ok(LockPublishResult::Published(temp_fd, temp_id))
+                    } else {
+                        Ok(LockPublishResult::AlreadyExists)
+                    }
+                }
+                Ok(false) => {
+                    drop(temp_guard);
+                    drop(temp_fd);
+                    Ok(LockPublishResult::AlreadyExists)
+                }
+                Err(error)
+                    if matches!(
+                        error.raw_os_error(),
+                        Some(libc::EPERM | libc::EOPNOTSUPP | libc::ENOSYS | libc::EXDEV)
+                    ) =>
+                {
+                    drop(temp_guard);
+                    drop(temp_fd);
+                    Ok(LockPublishResult::Unsupported(error))
+                }
+                Err(error) => {
+                    drop(temp_guard);
+                    drop(temp_fd);
+                    Err(ContainedFsError::Io(error))
+                }
+            }
+        })();
+        drop(stage_dir);
+        let _ = dir.rmdir_stage_if_same(&stage_name, stage_identity);
+        publish_result
     }
 
     fn is_smb_share(dir_fd: std::os::fd::RawFd) -> bool {
@@ -2742,6 +3065,7 @@ mod platform {
         dir: &ContainedDir,
         key: FileIdentity,
     ) -> Result<UnixDirLock, ContainedFsError> {
+        let dir_group_writable = verify_dir_allows_lock_publication(dir)?;
         // Duplicate the directory handle so `Drop` can unlink `.pmds-lock`
         // even if the caller drops `ContainedDir` before `ContainedTargetLock`.
         // SAFETY: `dir.fd` is an open directory descriptor.
@@ -2751,94 +3075,31 @@ mod platform {
         }
         // SAFETY: `dup_raw` is a newly duplicated valid file descriptor.
         let dir_fd = unsafe { OwnedFd::from_raw_fd(dup_raw) };
-        let pid = std::process::id();
         let smb_share = is_smb_share(dir.fd.as_raw_fd());
         let mut smb_open_deadline: Option<std::time::Instant> = None;
         let mut smb_open_backoff_ms: u64 = 2;
 
         loop {
-            let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
-            let temp_name = CString::new(format!(".pmds-ltmp-{pid}-{nonce}"))
-                .expect("ASCII temp lock name has no NUL bytes");
-            // Create a private temporary file, stamp our signature, and lock it
-            // BEFORE publishing at `.pmds-lock` via atomic no-replace rename
-            // (or `linkat`+`unlinkat` fallback), so no waiter can ever observe
-            // an empty or unlocked Palamedes lock file and no pre-existing file
-            // is ever overwritten.
-            // SAFETY: `dir.fd` is open and `temp_name` is a valid C string.
-            let temp_raw = unsafe {
-                libc::openat(
-                    dir.fd.as_raw_fd(),
-                    temp_name.as_ptr(),
-                    libc::O_RDWR
-                        | libc::O_CREAT
-                        | libc::O_EXCL
-                        | libc::O_NOFOLLOW
-                        | libc::O_CLOEXEC,
-                    0o664 as libc::c_uint,
-                )
-            };
-            if temp_raw < 0 {
-                let error = io::Error::last_os_error();
-                if error.raw_os_error() == Some(libc::EEXIST) {
-                    continue;
-                }
-                return Err(ContainedFsError::Io(error));
-            }
-            // SAFETY: `temp_raw` is a newly opened valid file descriptor.
-            let temp_fd = unsafe { OwnedFd::from_raw_fd(temp_raw) };
-            let mut temp_guard = UnixTempFileGuard::new(dir, temp_name.clone());
-            // Ensure the lock file is at least 0644 (and 0664 in group-writable
-            // directories, never world-writable) so other authorized users in
-            // shared or sticky directories can open it (`O_RDWR` for same-group
-            // NFS locking, or `O_RDONLY` fallback) even under a 0022/0077 umask.
-            if let Ok(temp_stat) = fstat_fd(temp_fd.as_raw_fd()) {
-                let mut target_mode = (temp_stat.st_mode & 0o664) | 0o644;
-                if fstat_fd(dir.fd.as_raw_fd())
-                    .map(|dir_stat| (dir_stat.st_mode & 0o020) != 0)
-                    .unwrap_or(false)
-                {
-                    target_mode |= 0o020;
-                }
-                if (temp_stat.st_mode & 0o777) != target_mode {
-                    // SAFETY: `temp_fd` is an open file descriptor we just created.
-                    let _ = unsafe { libc::fchmod(temp_fd.as_raw_fd(), target_mode) };
-                }
-            }
-            write_all_fd(temp_fd.as_raw_fd(), UNIX_DIR_LOCK_MAGIC)?;
-            flock_exclusive(temp_fd.as_raw_fd())?;
-
-            let published = publish_file_noreplace(
-                dir.fd.as_raw_fd(),
-                &temp_name,
-                dir.fd.as_raw_fd(),
+            match publish_locked_temp_file(
+                dir,
                 UNIX_DIR_LOCK_NAME,
-            );
-            match published {
-                Ok(true) => {
-                    temp_guard.disarm();
-                    let stat = fstat_fd(temp_fd.as_raw_fd())?;
+                ".pmds-ltmp",
+                dir_group_writable,
+            )? {
+                LockPublishResult::Published(temp_fd, temp_id) => {
+                    verify_dir_allows_lock_publication(dir)?;
                     return Ok(UnixDirLock {
                         key,
-                        cleanup: Some((dir_fd, stat_identity(&stat))),
+                        cleanup: Some((dir_fd, temp_id)),
                         _fd: temp_fd,
                     });
                 }
-                Ok(false) => {
-                    drop(temp_guard);
-                    drop(temp_fd);
-                }
-                Err(error)
-                    if matches!(
-                        error.raw_os_error(),
-                        Some(libc::EPERM | libc::EOPNOTSUPP | libc::ENOSYS | libc::EXDEV)
-                    ) =>
-                {
+                LockPublishResult::AlreadyExists => {}
+                LockPublishResult::Unsupported(_) => {
                     // Filesystems without atomic no-replace rename or hard
                     // links (e.g. FAT32/exFAT/VFAT) fall back to locking the
-                    // directory handle directly.
-                    drop(temp_guard);
-                    drop(temp_fd);
+                    // directory handle directly (only reached when the parent
+                    // directory passed `verify_dir_allows_lock_publication`).
                     let fallback_fd = open_unix_lock_fd(dir)?;
                     flock_exclusive(fallback_fd.as_raw_fd())?;
                     return Ok(UnixDirLock {
@@ -2846,10 +3107,6 @@ mod platform {
                         cleanup: None,
                         _fd: fallback_fd,
                     });
-                }
-                Err(error) => {
-                    drop(temp_guard);
-                    return Err(ContainedFsError::Io(error));
                 }
             }
 
@@ -3197,32 +3454,62 @@ mod platform {
                     return Some(DirFilenameEquivalence::Exact);
                 }
             }
+            if let Ok(dir_id) = dir.self_identity()
+                && let Ok(cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
+                && let Some(&cached) = cache.get(&dir_id)
+            {
+                return Some(cached);
+            }
             let case_insensitive = probe_directory_case_insensitivity(dir, readable.as_raw_fd())
                 .or_else(|| dir.probe_names_equivalent(OsStr::new("a"), OsStr::new("A")))?;
             let unicode_normalizing = dir
                 .probe_names_equivalent(OsStr::new("caf\u{00e9}"), OsStr::new("cafe\u{0301}"))
                 .unwrap_or(false);
-            Some(match (case_insensitive, unicode_normalizing) {
+            let equivalence = match (case_insensitive, unicode_normalizing) {
                 (false, false) => DirFilenameEquivalence::Exact,
                 (false, true) => DirFilenameEquivalence::UnicodeNfd,
                 (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
                 (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
-            })
+            };
+            if let Ok(dir_id) = dir.self_identity()
+                && let Ok(mut cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
+            {
+                if cache.len() >= 1024 {
+                    cache.clear();
+                }
+                cache.insert(dir_id, equivalence);
+            }
+            Some(equivalence)
         }
         #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
         {
             let readable = open_readable_self(dir)?;
+            if let Ok(dir_id) = dir.self_identity()
+                && let Ok(cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
+                && let Some(&cached) = cache.get(&dir_id)
+            {
+                return Some(cached);
+            }
             let case_insensitive = probe_directory_case_insensitivity(dir, readable.as_raw_fd())
                 .or_else(|| dir.probe_names_equivalent(OsStr::new("a"), OsStr::new("A")))?;
             let unicode_normalizing = dir
                 .probe_names_equivalent(OsStr::new("caf\u{00e9}"), OsStr::new("cafe\u{0301}"))
                 .unwrap_or(false);
-            Some(match (case_insensitive, unicode_normalizing) {
+            let equivalence = match (case_insensitive, unicode_normalizing) {
                 (false, false) => DirFilenameEquivalence::Exact,
                 (false, true) => DirFilenameEquivalence::UnicodeNfd,
                 (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
                 (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
-            })
+            };
+            if let Ok(dir_id) = dir.self_identity()
+                && let Ok(mut cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
+            {
+                if cache.len() >= 1024 {
+                    cache.clear();
+                }
+                cache.insert(dir_id, equivalence);
+            }
+            Some(equivalence)
         }
     }
 
@@ -4326,10 +4613,318 @@ mod platform {
         ))
     }
 
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    fn is_macos_kernel_managed_xattr(name: &[u8]) -> bool {
+        name.starts_with(b"com.apple.acl.")
+            || matches!(
+                name,
+                b"com.apple.decmpfs"
+                    | b"com.apple.macl"
+                    | b"com.apple.provenance"
+                    | b"com.apple.rootless"
+                    | b"com.apple.system.Security"
+            )
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    fn read_existing_user_xattrs(fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
+        let mut names_buf = Vec::new();
+        for _ in 0..4 {
+            // SAFETY: querying list size with null buffer.
+            let size = unsafe { libc::flistxattr(fd, std::ptr::null_mut(), 0, 0) };
+            if size < 0 {
+                let error = io::Error::last_os_error();
+                if matches!(
+                    error.raw_os_error(),
+                    Some(
+                        libc::ENOTSUP
+                            | libc::EOPNOTSUPP
+                            | libc::EPERM
+                            | libc::EACCES
+                            | libc::ENOSYS
+                    )
+                ) {
+                    return Ok(Vec::new());
+                }
+                return Err(error);
+            }
+            if size == 0 {
+                return Ok(Vec::new());
+            }
+            names_buf.resize(usize::try_from(size).unwrap_or(0), 0u8);
+            // SAFETY: `names_buf` has `names_buf.len()` writable bytes.
+            let read = unsafe {
+                libc::flistxattr(
+                    fd,
+                    names_buf.as_mut_ptr().cast::<libc::c_char>(),
+                    names_buf.len(),
+                    0,
+                )
+            };
+            if read >= 0 {
+                names_buf.truncate(usize::try_from(read).unwrap_or(0));
+                break;
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::ERANGE) {
+                continue;
+            }
+            if matches!(
+                error.raw_os_error(),
+                Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::EPERM | libc::EACCES | libc::ENOSYS)
+            ) {
+                return Ok(Vec::new());
+            }
+            return Err(error);
+        }
+
+        let mut xattrs = Vec::new();
+        for raw_name in names_buf.split(|&byte| byte == 0) {
+            if raw_name.is_empty() || is_macos_kernel_managed_xattr(raw_name) {
+                continue;
+            }
+            let Ok(c_name) = CString::new(raw_name) else {
+                continue;
+            };
+            let mut value_opt = None;
+            for _ in 0..4 {
+                // SAFETY: querying xattr size with null buffer.
+                let size =
+                    unsafe { libc::fgetxattr(fd, c_name.as_ptr(), std::ptr::null_mut(), 0, 0, 0) };
+                if size < 0 {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() == Some(libc::ENOATTR) {
+                        break;
+                    }
+                    if matches!(
+                        error.raw_os_error(),
+                        Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::EPERM | libc::EACCES)
+                    ) && raw_name.starts_with(b"com.apple.")
+                    {
+                        break;
+                    }
+                    return Err(error);
+                }
+                let mut value = vec![0u8; usize::try_from(size).unwrap_or(0)];
+                if value.is_empty() {
+                    value_opt = Some(value);
+                    break;
+                }
+                // SAFETY: `value` has `value.len()` writable bytes.
+                let read = unsafe {
+                    libc::fgetxattr(
+                        fd,
+                        c_name.as_ptr(),
+                        value.as_mut_ptr().cast::<libc::c_void>(),
+                        value.len(),
+                        0,
+                        0,
+                    )
+                };
+                if read >= 0 {
+                    value.truncate(usize::try_from(read).unwrap_or(0));
+                    value_opt = Some(value);
+                    break;
+                }
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::ERANGE) {
+                    continue;
+                }
+                if error.raw_os_error() == Some(libc::ENOATTR) {
+                    break;
+                }
+                return Err(error);
+            }
+            if let Some(value) = value_opt {
+                xattrs.push((c_name, value));
+            }
+        }
+        xattrs.sort_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
+        Ok(xattrs)
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    fn apply_existing_user_xattrs(
+        temp_fd: std::os::fd::RawFd,
+        xattrs: &[(CString, Vec<u8>)],
+    ) -> io::Result<()> {
+        for (name, value) in xattrs {
+            // SAFETY: `temp_fd` is open, `name` is NUL-terminated, and
+            // `value.as_ptr()` is valid for `value.len()` bytes (non-null even when empty).
+            let rc = unsafe {
+                libc::fsetxattr(
+                    temp_fd,
+                    name.as_ptr(),
+                    value.as_ptr().cast::<libc::c_void>(),
+                    value.len(),
+                    0,
+                    0,
+                )
+            };
+            if rc != 0 {
+                let error = io::Error::last_os_error();
+                if name.as_bytes().starts_with(b"com.apple.")
+                    && matches!(
+                        error.raw_os_error(),
+                        Some(
+                            libc::EPERM
+                                | libc::EACCES
+                                | libc::ENOTSUP
+                                | libc::EOPNOTSUPP
+                                | libc::EINVAL
+                        )
+                    )
+                {
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn read_existing_user_xattrs(fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
+        let mut names_buf = Vec::new();
+        for _ in 0..4 {
+            // SAFETY: querying list size with null buffer.
+            let size = unsafe { libc::flistxattr(fd, std::ptr::null_mut(), 0) };
+            if size < 0 {
+                let error = io::Error::last_os_error();
+                if matches!(
+                    error.raw_os_error(),
+                    Some(libc::EOPNOTSUPP | libc::ENOTSUP | libc::ENOSYS)
+                ) {
+                    return Ok(Vec::new());
+                }
+                return Err(error);
+            }
+            if size == 0 {
+                return Ok(Vec::new());
+            }
+            names_buf.resize(usize::try_from(size).unwrap_or(0), 0u8);
+            // SAFETY: `names_buf` has `names_buf.len()` writable bytes.
+            let read = unsafe {
+                libc::flistxattr(
+                    fd,
+                    names_buf.as_mut_ptr().cast::<libc::c_char>(),
+                    names_buf.len(),
+                )
+            };
+            if read >= 0 {
+                names_buf.truncate(usize::try_from(read).unwrap_or(0));
+                break;
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::ERANGE) {
+                continue;
+            }
+            if matches!(
+                error.raw_os_error(),
+                Some(libc::EOPNOTSUPP | libc::ENOTSUP | libc::ENOSYS)
+            ) {
+                return Ok(Vec::new());
+            }
+            return Err(error);
+        }
+
+        let mut xattrs = Vec::new();
+        for raw_name in names_buf.split(|&byte| byte == 0) {
+            if !raw_name.starts_with(b"user.") {
+                continue;
+            }
+            let Ok(c_name) = CString::new(raw_name) else {
+                continue;
+            };
+            let mut value_opt = None;
+            for _ in 0..4 {
+                // SAFETY: querying xattr size with null buffer.
+                let size = unsafe { libc::fgetxattr(fd, c_name.as_ptr(), std::ptr::null_mut(), 0) };
+                if size < 0 {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() == Some(libc::ENODATA) {
+                        break;
+                    }
+                    return Err(error);
+                }
+                let mut value = vec![0u8; usize::try_from(size).unwrap_or(0)];
+                if value.is_empty() {
+                    value_opt = Some(value);
+                    break;
+                }
+                // SAFETY: `value` has `value.len()` writable bytes.
+                let read = unsafe {
+                    libc::fgetxattr(
+                        fd,
+                        c_name.as_ptr(),
+                        value.as_mut_ptr().cast::<libc::c_void>(),
+                        value.len(),
+                    )
+                };
+                if read >= 0 {
+                    value.truncate(usize::try_from(read).unwrap_or(0));
+                    value_opt = Some(value);
+                    break;
+                }
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::ERANGE) {
+                    continue;
+                }
+                if error.raw_os_error() == Some(libc::ENODATA) {
+                    break;
+                }
+                return Err(error);
+            }
+            if let Some(value) = value_opt {
+                xattrs.push((c_name, value));
+            }
+        }
+        xattrs.sort_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
+        Ok(xattrs)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn apply_existing_user_xattrs(
+        temp_fd: std::os::fd::RawFd,
+        xattrs: &[(CString, Vec<u8>)],
+    ) -> io::Result<()> {
+        for (name, value) in xattrs {
+            // SAFETY: `temp_fd` is open, `name` is NUL-terminated, and
+            // `value.as_ptr()` is valid for `value.len()` bytes (non-null even when empty).
+            let rc = unsafe {
+                libc::fsetxattr(
+                    temp_fd,
+                    name.as_ptr(),
+                    value.as_ptr().cast::<libc::c_void>(),
+                    value.len(),
+                    0,
+                )
+            };
+            if rc != 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
+    fn read_existing_user_xattrs(_fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
+        Ok(Vec::new())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
+    fn apply_existing_user_xattrs(
+        _temp_fd: std::os::fd::RawFd,
+        _xattrs: &[(CString, Vec<u8>)],
+    ) -> io::Result<()> {
+        Ok(())
+    }
+
     fn restore_existing_metadata(
         temp_fd: std::os::fd::RawFd,
         existing: &ExistingTarget,
     ) -> io::Result<()> {
+        apply_existing_user_xattrs(temp_fd, &existing.xattrs)?;
         let mut temp_stat = std::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: `temp_fd` is an open file descriptor and `temp_stat` is writable.
         if unsafe { libc::fstat(temp_fd, temp_stat.as_mut_ptr()) } != 0 {
@@ -7052,5 +7647,124 @@ mod tests {
             ContainedWriteDurability::Rename,
         )
         .expect("subsequent catalog writes must still succeed");
+
+        // 8. `lock_target` fails closed in a non-sticky shared writable
+        //    directory and succeeds once the sticky bit is set.
+        let shared = root.path().join("shared-lock-dir");
+        fs::create_dir(&shared).expect("create shared dir");
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o777)).expect("chmod 0777");
+        let shared_dir = ContainedDir::open_root(&shared).expect("open shared dir");
+        let non_sticky_err = shared_dir
+            .lock_target(OsStr::new("en.po"))
+            .expect_err("lock_target must fail closed in non-sticky shared writable directory");
+        assert!(matches!(
+            non_sticky_err,
+            ContainedFsError::Io(ref io_err) if io_err.kind() == io::ErrorKind::PermissionDenied
+        ));
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o1777)).expect("chmod 1777");
+        {
+            let _guard = shared_dir
+                .lock_target(OsStr::new("en.po"))
+                .expect("lock_target should succeed in sticky shared dir owned by caller");
+        }
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o755)).expect("restore perms");
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn replacing_file_preserves_user_extended_attributes() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let file_path = root.path().join("en.mjs");
+        fs::write(&file_path, "export default { a: 1 };\n").expect("seed module");
+        let c_path = CString::new(file_path.as_os_str().as_bytes()).expect("c path");
+
+        #[cfg(target_os = "macos")]
+        let attrs: [(&std::ffi::CStr, &[u8]); 2] = [
+            (c"com.example.review", b"approved-v1"),
+            (c"com.example.empty", b""),
+        ];
+        #[cfg(target_os = "linux")]
+        let attrs: [(&std::ffi::CStr, &[u8]); 2] = [
+            (c"user.palamedes.review", b"approved-v1"),
+            (c"user.palamedes.empty", b""),
+        ];
+
+        for (name, value) in attrs {
+            #[cfg(target_os = "macos")]
+            let rc = unsafe {
+                libc::setxattr(
+                    c_path.as_ptr(),
+                    name.as_ptr(),
+                    value.as_ptr().cast::<libc::c_void>(),
+                    value.len(),
+                    0,
+                    0,
+                )
+            };
+            #[cfg(target_os = "linux")]
+            let rc = unsafe {
+                libc::setxattr(
+                    c_path.as_ptr(),
+                    name.as_ptr(),
+                    value.as_ptr().cast::<libc::c_void>(),
+                    value.len(),
+                    0,
+                )
+            };
+            if rc != 0 {
+                let err = io::Error::last_os_error();
+                if matches!(
+                    err.raw_os_error(),
+                    Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::ENOSYS)
+                ) {
+                    // Temp filesystem does not support user xattrs.
+                    return;
+                }
+                panic!("setxattr({name:?}) failed: {err}");
+            }
+        }
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        dir.write_file_in_place(OsStr::new("en.mjs"), b"export default { a: 2 };\n")
+            .expect("recompile module via write_file_in_place");
+        assert_eq!(
+            fs::read_to_string(&file_path).expect("read updated module"),
+            "export default { a: 2 };\n"
+        );
+
+        for (name, expected) in attrs {
+            let mut buf = [0u8; 64];
+            #[cfg(target_os = "macos")]
+            let read = unsafe {
+                libc::getxattr(
+                    c_path.as_ptr(),
+                    name.as_ptr(),
+                    buf.as_mut_ptr().cast::<libc::c_void>(),
+                    buf.len(),
+                    0,
+                    0,
+                )
+            };
+            #[cfg(target_os = "linux")]
+            let read = unsafe {
+                libc::getxattr(
+                    c_path.as_ptr(),
+                    name.as_ptr(),
+                    buf.as_mut_ptr().cast::<libc::c_void>(),
+                    buf.len(),
+                )
+            };
+            assert!(
+                read >= 0,
+                "user xattr {name:?} disappeared after replacement: {}",
+                io::Error::last_os_error()
+            );
+            #[allow(clippy::cast_sign_loss)]
+            let actual = &buf[..read as usize];
+            assert_eq!(actual, expected, "user xattr {name:?} value changed");
+        }
     }
 }
