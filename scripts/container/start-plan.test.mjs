@@ -148,7 +148,7 @@ describe("container publish contract", () => {
     expect(containerfile).toContain("COPY --from=rust-toolchain /usr/local/rust /usr/local/rust");
     expect(containerfile).toContain("pnpm_config_verify_deps_before_run=false");
     expect(containerfile).toContain(
-      "find /app /usr/local/share/corepack ! -type l -exec chmod go-w",
+      "find /app /usr/local/share/corepack ! -type l -exec chmod a+rX,go-w",
     );
     expect(containerfile).toContain("COPY --from=build --chown=root:root /app /app");
     expect(containerfile).not.toContain("--chown=node:node");
@@ -157,7 +157,10 @@ describe("container publish contract", () => {
     expect(containerfile).toContain("podman build --format docker -f Containerfile");
     expect(runExamplesDoc).toContain("podman build --format docker -f Containerfile");
     expect(publishContainer).toContain('test "$(docker exec examples-smoke id -un)" = node');
-    expect(publishContainer).toContain("find /app /usr/local/share/corepack ! -type l -perm /022");
+    expect(publishContainer).toContain("if docker exec examples-smoke sh -c 'touch /app/.ro-check");
+    expect(publishContainer).toContain(
+      "find /app /usr/local/share/corepack ! -type l \\( -perm /022 -o -writable \\)",
+    );
 
     for (const dir of ["crates", "docs", "adr", "tests", "benchmarks", "fuzz", "site", "video"]) {
       expect(containerfile).toMatch(new RegExp(`\\b${dir}\\b`, "u"));

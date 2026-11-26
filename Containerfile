@@ -74,9 +74,9 @@ RUN node scripts/build-component-demos.mjs
 # Drop build-only artifacts and non-runtime directories before they reach the
 # runtime image: the compiled .node was already copied into the platform
 # package (target/ is dead weight), Next.js build caches are not needed by
-# `next start`, and source/docs/test trees are unused at runtime. Strip group
-# and other write bits so root-owned files copied into the runtime stage stay
-# read-only for the unprivileged `node` user regardless of build-context umask.
+# `next start`, and source/docs/test trees are unused at runtime. Normalize
+# permissions (`a+rX,go-w`) so root-owned files copied into the runtime stage
+# stay readable/traversable yet read-only for `node` regardless of host umask.
 RUN rm -rf target \
   examples/*/.next/cache \
   crates \
@@ -88,7 +88,7 @@ RUN rm -rf target \
   fuzz \
   site \
   video \
-  && find /app /usr/local/share/corepack ! -type l -exec chmod go-w {} +
+  && find /app /usr/local/share/corepack ! -type l -exec chmod a+rX,go-w {} +
 
 # --- Runtime stage -----------------------------------------------------------
 # Dev dependencies stay installed on purpose: TanStack's `vite preview` needs

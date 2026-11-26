@@ -11,6 +11,10 @@ const PINNED_ACTION_PATTERN = /^[^\s@]+@[0-9a-f]{40}$/u;
 const PINNED_DIGEST_PATTERN = /@sha256:[0-9a-f]{64}$/u;
 const EMBEDDED_VAR_PATTERN =
   /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu;
+const ENV_EXPRESSION_PATTERN =
+  /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/gu;
+const SINGLE_ENV_EXPRESSION_PATTERN =
+  /^\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}$/u;
 const ENV_PREFIX_ASSIGNMENT_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$/u;
 const SHELL_COMMAND_PREFIXES = new Set([
   "if",
@@ -187,11 +191,34 @@ function isLocalDockerActionImage(imageReference) {
   );
 }
 
+function resolveEnvExpressions(text, envMap) {
+  return text.replace(ENV_EXPRESSION_PATTERN, (match, _p1, _p2, _p3, _offset, _str, groups) => {
+    const name = groups.dot ?? groups.sq ?? groups.dq;
+    return envMap.has(name) ? envMap.get(name).value : match;
+  });
+}
+
 function resolveVars(token, vars) {
-  return token.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
+  const withEnv = resolveEnvExpressions(token, vars);
+  return withEnv.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
     const name = groups.braced ?? groups.bare;
     return vars.has(name) ? vars.get(name).value : match;
   });
+}
+
+function lookupSingleVarLine(token, vars, fallbackLine) {
+  const envExpr = SINGLE_ENV_EXPRESSION_PATTERN.exec(token);
+  if (envExpr) {
+    const name = envExpr.groups.dot ?? envExpr.groups.sq ?? envExpr.groups.dq;
+    return vars.get(name)?.line ?? fallbackLine;
+  }
+  const singleVar =
+    /^\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))$/u.exec(token);
+  if (singleVar) {
+    const name = singleVar.groups.braced ?? singleVar.groups.bare;
+    return vars.get(name)?.line ?? fallbackLine;
+  }
+  return fallbackLine;
 }
 
 // --- Zero-dependency YAML parser with 1-based line tracking ------------------
@@ -482,15 +509,16 @@ function parseFlowValue(raw, line, anchors = new Map()) {
 
 function parseYaml(source) {
   const rawLines = source.split(/\r?\n/u);
-  const isDocumentMarker = (trimmed) =>
-    trimmed === "---" || trimmed === "..." || /^%(?:YAML|TAG)\b/u.test(trimmed);
+  const isTopLevelMarker = (line) =>
+    line === "---" || line === "..." || /^%(?:YAML|TAG)\b/u.test(line);
 
   // Dedent snippet inputs (like indented fragments in unit tests) while keeping
-  // original 1-based line numbers intact.
+  // original 1-based line numbers intact. Preserve indentation of `---`/`...`
+  // inside block scalars so YAML heredocs inside `run: |` stay intact.
   let minIndent = Number.POSITIVE_INFINITY;
   for (const line of rawLines) {
     const trimmed = line.trim();
-    if (trimmed.length === 0 || trimmed.startsWith("#") || isDocumentMarker(trimmed)) {
+    if (trimmed.length === 0 || trimmed.startsWith("#") || isTopLevelMarker(line)) {
       continue;
     }
     minIndent = Math.min(minIndent, line.length - line.trimStart().length);
@@ -499,16 +527,10 @@ function parseYaml(source) {
     return { doc: null, error: null };
   }
 
-  const lines = rawLines.map((line, index) => {
-    const trimmed = line.trim();
-    if (isDocumentMarker(trimmed)) {
-      return { lineNumber: index + 1, text: trimmed };
-    }
-    return {
-      lineNumber: index + 1,
-      text: line.length >= minIndent ? line.slice(minIndent) : line.trimStart(),
-    };
-  });
+  const lines = rawLines.map((line, index) => ({
+    lineNumber: index + 1,
+    text: line.length >= minIndent ? line.slice(minIndent) : line.trimStart(),
+  }));
 
   const anchors = new Map();
 
@@ -924,6 +946,17 @@ function splitShellCommands(command) {
       continue;
     }
 
+    // Keep GitHub Actions `${{ ... }}` expressions intact as a single token so
+    // spaces inside `${{ env.IMAGE }}` do not split the image argument.
+    if (ch === "$" && command[index + 1] === "{" && command[index + 2] === "{") {
+      const closeIndex = command.indexOf("}}", index + 3);
+      if (closeIndex !== -1) {
+        current += command.slice(index, closeIndex + 2);
+        index = closeIndex + 1;
+        continue;
+      }
+    }
+
     // POSIX shell comments start with an unquoted `#` at a token boundary.
     if (ch === "#" && current.length === 0) {
       flushCommand();
@@ -969,47 +1002,140 @@ function splitShellCommands(command) {
   return commands;
 }
 
+function extractHeredocDelimiters(line) {
+  const delimiters = [];
+  let quote = null;
+  let escaping = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const ch = line[index];
+
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (ch === "\\" && quote !== "'") {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (ch === "#" && (index === 0 || /\s/u.test(line[index - 1]))) {
+      break;
+    }
+    if (ch === "<" && line[index + 1] === "<" && line[index + 2] !== "<") {
+      let cursor = index + 2;
+      let stripTabs = false;
+      if (line[cursor] === "-") {
+        stripTabs = true;
+        cursor += 1;
+      }
+      while (cursor < line.length && /[ \t]/u.test(line[cursor])) {
+        cursor += 1;
+      }
+      let delimiter = "";
+      let delimQuote = null;
+      let delimEscaping = false;
+      while (cursor < line.length) {
+        const dch = line[cursor];
+        if (delimEscaping) {
+          delimiter += dch;
+          delimEscaping = false;
+          cursor += 1;
+          continue;
+        }
+        if (dch === "\\" && delimQuote !== "'") {
+          delimEscaping = true;
+          cursor += 1;
+          continue;
+        }
+        if (delimQuote) {
+          if (dch === delimQuote) {
+            delimQuote = null;
+          } else {
+            delimiter += dch;
+          }
+          cursor += 1;
+          continue;
+        }
+        if (dch === "'" || dch === '"') {
+          delimQuote = dch;
+          cursor += 1;
+          continue;
+        }
+        if (/[\s;&|<>()]/u.test(dch)) {
+          break;
+        }
+        delimiter += dch;
+        cursor += 1;
+      }
+      if (delimiter.length > 0) {
+        delimiters.push({ delimiter, stripTabs });
+      }
+      index = cursor - 1;
+    }
+  }
+
+  return delimiters;
+}
+
+function collectExecutableShellLines(entries) {
+  const logicalLines = [];
+  const pendingHeredocs = [];
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const { text, lineNumber } = entries[index];
+
+    if (pendingHeredocs.length > 0) {
+      const current = pendingHeredocs[0];
+      const candidate = current.stripTabs ? text.replace(/^\t+/u, "") : text;
+      if (candidate === current.delimiter) {
+        pendingHeredocs.shift();
+      }
+      continue;
+    }
+
+    const trimmed = text.trim();
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const startLine = lineNumber;
+    let combined = trimmed;
+    while (combined.endsWith("\\") && index + 1 < entries.length) {
+      combined = `${combined.slice(0, -1)} ${entries[index + 1].text.trim()}`;
+      index += 1;
+    }
+
+    pendingHeredocs.push(...extractHeredocDelimiters(combined));
+    logicalLines.push({ text: combined, lineNumber: startLine, sourceLines: null });
+  }
+
+  return logicalLines;
+}
+
 function inspectShellRunScript(runNode, inheritedEnv, filePath, problems) {
   const vars = new Map(inheritedEnv);
 
-  // Build logical shell lines with accurate line numbers.
-  const logicalLines = [];
-  if (runNode.folded && Array.isArray(runNode.lines)) {
-    logicalLines.push({
-      text: runNode.value,
-      lineNumber: runNode.line,
-      sourceLines: runNode.lines,
-    });
-  } else if (Array.isArray(runNode.lines)) {
-    for (let index = 0; index < runNode.lines.length; index += 1) {
-      const entry = runNode.lines[index];
-      const trimmed = entry.text.trim();
-      if (trimmed.length === 0 || trimmed.startsWith("#")) {
-        continue;
-      }
-      const startLine = entry.lineNumber;
-      let combined = trimmed;
-      while (combined.endsWith("\\") && index + 1 < runNode.lines.length) {
-        combined = `${combined.slice(0, -1)} ${runNode.lines[index + 1].text.trim()}`;
-        index += 1;
-      }
-      logicalLines.push({ text: combined, lineNumber: startLine, sourceLines: null });
-    }
-  } else {
-    const rawLines = String(runNode.value).split(/\r?\n/u);
-    for (let index = 0; index < rawLines.length; index += 1) {
-      const trimmed = rawLines[index].trim();
-      if (trimmed.length === 0 || trimmed.startsWith("#")) {
-        continue;
-      }
-      let combined = trimmed;
-      while (combined.endsWith("\\") && index + 1 < rawLines.length) {
-        combined = `${combined.slice(0, -1)} ${rawLines[index + 1].trim()}`;
-        index += 1;
-      }
-      logicalLines.push({ text: combined, lineNumber: runNode.line + index, sourceLines: null });
-    }
-  }
+  // Build executable shell lines with accurate line numbers, skipping heredoc bodies.
+  const logicalLines =
+    runNode.folded && Array.isArray(runNode.lines)
+      ? [{ text: runNode.value, lineNumber: runNode.line, sourceLines: runNode.lines }]
+      : Array.isArray(runNode.lines)
+        ? collectExecutableShellLines(runNode.lines)
+        : collectExecutableShellLines(
+            String(runNode.value)
+              .split(/\r?\n/u)
+              .map((text, offset) => ({ text, lineNumber: runNode.line + offset })),
+          );
 
   for (const { text, lineNumber, sourceLines } of logicalLines) {
     for (const tokens of splitShellCommands(text)) {
@@ -1115,15 +1241,8 @@ function inspectShellRunScript(runNode, inheritedEnv, filePath, problems) {
       }
 
       if (!isPinnedDigest(resolved)) {
-        let reportLine = lineNumber;
-        const singleVar =
-          /^\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))$/u.exec(
-            imageToken,
-          );
-        if (singleVar) {
-          const name = singleVar.groups.braced ?? singleVar.groups.bare;
-          reportLine = commandVars.get(name)?.line ?? lineNumber;
-        } else if (sourceLines) {
+        let reportLine = lookupSingleVarLine(imageToken, commandVars, lineNumber);
+        if (reportLine === lineNumber && sourceLines) {
           reportLine =
             sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber;
         }
@@ -1146,11 +1265,18 @@ function extractEnvMap(envNode, baseEnv) {
   return merged;
 }
 
-function checkImageField(node, filePath, problems, { allowLocalDockerAction = false } = {}) {
+function checkImageField(
+  node,
+  envMap,
+  filePath,
+  problems,
+  { allowLocalDockerAction = false } = {},
+) {
   if (node?.kind !== "scalar") {
     return;
   }
-  const imageRef = String(node.value).trim();
+  const rawRef = String(node.value).trim();
+  const imageRef = resolveEnvExpressions(rawRef, envMap);
   if (!imageRef || isDynamicReference(imageRef)) {
     return;
   }
@@ -1158,7 +1284,8 @@ function checkImageField(node, filePath, problems, { allowLocalDockerAction = fa
     return;
   }
   if (!isPinnedDigest(imageRef)) {
-    problems.push(`${filePath}:${node.line}: ${imageRef} is not pinned to a sha256 digest`);
+    const reportLine = lookupSingleVarLine(rawRef, envMap, node.line);
+    problems.push(`${filePath}:${reportLine}: ${imageRef} is not pinned to a sha256 digest`);
   }
 }
 
@@ -1410,34 +1537,34 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
   const workflowEnv = extractEnvMap(doc.value.get("env"), new Map());
 
   // Support snippet inputs containing top-level `container`, `image`, `services`, or `steps`.
-  const checkContainerNode = (containerNode) => {
+  const checkContainerNode = (containerNode, envMap) => {
     if (!containerNode) {
       return;
     }
     if (containerNode.kind === "scalar") {
-      checkImageField(containerNode, filePath, problems);
+      checkImageField(containerNode, envMap, filePath, problems);
     } else if (containerNode.kind === "map") {
-      checkImageField(containerNode.value.get("image"), filePath, problems);
+      checkImageField(containerNode.value.get("image"), envMap, filePath, problems);
     }
   };
 
-  const checkServicesNode = (servicesNode) => {
+  const checkServicesNode = (servicesNode, envMap) => {
     if (servicesNode?.kind !== "map") {
       return;
     }
     for (const serviceNode of servicesNode.value.values()) {
-      checkContainerNode(serviceNode);
+      checkContainerNode(serviceNode, envMap);
     }
   };
 
-  checkContainerNode(doc.value.get("container"));
-  checkServicesNode(doc.value.get("services"));
-  checkImageField(doc.value.get("image"), filePath, problems);
+  checkContainerNode(doc.value.get("container"), workflowEnv);
+  checkServicesNode(doc.value.get("services"), workflowEnv);
+  checkImageField(doc.value.get("image"), workflowEnv, filePath, problems);
   checkStepsList(doc.value.get("steps"), workflowEnv, filePath, problems);
 
   const runsNode = doc.value.get("runs");
   if (runsNode?.kind === "map") {
-    checkImageField(runsNode.value.get("image"), filePath, problems, {
+    checkImageField(runsNode.value.get("image"), workflowEnv, filePath, problems, {
       allowLocalDockerAction: true,
     });
     checkStepsList(runsNode.value.get("steps"), workflowEnv, filePath, problems);
@@ -1450,8 +1577,8 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
         continue;
       }
       const jobEnv = extractEnvMap(jobNode.value.get("env"), workflowEnv);
-      checkContainerNode(jobNode.value.get("container"));
-      checkServicesNode(jobNode.value.get("services"));
+      checkContainerNode(jobNode.value.get("container"), jobEnv);
+      checkServicesNode(jobNode.value.get("services"), jobEnv);
       checkStepsList(jobNode.value.get("steps"), jobEnv, filePath, problems);
     }
   }

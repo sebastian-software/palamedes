@@ -1357,6 +1357,61 @@ describe("workflow contracts", () => {
       "<memory>:5: node:24 is not pinned to a sha256 digest",
       "<memory>:5: node:24 is not pinned to a sha256 digest",
     ]);
+    // Actions `${{ env.* }}` expressions resolve against scoped static env mappings.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "env:",
+          "  IMAGE: node:24",
+          "jobs:",
+          "  test:",
+          "    container: ${{ env.IMAGE }}",
+          "    steps:",
+          "      - run: docker pull ${{ env.IMAGE }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:2: node:24 is not pinned to a sha256 digest",
+      "<memory>:2: node:24 is not pinned to a sha256 digest",
+    ]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "env:",
+          `  IMAGE: node:24@${digest}`,
+          "jobs:",
+          "  test:",
+          "    container: ${{ env.IMAGE }}",
+          "    steps:",
+          "      - run: docker pull ${{ env.IMAGE }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([]);
+    // YAML document markers and Docker examples inside heredocs must not trigger false positives.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "---",
+          "jobs:",
+          "  docs:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - run: |",
+          "          cat <<'YAML' > manifest.yaml",
+          "          ---",
+          "          kind: Demo",
+          "          ...",
+          "          YAML",
+          "          cat <<'EOF' >> \"$GITHUB_STEP_SUMMARY\"",
+          "          docker pull node:24",
+          "          EOF",
+          `          docker pull node:24@${digest}`,
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([]);
     expect(
       unpinnedWorkflowContainerReferences(
         "      - name: Multi\n        run: docker version && docker pull node:24\n",
