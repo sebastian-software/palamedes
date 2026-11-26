@@ -1107,9 +1107,32 @@ function findEnclosingModuleContext(
   if (braceStack.length === 0) {
     return { scopeStart: 0, scopeEnd: source.length, isTopLevel: true };
   }
-  if (braceStack.length !== 1) return;
-
-  const openBrace = braceStack[0]!;
+  let openBrace: number | undefined;
+  if (braceStack.length === 1) {
+    openBrace = braceStack[0]!;
+  } else if (braceStack.length === 2) {
+    // Next 16.4.1 can wrap strict-mode factory tables in a leading zero-arg IIFE
+    // (`module.exports = [(() => { "use strict"; return [id, factory, ...]; })(), ...]`).
+    const outerBrace = braceStack[0]!;
+    const outerPrefix = source.slice(0, outerBrace);
+    if (
+      /(?:^|[^\w$])(?:\(\s*\)\s*=>|function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*\))\s*$/u.test(
+        outerPrefix,
+      )
+    ) {
+      const outerClose = scanBalancedEnd(source, outerBrace);
+      if (outerClose !== -1) {
+        let afterOuter = skipWhitespaceAndComments(source, outerClose);
+        if (source[afterOuter] === ")") {
+          afterOuter = skipWhitespaceAndComments(source, afterOuter + 1);
+        }
+        if (source[afterOuter] === "(") {
+          openBrace = braceStack[1]!;
+        }
+      }
+    }
+  }
+  if (openBrace === undefined) return;
   const closeBraceEnd = scanBalancedEnd(source, openBrace);
   if (closeBraceEnd === -1) return;
 
@@ -1435,8 +1458,84 @@ const NEXT_APP_PAGE_RUNTIME_SPECIFIER =
 const NEXT_APP_PAGE_EXTERNAL_SPECIFIER =
   /^next\/dist\/(?:compiled\/next-server\/app-page(?:-turbo)?(?:-experimental)?\.runtime\.(?:prod|dev)\.js|server\/route-modules\/app-page\/module\.compiled(?:\.js)?)$/u;
 
-type TurbopackModuleResolver = (moduleId: string) => string | undefined;
+/** Returns the factory source, `null` when conflicting factories exist for `moduleId`, or `undefined` when absent. */
+type TurbopackModuleResolver = (moduleId: string) => string | null | undefined;
 type TurbopackChunkModuleCache = Map<string, Map<string, string | null> | null>;
+
+function unwrapNestedTurbopackFactoryArray(expr: string): string | undefined {
+  const withoutSpread = expr.trim().startsWith("...") ? expr.trim().slice(3) : expr;
+  const trimmed = stripOuterParens(withoutSpread);
+  if (trimmed.startsWith("[") && scanBalancedEnd(trimmed, 0) === trimmed.length) {
+    return trimmed;
+  }
+  // Strict-mode IIFE table: `(() => { "use strict"; return [...]; })()` or
+  // `(function() { "use strict"; return [...]; })()`.
+  const callMatch = /^([\s\S]+?)\(\s*\)$/u.exec(trimmed);
+  if (!callMatch) return;
+  const callee = stripOuterParens(callMatch[1]!);
+  const conciseArrow = /^\(\s*\)\s*=>\s*([\s\S]+)$/u.exec(callee);
+  if (conciseArrow) {
+    const bodyExpr = stripOuterParens(conciseArrow[1]!);
+    if (bodyExpr.startsWith("[") && scanBalancedEnd(bodyExpr, 0) === bodyExpr.length) {
+      return bodyExpr;
+    }
+  }
+  const blockMatch = /^(?:\(\s*\)\s*=>|function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*\))\s*\{/u.exec(
+    callee,
+  );
+  if (!blockMatch) return;
+  const openBrace = blockMatch[0].length - 1;
+  if (scanBalancedEnd(callee, openBrace) !== callee.length) return;
+  const body = stripLeadingCommentsAndUseStrict(callee.slice(openBrace + 1, -1));
+  const returnMatch = /^return\s*([\s\S]+?)\s*;?$/u.exec(body);
+  if (!returnMatch) return;
+  const returned = stripOuterParens(returnMatch[1]!);
+  if (returned.startsWith("[") && scanBalancedEnd(returned, 0) === returned.length) {
+    return returned;
+  }
+  return;
+}
+
+function extractTurbopackFactoryTableElements(
+  elements: readonly string[],
+  modules: Map<string, string | null>,
+  depth = 0,
+): void {
+  if (depth > 2) return;
+  // Turbopack registers one or more consecutive module IDs followed by their
+  // shared factory function (`[3042, 77420, (a, b) => ...]`). Next 16.4.1 can
+  // also place strict-mode factories inside a leading nested table (`[[id, fn],
+  // id2, fn2]` or `[(() => { "use strict"; return [id, fn]; })(), id2, fn2]`).
+  let pendingIds: string[] = [];
+  for (const rawElement of elements) {
+    const elem = rawElement.trim();
+    if (pendingIds.length === 0) {
+      const nestedArray = unwrapNestedTurbopackFactoryArray(elem);
+      if (nestedArray) {
+        const nestedElements = splitTopLevelArrayElements(nestedArray, 0);
+        if (nestedElements) {
+          extractTurbopackFactoryTableElements(nestedElements, modules, depth + 1);
+        }
+        continue;
+      }
+    }
+    const normalizedId = normalizeTurbopackModuleId(elem);
+    if (normalizedId !== undefined) {
+      pendingIds.push(normalizedId);
+      continue;
+    }
+    if (pendingIds.length === 0) break;
+    for (const id of pendingIds) {
+      const existing = modules.get(id);
+      if (existing === undefined) {
+        modules.set(id, elem);
+      } else if (existing !== elem) {
+        modules.set(id, null);
+      }
+    }
+    pendingIds = [];
+  }
+}
 
 function extractTurbopackModulesFromSource(source: string): Map<string, string | null> {
   const modules = new Map<string, string | null>();
@@ -1498,27 +1597,7 @@ function extractTurbopackModulesFromSource(source: string): Map<string, string |
           if (arrayEnd !== -1) {
             const elements = splitTopLevelArrayElements(source.slice(arrayStart, arrayEnd), 0);
             if (elements) {
-              // Turbopack registers one or more consecutive module IDs followed
-              // by their shared factory function: `[3042, 77420, (a, b) => ...]`.
-              let pendingIds: string[] = [];
-              for (const rawElement of elements) {
-                const elem = rawElement.trim();
-                const normalizedId = normalizeTurbopackModuleId(elem);
-                if (normalizedId !== undefined) {
-                  pendingIds.push(normalizedId);
-                  continue;
-                }
-                if (pendingIds.length === 0) break;
-                for (const id of pendingIds) {
-                  const existing = modules.get(id);
-                  if (existing === undefined) {
-                    modules.set(id, elem);
-                  } else if (existing !== elem) {
-                    modules.set(id, null);
-                  }
-                }
-                pendingIds = [];
-              }
+              extractTurbopackFactoryTableElements(elements, modules);
             }
             index = arrayEnd;
             prevToken = "other";
@@ -1552,6 +1631,7 @@ function createTurbopackModuleResolver(
 ): TurbopackModuleResolver {
   const combined = new Map<string, string | null>();
   let loadedChunks = false;
+  let hasUnreadableChunk = false;
 
   const mergeModules = (extracted: Map<string, string | null>) => {
     for (const [id, factory] of extracted) {
@@ -1566,7 +1646,7 @@ function createTurbopackModuleResolver(
 
   for (const source of inlineSources) mergeModules(extractTurbopackModulesFromSource(source));
 
-  return (moduleId: string): string | undefined => {
+  return (moduleId: string): string | null | undefined => {
     if (!loadedChunks && chunkPaths.length > 0) {
       loadedChunks = true;
       for (const chunkPath of chunkPaths) {
@@ -1575,16 +1655,21 @@ function createTurbopackModuleResolver(
           try {
             extracted = extractTurbopackModulesFromSource(readFileSync(chunkPath, "utf8"));
           } catch {
-            // Ignore unreadable chunks; missing provenance fails closed.
+            // Unreadable sibling chunks could register a conflicting factory;
+            // fail closed by treating lookups as ambiguous.
             extracted = null;
           }
           chunkCache?.set(chunkPath, extracted);
         }
-        if (extracted) mergeModules(extracted);
+        if (extracted) {
+          mergeModules(extracted);
+        } else {
+          hasUnreadableChunk = true;
+        }
       }
     }
-    const found = combined.get(moduleId);
-    return found === null ? undefined : found;
+    if (hasUnreadableChunk) return null;
+    return combined.get(moduleId);
   };
 }
 
@@ -2171,7 +2256,7 @@ function isNextAppPageExternalModule(
 ): boolean {
   if (depth > 4) return false;
   const factory = resolveModule(moduleId);
-  if (!factory) return false;
+  if (typeof factory !== "string") return false;
   const parsed = parseTurbopackFactory(factory);
   if (!parsed) return false;
   const body = unwrapTurbopackCompileTimeBranches(parsed.body);
@@ -2381,7 +2466,7 @@ function verifyTurbopackAppPageRuntimeExport(
   resolveModule: TurbopackModuleResolver,
 ): boolean {
   const factory = resolveModule(runtimeModuleId);
-  if (!factory) return false;
+  if (typeof factory !== "string") return false;
   const parsed = parseTurbopackFactory(factory);
   if (!parsed) return false;
   const fnSource = extractTurbopackExportedFunction(parsed.body, parsed.param, exportName);
@@ -3194,11 +3279,18 @@ function resolveTurbopackRouteModuleTarget(
 
   for (let depth = 0; depth <= 8; depth += 1) {
     const factory = resolveModule(currentModuleId);
-    if (!factory)
-      return { moduleId: currentModuleId, exportName: currentExportName, kind, forwarded };
+    // Ambiguous module IDs (conflicting factories across or within loaded chunks)
+    // must fail closed rather than letting the template chunk alone win.
+    if (factory === null) return;
+    if (factory === undefined) {
+      return forwarded
+        ? undefined
+        : { moduleId: currentModuleId, exportName: currentExportName, kind, forwarded };
+    }
     const parsed = parseTurbopackFactory(factory);
-    if (!parsed)
+    if (!parsed) {
       return { moduleId: currentModuleId, exportName: currentExportName, kind, forwarded };
+    }
     const step = inspectTurbopackExportHop(
       parsed.body,
       parsed.param,
@@ -3918,8 +4010,11 @@ function findTreeExpressionsInSource(
             props.has("interopDefault");
           if (isNextAppPageEntrypointArgs) {
             const moduleCtx = findEnclosingModuleContext(source, objectStart);
+            const hasAmbiguousModuleId =
+              moduleCtx?.moduleIds?.some((id) => resolveTurbopackModule(id) === null) === true;
             if (
               moduleCtx &&
+              !hasAmbiguousModuleId &&
               (expectedModuleId === undefined ||
                 moduleCtx.moduleIds?.includes(expectedModuleId) === true)
             ) {
@@ -4043,7 +4138,7 @@ function findTreeExpressionForPage(
   );
   if (matches.length === 0 && forwarded && targetModuleId !== undefined) {
     const forwardedFactory = resolveTurbopackModule(targetModuleId);
-    if (forwardedFactory) {
+    if (typeof forwardedFactory === "string") {
       matches = findTreeExpressionsInSource(
         `module.exports=[${formatNormalizedTurbopackModuleIdLiteral(targetModuleId)},${forwardedFactory}];`,
         expectedPage,

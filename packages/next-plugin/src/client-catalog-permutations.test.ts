@@ -1424,6 +1424,58 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
 ];\n`,
         );
         expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
+        // Next 16.4.1 can place strict-mode factories in a leading nested array
+        // or strict-mode IIFE at the start of `module.exports = [...]` before
+        // outer module factories. Verify both leading nested tables and outer
+        // entries are decoded cleanly.
+        writeFileSync(
+          namedRuntimeChunk,
+          `module.exports = [
+['${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function({tree:O,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},V=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:O}}); async function W(){return null} return {__next_app__:U,routeModule:V,handler:W}; }]); }],
+'${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
+'${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
+];\n`,
+        );
+        writeFileSync(
+          templateChunk,
+          `module.exports = [
+[(() => { "use strict"; return ['${namedEntryId}', a => { let c = a.i('${namedRuntimeId}'); let j = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []]; let m = (0, c.f)({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: k, loadChunk: lc, interopDefault: d.interopDefault }), n = m.__next_app__, o = m.routeModule, p = m.handler; a.s(["__next_app__", 0, n, "handler", 0, p, "routeModule", 0, o]); }]; })()],
+'[project]/outer-after-nested', (a, b) => { b.exports = {}; }
+];\n`,
+        );
+        expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+        // Also test a direct leading nested array (without IIFE) followed by the
+        // outer route entrypoint factory.
+        writeFileSync(
+          templateChunk,
+          `module.exports = [
+['[project]/strict-helper', a => { a.s([]); }],
+'${namedEntryId}', a => { "use strict"; let c = a.i('${namedRuntimeId}'); let j = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []]; let m = (0, c.f)({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: k, loadChunk: lc, interopDefault: d.interopDefault }), n = m.__next_app__, o = m.routeModule, p = m.handler; a.s(["__next_app__", 0, n, "handler", 0, p, "routeModule", 0, o]); }
+];\n`,
+        );
+        expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+        // Conflicting factories registered for the same route-module ID across
+        // two loaded chunks must fail closed instead of letting the template
+        // chunk override the earlier chunk.
+        const conflictingChunk = path.join(distDir, "server/chunks/ssr/conflicting_entry.js");
+        try {
+          writeFileSync(
+            conflictingChunk,
+            `module.exports = [
+'${namedEntryId}', a => { "use strict"; let c = a.i('${namedRuntimeId}'); let j = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, { layout: [ly, "[project]/app/[[...locale]]/layout.tsx"] }, []] }, {}, []]; let m = (0, c.f)({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: k, loadChunk: lc, interopDefault: d.interopDefault }), n = m.__next_app__, o = m.routeModule, p = m.handler; a.s(["__next_app__", 0, n, "handler", 0, p, "routeModule", 0, o]); }
+];\n`,
+          );
+          writeFileSync(
+            path.join(distDir, "server/app/[[...locale]]/page.js"),
+            `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/conflicting_entry.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+        } finally {
+          rmSync(conflictingChunk, { force: true });
+        }
       } finally {
         writeFileSync(path.join(distDir, "server/app/[[...locale]]/page.js"), savedEntryForNamed);
         rmSync(namedRuntimeChunk, { force: true });
