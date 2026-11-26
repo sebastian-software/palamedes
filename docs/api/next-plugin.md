@@ -376,12 +376,20 @@ whose Proxy should take precedence over route params can opt in with
 `bindClientCatalogPermutations({ localeSource: "header" })`. Whenever the header
 can select different locales for the same URL (for example, overriding `/en`
 with German via `localeSource: "header"`), the document shell itself must not be
-prerendered for that URL: render the route dynamically (`export const dynamic = "force-dynamic"`)
-rather than relying on a dynamic API inside a `<Suspense>` child (with Cache
-Components enabled, a dynamic child leaves the prerendered shell bound to the
-route locale's chunk URLs). Any shared response cache (CDN, reverse proxy, or
-ISR) must also distinguish locales or be bypassed; signing the header does not
-change either requirement.
+prerendered for that URL:
+
+- **Without `cacheComponents`:** export `export const dynamic = "force-dynamic"`
+  (or use another request-time dynamic API in the layout/page) so the route
+  renders dynamically on every request.
+- **With `cacheComponents: true`:** Next.js 16 rejects
+  `export const dynamic = "force-dynamic"`, and reading a dynamic API inside a
+  `<Suspense>` child still leaves the prerendered shell bound to the route
+  locale's chunk URLs. Routes that retain a prerendered shell must select chunks
+  by `[locale]` route param rather than overriding the locale via header.
+
+Any shared response cache (CDN, reverse proxy, or ISR) must also distinguish
+locales or be bypassed for header-varying URLs; signing the header does not
+change either rendering or caching requirement.
 
 If your app can consult an unsigned `x-palamedes-locale` header — either in
 `localeSource: "header"` mode, or in `route-first` mode on any route without a

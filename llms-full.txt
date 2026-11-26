@@ -782,9 +782,11 @@ cover every renderable route in the Proxy matcher to strip/overwrite incoming
 headers or require HMAC-SHA256 verification via `signClientCatalogLocaleHeader()`
 and `headerSecret` (passing an explicitly `undefined` or empty `headerSecret`
 throws at binding time). For any URL whose locale can vary by header, do not
-prerender the document shell (a dynamic child inside `<Suspense>` under Cache
-Components is insufficient) and ensure shared caches vary by locale or are
-bypassed. See `/docs/api/next-plugin.md#client-chunk-permutations-experimental`.
+prerender the document shell (use `export const dynamic = "force-dynamic"` only
+when `cacheComponents` is disabled; with `cacheComponents: true`, routes that
+retain a prerendered shell must select chunks by `[locale]` route param rather
+than header override) and ensure shared caches vary by locale or are bypassed.
+See `/docs/api/next-plugin.md#client-chunk-permutations-experimental`.
 
 ### Remix v3
 

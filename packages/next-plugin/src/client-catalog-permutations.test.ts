@@ -17,6 +17,7 @@ import {
   assertNoBootstrapChunks,
   assertChunkCoverage,
   chunkReferences,
+  compiledLoaderTreeHasOptionalRootLocale,
   compiledRouteHasOptionalRootLocale,
   emitClientCatalogPermutations,
   filterLoadableManifest,
@@ -381,34 +382,6 @@ describe("locale resolution", () => {
         ),
       ).toBe(true);
 
-      // A symlink pointing to a regular layout file counts as a layout (like Next),
-      // while a symlink pointing to a directory does not.
-      writeLayout("symlink-file", "shared/root-layout.tsx");
-      writeLayout("symlink-file", "app/[[...locale]]/layout.tsx");
-      symlinkSync(
-        path.join(fixtureRoot, "symlink-file/shared/root-layout.tsx"),
-        path.join(fixtureRoot, "symlink-file/app/layout.tsx"),
-      );
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "symlink-file"),
-          "[[...locale]]/page_client-reference-manifest.js",
-        ),
-      ).toBe(false);
-
-      mkdirSync(path.join(fixtureRoot, "symlink-dir/shared/dir"), { recursive: true });
-      writeLayout("symlink-dir", "app/[[...locale]]/layout.tsx");
-      symlinkSync(
-        path.join(fixtureRoot, "symlink-dir/shared/dir"),
-        path.join(fixtureRoot, "symlink-dir/app/layout.tsx"),
-      );
-      expect(
-        routeHasOptionalRootLocale(
-          path.join(fixtureRoot, "symlink-dir"),
-          "[[...locale]]/page_client-reference-manifest.js",
-        ),
-      ).toBe(true);
-
       // src/app/(marketing)/[[...locale]]/layout.page.tsx with custom pageExtensions.
       writeLayout("src-custom-ext", "src/app/(marketing)/[[...locale]]/layout.page.tsx");
       expect(
@@ -447,6 +420,57 @@ describe("locale resolution", () => {
     expect(resolveRenderLocale(locales, "en", undefined, unit({ headers: header("de") }))).toBe(
       "de",
     );
+  });
+
+  it("follows layout file symlinks (and ignores symlinked directories) in the source-tree fallback", (context) => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-symlink-layout-tree-"));
+    try {
+      const writeLayout = (project: string, relativePath: string) => {
+        const target = path.join(fixtureRoot, project, relativePath);
+        mkdirSync(path.dirname(target), { recursive: true });
+        writeFileSync(
+          target,
+          "export default function Layout({ children }) { return children; }\n",
+        );
+      };
+
+      writeLayout("symlink-file", "shared/root-layout.tsx");
+      writeLayout("symlink-file", "app/[[...locale]]/layout.tsx");
+      try {
+        symlinkSync(
+          path.join(fixtureRoot, "symlink-file/shared/root-layout.tsx"),
+          path.join(fixtureRoot, "symlink-file/app/layout.tsx"),
+        );
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EPERM" || code === "EACCES") {
+          context.skip();
+          return;
+        }
+        throw error;
+      }
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "symlink-file"),
+          "[[...locale]]/page_client-reference-manifest.js",
+        ),
+      ).toBe(false);
+
+      mkdirSync(path.join(fixtureRoot, "symlink-dir/shared/dir"), { recursive: true });
+      writeLayout("symlink-dir", "app/[[...locale]]/layout.tsx");
+      symlinkSync(
+        path.join(fixtureRoot, "symlink-dir/shared/dir"),
+        path.join(fixtureRoot, "symlink-dir/app/layout.tsx"),
+      );
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "symlink-dir"),
+          "[[...locale]]/page_client-reference-manifest.js",
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it("embeds optional-root-locale route-tree detection into built manifests without relying on layout asset entries", async () => {
@@ -754,15 +778,17 @@ const entrypoint = createAppPageEntrypoint({
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(true);
 
-      // Single-quoted JS string with escaped apostrophe and embedded quotes, as
-      // Next 16.4.6 emits for routes like `app/Bob's "recs"/[[...locale]]/layout.page.jsx`.
-      const specialDir = path.join(projectRoot, 'app/Bob\'s "recs"/[[...locale]]');
+      // Single-quoted JS string with escaped apostrophe in a Windows-portable
+      // directory name (`Bob's recs`), plus an in-memory check for routes
+      // containing both `'` and `"` (`Bob's "recs"`, which POSIX supports and
+      // Windows disallows in directory names).
+      const specialDir = path.join(projectRoot, "app/Bob's recs/[[...locale]]");
       mkdirSync(specialDir, { recursive: true });
       writeFileSync(
         path.join(specialDir, "layout.page.jsx"),
         "export default function Layout({ children }) { return children; }\n",
       );
-      const specialManifestDir = path.join(distDir, 'server/app/Bob\'s "recs"/[[...locale]]');
+      const specialManifestDir = path.join(distDir, "server/app/Bob's recs/[[...locale]]");
       mkdirSync(specialManifestDir, { recursive: true });
       const specialManifestPath = path.join(
         specialManifestDir,
@@ -771,24 +797,28 @@ const entrypoint = createAppPageEntrypoint({
       writeFileSync(
         specialManifestPath,
         `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
-globalThis.__RSC_MANIFEST[${JSON.stringify('/Bob\'s "recs"/[[...locale]]/page')}] = ${JSON.stringify(
-          {
-            entryCSSFiles: {},
-            entryJSFiles: {
-              '[project]/app/Bob\'s "recs"/[[...locale]]/page': ["static/chunks/page.js"],
-            },
+globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] = ${JSON.stringify({
+          entryCSSFiles: {},
+          entryJSFiles: {
+            "[project]/app/Bob's recs/[[...locale]]/page": ["static/chunks/page.js"],
           },
-        )};`,
+        })};`,
       );
       writeFileSync(
         path.join(specialManifestDir, "page.js"),
-        `var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/Bob's \\"recs\\"/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_special.js")\n`,
+        `var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/Bob's recs/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_special.js")\n`,
       );
       writeFileSync(
         path.join(distDir, "server/chunks/ssr/next_dist_esm_build_templates_app-page_special.js"),
-        `module.exports=[2,a=>{let j=["",{children:['Bob\\'s "recs"',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s "recs"/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s "recs"/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:'/Bob\\'s "recs"/[[...locale]]/page',pathname:'/Bob\\'s "recs"/[[...locale]]'});}];`,
+        `module.exports=[2,a=>{let j=["",{children:['Bob\\'s recs',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s recs/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s recs/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:'/Bob\\'s recs/[[...locale]]/page',pathname:'/Bob\\'s recs/[[...locale]]'});}];`,
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, specialManifestPath)).toBe(true);
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `module.exports=[2,a=>{let j=["",{children:['Bob\\'s "recs"',{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,'[project]/app/Bob\\'s "recs"/[[...locale]]/page.page.jsx']},[]]},{metadata:{},layout:[l,'[project]/app/Bob\\'s "recs"/[[...locale]]/layout.page.jsx']},[]]},{metadata:{}},[]]},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:'/Bob\\'s "recs"/[[...locale]]/page',pathname:'/Bob\\'s "recs"/[[...locale]]'});}];`,
+          '/Bob\'s "recs"/[[...locale]]/page',
+        ),
+      ).toBe(true);
 
       // If no entrypoint binds `tree` for this page, return undefined so the
       // source-tree fallback runs instead of trusting an unrelated array.

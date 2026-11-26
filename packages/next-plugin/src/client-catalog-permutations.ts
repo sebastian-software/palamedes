@@ -487,6 +487,20 @@ function findTreeExpressionForPage(source: string, expectedPage: string): string
 }
 
 /**
+ * Inspects a compiled Next.js page chunk source for the `loaderTree` bound to
+ * `expectedPage` and returns whether an optional catch-all `[[...locale]]`
+ * segment sits at or above its first `layout`.
+ */
+export function compiledLoaderTreeHasOptionalRootLocale(
+  source: string,
+  expectedPage: string,
+): boolean | undefined {
+  const treeExpr = findTreeExpressionForPage(source, expectedPage);
+  if (!treeExpr) return;
+  return walkCompiledLoaderTree(treeExpr, 0, false);
+}
+
+/**
  * Inspects Next.js's compiled `loaderTree` for a route manifest to determine
  * whether an optional catch-all `[[...locale]]` segment sits at or above the
  * route's first `layout`, matching Next.js's `getRootParamsImpl()`. Uses the
@@ -526,12 +540,6 @@ export function compiledRouteHasOptionalRootLocale(
     return aIsTemplate - bIsTemplate;
   });
 
-  const inspectSource = (source: string): boolean | undefined => {
-    const treeExpr = findTreeExpressionForPage(source, expectedPage);
-    if (!treeExpr) return;
-    return walkCompiledLoaderTree(treeExpr, 0, false);
-  };
-
   for (const chunkPath of chunkPaths) {
     let chunkSource: string;
     try {
@@ -539,10 +547,10 @@ export function compiledRouteHasOptionalRootLocale(
     } catch {
       continue;
     }
-    const result = inspectSource(chunkSource);
+    const result = compiledLoaderTreeHasOptionalRootLocale(chunkSource, expectedPage);
     if (result !== undefined) return result;
   }
-  return inspectSource(entrySource);
+  return compiledLoaderTreeHasOptionalRootLocale(entrySource, expectedPage);
 }
 
 function resolveSourceSegmentDirectory(
