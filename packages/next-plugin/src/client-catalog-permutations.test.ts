@@ -1537,7 +1537,7 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
           );
           writeFileSync(
             collidingFilenameChunk,
-            `module.exports = [92e3, a => { let counter = 1; const half = counter++ / 2; const ratio = obj.return / 2; const link = { href: "/shop/" + half + ratio }; a.s(["default", 0, link]); }, '[project]/user-page-mod', a => { a.s([]); }];\n`,
+            `module.exports = [92e3, a => { let counter = 1; const half = counter++ / 2; const ratio = obj.return / 2; const metric = metrics.with(params) / 2; const link = { href: "/shop/" + half + ratio + metric }; a.s(["default", 0, link]); }, '[project]/user-page-mod', a => { a.s([]); }];\n`,
           );
           writeFileSync(
             templateChunk,

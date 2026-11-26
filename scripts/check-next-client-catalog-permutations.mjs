@@ -454,9 +454,10 @@ export function Greeting() {
         path.join(fixtureDir, "app/[[...locale]]/page.tsx"),
         `import { Greeting } from "./greeting";
 export const dynamic = "force-dynamic";
+const metrics = { with: (value: number) => value };
 export default function Page() {
   let counter = 1;
-  const half = counter++ / 2;
+  const half = counter++ / 2 + metrics.with(4) / 2;
   return (
     <a href={"/shop/" + half}>
       <Greeting />

@@ -252,8 +252,11 @@ function scanBalancedEnd(source: string, start: number): number {
       const wordStart = index;
       index += 1;
       while (index < source.length && /[\w$]/u.test(source[index] ?? "")) index += 1;
-      prevWord = source.slice(wordStart, index);
-      regexAllowed = !prevWasDot && REGEX_PRECEDING_KEYWORDS.has(prevWord);
+      const word = source.slice(wordStart, index);
+      // Property accesses like `metrics.with(params)` or `fiber.return` are not
+      // keywords, so clear `prevWord` and disallow regexes after them.
+      prevWord = prevWasDot ? "" : word;
+      regexAllowed = !prevWasDot && REGEX_PRECEDING_KEYWORDS.has(word);
       prevWasDot = false;
       continue;
     }
@@ -266,9 +269,7 @@ function scanBalancedEnd(source: string, start: number): number {
       continue;
     }
     if (ch === "(") {
-      parenConditionStack.push(
-        !prevWasDot && (CONTROL_FLOW_KEYWORDS.has(prevWord) || prevWord === "for"),
-      );
+      parenConditionStack.push(CONTROL_FLOW_KEYWORDS.has(prevWord) || prevWord === "for");
     } else if (ch === ")") {
       const wasCondition = parenConditionStack.pop() ?? false;
       if (ch === close) {
