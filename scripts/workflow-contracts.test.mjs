@@ -3220,6 +3220,50 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r38Fixture, { recursive: true, force: true });
     }
+    // `docker/setup-buildx-action` validates every appended node's BuildKit
+    // image; literal image tags with a dynamic registry prefix are caught;
+    // absent properties on known matrix rows expand to empty strings in both
+    // fields and run scripts; and Docker's `--umask` consumes its value.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  r39:",
+          "    runs-on: ubuntu-24.04",
+          "    strategy:",
+          "      matrix:",
+          "        include:",
+          "          - name: pinned",
+          `            suffix: "@${digest}"`,
+          "          - name: bare",
+          "    container: ghcr.io/${{ github.repository_owner }}/runner:latest",
+          "    services:",
+          "      db:",
+          "        image: node:24${{ matrix.suffix }}",
+          "    steps:",
+          `      - run: docker run --umask 0022 node:24@${digest} node -v`,
+          "      - run: docker pull node:24${{ matrix.suffix }}",
+          "      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4",
+          "        with:",
+          "          driver-opts: |",
+          `            image=moby/buildkit:v0.35.1@${digest}`,
+          "          append: |",
+          "            - endpoint: ssh://arm-pinned",
+          "              driver-opts: |",
+          `                image=moby/buildkit:v0.35.1@${digest}`,
+          "            - endpoint: ssh://arm-default",
+          "            - endpoint: ssh://arm-mutable",
+          "              driver-opts: image=moby/buildkit:v0.35.1",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:10: ghcr.io/${{ github.repository_owner }}/runner:latest is not pinned to a sha256 digest",
+      "<memory>:13: node:24 is not pinned to a sha256 digest",
+      "<memory>:16: node:24 is not pinned to a sha256 digest",
+      "<memory>:25: docker/setup-buildx-action appended node uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
+      "<memory>:27: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

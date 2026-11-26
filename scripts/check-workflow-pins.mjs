@@ -272,6 +272,7 @@ const DOCKER_RUN_VALUE_FLAGS = new Set([
   "--sysctl",
   "--tmpfs",
   "--ulimit",
+  "--umask",
   "-u",
   "--user",
   "--userns",
@@ -331,7 +332,6 @@ const PODMAN_RUN_VALUE_FLAGS = new Set([
   "--timeout",
   "--tz",
   "--uidmap",
-  "--umask",
   "--unsetenv",
   "--variant",
 ]);
@@ -359,6 +359,42 @@ function isDynamicReference(value, shellMode = "posix") {
     return true;
   }
   return false;
+}
+
+// Detect image references whose registry/repository path is dynamic (e.g.
+// `ghcr.io/${{ github.repository_owner }}/app:latest`) yet whose tag/digest
+// suffix is purely literal and not a sha256 digest, making the image provably
+// unpinned regardless of the dynamic prefix.
+function hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode = "posix") {
+  if (!imageRef || isPinnedDigest(imageRef)) {
+    return false;
+  }
+  const lastSlash = imageRef.lastIndexOf("/");
+  const tail = lastSlash === -1 ? imageRef : imageRef.slice(lastSlash + 1);
+  const atIndex = tail.indexOf("@");
+  if (atIndex !== -1) {
+    const digestPart = tail.slice(atIndex + 1);
+    return (
+      digestPart.length > 0 &&
+      !isDynamicReference(digestPart, shellMode) &&
+      !digestPart.includes("}}") &&
+      !digestPart.includes("}")
+    );
+  }
+  const colonIndex = tail.lastIndexOf(":");
+  if (colonIndex === -1) {
+    return false;
+  }
+  const tagPart = tail.slice(colonIndex + 1);
+  if (
+    !tagPart ||
+    isDynamicReference(tagPart, shellMode) ||
+    tagPart.includes("}}") ||
+    tagPart.includes("}")
+  ) {
+    return false;
+  }
+  return /^[A-Za-z0-9_][A-Za-z0-9._-]*$/u.test(tagPart);
 }
 
 function isLocalDockerActionImage(imageReference) {
@@ -2791,6 +2827,7 @@ function extractJobMatrixRows(jobNode, filePath, problems) {
   const axisNamesLower = new Set();
   const includeRows = [];
   const excludeRows = [];
+  let hasDynamicMatrixEntries = false;
 
   for (const [key, entryNode] of matrixNode.value) {
     const lowerKey = key.toLowerCase();
@@ -2799,8 +2836,12 @@ function extractJobMatrixRows(jobNode, filePath, problems) {
         for (const rowNode of entryNode.value) {
           if (rowNode?.kind === "map") {
             excludeRows.push(rowNode.value);
+          } else {
+            hasDynamicMatrixEntries = true;
           }
         }
+      } else {
+        hasDynamicMatrixEntries = true;
       }
       continue;
     }
@@ -2809,14 +2850,20 @@ function extractJobMatrixRows(jobNode, filePath, problems) {
         for (const rowNode of entryNode.value) {
           if (rowNode?.kind === "map") {
             includeRows.push(rowNode.value);
+          } else {
+            hasDynamicMatrixEntries = true;
           }
         }
+      } else {
+        hasDynamicMatrixEntries = true;
       }
       continue;
     }
     if (entryNode?.kind === "seq" && entryNode.value.length > 0) {
       axes.push([key, entryNode.value]);
       axisNamesLower.add(lowerKey);
+    } else {
+      hasDynamicMatrixEntries = true;
     }
   }
 
@@ -2893,6 +2940,11 @@ function extractJobMatrixRows(jobNode, filePath, problems) {
   }
 
   const allRows = [...rows, ...standaloneIncludeRows];
+  if (hasDynamicMatrixEntries) {
+    for (const row of allRows) {
+      row.hasUnknownProperties = true;
+    }
+  }
   if (truncated || allRows.length > MAX_MATRIX_ROWS) {
     problems.push(
       `${filePath}:${matrixNode.line}: matrix exceeds ${MAX_MATRIX_ROWS} combinations and cannot be verified exhaustively`,
@@ -2913,9 +2965,17 @@ function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
   const seen = new Set();
 
   for (const row of matrixRows) {
+    const missingReplacement = row.hasUnknownProperties ? null : "";
     if (singleMatrix) {
       const resolved = resolveMatrixPath(row, parseMatrixPathSegments(singleMatrix.groups.path));
       if (!resolved) {
+        if (missingReplacement !== null) {
+          const key = `${fallbackLine}:`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            candidates.push({ text: "", line: fallbackLine });
+          }
+        }
         continue;
       }
       const key = `${resolved.line}:${resolved.value}`;
@@ -2933,6 +2993,10 @@ function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
       (match, _p1, _offset, _str, groups) => {
         const resolved = resolveMatrixPath(row, parseMatrixPathSegments(groups.path));
         if (!resolved) {
+          if (missingReplacement !== null) {
+            matchedAny = true;
+            return missingReplacement;
+          }
           return match;
         }
         matchedAny = true;
@@ -6439,7 +6503,10 @@ function inspectShellRunScript(
     const substituteMatrixForRow = (text, row) =>
       text.replace(MATRIX_EXPRESSION_PATTERN, (match, _p1, _offset, _str, groups) => {
         const resolved = resolveMatrixPath(row, parseMatrixPathSegments(groups.path));
-        return resolved ? resolved.value : match;
+        if (resolved) {
+          return resolved.value;
+        }
+        return row.hasUnknownProperties ? match : "";
       });
 
     const effectiveRows = hasMatrixExpr ? matrixRows : [null];
@@ -6581,7 +6648,10 @@ function checkImageField(
       envCandidate.line,
     )) {
       const imageRef = candidate.text.trim();
-      if (!imageRef || isDynamicReference(imageRef)) {
+      if (
+        !imageRef ||
+        (isDynamicReference(imageRef) && !hasProvablyUnpinnedLiteralSuffix(imageRef))
+      ) {
         continue;
       }
       if (allowLocalDockerAction && isLocalDockerActionImage(imageRef)) {
@@ -6981,12 +7051,76 @@ function checkStepsList(
     ) {
       const driverNode = getMapField(withNode, "driver");
       const driverOptsNode = getMapField(withNode, "driver-opts");
+      const appendNode = getMapField(withNode, "append");
       const actionRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
       const seenBuildxProblems = new Set();
       const pushBuildxProblem = (message) => {
         if (!seenBuildxProblems.has(message)) {
           seenBuildxProblems.add(message);
           problems.push(message);
+        }
+      };
+
+      const checkBuildxNodeDriverOpts = (
+        rawLines,
+        optsLine,
+        fallbackLine,
+        nodeLabel,
+        rowStepEnv,
+        rowList,
+      ) => {
+        let effectiveImageCandidates = [];
+        for (const rawLine of rawLines) {
+          const trimmedLine = rawLine.trim();
+          if (!trimmedLine || trimmedLine.startsWith("#")) {
+            continue;
+          }
+          const expandedOpt = resolveEnvExpressionCandidates(trimmedLine, rowStepEnv, optsLine);
+          if (expandedOpt.truncated) {
+            pushBuildxProblem(
+              `${filePath}:${optsLine}: ${trimmedLine} exceeds expansion limit and cannot be verified exhaustively`,
+            );
+          }
+          const lineImages = [];
+          for (const envCandidate of expandedOpt.candidates) {
+            for (const candidate of expandMatrixReferences(
+              envCandidate.text,
+              rowList,
+              envCandidate.line,
+            )) {
+              for (const imageRef of extractDriverOptImages(candidate.text)) {
+                lineImages.push({ text: imageRef, line: candidate.line });
+              }
+            }
+          }
+          if (lineImages.length > 0) {
+            effectiveImageCandidates = lineImages;
+          }
+        }
+
+        if (effectiveImageCandidates.length === 0) {
+          pushBuildxProblem(
+            `${filePath}:${fallbackLine}: ${nodeLabel} uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)`,
+          );
+          return;
+        }
+
+        for (const imageCandidate of effectiveImageCandidates) {
+          const imageRef = imageCandidate.text.trim();
+          if (!imageRef) {
+            pushBuildxProblem(
+              `${filePath}:${fallbackLine}: ${nodeLabel} uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)`,
+            );
+            continue;
+          }
+          if (
+            (!isDynamicReference(imageRef) || hasProvablyUnpinnedLiteralSuffix(imageRef)) &&
+            !isPinnedDigest(imageRef)
+          ) {
+            pushBuildxProblem(
+              `${filePath}:${imageCandidate.line}: ${imageRef} is not pinned to a sha256 digest`,
+            );
+          }
         }
       };
 
@@ -7016,60 +7150,74 @@ function checkStepsList(
           continue;
         }
 
-        let effectiveImageCandidates = [];
-        if (driverOptsNode?.kind === "scalar") {
-          for (const rawLine of String(driverOptsNode.value).split(/\r?\n/u)) {
-            const trimmedLine = rawLine.trim();
-            if (!trimmedLine || trimmedLine.startsWith("#")) {
+        const primaryLines =
+          driverOptsNode?.kind === "scalar" ? String(driverOptsNode.value).split(/\r?\n/u) : [];
+        checkBuildxNodeDriverOpts(
+          primaryLines,
+          driverOptsNode?.line ?? usesNode.line,
+          usesNode.line,
+          "docker/setup-buildx-action",
+          rowStepEnv,
+          rowList,
+        );
+
+        const inspectAppendSeq = (seqNode, baseLine) => {
+          for (const itemNode of seqNode.value) {
+            if (itemNode?.kind !== "map") {
               continue;
             }
-            const expandedOpt = resolveEnvExpressionCandidates(
-              trimmedLine,
+            const itemDriverOpts = getMapField(itemNode, "driver-opts");
+            let itemLines = [];
+            if (itemDriverOpts?.kind === "scalar") {
+              itemLines = String(itemDriverOpts.value).split(/\r?\n/u);
+            } else if (itemDriverOpts?.kind === "seq") {
+              itemLines = itemDriverOpts.value
+                .filter((entry) => entry?.kind === "scalar")
+                .map((entry) => String(entry.value));
+            }
+            const itemLine = baseLine + (itemDriverOpts?.line ?? itemNode.line ?? 1) - 1;
+            checkBuildxNodeDriverOpts(
+              itemLines,
+              itemLine,
+              baseLine + (itemNode.line ?? 1) - 1,
+              "docker/setup-buildx-action appended node",
               rowStepEnv,
-              driverOptsNode.line,
+              rowList,
             );
-            if (expandedOpt.truncated) {
+          }
+        };
+
+        if (appendNode?.kind === "seq") {
+          inspectAppendSeq(appendNode, 1);
+        } else if (appendNode?.kind === "scalar") {
+          const rawAppend = String(appendNode.value).trim();
+          if (rawAppend) {
+            const expandedAppend = resolveEnvExpressionCandidates(
+              String(appendNode.value),
+              rowStepEnv,
+              appendNode.line,
+            );
+            if (expandedAppend.truncated) {
               pushBuildxProblem(
-                `${filePath}:${driverOptsNode.line}: ${trimmedLine} exceeds expansion limit and cannot be verified exhaustively`,
+                `${filePath}:${appendNode.line}: docker/setup-buildx-action append exceeds expansion limit and cannot be verified exhaustively`,
               );
             }
-            const lineImages = [];
-            for (const envCandidate of expandedOpt.candidates) {
+            for (const envCandidate of expandedAppend.candidates) {
               for (const candidate of expandMatrixReferences(
                 envCandidate.text,
                 rowList,
                 envCandidate.line,
               )) {
-                for (const imageRef of extractDriverOptImages(candidate.text)) {
-                  lineImages.push({ text: imageRef, line: candidate.line });
+                const { doc: appendDoc, error: appendError } = parseWorkflowYaml(candidate.text);
+                if (appendError || appendDoc?.kind !== "seq") {
+                  pushBuildxProblem(
+                    `${filePath}:${appendNode.line}: docker/setup-buildx-action append definition cannot be verified statically`,
+                  );
+                  continue;
                 }
+                inspectAppendSeq(appendDoc, appendNode.line);
               }
             }
-            if (lineImages.length > 0) {
-              effectiveImageCandidates = lineImages;
-            }
-          }
-        }
-
-        if (effectiveImageCandidates.length === 0) {
-          pushBuildxProblem(
-            `${filePath}:${usesNode.line}: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)`,
-          );
-          continue;
-        }
-
-        for (const imageCandidate of effectiveImageCandidates) {
-          const imageRef = imageCandidate.text.trim();
-          if (!imageRef) {
-            pushBuildxProblem(
-              `${filePath}:${usesNode.line}: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)`,
-            );
-            continue;
-          }
-          if (!isDynamicReference(imageRef) && !isPinnedDigest(imageRef)) {
-            pushBuildxProblem(
-              `${filePath}:${imageCandidate.line}: ${imageRef} is not pinned to a sha256 digest`,
-            );
           }
         }
       }
