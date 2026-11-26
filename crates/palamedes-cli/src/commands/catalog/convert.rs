@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use clap::{Args, ValueEnum};
 use palamedes::{
     CatalogFileConvertRequest, ContainedDir, ContainedNewFileMode, ContainedWriteDurability,
-    PalamedesCatalogFormat, convert_catalog_content, convert_catalog_file,
+    ContainedWriteOutcome, PalamedesCatalogFormat, convert_catalog_content, convert_catalog_file,
     split_relative_catalog_path,
 };
 
@@ -52,6 +52,7 @@ pub enum ConvertReport {
     Configured {
         converted: usize,
         skipped: usize,
+        durability_warnings: Vec<(PathBuf, String)>,
     },
 }
 
@@ -85,6 +86,7 @@ impl Command for ConvertOptions {
                 let config = context.load_config(Some(config_path))?;
                 let mut converted = 0usize;
                 let mut skipped = 0usize;
+                let mut durability_warnings = Vec::new();
                 for catalog in &config.catalogs {
                     if catalog.format != palamedes::PalamedesCatalogFormat::Po {
                         skipped += config.locales.len();
@@ -170,7 +172,7 @@ impl Command for ConvertOptions {
                             &config.source_locale,
                             Some(locale),
                         )?;
-                        output_dir
+                        if let ContainedWriteOutcome::CommittedWithoutDirSync(source) = output_dir
                             .write_file_atomically(
                                 &output_file,
                                 converted_content.as_bytes(),
@@ -180,11 +182,18 @@ impl Command for ConvertOptions {
                             .map_err(|error| CliError::Io {
                                 path: output.clone(),
                                 source: error.into_io_error(),
-                            })?;
+                            })?
+                        {
+                            durability_warnings.push((output.clone(), source.to_string()));
+                        }
                         converted += 1;
                     }
                 }
-                Ok(ConvertReport::Configured { converted, skipped })
+                Ok(ConvertReport::Configured {
+                    converted,
+                    skipped,
+                    durability_warnings,
+                })
             }
             (None, None) => Err(CliError::MissingConvertInput),
         }
@@ -214,7 +223,11 @@ impl Command for ConvertOptions {
                     );
                 }
             }
-            ConvertReport::Configured { converted, skipped } => {
+            ConvertReport::Configured {
+                converted,
+                skipped,
+                durability_warnings,
+            } => {
                 println!(
                     "{}",
                     tr!(
@@ -223,6 +236,12 @@ impl Command for ConvertOptions {
                         skipped = skipped
                     )
                 );
+                for (path, warning) in durability_warnings {
+                    eprintln!(
+                        "Warning: {} was written, but syncing its containing directory failed: {warning}",
+                        path.display()
+                    );
+                }
                 println!(
                     "{}",
                     tr!(
@@ -403,7 +422,8 @@ catalogs:
             report,
             ConvertReport::Configured {
                 converted: 1,
-                skipped: 0
+                skipped: 0,
+                ..
             }
         ));
         assert!(catalog_dir.join("messages.v2.fcl").exists());
@@ -448,7 +468,8 @@ catalogs:
             report,
             ConvertReport::Configured {
                 converted: 1,
-                skipped: 0
+                skipped: 0,
+                ..
             }
         ));
         assert!(catalog_dir.join("messages.po.fcl").exists());

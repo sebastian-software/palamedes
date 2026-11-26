@@ -424,6 +424,43 @@ describe("@palamedes/core-node", () => {
       path.join(rootDir, "legacy", "de", "messages.po"),
       path.join(rootDir, "empty", "de", "messages.po"),
     ]);
+
+    const backslashPaths = translationPatchTargetPaths({
+      config: {
+        rootDir,
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [
+          { path: String.raw`locales\{locale}\messages`, include: ["src"] },
+          { path: String.raw`admin\{locale}.fcl`, format: "Fcl", include: ["admin"] },
+          { path: String.raw`legacy\{locale}\messages.PO`, include: ["legacy"] },
+          { path: String.raw`empty\{locale}\messages.`, include: ["empty"] },
+        ],
+      },
+      patches: [
+        {
+          id: { catalog: String.raw`locales\{locale}\messages`, locale: "de", message: "Hello" },
+          fingerprint: "first",
+          translation: { kind: "Singular", value: "Hallo" },
+        },
+        {
+          id: { catalog: String.raw`admin\{locale}.fcl`, locale: "de", message: "Save" },
+          fingerprint: "second",
+          translation: { kind: "Singular", value: "Speichern" },
+        },
+        {
+          id: { catalog: String.raw`legacy\{locale}\messages.PO`, locale: "de", message: "Old" },
+          fingerprint: "third",
+          translation: { kind: "Singular", value: "Alt" },
+        },
+        {
+          id: { catalog: String.raw`empty\{locale}\messages.`, locale: "de", message: "Empty" },
+          fingerprint: "fourth",
+          translation: { kind: "Singular", value: "Leer" },
+        },
+      ],
+    });
+    expect(backslashPaths).toStrictEqual(paths);
   });
 
   it("rejects a mismatched platform binding before exposing the native surface", () => {

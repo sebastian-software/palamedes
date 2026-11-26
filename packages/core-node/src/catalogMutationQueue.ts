@@ -14,10 +14,11 @@ export function translationPatchTargetPaths(request: TranslationPatchRequest): s
     }
 
     const extension = catalog.format === "Fcl" ? "fcl" : "po";
-    const configuredExtension = path.extname(catalog.path);
+    const portableCatalogPath = catalog.path.replaceAll("\\", "/");
+    const configuredExtension = path.posix.extname(portableCatalogPath);
     const configuredPath = path.resolve(
       request.config.rootDir,
-      catalog.path.replaceAll("{locale}", patch.id.locale),
+      portableCatalogPath.replaceAll("{locale}", patch.id.locale),
     );
     if (configuredExtension === `.${extension}`) {
       return [configuredPath];

@@ -1,7 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fs;
-use std::io::Write;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use ferrocat::{
@@ -30,7 +29,10 @@ thread_local! {
 
 use crate::catalog_artifact::resolve_catalog_path;
 use crate::catalog_update::{AiProvenance, MachineMetadata, po_serialize_options};
-use crate::contained_fs::read_optional_contained_catalog_file;
+use crate::contained_fs::{
+    ContainedDir, ContainedFsError, ContainedNewFileMode, ContainedWriteDurability,
+    split_relative_catalog_path,
+};
 use crate::icu_compatibility::compare_runtime_icu;
 use crate::icu_text::parse_runtime_icu;
 use crate::{
@@ -282,6 +284,8 @@ struct LoadedCatalog {
     scope: String,
     locale: String,
     path: PathBuf,
+    parent_dir: ContainedDir,
+    file_name: OsString,
     format: PalamedesCatalogFormat,
     original: String,
     po: PoFile,
@@ -304,6 +308,8 @@ struct PoItemIndexes {
 #[derive(Debug)]
 struct PreparedCatalog {
     path: PathBuf,
+    parent_dir: ContainedDir,
+    file_name: OsString,
     locale: String,
     patch_indexes: Vec<usize>,
     content: String,
@@ -657,6 +663,8 @@ where
             )?;
             prepared.push(PreparedCatalog {
                 path: loaded.path,
+                parent_dir: loaded.parent_dir,
+                file_name: loaded.file_name,
                 locale: batch.locale,
                 patch_indexes,
                 changed: content != loaded.original,
@@ -787,15 +795,53 @@ fn load_catalog(
     catalog: &CatalogConfig,
     locale: &str,
 ) -> PalamedesResult<LoadedCatalog> {
+    let root_dir = Path::new(&config.root_dir);
     let path = resolve_catalog_path(config, catalog, locale)?;
-    let original = read_optional_contained_catalog_file(Path::new(&config.root_dir), &path)?
-        .ok_or_else(|| PalamedesError::ReadFile {
-            path: path.clone(),
-            source: std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "catalog file does not exist",
-            ),
+    let (relative_parent, file_name) =
+        split_relative_catalog_path(root_dir, &path).map_err(|error| {
+            PalamedesError::UnsafeCatalogPath {
+                path: path.to_string_lossy().into_owned(),
+                reason: error.to_string(),
+            }
         })?;
+    let parent_dir = match ContainedDir::open_subpath(root_dir, &relative_parent, false) {
+        Ok(Some(dir)) => dir,
+        Ok(None) => {
+            return Err(PalamedesError::ReadFile {
+                path,
+                source: std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "catalog file does not exist",
+                ),
+            });
+        }
+        Err(ContainedFsError::Containment(reason)) => {
+            return Err(PalamedesError::UnsafeCatalogPath {
+                path: path.to_string_lossy().into_owned(),
+                reason,
+            });
+        }
+        Err(ContainedFsError::Io(source)) => return Err(PalamedesError::ReadFile { path, source }),
+    };
+    let original = match parent_dir.read_optional_file(&file_name) {
+        Ok(Some(content)) => content,
+        Ok(None) => {
+            return Err(PalamedesError::ReadFile {
+                path,
+                source: std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "catalog file does not exist",
+                ),
+            });
+        }
+        Err(ContainedFsError::Containment(reason)) => {
+            return Err(PalamedesError::UnsafeCatalogPath {
+                path: path.to_string_lossy().into_owned(),
+                reason,
+            });
+        }
+        Err(ContainedFsError::Io(source)) => return Err(PalamedesError::ReadFile { path, source }),
+    };
     let po = parse_catalog_as_po(&original, &config.source_locale, locale, catalog.format)?;
     let mut messages = BTreeMap::new();
     let mut ambiguous_messages = BTreeSet::new();
@@ -817,6 +863,8 @@ fn load_catalog(
         scope: catalog.path.clone(),
         locale: locale.to_owned(),
         path,
+        parent_dir,
+        file_name,
         format: catalog.format,
         original,
         po,
@@ -1608,7 +1656,7 @@ fn atomic_replace_catalog(
     _source_locale: &str,
     _po: Option<&PoOutputOptions>,
 ) -> PalamedesResult<CatalogReplacement> {
-    atomic_replace_catalog_with_directory_sync(catalog, sync_catalog_directory)
+    atomic_replace_catalog_with_directory_sync(catalog, ContainedDir::sync_directory)
 }
 
 fn atomic_replace_catalog_with_directory_sync<F>(
@@ -1616,81 +1664,36 @@ fn atomic_replace_catalog_with_directory_sync<F>(
     sync_directory: F,
 ) -> PalamedesResult<CatalogReplacement>
 where
-    F: FnOnce(&std::path::Path) -> std::io::Result<()>,
+    F: FnOnce(&ContainedDir) -> std::io::Result<()>,
 {
-    // `PreparedCatalog::content` has already been rendered into its target format. Writing it
-    // directly avoids asking `convert_catalog_file` to parse and render the same catalog again.
-    // Keep the replacement atomic and fully durable when the filesystem permits it: sync the
-    // temporary content and inherited target permissions, rename beside the target, then sync the
-    // containing directory. `persist` is the visible commit point, so a later directory-sync
-    // failure is a successful replacement with an explicit durability warning rather than a false
-    // "not applied" error. A new target keeps `NamedTempFile`'s secure platform default instead of
-    // inventing permissions that may conflict with the caller's policy.
-    let directory = catalog
-        .path
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."));
-    let target_permissions = match fs::metadata(&catalog.path) {
-        Ok(metadata) => Some(metadata.permissions()),
-        Err(source) if source.kind() == std::io::ErrorKind::NotFound => None,
-        Err(source) => {
-            return Err(PalamedesError::WriteFile {
+    // `PreparedCatalog::content` has already been rendered into its target format. Commit the
+    // replacement directly through the verified `ContainedDir` handle captured during load so
+    // ancestor path swaps between preparation and commit cannot redirect the write outside the
+    // configured root. Metadata and ACLs are restored before the temporary file is synced and
+    // renamed; a later directory-sync failure returns an explicit durability warning because the
+    // rename is already visibly committed.
+    catalog
+        .parent_dir
+        .write_file_atomically(
+            &catalog.file_name,
+            catalog.content.as_bytes(),
+            ContainedNewFileMode::Private,
+            ContainedWriteDurability::FileOnly,
+        )
+        .map_err(|error| match error {
+            ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
+                path: catalog.path.to_string_lossy().into_owned(),
+                reason,
+            },
+            ContainedFsError::Io(source) => PalamedesError::WriteFile {
                 path: catalog.path.clone(),
                 source,
-            });
-        }
-    };
-    fs::create_dir_all(directory).map_err(|source| PalamedesError::WriteFile {
-        path: catalog.path.clone(),
-        source,
-    })?;
-    let mut temporary =
-        tempfile::NamedTempFile::new_in(directory).map_err(|source| PalamedesError::WriteFile {
-            path: catalog.path.clone(),
-            source,
+            },
         })?;
-    temporary
-        .write_all(catalog.content.as_bytes())
-        .map_err(|source| PalamedesError::WriteFile {
-            path: catalog.path.clone(),
-            source,
-        })?;
-    if let Some(permissions) = target_permissions {
-        temporary
-            .as_file()
-            .set_permissions(permissions)
-            .map_err(|source| PalamedesError::WriteFile {
-                path: catalog.path.clone(),
-                source,
-            })?;
-    }
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|source| PalamedesError::WriteFile {
-            path: catalog.path.clone(),
-            source,
-        })?;
-    temporary
-        .persist(&catalog.path)
-        .map_err(|source| PalamedesError::WriteFile {
-            path: catalog.path.clone(),
-            source: source.error,
-        })?;
-    Ok(match sync_directory(directory) {
+    Ok(match sync_directory(&catalog.parent_dir) {
         Ok(()) => CatalogReplacement::Durable,
         Err(source) => CatalogReplacement::CommittedWithDurabilityWarning(source),
     })
-}
-
-#[cfg(unix)]
-fn sync_catalog_directory(directory: &std::path::Path) -> std::io::Result<()> {
-    fs::File::open(directory).and_then(|file| file.sync_all())
-}
-
-#[cfg(not(unix))]
-fn sync_catalog_directory(_directory: &std::path::Path) -> std::io::Result<()> {
-    Ok(())
 }
 
 fn po_item_indexes(po: &PoFile) -> HashMap<CatalogMessageKey, PoItemIndexes> {
@@ -1847,6 +1850,7 @@ fn diagnostic_sort_key(
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::fs;
     use std::path::Path;
 
@@ -1864,6 +1868,7 @@ mod tests {
         find_po_item, list_translation_candidates, load_catalog, parse_catalog_as_po,
         po_item_indexes, reset_source_catalog_parse_count, source_catalog_parse_count,
     };
+    use crate::contained_fs::ContainedDir;
     use crate::{CatalogArtifactConfig, CatalogConfig, PalamedesCatalogFormat, PalamedesError};
 
     const FIXTURE: &str = include_str!("../fixtures/translation-workflow.de.po");
@@ -3616,8 +3621,13 @@ mod tests {
 
         let fixture = tempfile::tempdir().expect("fixture directory");
         let path = fixture.path().join("new/messages.po");
+        let parent_dir = ContainedDir::open_subpath(fixture.path(), Path::new("new"), true)
+            .expect("open contained parent")
+            .expect("created parent");
         let prepared = PreparedCatalog {
             path: path.clone(),
+            parent_dir,
+            file_name: OsString::from("messages.po"),
             locale: "de".to_owned(),
             patch_indexes: Vec::new(),
             content: "msgid \"Hello\"\nmsgstr \"Hallo\"\n".to_owned(),
@@ -3633,6 +3643,55 @@ mod tests {
                 .mode()
                 & 0o7777,
             0o600
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn translation_writeback_stays_pinned_to_original_directory_handle_after_parent_swap() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let outside = tempfile::tempdir().expect("outside directory");
+        let outside_catalog = outside.path().join("de.po");
+        fs::write(&outside_catalog, "outside-untouched").expect("seed outside target");
+
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list candidate");
+        let hello = candidate(&listed.candidates, "Hello");
+
+        let moved_dir = fixture.path().join("messages-moved");
+        let result = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config: po_config(fixture.path()),
+                po: None,
+                patches: vec![singular_patch(hello, "Hallo")],
+            },
+            |catalog, source_locale, po| {
+                // Swap `messages` to a symlink pointing outside after preparation, right before commit.
+                fs::rename(fixture.path().join("messages"), &moved_dir).expect("move real dir");
+                symlink(outside.path(), fixture.path().join("messages")).expect("swap symlink");
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+        )
+        .expect("pinned replacement stays inside original directory handle");
+
+        assert!(result.updated);
+        assert_eq!(
+            fs::read_to_string(&outside_catalog).expect("read outside file"),
+            "outside-untouched"
+        );
+        assert!(
+            fs::read_to_string(moved_dir.join("de.po"))
+                .expect("read moved original dir")
+                .contains("msgstr \"Hallo\"")
         );
     }
 

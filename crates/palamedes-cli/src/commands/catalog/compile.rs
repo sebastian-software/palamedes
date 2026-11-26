@@ -949,4 +949,51 @@ mod tests {
                 .contains("Hello")
         );
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_refuses_to_overwrite_read_only_existing_module() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let app = temp_dir("compile-js-readonly-module");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+        fs::create_dir_all(&output).expect("create output dir");
+        let module_path = output.join("en.mjs");
+        fs::write(&module_path, "export const original = true;\n").expect("seed module");
+        fs::set_permissions(&module_path, fs::Permissions::from_mode(0o444))
+            .expect("chmod 0444 module");
+
+        if fs::OpenOptions::new()
+            .write(true)
+            .open(&module_path)
+            .is_ok()
+        {
+            fs::set_permissions(&module_path, fs::Permissions::from_mode(0o644)).expect("restore");
+            return;
+        }
+
+        let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect_err("read-only existing module must not be overwritten");
+        assert!(
+            error.contains("en.mjs"),
+            "expected module path in error, got: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&module_path).expect("read unchanged module"),
+            "export const original = true;\n"
+        );
+        fs::set_permissions(&module_path, fs::Permissions::from_mode(0o644)).expect("restore");
+    }
 }

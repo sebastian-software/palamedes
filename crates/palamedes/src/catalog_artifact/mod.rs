@@ -378,7 +378,7 @@ pub fn compile_catalog_artifact(
 
     build_artifact_result(
         artifact,
-        &prepared.loaded,
+        Some(&prepared.loaded),
         prepared.watch_files,
         prepared.fallback_chain,
         request.config.pseudo_locale.as_deref(),
@@ -473,7 +473,7 @@ pub(super) fn compile_selected_prepared(
 
     build_artifact_result(
         artifact,
-        &prepared.loaded,
+        None,
         prepared.watch_files.clone(),
         prepared.fallback_chain.clone(),
         request.config.pseudo_locale.as_deref(),

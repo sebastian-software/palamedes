@@ -30,7 +30,7 @@ pub(super) fn runtime_icu_options() -> CompileCatalogArtifactIcuOptions {
 
 pub(super) fn build_artifact_result(
     artifact: ferrocat::CompiledCatalogArtifact,
-    loaded: &LocaleCatalogs,
+    source_catalogs: Option<&LocaleCatalogs>,
     watch_files: Vec<PathBuf>,
     fallback_chain: Vec<String>,
     pseudo_locale: Option<&str>,
@@ -47,16 +47,21 @@ pub(super) fn build_artifact_result(
     };
 
     let mut source_keys = BTreeMap::new();
-    for chain_locale in &fallback_chain {
-        let Some(catalog) = loaded.get(chain_locale) else {
-            continue;
-        };
-        for message in &catalog.parsed_catalog().messages {
-            let compiled_id = compiled_message_key(&message.msgid, message.msgctxt.as_deref());
-            if artifact.messages.contains_key(&compiled_id) {
-                source_keys.entry(compiled_id).or_insert_with(|| {
-                    CatalogArtifactSourceKey::new(message.msgid.clone(), message.msgctxt.clone())
-                });
+    if let Some(loaded) = source_catalogs {
+        for chain_locale in &fallback_chain {
+            let Some(catalog) = loaded.get(chain_locale) else {
+                continue;
+            };
+            for message in &catalog.parsed_catalog().messages {
+                let compiled_id = compiled_message_key(&message.msgid, message.msgctxt.as_deref());
+                if artifact.messages.contains_key(&compiled_id) {
+                    source_keys.entry(compiled_id).or_insert_with(|| {
+                        CatalogArtifactSourceKey::new(
+                            message.msgid.clone(),
+                            message.msgctxt.clone(),
+                        )
+                    });
+                }
             }
         }
     }

@@ -82,9 +82,30 @@ pub enum ContainedNewFileMode {
 pub enum ContainedWriteDurability {
     /// Flush and atomically rename without fsync barriers.
     Rename,
-    /// Sync the temporary file before replacement and sync the containing
-    /// directory afterward on Unix.
+    /// Sync the temporary file (after restoring metadata) before atomic
+    /// rename, without syncing the containing directory. Callers that need
+    /// custom directory-sync handling can invoke [`ContainedDir::sync_directory`]
+    /// immediately afterward.
+    FileOnly,
+    /// Sync the temporary file (after restoring metadata) before atomic
+    /// rename, and sync the containing directory afterward on Unix.
     Full,
+}
+
+impl ContainedWriteDurability {
+    const fn syncs_file(self) -> bool {
+        matches!(self, Self::FileOnly | Self::Full)
+    }
+}
+
+/// Outcome of an atomic file replacement via [`ContainedDir`].
+#[derive(Debug)]
+pub enum ContainedWriteOutcome {
+    /// The replacement committed and met the requested durability level.
+    Committed,
+    /// The rename committed visibly on disk, so the new contents are live,
+    /// but syncing the containing directory failed.
+    CommittedWithoutDirSync(io::Error),
 }
 
 /// Stable on-disk file identity used to detect hard-linked input/output aliases.
@@ -243,8 +264,8 @@ mod platform {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{
-        ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, FileIdentity,
-        validate_relative_dir_segments, validate_single_file_name,
+        ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
+        FileIdentity, validate_relative_dir_segments, validate_single_file_name,
     };
 
     static TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
@@ -255,9 +276,7 @@ mod platform {
         target_os = "macos",
         target_os = "ios",
         target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "dragonfly"
+        target_os = "netbsd"
     ))]
     const DIR_TRAVERSAL_FLAGS: libc::c_int = libc::O_SEARCH | libc::O_DIRECTORY | libc::O_CLOEXEC;
     #[cfg(not(any(
@@ -265,11 +284,17 @@ mod platform {
         target_os = "macos",
         target_os = "ios",
         target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "dragonfly"
+        target_os = "netbsd"
     )))]
     const DIR_TRAVERSAL_FLAGS: libc::c_int = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC;
+
+    const USES_SEARCH_ONLY_DIR_HANDLE: bool = cfg!(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    ));
 
     #[derive(Clone, Copy)]
     struct ExistingEntry {
@@ -279,7 +304,56 @@ mod platform {
         identity: FileIdentity,
     }
 
+    struct ExistingTarget {
+        entry: ExistingEntry,
+        acl: Option<ExistingAcl>,
+    }
+
+    #[cfg(target_os = "linux")]
+    struct ExistingAcl {
+        posix_access: Option<Vec<u8>>,
+        nfs4: Option<Vec<u8>>,
+    }
+
+    #[cfg(target_os = "macos")]
+    struct ExistingAcl(*mut libc::c_void);
+
+    #[cfg(target_os = "macos")]
+    impl Drop for ExistingAcl {
+        fn drop(&mut self) {
+            // SAFETY: `self.0` was returned by `acl_get_fd_np` and has not been freed.
+            unsafe {
+                let _ = macos_acl::acl_free(self.0);
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    struct ExistingAcl;
+
+    #[cfg(target_os = "macos")]
+    mod macos_acl {
+        pub(super) const ACL_TYPE_EXTENDED: libc::c_int = 0x0000_0100;
+        pub(super) const ACL_FIRST_ENTRY: libc::c_int = 0;
+
+        unsafe extern "C" {
+            pub(super) fn acl_get_fd_np(fd: libc::c_int, type_: libc::c_int) -> *mut libc::c_void;
+            pub(super) fn acl_set_fd_np(
+                fd: libc::c_int,
+                acl: *mut libc::c_void,
+                type_: libc::c_int,
+            ) -> libc::c_int;
+            pub(super) fn acl_get_entry(
+                acl: *mut libc::c_void,
+                entry_id: libc::c_int,
+                entry_p: *mut *mut libc::c_void,
+            ) -> libc::c_int;
+            pub(super) fn acl_free(obj_p: *mut libc::c_void) -> libc::c_int;
+        }
+    }
+
     /// Open handle to a verified directory used for containment-enforcing I/O.
+    #[derive(Debug)]
     pub struct ContainedDir {
         fd: OwnedFd,
     }
@@ -346,7 +420,7 @@ mod platform {
                     if !create_missing && error.raw_os_error() == Some(libc::ENOENT) {
                         return Ok(None);
                     }
-                    if error.raw_os_error() == Some(libc::ELOOP) {
+                    if is_symlink_open_error(error.raw_os_error()) {
                         return Err(ContainedFsError::Containment(format!(
                             "refusing to follow symlink at directory component \"{}\"",
                             segment.to_string_lossy()
@@ -413,7 +487,7 @@ mod platform {
                 if error.raw_os_error() == Some(libc::ENOENT) {
                     return Ok(None);
                 }
-                if error.raw_os_error() == Some(libc::ELOOP) {
+                if is_symlink_open_error(error.raw_os_error()) {
                     return Err(ContainedFsError::Containment(format!(
                         "refusing to follow symlink \"{}\"",
                         file_name.to_string_lossy()
@@ -431,11 +505,13 @@ mod platform {
         /// Writes `bytes` to a fresh temporary file inside this directory and
         /// atomically replaces `file_name`.
         ///
-        /// When replacing an existing file, the temporary file is created as
-        /// `0600`, populated, ownership/group is restored when needed, and only
-        /// then are the prior mode bits applied via `fchmod`. If the original
-        /// principals cannot be preserved safely, replacement fails without
-        /// modifying the destination.
+        /// When replacing an existing file, write permission on the existing
+        /// destination is verified without truncating it, the temporary file is
+        /// created as `0600`, populated, ownership/group, mode bits, and
+        /// extended ACLs are restored, and only then is the temporary file
+        /// synced (when requested) and atomically renamed into place. If the
+        /// original principals or ACLs cannot be preserved safely, replacement
+        /// fails without modifying the destination.
         ///
         /// # Errors
         ///
@@ -447,12 +523,12 @@ mod platform {
             bytes: &[u8],
             new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
-        ) -> Result<(), ContainedFsError> {
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             validate_single_file_name(file_name)?;
-            let existing = self.inspect_entry(file_name)?;
+            let existing = self.open_existing_for_replace(file_name)?;
             let c_target = os_str_to_cstring(file_name)?;
 
-            let create_mode: libc::c_uint = match (existing, new_file_mode) {
+            let create_mode: libc::c_uint = match (&existing, new_file_mode) {
                 (None, ContainedNewFileMode::RespectUmask) => 0o666,
                 _ => 0o600,
             };
@@ -460,11 +536,11 @@ mod platform {
             let write_result = (|| -> io::Result<()> {
                 temp_file.write_all(bytes)?;
                 temp_file.flush()?;
-                if durability == ContainedWriteDurability::Full {
-                    temp_file.sync_all()?;
+                if let Some(existing) = existing.as_ref() {
+                    restore_existing_metadata(temp_file.as_raw_fd(), existing)?;
                 }
-                if let Some(existing) = existing {
-                    restore_existing_ownership_and_mode(temp_file.as_raw_fd(), existing)?;
+                if durability.syncs_file() {
+                    temp_file.sync_all()?;
                 }
                 Ok(())
             })();
@@ -489,44 +565,114 @@ mod platform {
                 let _ = self.unlink_temp(&temp_name);
                 return Err(ContainedFsError::Io(error));
             }
-            if durability == ContainedWriteDurability::Full {
-                self.sync_directory()?;
+            if durability == ContainedWriteDurability::Full
+                && let Err(error) = self.sync_directory()
+            {
+                return Ok(ContainedWriteOutcome::CommittedWithoutDirSync(error));
+            }
+            Ok(ContainedWriteOutcome::Committed)
+        }
+
+        /// Flushes directory metadata for this pinned directory handle to disk.
+        ///
+        /// # Errors
+        ///
+        /// Returns an [`io::Error`] when a readable descriptor cannot be opened
+        /// for the directory or `fsync` fails.
+        pub fn sync_directory(&self) -> io::Result<()> {
+            if USES_SEARCH_ONLY_DIR_HANDLE {
+                // Search-only descriptors (`O_PATH` on Linux, `O_SEARCH` on
+                // macOS/BSD) do not accept `fsync`. Open a readable handle to
+                // the same pinned directory and return the open error directly
+                // if that fails rather than masking it behind `EBADF`.
+                let dot = c".";
+                // SAFETY: `self.fd` is an open directory descriptor and `dot` is a valid C string.
+                let raw = unsafe {
+                    libc::openat(
+                        self.fd.as_raw_fd(),
+                        dot.as_ptr(),
+                        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+                    )
+                };
+                if raw < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                // SAFETY: `raw` is a newly opened valid file descriptor.
+                let readable = unsafe { OwnedFd::from_raw_fd(raw) };
+                // SAFETY: `readable` is an open directory descriptor.
+                if unsafe { libc::fsync(readable.as_raw_fd()) } != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            } else {
+                // SAFETY: `self.fd` is an open readable directory descriptor.
+                if unsafe { libc::fsync(self.fd.as_raw_fd()) } != 0 {
+                    return Err(io::Error::last_os_error());
+                }
             }
             Ok(())
         }
 
-        fn sync_directory(&self) -> Result<(), ContainedFsError> {
-            // Search-only descriptors (`O_PATH` on Linux, `O_SEARCH` on BSD/macOS)
-            // may not accept `fsync`. Open a readable handle to the same pinned
-            // directory when possible and fsync it.
-            let dot = c".";
-            // SAFETY: `self.fd` is an open directory descriptor and `dot` is a valid C string.
+        fn open_existing_for_replace(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<Option<ExistingTarget>, ContainedFsError> {
+            let c_name = os_str_to_cstring(file_name)?;
+            // Open without `O_TRUNC` so existing file write permissions (for
+            // example `0444`) are honored without modifying the file, symlinks
+            // are rejected atomically, and metadata + ACLs are read from the
+            // exact pinned inode.
+            // SAFETY: `self.fd` is an open directory descriptor and `c_name` is valid.
             let raw = unsafe {
                 libc::openat(
                     self.fd.as_raw_fd(),
-                    dot.as_ptr(),
-                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+                    c_name.as_ptr(),
+                    libc::O_WRONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
                 )
             };
-            let sync_rc = if raw >= 0 {
-                // SAFETY: `raw` is a newly opened valid file descriptor.
-                let readable = unsafe { OwnedFd::from_raw_fd(raw) };
-                // SAFETY: `readable` is an open directory descriptor.
-                unsafe { libc::fsync(readable.as_raw_fd()) }
-            } else {
-                // SAFETY: `self.fd` is an open directory descriptor.
-                unsafe { libc::fsync(self.fd.as_raw_fd()) }
-            };
-            if sync_rc != 0 {
+            if raw < 0 {
                 let error = io::Error::last_os_error();
-                if !matches!(
-                    error.raw_os_error(),
-                    Some(libc::EINVAL | libc::EBADF | libc::EROFS | libc::EACCES)
-                ) {
-                    return Err(ContainedFsError::Io(error));
+                if error.raw_os_error() == Some(libc::ENOENT) {
+                    return Ok(None);
                 }
+                if is_symlink_open_error(error.raw_os_error()) {
+                    return Err(ContainedFsError::Containment(format!(
+                        "refusing to write through symlink \"{}\"",
+                        file_name.to_string_lossy()
+                    )));
+                }
+                return Err(ContainedFsError::Io(error));
             }
-            Ok(())
+            // SAFETY: `raw` is a newly opened valid file descriptor.
+            let existing_fd = unsafe { OwnedFd::from_raw_fd(raw) };
+            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // SAFETY: `existing_fd` is open and `stat` is writable.
+            if unsafe { libc::fstat(existing_fd.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
+                return Err(ContainedFsError::Io(io::Error::last_os_error()));
+            }
+            // SAFETY: `fstat` succeeded and initialized `stat`.
+            let stat = unsafe { stat.assume_init() };
+            if (stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "refusing to replace non-regular file \"{}\"",
+                        file_name.to_string_lossy()
+                    ),
+                )));
+            }
+            #[allow(clippy::unnecessary_cast)]
+            let identity = FileIdentity {
+                dev: stat.st_dev as u64,
+                ino: stat.st_ino as u64,
+            };
+            let entry = ExistingEntry {
+                mode: stat.st_mode & 0o7777,
+                uid: stat.st_uid,
+                gid: stat.st_gid,
+                identity,
+            };
+            let acl = read_existing_acl(existing_fd.as_raw_fd())?;
+            Ok(Some(ExistingTarget { entry, acl }))
         }
 
         fn inspect_entry(
@@ -620,9 +766,171 @@ mod platform {
         }
     }
 
-    fn restore_existing_ownership_and_mode(
+    fn is_symlink_open_error(raw_os_error: Option<i32>) -> bool {
+        #[cfg(target_os = "freebsd")]
+        if raw_os_error == Some(libc::EMLINK) {
+            return true;
+        }
+        #[cfg(target_os = "netbsd")]
+        if raw_os_error == Some(libc::EFTYPE) {
+            return true;
+        }
+        raw_os_error == Some(libc::ELOOP)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn read_linux_xattr(
+        fd: std::os::fd::RawFd,
+        name: &std::ffi::CStr,
+    ) -> io::Result<Option<Vec<u8>>> {
+        for _ in 0..4 {
+            // SAFETY: querying xattr size with null buffer.
+            let size = unsafe { libc::fgetxattr(fd, name.as_ptr(), std::ptr::null_mut(), 0) };
+            if size < 0 {
+                let error = io::Error::last_os_error();
+                if matches!(
+                    error.raw_os_error(),
+                    Some(libc::ENODATA | libc::ENOTSUP | libc::EOPNOTSUPP)
+                ) {
+                    return Ok(None);
+                }
+                return Err(error);
+            }
+            if size == 0 {
+                return Ok(None);
+            }
+            let mut buffer = vec![0u8; usize::try_from(size).unwrap_or(0)];
+            // SAFETY: `buffer` has `buffer.len()` writable bytes.
+            let read = unsafe {
+                libc::fgetxattr(
+                    fd,
+                    name.as_ptr(),
+                    buffer.as_mut_ptr().cast::<libc::c_void>(),
+                    buffer.len(),
+                )
+            };
+            if read < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::ERANGE) {
+                    continue;
+                }
+                if error.raw_os_error() == Some(libc::ENODATA) {
+                    return Ok(None);
+                }
+                return Err(error);
+            }
+            buffer.truncate(usize::try_from(read).unwrap_or(0));
+            return Ok(Some(buffer));
+        }
+        Err(io::Error::other(
+            "extended attribute size changed repeatedly while reading destination ACL",
+        ))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn read_existing_acl(fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
+        let posix_access = read_linux_xattr(fd, c"system.posix_acl_access")?;
+        let nfs4 = read_linux_xattr(fd, c"system.nfs4_acl")?;
+        if posix_access.is_none() && nfs4.is_none() {
+            Ok(None)
+        } else {
+            Ok(Some(ExistingAcl { posix_access, nfs4 }))
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn apply_existing_acl(temp_fd: std::os::fd::RawFd, acl: &ExistingAcl) -> io::Result<()> {
+        if let Some(bytes) = &acl.posix_access {
+            // SAFETY: `temp_fd` is open and `bytes` is a valid buffer.
+            if unsafe {
+                libc::fsetxattr(
+                    temp_fd,
+                    c"system.posix_acl_access".as_ptr(),
+                    bytes.as_ptr().cast::<libc::c_void>(),
+                    bytes.len(),
+                    0,
+                )
+            } != 0
+            {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("cannot preserve POSIX ACL on replacement: {error}"),
+                ));
+            }
+        }
+        if let Some(bytes) = &acl.nfs4 {
+            // SAFETY: `temp_fd` is open and `bytes` is a valid buffer.
+            if unsafe {
+                libc::fsetxattr(
+                    temp_fd,
+                    c"system.nfs4_acl".as_ptr(),
+                    bytes.as_ptr().cast::<libc::c_void>(),
+                    bytes.len(),
+                    0,
+                )
+            } != 0
+            {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("cannot preserve NFSv4 ACL on replacement: {error}"),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn read_existing_acl(fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
+        // SAFETY: `fd` is an open file descriptor.
+        let raw = unsafe { macos_acl::acl_get_fd_np(fd, macos_acl::ACL_TYPE_EXTENDED) };
+        if raw.is_null() {
+            let error = io::Error::last_os_error();
+            if matches!(
+                error.raw_os_error(),
+                Some(libc::ENOENT | libc::ENOTSUP | libc::EOPNOTSUPP | libc::EINVAL)
+            ) {
+                return Ok(None);
+            }
+            return Err(error);
+        }
+        let acl = ExistingAcl(raw);
+        let mut entry: *mut libc::c_void = std::ptr::null_mut();
+        // SAFETY: `acl.0` is a valid `acl_t` returned by `acl_get_fd_np`.
+        if unsafe { macos_acl::acl_get_entry(acl.0, macos_acl::ACL_FIRST_ENTRY, &mut entry) } == 0 {
+            Ok(Some(acl))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn apply_existing_acl(temp_fd: std::os::fd::RawFd, acl: &ExistingAcl) -> io::Result<()> {
+        // SAFETY: `temp_fd` is open and `acl.0` is a valid `acl_t`.
+        if unsafe { macos_acl::acl_set_fd_np(temp_fd, acl.0, macos_acl::ACL_TYPE_EXTENDED) } != 0 {
+            let error = io::Error::last_os_error();
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("cannot preserve macOS extended ACL on replacement: {error}"),
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    fn read_existing_acl(_fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
+        Ok(None)
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    fn apply_existing_acl(_temp_fd: std::os::fd::RawFd, _acl: &ExistingAcl) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn restore_existing_metadata(
         temp_fd: std::os::fd::RawFd,
-        existing: ExistingEntry,
+        existing: &ExistingTarget,
     ) -> io::Result<()> {
         let mut temp_stat = std::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: `temp_fd` is an open file descriptor and `temp_stat` is writable.
@@ -631,38 +939,38 @@ mod platform {
         }
         // SAFETY: `fstat` succeeded and initialized `temp_stat`.
         let temp_stat = unsafe { temp_stat.assume_init() };
-        let uid_differs = temp_stat.st_uid != existing.uid;
-        let gid_differs = temp_stat.st_gid != existing.gid;
+        let uid_differs = temp_stat.st_uid != existing.entry.uid;
+        let gid_differs = temp_stat.st_gid != existing.entry.gid;
         if uid_differs || gid_differs {
             let target_uid = if uid_differs {
-                existing.uid
+                existing.entry.uid
             } else {
                 libc::uid_t::MAX
             };
             let target_gid = if gid_differs {
-                existing.gid
+                existing.entry.gid
             } else {
                 libc::gid_t::MAX
             };
             // SAFETY: `temp_fd` is an open file descriptor.
             if unsafe { libc::fchown(temp_fd, target_uid, target_gid) } != 0 {
                 let error = io::Error::last_os_error();
-                let grants_group_or_special = (existing.mode & 0o6070) != 0;
-                if uid_differs || grants_group_or_special {
-                    return Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        format!(
-                            "cannot safely preserve original file ownership/group permissions on replacement: {error}"
-                        ),
-                    ));
-                }
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!(
+                        "cannot safely preserve original file ownership/group on replacement: {error}"
+                    ),
+                ));
             }
         }
-        if (temp_stat.st_mode & 0o7777) != existing.mode {
+        if (temp_stat.st_mode & 0o7777) != existing.entry.mode {
             // SAFETY: `temp_fd` is an open file descriptor.
-            if unsafe { libc::fchmod(temp_fd, existing.mode) } != 0 {
+            if unsafe { libc::fchmod(temp_fd, existing.entry.mode) } != 0 {
                 return Err(io::Error::last_os_error());
             }
+        }
+        if let Some(acl) = existing.acl.as_ref() {
+            apply_existing_acl(temp_fd, acl)?;
         }
         Ok(())
     }
@@ -685,8 +993,8 @@ mod platform {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{
-        ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, FileIdentity,
-        validate_relative_dir_segments, validate_single_file_name,
+        ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
+        FileIdentity, validate_relative_dir_segments, validate_single_file_name,
     };
 
     static TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
@@ -700,6 +1008,7 @@ mod platform {
     const ERROR_NOT_SUPPORTED: i32 = 50;
     const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
 
+    const FILE_WRITE_DATA: u32 = 0x0000_0002;
     const FILE_READ_ATTRIBUTES: u32 = 0x0000_0080;
     const FILE_TRAVERSE: u32 = 0x0000_0020;
     const READ_CONTROL: u32 = 0x0002_0000;
@@ -840,6 +1149,7 @@ mod platform {
 
     /// Open directory handle on Windows used for strictly handle-relative child
     /// operations via `NtCreateFile` and `NtSetInformationFile`.
+    #[derive(Debug)]
     pub struct ContainedDir {
         handle: OwnedHandle,
     }
@@ -1003,8 +1313,8 @@ mod platform {
         }
 
         /// Atomically writes `bytes` to `file_name` inside this directory
-        /// handle, preserving any existing destination DACL from the moment the
-        /// temporary file is created.
+        /// handle, verifying write access on any existing file and preserving
+        /// its DACL from the moment the temporary file is created.
         ///
         /// # Errors
         ///
@@ -1016,7 +1326,7 @@ mod platform {
             bytes: &[u8],
             _new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
-        ) -> Result<(), ContainedFsError> {
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             validate_single_file_name(file_name)?;
             let mut existing_dacl = self
                 .inspect_entry(file_name, true)?
@@ -1031,7 +1341,7 @@ mod platform {
             let write_result = (|| -> io::Result<()> {
                 temp_file.write_all(bytes)?;
                 temp_file.flush()?;
-                if durability == ContainedWriteDurability::Full {
+                if durability.syncs_file() {
                     temp_file.sync_all()?;
                 }
                 nt_rename_relative(
@@ -1044,16 +1354,21 @@ mod platform {
                 let _ = nt_mark_delete_on_close(temp_file.as_raw_handle());
                 return Err(ContainedFsError::Io(error));
             }
+            Ok(ContainedWriteOutcome::Committed)
+        }
+
+        /// Flushes directory metadata (no-op on Windows where file sync provides durability).
+        pub fn sync_directory(&self) -> io::Result<()> {
             Ok(())
         }
 
         fn inspect_entry(
             &self,
             file_name: &OsStr,
-            capture_dacl: bool,
+            for_replace: bool,
         ) -> Result<Option<(FileIdentity, Option<Vec<usize>>)>, ContainedFsError> {
-            let access = if capture_dacl {
-                FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE
+            let access = if for_replace {
+                FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE
             } else {
                 FILE_READ_ATTRIBUTES | SYNCHRONIZE
             };
@@ -1078,7 +1393,7 @@ mod platform {
                     file_name.to_string_lossy()
                 )));
             }
-            let dacl = if capture_dacl {
+            let dacl = if for_replace {
                 read_dacl_security_descriptor(handle.as_raw_handle())?
             } else {
                 None
@@ -1339,11 +1654,12 @@ mod platform {
     use std::path::{Path, PathBuf};
 
     use super::{
-        ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, FileIdentity,
-        validate_relative_dir_segments, validate_single_file_name,
+        ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
+        FileIdentity, validate_relative_dir_segments, validate_single_file_name,
     };
 
     /// Verified directory handle fallback for platforms without Unix/Windows APIs.
+    #[derive(Debug)]
     pub struct ContainedDir {
         dir: PathBuf,
     }
@@ -1447,18 +1763,23 @@ mod platform {
             bytes: &[u8],
             _new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
-        ) -> Result<(), ContainedFsError> {
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             self.reject_symlink(file_name)?;
             let destination = self.dir.join(file_name);
             let mut temporary = tempfile::NamedTempFile::new_in(&self.dir)?;
             temporary.write_all(bytes)?;
             temporary.flush()?;
-            if durability == ContainedWriteDurability::Full {
+            if durability.syncs_file() {
                 temporary.as_file().sync_all()?;
             }
             temporary
                 .persist(&destination)
                 .map_err(|error| ContainedFsError::Io(error.error))?;
+            Ok(ContainedWriteOutcome::Committed)
+        }
+
+        /// Flushes directory metadata (no-op on fallback targets).
+        pub fn sync_directory(&self) -> io::Result<()> {
             Ok(())
         }
     }
@@ -1470,10 +1791,14 @@ pub use platform::ContainedDir;
 mod tests {
     use std::ffi::OsStr;
     use std::fs;
+    use std::io;
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
 
-    use super::{ContainedDir, ContainedNewFileMode, ContainedWriteDurability};
+    use super::{
+        ContainedDir, ContainedFsError, ContainedNewFileMode, ContainedWriteDurability,
+        ContainedWriteOutcome,
+    };
 
     #[test]
     fn traverses_search_only_unix_directories_for_reads_and_writes() {
@@ -1494,13 +1819,15 @@ mod tests {
                 .as_deref(),
             Some("hello")
         );
-        dir.write_file_atomically(
-            OsStr::new("de.po"),
-            b"hallo",
-            ContainedNewFileMode::Private,
-            ContainedWriteDurability::Full,
-        )
-        .expect("write and sync under search-only parent");
+        let outcome = dir
+            .write_file_atomically(
+                OsStr::new("de.po"),
+                b"hallo",
+                ContainedNewFileMode::Private,
+                ContainedWriteDurability::Full,
+            )
+            .expect("write and sync under search-only parent");
+        assert!(matches!(outcome, ContainedWriteOutcome::Committed));
         assert_eq!(
             dir.read_optional_file(OsStr::new("de.po"))
                 .expect("read written file")
@@ -1511,5 +1838,116 @@ mod tests {
         // Restore permissions so TempDir cleanup succeeds cleanly.
         fs::set_permissions(&hidden, fs::Permissions::from_mode(0o755))
             .expect("restore permissions");
+    }
+
+    #[test]
+    fn refuses_to_overwrite_read_only_existing_file_for_unprivileged_owner() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let target = root.path().join("en.mjs");
+        fs::write(&target, "original").expect("seed file");
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o444)).expect("chmod 0444");
+
+        // Skip when running as root (CAP_DAC_OVERRIDE bypasses 0444 checks).
+        if fs::OpenOptions::new().write(true).open(&target).is_ok() {
+            fs::set_permissions(&target, fs::Permissions::from_mode(0o644)).expect("restore");
+            return;
+        }
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        let error = dir
+            .write_file_atomically(
+                OsStr::new("en.mjs"),
+                b"overwritten",
+                ContainedNewFileMode::RespectUmask,
+                ContainedWriteDurability::Rename,
+            )
+            .expect_err("read-only existing file must not be overwritten");
+        assert!(
+            matches!(&error, ContainedFsError::Io(io_err) if io_err.kind() == io::ErrorKind::PermissionDenied),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&target).expect("read original"),
+            "original"
+        );
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o644)).expect("restore");
+    }
+
+    #[test]
+    fn full_write_reports_when_directory_cannot_be_synced() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let leaf = root.path().join("write-only-dir");
+        fs::create_dir_all(&leaf).expect("create dir");
+        // Searchable + writable, but not readable: rename commits, opening "." O_RDONLY fails.
+        fs::set_permissions(&leaf, fs::Permissions::from_mode(0o311)).expect("chmod 0311");
+
+        // Skip when running as root or on targets whose dir handle is already O_RDONLY.
+        if fs::read_dir(&leaf).is_ok() {
+            fs::set_permissions(&leaf, fs::Permissions::from_mode(0o755)).expect("restore");
+            return;
+        }
+
+        let dir = ContainedDir::open_subpath(root.path(), Path::new("write-only-dir"), false)
+            .expect("open search-only leaf")
+            .expect("exists");
+        let outcome = dir
+            .write_file_atomically(
+                OsStr::new("out.fcl"),
+                b"payload",
+                ContainedNewFileMode::Private,
+                ContainedWriteDurability::Full,
+            )
+            .expect("rename commits visibly even when directory sync fails");
+        assert!(
+            matches!(outcome, ContainedWriteOutcome::CommittedWithoutDirSync(_)),
+            "expected CommittedWithoutDirSync, got {outcome:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(leaf.join("out.fcl")).expect("read committed file"),
+            "payload"
+        );
+
+        fs::set_permissions(&leaf, fs::Permissions::from_mode(0o755)).expect("restore");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn preserves_macos_extended_acl_across_atomic_replacement() {
+        use std::process::Command;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let target = root.path().join("en.mjs");
+        fs::write(&target, "before").expect("seed file");
+
+        let status = Command::new("/bin/chmod")
+            .args(["+a", "everyone allow read"])
+            .arg(&target)
+            .status()
+            .expect("invoke /bin/chmod +a");
+        if !status.success() {
+            // Skip if the temp filesystem does not support macOS ACLs.
+            return;
+        }
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        dir.write_file_atomically(
+            OsStr::new("en.mjs"),
+            b"after",
+            ContainedNewFileMode::RespectUmask,
+            ContainedWriteDurability::Rename,
+        )
+        .expect("atomic replacement with ACL succeeds");
+        assert_eq!(fs::read_to_string(&target).expect("read replaced"), "after");
+
+        let ls = Command::new("/bin/ls")
+            .args(["-le"])
+            .arg(&target)
+            .output()
+            .expect("invoke /bin/ls -le");
+        let stdout = String::from_utf8_lossy(&ls.stdout);
+        assert!(
+            stdout.contains("everyone allow read"),
+            "expected preserved macOS ACL in `ls -le` output, got:\n{stdout}"
+        );
     }
 }
