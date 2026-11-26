@@ -1654,6 +1654,50 @@ describe("workflow contracts", () => {
         `FROM \\\n  # runtime base\n  node:24@${digest} AS runtime\n`,
       ),
     ).toEqual([]);
+    expect(
+      unpinnedContainerfileReferences(
+        `# escape=\`\nFROM \`\n  # windows base\n  node:24@${digest} AS runtime\n`,
+      ),
+    ).toEqual([]);
+    // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
+    expect(
+      unpinnedActionReferences(
+        ["Jobs:", "  build:", "    Steps:", "      - Uses: actions/checkout@v7", ""].join("\n"),
+      ),
+    ).toEqual(["<memory>:4: actions/checkout@v7 is not pinned to a full commit SHA"]);
+    // PowerShell backtick continuations (from step or default shell), literal
+    // `for ... in` image lists, and fail-closed expansion-limit diagnostics.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "defaults:",
+          "  run:",
+          "    shell: pwsh",
+          "jobs:",
+          "  win:",
+          "    steps:",
+          "      - run: |",
+          "          docker run --rm `",
+          `            node:24@${digest} \``,
+          "            node -v",
+          "      - shell: bash",
+          "        run: |",
+          `          for img in node:24@${digest} alpine:3.20; do`,
+          '            docker pull "$img"',
+          "          done",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:13: alpine:3.20 is not pinned to a sha256 digest"]);
+    const overflowList = [
+      ...Array.from({ length: 32 }, (_, idx) => `node:${idx}@${digest}`),
+      "alpine:3.20",
+    ].join(" ");
+    expect(
+      unpinnedWorkflowContainerReferences(
+        `steps:\n  - run: |\n      for img in ${overflowList}; do\n        docker pull "$img"\n      done\n`,
+      ),
+    ).toEqual(["<memory>:4: $img exceeds expansion limit and cannot be verified exhaustively"]);
     // Empty quoted arguments (`--entrypoint ''`), branch-reachable shell
     // assignments, command-local prefix assignment scoping, `GITHUB_ENV`
     // propagation into subsequent steps (not the writing step), and pre-cutoff

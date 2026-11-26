@@ -13,6 +13,8 @@ const PINNED_ACTION_PATTERN = /^[^\s@]+@[0-9a-f]{40}$/u;
 const PINNED_DIGEST_PATTERN = /@sha256:[0-9a-f]{64}$/u;
 const EMBEDDED_VAR_PATTERN =
   /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu;
+const PWSH_ENV_VAR_PATTERN =
+  /\$(?:\{env:(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|env:(?<bare>[A-Za-z_][A-Za-z0-9_]*))/giu;
 const ENV_EXPRESSION_PATTERN =
   /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/gu;
 const MATRIX_EXPRESSION_PATTERN =
@@ -293,6 +295,47 @@ function isLocalDockerActionImage(imageReference) {
   );
 }
 
+function getMapField(mapNode, key) {
+  if (mapNode?.kind !== "map") {
+    return null;
+  }
+  if (mapNode.value.has(key)) {
+    return mapNode.value.get(key);
+  }
+  const lower = key.toLowerCase();
+  for (const [entryKey, entryValue] of mapNode.value) {
+    if (entryKey.toLowerCase() === lower) {
+      return entryValue;
+    }
+  }
+  return null;
+}
+
+function hasMapField(mapNode, key) {
+  return getMapField(mapNode, key) !== null;
+}
+
+function normalizeShellMode(shellValue) {
+  if (!shellValue) {
+    return "posix";
+  }
+  const trimmed = String(shellValue).trim();
+  if (/^(?:pwsh|powershell)(?:\.exe)?(?:\s|$)/iu.test(trimmed)) {
+    return "pwsh";
+  }
+  if (/^cmd(?:\.exe)?(?:\s|$)/iu.test(trimmed)) {
+    return "cmd";
+  }
+  return "posix";
+}
+
+function extractDefaultShell(node) {
+  const defaultsNode = getMapField(node, "defaults");
+  const runDefaults = getMapField(defaultsNode, "run");
+  const shellNode = getMapField(runDefaults, "shell");
+  return shellNode?.kind === "scalar" ? String(shellNode.value).trim() : null;
+}
+
 function cloneVarMap(varMap) {
   const copy = new Map();
   for (const [key, entries] of varMap) {
@@ -304,16 +347,25 @@ function cloneVarMap(varMap) {
 function mergeVarEntries(existing, incoming) {
   const merged = [];
   const seen = new Set();
+  let truncatedLine = null;
   for (const entry of [...existing, ...incoming]) {
+    if (entry.truncated) {
+      truncatedLine ??= entry.line;
+      continue;
+    }
     const key = `${entry.line}:${entry.value}`;
     if (seen.has(key)) {
       continue;
     }
     seen.add(key);
-    merged.push(entry);
     if (merged.length >= MAX_VAR_VALUES) {
-      break;
+      truncatedLine ??= entry.line;
+      continue;
     }
+    merged.push(entry);
+  }
+  if (truncatedLine !== null) {
+    merged.push({ value: "", line: truncatedLine, truncated: true });
   }
   return merged;
 }
@@ -328,8 +380,17 @@ function joinVarMaps(maps) {
   return joined;
 }
 
-function expandPatternCandidates(candidates, pattern, lookup) {
+function candidatesToVarEntries({ candidates, truncated }, assignLine) {
+  const entries = candidates.map((entry) => ({ value: entry.text, line: assignLine }));
+  if (truncated) {
+    entries.push({ value: "", line: assignLine, truncated: true });
+  }
+  return entries;
+}
+
+function expandPatternCandidates(candidates, pattern, lookup, initialTruncated = false) {
   let results = candidates;
+  let truncated = initialTruncated;
   let guard = 0;
 
   while (guard < 16) {
@@ -366,13 +427,22 @@ function expandPatternCandidates(candidates, pattern, lookup) {
       const suffix = candidate.text.slice(match.index + match[0].length);
 
       for (const entry of entries) {
+        if (entry.truncated) {
+          truncated = true;
+          continue;
+        }
         const nextText = `${prefix}${entry.value}${suffix}`;
         const nextLine = isWholeToken ? entry.line : candidate.line;
         const key = `${nextLine}:${nextText}`;
-        if (!seen.has(key) && nextResults.length < MAX_TOKEN_EXPANSIONS) {
-          seen.add(key);
-          nextResults.push({ text: nextText, line: nextLine });
+        if (seen.has(key)) {
+          continue;
         }
+        if (nextResults.length >= MAX_TOKEN_EXPANSIONS) {
+          truncated = true;
+          continue;
+        }
+        seen.add(key);
+        nextResults.push({ text: nextText, line: nextLine });
       }
     }
 
@@ -380,9 +450,12 @@ function expandPatternCandidates(candidates, pattern, lookup) {
     if (!expandedAny) {
       break;
     }
+    if (guard === 16) {
+      truncated = true;
+    }
   }
 
-  return results;
+  return { candidates: results, truncated };
 }
 
 function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
@@ -397,16 +470,29 @@ function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
 }
 
 // GitHub Actions evaluates `${{ env.* }}` against the immutable step `env`
-// before bash runs, whereas `$VAR`/`${VAR}` reflect reachable shell assignments.
-function resolveImageTokenCandidates(token, stepEnv, shellVars, fallbackLine) {
-  const afterActionsEnv = resolveEnvExpressionCandidates(token, stepEnv, fallbackLine);
+// before the shell runs, whereas `$VAR`/`${VAR}` (and `$env:VAR` in PowerShell)
+// reflect reachable shell assignments.
+function resolveImageTokenCandidates(token, stepEnv, shellVars, fallbackLine, shellMode = "posix") {
+  let current = resolveEnvExpressionCandidates(token, stepEnv, fallbackLine);
+  if (shellMode === "pwsh") {
+    current = expandPatternCandidates(
+      current.candidates,
+      new RegExp(PWSH_ENV_VAR_PATTERN.source, "iu"),
+      (match) => {
+        const name = match.groups.braced ?? match.groups.bare;
+        return shellVars.get(name) ?? null;
+      },
+      current.truncated,
+    );
+  }
   return expandPatternCandidates(
-    afterActionsEnv,
+    current.candidates,
     new RegExp(EMBEDDED_VAR_PATTERN.source, "u"),
     (match) => {
       const name = match.groups.braced ?? match.groups.bare;
       return shellVars.get(name) ?? null;
     },
+    current.truncated,
   );
 }
 
@@ -808,7 +894,11 @@ function extractUnquotedHeredocSubstitutions(bodyText, startLine) {
 }
 
 function isGithubEnvTarget(token) {
-  return token === "$GITHUB_ENV" || token === "${GITHUB_ENV}";
+  return (
+    token === "$GITHUB_ENV" ||
+    token === "${GITHUB_ENV}" ||
+    /^\$(?:env:GITHUB_ENV|\{env:GITHUB_ENV\})$/iu.test(token ?? "")
+  );
 }
 
 function redirectsToGithubEnv(tokens) {
@@ -827,11 +917,12 @@ function redirectsToGithubEnv(tokens) {
 }
 
 // Lex an entire shell script preserving quotes across physical newlines,
-// preserving empty quoted arguments (`''` / `""`), tracking heredocs (while
-// ignoring `<<<` here-strings and arithmetic `<<`), attaching unquoted and
-// double-quoted command substitutions to their owning command, and emitting
-// explicit subshell and conditional/case markers.
-function lexShellScript(text, startLine) {
+// preserving empty quoted arguments (`''` / `""`), honoring shell-specific line
+// continuations (`\` in POSIX, `` ` `` in PowerShell, `^` in cmd), tracking
+// heredocs (while ignoring `<<<` here-strings and arithmetic `<<`), attaching
+// unquoted and double-quoted command substitutions to their owning command, and
+// emitting explicit subshell and conditional/case markers.
+function lexShellScript(text, startLine, shellMode = "posix") {
   const events = [];
   let tokens = [];
   let commandSubstitutions = [];
@@ -846,6 +937,8 @@ function lexShellScript(text, startLine) {
   let arrayParenDepth = 0;
   let line = startLine;
   const pendingHeredocs = [];
+  const isPwsh = shellMode === "pwsh";
+  const isCmd = shellMode === "cmd";
 
   const markTokenStart = () => {
     if (!tokenStarted && tokens.length === 0) {
@@ -908,7 +1001,7 @@ function lexShellScript(text, startLine) {
       const bodyText = bodyLines.join("\n");
       if (spec.executable) {
         events.push({ kind: "enter-subshell" });
-        events.push(...lexShellScript(bodyText, bodyStartLine));
+        events.push(...lexShellScript(bodyText, bodyStartLine, "posix"));
         events.push({ kind: "exit-subshell" });
       } else {
         if (!spec.quoted) {
@@ -951,9 +1044,40 @@ function lexShellScript(text, startLine) {
       continue;
     }
 
-    if (ch === "\\" && quote !== "'") {
+    if (!isPwsh && !isCmd && ch === "\\" && quote !== "'") {
       escaping = true;
       continue;
+    }
+
+    if (isPwsh && ch === "`" && quote !== "'") {
+      // PowerShell line continuation: backtick followed by optional horizontal
+      // whitespace and a newline joins the next line into the current command.
+      let cursor = index + 1;
+      while (
+        cursor < text.length &&
+        (text[cursor] === " " || text[cursor] === "\t" || text[cursor] === "\r")
+      ) {
+        cursor += 1;
+      }
+      if (text[cursor] === "\n") {
+        line += 1;
+        index = cursor;
+        continue;
+      }
+      escaping = true;
+      continue;
+    }
+
+    if (isCmd && ch === "^" && !quote) {
+      let cursor = index + 1;
+      if (text[cursor] === "\r") {
+        cursor += 1;
+      }
+      if (text[cursor] === "\n") {
+        line += 1;
+        index = cursor;
+        continue;
+      }
     }
 
     if (quote === "'") {
@@ -961,7 +1085,12 @@ function lexShellScript(text, startLine) {
         line += 1;
       }
       if (ch === "'") {
-        quote = null;
+        if (isPwsh && text[index + 1] === "'") {
+          current += "'";
+          index += 1;
+        } else {
+          quote = null;
+        }
       } else {
         current += ch;
       }
@@ -969,7 +1098,7 @@ function lexShellScript(text, startLine) {
     }
 
     if (quote === '"') {
-      if (ch === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
+      if (!isCmd && ch === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
         const subStartLine = line;
         const scanned = scanDollarCommandSubstitution(text, index, line);
         if (scanned) {
@@ -980,7 +1109,7 @@ function lexShellScript(text, startLine) {
           continue;
         }
       }
-      if (ch === "`") {
+      if (!isPwsh && !isCmd && ch === "`") {
         const subStartLine = line;
         const scanned = scanBacktickSubstitution(text, index, line, true);
         if (scanned) {
@@ -1020,6 +1149,20 @@ function lexShellScript(text, startLine) {
       continue;
     }
 
+    // PowerShell block comments `<# ... #>`.
+    if (isPwsh && !tokenStarted && ch === "<" && text[index + 1] === "#") {
+      const closeIndex = text.indexOf("#>", index + 2);
+      if (closeIndex !== -1) {
+        for (let cursor = index + 2; cursor < closeIndex; cursor += 1) {
+          if (text[cursor] === "\n") {
+            line += 1;
+          }
+        }
+        index = closeIndex + 1;
+        continue;
+      }
+    }
+
     if (ch === "'" || ch === '"') {
       markTokenStart();
       quote = ch;
@@ -1027,7 +1170,7 @@ function lexShellScript(text, startLine) {
     }
 
     // Command substitution `$(...)` outside single quotes.
-    if (ch === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
+    if (!isCmd && ch === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
       markTokenStart();
       const subStartLine = line;
       const scanned = scanDollarCommandSubstitution(text, index, line);
@@ -1040,8 +1183,8 @@ function lexShellScript(text, startLine) {
       }
     }
 
-    // Backtick command substitution `` `...` `` outside single quotes.
-    if (ch === "`") {
+    // Backtick command substitution `` `...` `` in POSIX shells only.
+    if (!isPwsh && !isCmd && ch === "`") {
       markTokenStart();
       const subStartLine = line;
       const scanned = scanBacktickSubstitution(text, index, line, false);
@@ -1337,8 +1480,8 @@ function matchesExcludePartial(row, excludeRows) {
 }
 
 function extractJobMatrixRows(jobNode, filePath, problems) {
-  const strategyNode = jobNode?.value?.get("strategy");
-  const matrixNode = strategyNode?.kind === "map" ? strategyNode.value.get("matrix") : null;
+  const strategyNode = getMapField(jobNode, "strategy");
+  const matrixNode = getMapField(strategyNode, "matrix");
   if (matrixNode?.kind !== "map") {
     return [];
   }
@@ -1349,7 +1492,8 @@ function extractJobMatrixRows(jobNode, filePath, problems) {
   const excludeRows = [];
 
   for (const [key, entryNode] of matrixNode.value) {
-    if (key === "exclude") {
+    const lowerKey = key.toLowerCase();
+    if (lowerKey === "exclude") {
       if (entryNode?.kind === "seq") {
         for (const rowNode of entryNode.value) {
           if (rowNode?.kind === "map") {
@@ -1359,7 +1503,7 @@ function extractJobMatrixRows(jobNode, filePath, problems) {
       }
       continue;
     }
-    if (key === "include") {
+    if (lowerKey === "include") {
       if (entryNode?.kind === "seq") {
         for (const rowNode of entryNode.value) {
           if (rowNode?.kind === "map") {
@@ -1638,7 +1782,7 @@ function extractRedirectedWriteLines(tokens, startIndex) {
   return null;
 }
 
-function peelControlKeywords(tokens, frame) {
+function peelControlKeywords(tokens, frame, lineNumber, stepEnv, shellMode) {
   let start = 0;
   while (start < tokens.length) {
     const keyword = tokens[start];
@@ -1688,7 +1832,33 @@ function peelControlKeywords(tokens, frame) {
       start += 1;
       continue;
     }
-    if (keyword === "for" || keyword === "while" || keyword === "until") {
+    if (keyword === "for") {
+      frame.branches.push({
+        kind: "loop",
+        entryVars: cloneVarMap(frame.vars),
+      });
+      const varName = tokens[start + 1];
+      if (varName && /^[A-Za-z_][A-Za-z0-9_]*$/u.test(varName) && tokens[start + 2] === "in") {
+        let entries = [];
+        for (const operand of tokens.slice(start + 3)) {
+          const expanded = resolveImageTokenCandidates(
+            operand,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          entries = mergeVarEntries(entries, candidatesToVarEntries(expanded, lineNumber));
+        }
+        if (entries.length > 0) {
+          frame.vars.set(varName, entries);
+        }
+        return [];
+      }
+      start += 1;
+      continue;
+    }
+    if (keyword === "while" || keyword === "until") {
       frame.branches.push({
         kind: "loop",
         entryVars: cloneVarMap(frame.vars),
@@ -1739,6 +1909,7 @@ function inspectShellText(
   filePath,
   problems,
   emittedGithubEnv = null,
+  shellMode = "posix",
   depth = 0,
 ) {
   if (depth > MAX_SHELL_NESTING_DEPTH) {
@@ -1747,7 +1918,7 @@ function inspectShellText(
 
   const scopeStack = [{ vars: cloneVarMap(shellVars), branches: [] }];
 
-  for (const event of lexShellScript(scriptText, startLine)) {
+  for (const event of lexShellScript(scriptText, startLine, shellMode)) {
     if (event.kind === "enter-subshell") {
       scopeStack.push({ vars: cloneVarMap(scopeStack.at(-1).vars), branches: [] });
       continue;
@@ -1775,11 +1946,17 @@ function inspectShellText(
       for (const assignment of parseGithubEnvPayload(event.lines, event.startLine)) {
         const resolved = event.quoted
           ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
-          : resolveImageTokenCandidates(assignment.value, stepEnv, frame.vars, assignment.line);
+          : resolveImageTokenCandidates(
+              assignment.value,
+              stepEnv,
+              frame.vars,
+              assignment.line,
+              shellMode,
+            );
         recordGithubEnvWrite(
           emittedGithubEnv,
           assignment.name,
-          resolved.map((entry) => ({ value: entry.text, line: assignment.line })),
+          candidatesToVarEntries(resolved, assignment.line),
           isConditional,
         );
       }
@@ -1799,6 +1976,7 @@ function inspectShellText(
         filePath,
         problems,
         emittedGithubEnv,
+        shellMode,
         depth + 1,
       );
     }
@@ -1807,7 +1985,7 @@ function inspectShellText(
       continue;
     }
 
-    const tokens = peelControlKeywords(event.tokens, frame);
+    const tokens = peelControlKeywords(event.tokens, frame, lineNumber, stepEnv, shellMode);
     if (tokens.length === 0 || tokens[0].startsWith("#")) {
       continue;
     }
@@ -1821,12 +1999,16 @@ function inspectShellText(
       for (const token of tokens.slice(assignStart)) {
         const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
         if (match) {
-          const resolved = resolveImageTokenCandidates(
-            match.groups.value,
-            stepEnv,
-            frame.vars,
+          const resolved = candidatesToVarEntries(
+            resolveImageTokenCandidates(
+              match.groups.value,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            ),
             lineNumber,
-          ).map((entry) => ({ value: entry.text, line: lineNumber }));
+          );
           if (conditional) {
             frame.vars.set(
               match.groups.name,
@@ -1854,12 +2036,16 @@ function inspectShellText(
       }
       const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
       if (prefixAssign) {
-        const resolved = resolveImageTokenCandidates(
-          prefixAssign.groups.value,
-          stepEnv,
-          frame.vars,
+        const resolved = candidatesToVarEntries(
+          resolveImageTokenCandidates(
+            prefixAssign.groups.value,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          ),
           lineNumber,
-        ).map((entry) => ({ value: entry.text, line: lineNumber }));
+        );
         commandVars.set(prefixAssign.groups.name, resolved);
         cursor += 1;
         continue;
@@ -1881,11 +2067,12 @@ function inspectShellText(
           stepEnv,
           frame.vars,
           lineNumber,
+          shellMode,
         );
         recordGithubEnvWrite(
           emittedGithubEnv,
           assignment.name,
-          resolved.map((entry) => ({ value: entry.text, line: lineNumber })),
+          candidatesToVarEntries(resolved, lineNumber),
           isConditional,
         );
       }
@@ -1905,6 +2092,7 @@ function inspectShellText(
           filePath,
           problems,
           emittedGithubEnv,
+          "posix",
           depth + 1,
         );
       }
@@ -1995,14 +2183,20 @@ function inspectShellText(
       ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber)
       : lineNumber;
 
-    const varExpandedCandidates = resolveImageTokenCandidates(
+    const varExpanded = resolveImageTokenCandidates(
       imageToken,
       stepEnv,
       frame.vars,
       fallbackLine,
+      shellMode,
     );
     const seenProblems = new Set();
-    for (const varCandidate of varExpandedCandidates) {
+    if (varExpanded.truncated) {
+      const limitMessage = `${filePath}:${fallbackLine}: ${imageToken} exceeds expansion limit and cannot be verified exhaustively`;
+      seenProblems.add(limitMessage);
+      problems.push(limitMessage);
+    }
+    for (const varCandidate of varExpanded.candidates) {
       for (const candidate of expandMatrixReferences(
         varCandidate.text,
         matrixRows,
@@ -2030,6 +2224,7 @@ function inspectShellRunScript(
   filePath,
   problems,
   emittedGithubEnv = null,
+  shellMode = "posix",
 ) {
   const scriptText =
     runNode.folded && Array.isArray(runNode.lines)
@@ -2049,6 +2244,7 @@ function inspectShellRunScript(
     filePath,
     problems,
     emittedGithubEnv,
+    shellMode,
   );
 }
 
@@ -2078,7 +2274,13 @@ function checkImageField(
   }
   const rawRef = String(node.value).trim();
   const seenProblems = new Set();
-  for (const envCandidate of resolveEnvExpressionCandidates(rawRef, envMap, node.line)) {
+  const envExpanded = resolveEnvExpressionCandidates(rawRef, envMap, node.line);
+  if (envExpanded.truncated) {
+    const limitMessage = `${filePath}:${node.line}: ${rawRef} exceeds expansion limit and cannot be verified exhaustively`;
+    seenProblems.add(limitMessage);
+    problems.push(limitMessage);
+  }
+  for (const envCandidate of envExpanded.candidates) {
     for (const candidate of expandMatrixReferences(
       envCandidate.text,
       matrixRows,
@@ -2102,7 +2304,7 @@ function checkImageField(
   }
 }
 
-function checkStepsList(stepsNode, baseEnv, matrixRows, filePath, problems) {
+function checkStepsList(stepsNode, baseEnv, matrixRows, filePath, problems, defaultShell = null) {
   if (stepsNode?.kind !== "seq") {
     return;
   }
@@ -2111,12 +2313,24 @@ function checkStepsList(stepsNode, baseEnv, matrixRows, filePath, problems) {
     if (stepNode?.kind !== "map") {
       continue;
     }
-    const stepEnv = extractEnvMap(stepNode.value.get("env"), runningEnv);
-    const stepConditional = stepNode.value.has("if");
+    const stepEnv = extractEnvMap(getMapField(stepNode, "env"), runningEnv);
+    const stepConditional = hasMapField(stepNode, "if");
+    const stepShellNode = getMapField(stepNode, "shell");
+    const effectiveShell =
+      stepShellNode?.kind === "scalar" ? String(stepShellNode.value).trim() : defaultShell;
+    const shellMode = normalizeShellMode(effectiveShell);
     const emittedGithubEnv = new Map();
-    const runNode = stepNode.value.get("run");
+    const runNode = getMapField(stepNode, "run");
     if (runNode?.kind === "scalar") {
-      inspectShellRunScript(runNode, stepEnv, matrixRows, filePath, problems, emittedGithubEnv);
+      inspectShellRunScript(
+        runNode,
+        stepEnv,
+        matrixRows,
+        filePath,
+        problems,
+        emittedGithubEnv,
+        shellMode,
+      );
     }
     for (const [name, write] of emittedGithubEnv) {
       if (stepConditional || write.conditional || !runningEnv.has(name)) {
@@ -2222,7 +2436,7 @@ function collectUsesNodes(doc) {
       if (stepNode?.kind !== "map") {
         continue;
       }
-      const usesNode = stepNode.value.get("uses");
+      const usesNode = getMapField(stepNode, "uses");
       if (usesNode?.kind === "scalar") {
         usesNodes.push(usesNode);
       }
@@ -2238,28 +2452,28 @@ function collectUsesNodes(doc) {
     return usesNodes;
   }
 
-  const topUses = doc.value.get("uses");
+  const topUses = getMapField(doc, "uses");
   if (topUses?.kind === "scalar") {
     usesNodes.push(topUses);
   }
-  collectFromSteps(doc.value.get("steps"));
+  collectFromSteps(getMapField(doc, "steps"));
 
-  const runsNode = doc.value.get("runs");
+  const runsNode = getMapField(doc, "runs");
   if (runsNode?.kind === "map") {
-    collectFromSteps(runsNode.value.get("steps"));
+    collectFromSteps(getMapField(runsNode, "steps"));
   }
 
-  const jobsNode = doc.value.get("jobs");
+  const jobsNode = getMapField(doc, "jobs");
   if (jobsNode?.kind === "map") {
     for (const jobNode of jobsNode.value.values()) {
       if (jobNode?.kind !== "map") {
         continue;
       }
-      const jobUses = jobNode.value.get("uses");
+      const jobUses = getMapField(jobNode, "uses");
       if (jobUses?.kind === "scalar") {
         usesNodes.push(jobUses);
       }
-      collectFromSteps(jobNode.value.get("steps"));
+      collectFromSteps(getMapField(jobNode, "steps"));
     }
   }
 
@@ -2323,7 +2537,8 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
     return problems;
   }
 
-  const workflowEnv = extractEnvMap(doc.value.get("env"), new Map());
+  const workflowEnv = extractEnvMap(getMapField(doc, "env"), new Map());
+  const workflowDefaultShell = extractDefaultShell(doc);
 
   const checkContainerNode = (containerNode, envMap, matrixRows) => {
     if (!containerNode) {
@@ -2332,7 +2547,7 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
     if (containerNode.kind === "scalar") {
       checkImageField(containerNode, envMap, matrixRows, filePath, problems);
     } else if (containerNode.kind === "map") {
-      checkImageField(containerNode.value.get("image"), envMap, matrixRows, filePath, problems);
+      checkImageField(getMapField(containerNode, "image"), envMap, matrixRows, filePath, problems);
     }
   };
 
@@ -2345,30 +2560,52 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
     }
   };
 
-  checkContainerNode(doc.value.get("container"), workflowEnv, []);
-  checkServicesNode(doc.value.get("services"), workflowEnv, []);
-  checkImageField(doc.value.get("image"), workflowEnv, [], filePath, problems);
-  checkStepsList(doc.value.get("steps"), workflowEnv, [], filePath, problems);
+  checkContainerNode(getMapField(doc, "container"), workflowEnv, []);
+  checkServicesNode(getMapField(doc, "services"), workflowEnv, []);
+  checkImageField(getMapField(doc, "image"), workflowEnv, [], filePath, problems);
+  checkStepsList(
+    getMapField(doc, "steps"),
+    workflowEnv,
+    [],
+    filePath,
+    problems,
+    workflowDefaultShell,
+  );
 
-  const runsNode = doc.value.get("runs");
+  const runsNode = getMapField(doc, "runs");
   if (runsNode?.kind === "map") {
-    checkImageField(runsNode.value.get("image"), workflowEnv, [], filePath, problems, {
+    checkImageField(getMapField(runsNode, "image"), workflowEnv, [], filePath, problems, {
       allowLocalDockerAction: true,
     });
-    checkStepsList(runsNode.value.get("steps"), workflowEnv, [], filePath, problems);
+    checkStepsList(
+      getMapField(runsNode, "steps"),
+      workflowEnv,
+      [],
+      filePath,
+      problems,
+      workflowDefaultShell,
+    );
   }
 
-  const jobsNode = doc.value.get("jobs");
+  const jobsNode = getMapField(doc, "jobs");
   if (jobsNode?.kind === "map") {
     for (const jobNode of jobsNode.value.values()) {
       if (jobNode?.kind !== "map") {
         continue;
       }
-      const jobEnv = extractEnvMap(jobNode.value.get("env"), workflowEnv);
+      const jobEnv = extractEnvMap(getMapField(jobNode, "env"), workflowEnv);
+      const jobDefaultShell = extractDefaultShell(jobNode) ?? workflowDefaultShell;
       const jobMatrixRows = extractJobMatrixRows(jobNode, filePath, problems);
-      checkContainerNode(jobNode.value.get("container"), jobEnv, jobMatrixRows);
-      checkServicesNode(jobNode.value.get("services"), jobEnv, jobMatrixRows);
-      checkStepsList(jobNode.value.get("steps"), jobEnv, jobMatrixRows, filePath, problems);
+      checkContainerNode(getMapField(jobNode, "container"), jobEnv, jobMatrixRows);
+      checkServicesNode(getMapField(jobNode, "services"), jobEnv, jobMatrixRows);
+      checkStepsList(
+        getMapField(jobNode, "steps"),
+        jobEnv,
+        jobMatrixRows,
+        filePath,
+        problems,
+        jobDefaultShell,
+      );
     }
   }
 
@@ -2523,6 +2760,8 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
   const logicalLines = [];
   const pendingHeredocs = [];
   let inHeaderDirectives = true;
+  let escapeChar = "\\";
+  let escapeDirectiveSeen = false;
 
   for (let index = 0; index < rawLines.length; index += 1) {
     const line = rawLines[index];
@@ -2549,13 +2788,18 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
             problems.push(`${filePath}:${index + 1}: ${frontend} is not pinned to a sha256 digest`);
           }
         }
+        const escapeMatch = /^#\s*escape\s*=\s*(?<char>[\\`])\s*$/iu.exec(trimmed);
+        if (escapeMatch && !escapeDirectiveSeen) {
+          escapeChar = escapeMatch.groups.char;
+          escapeDirectiveSeen = true;
+        }
       }
       continue;
     }
     inHeaderDirectives = false;
     const startLine = index + 1;
     let combined = trimmed;
-    while (combined.endsWith("\\") && index + 1 < rawLines.length) {
+    while (combined.endsWith(escapeChar) && index + 1 < rawLines.length) {
       index += 1;
       const nextTrimmed = rawLines[index].trim();
       if (nextTrimmed.length === 0 || nextTrimmed.startsWith("#")) {
@@ -2563,7 +2807,7 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
       }
       combined = `${combined.slice(0, -1)} ${nextTrimmed}`;
     }
-    if (combined.endsWith("\\")) {
+    if (combined.endsWith(escapeChar)) {
       combined = combined.slice(0, -1).trimEnd();
     }
     pendingHeredocs.push(...extractDockerfileHeredocDelimiters(combined));
