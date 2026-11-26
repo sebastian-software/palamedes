@@ -1447,18 +1447,18 @@ function resolveContainerBuildCommand(
   if (subcommand === "build") {
     return { kind: "build", argStart: argIndex + 1 };
   }
-  if (subcommand === "image") {
-    let imageSubIndex = argIndex + 1;
-    while (imageSubIndex < tokens.length) {
-      const redirConsumed = consumeShellRedirection(tokens, imageSubIndex, stdinRedirectTargets);
+  if (subcommand === "image" || subcommand === "builder") {
+    let nestedSubIndex = argIndex + 1;
+    while (nestedSubIndex < tokens.length) {
+      const redirConsumed = consumeShellRedirection(tokens, nestedSubIndex, stdinRedirectTargets);
       if (redirConsumed > 0) {
-        imageSubIndex += redirConsumed;
+        nestedSubIndex += redirConsumed;
         continue;
       }
       break;
     }
-    if (tokens[imageSubIndex] === "build") {
-      return { kind: "build", argStart: imageSubIndex + 1 };
+    if (tokens[nestedSubIndex] === "build") {
+      return { kind: "build", argStart: nestedSubIndex + 1 };
     }
     return null;
   }
@@ -1640,7 +1640,7 @@ function extractDriverOptImages(rawText) {
   return images;
 }
 
-function advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets = null) {
+function advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets = null, wrapperChdirs = null) {
   const token = tokens[cursor];
   if (!SHELL_COMMAND_PREFIXES.has(token)) {
     return null;
@@ -1674,10 +1674,13 @@ function advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets = null) {
   }
 
   let valueFlags = null;
+  let chdirShortFlag = null;
   if (normalized === "sudo") {
     valueFlags = SUDO_VALUE_FLAGS;
+    chdirShortFlag = "D";
   } else if (normalized === "env") {
     valueFlags = ENV_VALUE_FLAGS;
+    chdirShortFlag = "C";
   } else if (normalized === "exec") {
     valueFlags = EXEC_VALUE_FLAGS;
   } else if (normalized === "time") {
@@ -1702,6 +1705,49 @@ function advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets = null) {
       }
       if (!flag.startsWith("-") || flag === "-") {
         break;
+      }
+      if (chdirShortFlag && wrapperChdirs) {
+        if (flag === `-${chdirShortFlag}` || flag === "--chdir") {
+          if (tokens[next + 1] !== undefined) {
+            wrapperChdirs.push(tokens[next + 1]);
+          }
+          next += 2;
+          continue;
+        }
+        if (flag.startsWith("--chdir=")) {
+          wrapperChdirs.push(flag.slice("--chdir=".length));
+          next += 1;
+          continue;
+        }
+        if (flag.startsWith(`-${chdirShortFlag}=`)) {
+          wrapperChdirs.push(flag.slice(3));
+          next += 1;
+          continue;
+        }
+        if (!flag.startsWith("--") && flag.length > 2) {
+          let consumedNext = false;
+          for (let idx = 1; idx < flag.length; idx += 1) {
+            const ch = flag[idx];
+            if (ch === chdirShortFlag) {
+              if (idx === flag.length - 1) {
+                if (tokens[next + 1] !== undefined) {
+                  wrapperChdirs.push(tokens[next + 1]);
+                }
+                consumedNext = true;
+              } else {
+                const rest = flag.slice(idx + 1);
+                wrapperChdirs.push(rest.startsWith("=") ? rest.slice(1) : rest);
+              }
+              break;
+            }
+            if (valueFlags.has(`-${ch}`)) {
+              consumedNext = idx === flag.length - 1;
+              break;
+            }
+          }
+          next += consumedNext ? 2 : 1;
+          continue;
+        }
       }
       next += flagConsumesNextArg(flag, valueFlags) ? 2 : 1;
     }
@@ -1756,6 +1802,10 @@ function isStdinContainerBuildCommand(tokens) {
   if (buildCommand?.kind !== "build") {
     return false;
   }
+  const buildValueFlags =
+    normalizedCli === "podman" || normalizedCli === "buildah"
+      ? PODMAN_BUILD_VALUE_FLAGS
+      : DOCKER_BUILD_VALUE_FLAGS;
   let hasStdinFile = false;
   let hasExplicitFile = false;
   let contextArg = null;
@@ -1809,7 +1859,7 @@ function isStdinContainerBuildCommand(tokens) {
       continue;
     }
     if (token.startsWith("-") && token !== "-") {
-      if (flagConsumesNextArg(token, DOCKER_BUILD_VALUE_FLAGS)) {
+      if (flagConsumesNextArg(token, buildValueFlags)) {
         index += 1;
       }
       continue;
@@ -1846,6 +1896,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   const events = [];
   let tokens = [];
   let tokenSingleQuoted = [];
+  let tokenQuoted = [];
   let commandSubstitutions = [];
   let commandLine = startLine;
   let commandConditional = false;
@@ -1855,6 +1906,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   let tokenStarted = false;
   let currentHasUnquotedOrDoubleQuoted = false;
   let currentSawSingleQuote = false;
+  let currentSawAnyQuote = false;
   let quote = null;
   let escaping = false;
   let arithDepth = 0;
@@ -1864,13 +1916,16 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   const isPwsh = shellMode === "pwsh";
   const isCmd = shellMode === "cmd";
 
-  const markTokenStart = ({ singleQuoted = false } = {}) => {
+  const markTokenStart = ({ singleQuoted = false, quoted = false } = {}) => {
     if (!tokenStarted && tokens.length === 0) {
       commandLine = line;
       commandConditional = nextConditional;
       nextConditional = false;
     }
     tokenStarted = true;
+    if (quoted) {
+      currentSawAnyQuote = true;
+    }
     if (singleQuoted) {
       currentSawSingleQuote = true;
     } else {
@@ -1885,10 +1940,12 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       }
       tokens.push(current);
       tokenSingleQuoted.push(currentSawSingleQuote && !currentHasUnquotedOrDoubleQuoted);
+      tokenQuoted.push(currentSawAnyQuote);
       current = "";
       tokenStarted = false;
       currentHasUnquotedOrDoubleQuoted = false;
       currentSawSingleQuote = false;
+      currentSawAnyQuote = false;
     }
   };
 
@@ -1899,6 +1956,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         kind: "command",
         tokens,
         tokenSingleQuoted,
+        tokenQuoted,
         lineNumber: commandLine,
         conditional: commandConditional,
         hasStdinHeredoc: commandHasStdinHeredoc,
@@ -1906,6 +1964,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       });
       tokens = [];
       tokenSingleQuoted = [];
+      tokenQuoted = [];
       commandSubstitutions = [];
       commandConditional = false;
       commandHasStdinHeredoc = false;
@@ -2118,7 +2177,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
     }
 
     if (ch === "'" || ch === '"') {
-      markTokenStart({ singleQuoted: ch === "'" });
+      markTokenStart({ singleQuoted: ch === "'", quoted: true });
       quote = ch;
       continue;
     }
@@ -2212,14 +2271,17 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       if (text[index + 1] === ">") {
         tokens.push(">>");
         tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
         index += 1;
       } else if (text[index + 1] === "&") {
         tokens.push(">&");
         tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
         index += 1;
       } else {
         tokens.push(">");
         tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
       }
       continue;
     }
@@ -2312,14 +2374,17 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       if (text[index + 1] === "&") {
         tokens.push("<&");
         tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
         index += 1;
       } else if (text[index + 1] === ">") {
         tokens.push("<>");
         tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
         index += 1;
       } else {
         tokens.push("<");
         tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
       }
       continue;
     }
@@ -3015,6 +3080,65 @@ const DOCKER_BUILD_VALUE_FLAGS = new Set([
   "-v",
   "--volume",
 ]);
+const PODMAN_BUILD_VALUE_FLAGS = new Set([
+  ...DOCKER_BUILD_VALUE_FLAGS,
+  "--arch",
+  "--authfile",
+  "--cap-add",
+  "--cap-drop",
+  "--cert-dir",
+  "--cpp-flag",
+  "--creds",
+  "--decryption-key",
+  "--device",
+  "--dns",
+  "--dns-option",
+  "--dns-search",
+  "--env",
+  "--format",
+  "--from",
+  "--gidmap",
+  "--group-add",
+  "--hooks-dir",
+  "--identity-label",
+  "--ignorefile",
+  "--iidfile-raw",
+  "--ipc",
+  "--jobs",
+  "--layer-label",
+  "--logfile",
+  "--manifest",
+  "--os",
+  "--pid",
+  "--retry",
+  "--retry-delay",
+  "--runtime",
+  "--runtime-flag",
+  "--save-stages",
+  "--sbom-image-output",
+  "--sbom-image-purl-output",
+  "--sbom-merge-strategy",
+  "--sbom-output",
+  "--sbom-purl-output",
+  "--sbom-scanner-command",
+  "--sbom-scanner-image",
+  "--security-opt",
+  "--sign-by",
+  "--source-date-epoch",
+  "--stage-labels",
+  "--timestamp",
+  "--uidmap",
+  "--unsetannotation",
+  "--unsetenv",
+  "--unsetlabel",
+  "--userns",
+  "--userns-gid-map",
+  "--userns-gid-map-group",
+  "--userns-uid-map",
+  "--userns-uid-map-user",
+  "--uts",
+  "--variant",
+]);
 
 const GITHUB_WORKSPACE_PREFIX_PATTERN =
   /^(?:\$\{\{\s*github\.workspace\s*\}\}|\$(?:\{GITHUB_WORKSPACE\}|GITHUB_WORKSPACE|\{env:GITHUB_WORKSPACE\}|env:GITHUB_WORKSPACE)|%GITHUB_WORKSPACE%)(?:[\\/]+(?<rest>.*)|$)/iu;
@@ -3536,6 +3660,7 @@ function inspectShellText(
     const peeledSingleQuoted = event.tokenSingleQuoted
       ? event.tokenSingleQuoted.slice(peeledCount)
       : [];
+    const peeledQuoted = event.tokenQuoted ? event.tokenQuoted.slice(peeledCount) : [];
     if (tokens.length === 0 || tokens[0].startsWith("#")) {
       continue;
     }
@@ -3721,6 +3846,7 @@ function inspectShellText(
       }
     }
     const stdinRedirectTargets = [];
+    const wrapperChdirs = [];
     let cursor = 0;
     while (cursor < tokens.length) {
       const redirConsumed = consumeShellRedirection(tokens, cursor, stdinRedirectTargets);
@@ -3728,7 +3854,12 @@ function inspectShellText(
         cursor += redirConsumed;
         continue;
       }
-      const afterWrapper = advanceWrapperPrefix(tokens, cursor, stdinRedirectTargets);
+      const afterWrapper = advanceWrapperPrefix(
+        tokens,
+        cursor,
+        stdinRedirectTargets,
+        wrapperChdirs,
+      );
       if (afterWrapper !== null) {
         cursor = afterWrapper;
         continue;
@@ -3953,12 +4084,78 @@ function inspectShellText(
       continue;
     }
 
+    const resolveCommandWorkingDirs = (row) => {
+      const baseDirs =
+        frame.rowCwds.get(row) ??
+        (buildFileContext?.workingDir ? [buildFileContext.workingDir] : []);
+      if (wrapperChdirs.length === 0 || !buildFileContext || baseDirs.length === 0) {
+        return { dirs: baseDirs, truncated: frame.rowCwdsTruncated.has(row) };
+      }
+      const rowList = row ? [row] : [];
+      let currentDirs = [...baseDirs];
+      let truncated = frame.rowCwdsTruncated.has(row);
+      for (const rawChdir of wrapperChdirs) {
+        const expandedDir = resolveImageTokenCandidates(
+          rawChdir,
+          stepEnv,
+          frame.vars,
+          lineNumber,
+          shellMode,
+        );
+        const nextDirs = [];
+        const seenDirs = new Set();
+        for (const baseDir of currentDirs) {
+          for (const varCandidate of expandedDir.candidates) {
+            for (const candidate of expandMatrixReferences(
+              varCandidate.text,
+              rowList,
+              varCandidate.line,
+            )) {
+              const resolved = resolveContainedPath(
+                candidate.text,
+                baseDir,
+                buildFileContext.root,
+                { windowsPath: isWindowsShell },
+              );
+              if (!resolved || seenDirs.has(resolved)) {
+                continue;
+              }
+              if (nextDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
+                truncated = true;
+                continue;
+              }
+              seenDirs.add(resolved);
+              nextDirs.push(resolved);
+            }
+          }
+        }
+        if (nextDirs.length > 0) {
+          currentDirs = nextDirs;
+        }
+      }
+      return { dirs: currentDirs, truncated };
+    };
+
     if (SHELL_INTERPRETERS.has(normalizedCli)) {
       const dashCInfo = extractShellDashCScriptInfo(tokens, peeledSingleQuoted, cursor);
       if (dashCInfo) {
         // Single-quoted `sh -c '...'` receives only exported/prefixed variables;
         // unquoted/double-quoted `sh -c "..."` is expanded by the parent shell first.
         const childVars = dashCInfo.singleQuoted ? exportedCommandVars : commandVars;
+        let childRowCwds = cloneRowCwds(frame.rowCwds);
+        let childRowCwdsTruncated = new Set(frame.rowCwdsTruncated);
+        if (wrapperChdirs.length > 0 && buildFileContext) {
+          const rowsForChild = matrixRows.length > 0 ? matrixRows : [null];
+          childRowCwds = new Map();
+          childRowCwdsTruncated = new Set();
+          for (const row of rowsForChild) {
+            const resolved = resolveCommandWorkingDirs(row);
+            childRowCwds.set(row, resolved.dirs);
+            if (resolved.truncated) {
+              childRowCwdsTruncated.add(row);
+            }
+          }
+        }
         inspectShellText(
           dashCInfo.script,
           lineNumber,
@@ -3974,8 +4171,8 @@ function inspectShellText(
           buildFileContext
             ? {
                 ...buildFileContext,
-                rowCwds: cloneRowCwds(frame.rowCwds),
-                rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
+                rowCwds: childRowCwds,
+                rowCwdsTruncated: childRowCwdsTruncated,
               }
             : null,
         );
@@ -4222,7 +4419,11 @@ function inspectShellText(
           continue;
         }
         if (token.startsWith("-") && token !== "-") {
-          if (flagConsumesNextArg(token, DOCKER_BUILD_VALUE_FLAGS)) {
+          const buildValueFlags =
+            normalizedCli === "podman" || normalizedCli === "buildah"
+              ? PODMAN_BUILD_VALUE_FLAGS
+              : DOCKER_BUILD_VALUE_FLAGS;
+          if (flagConsumesNextArg(token, buildValueFlags)) {
             index += 1;
           }
           continue;
@@ -4320,9 +4521,8 @@ function inspectShellText(
           continue;
         }
 
-        const activeWorkingDirs =
-          frame.rowCwds.get(row) ??
-          (buildFileContext?.workingDir ? [buildFileContext.workingDir] : []);
+        const { dirs: activeWorkingDirs, truncated: activeWorkingDirsTruncated } =
+          resolveCommandWorkingDirs(row);
 
         if (usesStdinDockerfile) {
           if (hasStdinHeredoc) {
@@ -4335,7 +4535,7 @@ function inspectShellText(
                 `${filePath}:${lineNumber}: stdin containerfile input ${rawStdinTarget} cannot be verified statically`,
               );
             } else {
-              if (frame.rowCwdsTruncated.has(row)) {
+              if (activeWorkingDirsTruncated) {
                 pushStdinProblem(
                   `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
                 );
@@ -4424,7 +4624,7 @@ function inspectShellText(
           continue;
         }
 
-        if (frame.rowCwdsTruncated.has(row)) {
+        if (activeWorkingDirsTruncated) {
           problems.push(
             `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
           );
@@ -4578,74 +4778,177 @@ function inspectShellText(
             ? DOCKER_PULL_VALUE_FLAGS
             : DOCKER_RUN_VALUE_FLAGS;
     const allowMultipleImages = normalizedCli === "podman" && subcommand === "pull";
-    const imageTokens = [];
+    const seenProblems = new Set();
 
+    // Expand statically known shell option variables (e.g. `opts="--rm"` or
+    // `opts="--platform linux/amd64"`) before scanning flags so option tokens
+    // are consumed rather than misclassified as the image operand.
+    let argTokenVariants = [[]];
+    let argExpansionTruncated = false;
     for (let index = argIndex; index < tokens.length; index += 1) {
       const token = tokens[index];
-      if (token === "--") {
-        if (allowMultipleImages) {
-          for (let restIndex = index + 1; restIndex < tokens.length; restIndex += 1) {
-            const restToken = tokens[restIndex];
-            if (
-              restToken === ">" ||
-              restToken === ">>" ||
-              restToken === ">&" ||
-              restToken === "<"
-            ) {
-              restIndex += 1;
-              continue;
+      const isSingleQuoted = Boolean(peeledSingleQuoted[index]);
+      const isAnyQuoted = Boolean(peeledQuoted[index]);
+      const isArrayExpansion =
+        token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"));
+      const fallbackLine = sourceLines
+        ? (sourceLines.find((entry) => entry.text.includes(token))?.lineNumber ?? lineNumber)
+        : lineNumber;
+      const mayContainVar =
+        !isSingleQuoted &&
+        !isArrayExpansion &&
+        (token.includes("$") || (shellMode === "cmd" && CMD_VAR_PATTERN.test(token)));
+      CMD_VAR_PATTERN.lastIndex = 0;
+
+      let expandedSlices = null;
+      if (mayContainVar) {
+        const varExpanded = resolveImageTokenCandidates(
+          token,
+          stepEnv,
+          frame.vars,
+          fallbackLine,
+          shellMode,
+        );
+        const affectsOptionParsing = varExpanded.candidates.some(
+          (candidate) =>
+            !isDynamicReference(candidate.text, shellMode) &&
+            (candidate.text.startsWith("-") ||
+              candidate.text.length === 0 ||
+              (!isAnyQuoted && /\s/u.test(candidate.text))),
+        );
+        if (affectsOptionParsing) {
+          if (varExpanded.truncated) {
+            const limitMessage = `${filePath}:${fallbackLine}: ${token} exceeds expansion limit and cannot be verified exhaustively`;
+            if (!seenProblems.has(limitMessage)) {
+              seenProblems.add(limitMessage);
+              problems.push(limitMessage);
             }
-            imageTokens.push(restToken);
           }
-        } else if (tokens[index + 1] !== undefined) {
-          imageTokens.push(tokens[index + 1]);
+          expandedSlices = [];
+          const seenSliceKeys = new Set();
+          for (const candidate of varExpanded.candidates) {
+            const parts = isAnyQuoted
+              ? [{ text: candidate.text, line: candidate.line, preExpanded: true }]
+              : candidate.text.trim().length > 0
+                ? candidate.text
+                    .trim()
+                    .split(/\s+/u)
+                    .map((part) => ({ text: part, line: candidate.line, preExpanded: true }))
+                : [];
+            const key = parts.map((part) => `${part.line}:${part.text}`).join("\0");
+            if (!seenSliceKeys.has(key)) {
+              seenSliceKeys.add(key);
+              expandedSlices.push(parts);
+            }
+          }
         }
-        break;
       }
-      if (token === ">" || token === ">>" || token === ">&" || token === "<") {
-        index += 1;
-        continue;
-      }
-      if (
-        /^\d+$/u.test(token) &&
-        (tokens[index + 1] === ">" || tokens[index + 1] === ">>" || tokens[index + 1] === ">&")
-      ) {
-        index += 2;
-        continue;
-      }
-      if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
-        continue;
-      }
-      if (token.startsWith("-")) {
-        if (flagConsumesNextArg(token, valueFlags)) {
-          index += 1;
+
+      if (expandedSlices) {
+        const nextVariants = [];
+        for (const existing of argTokenVariants) {
+          for (const slice of expandedSlices) {
+            if (nextVariants.length >= MAX_TOKEN_EXPANSIONS) {
+              argExpansionTruncated = true;
+              break;
+            }
+            nextVariants.push([...existing, ...slice]);
+          }
+          if (argExpansionTruncated) {
+            break;
+          }
         }
-        continue;
-      }
-      imageTokens.push(token);
-      if (!allowMultipleImages) {
-        break;
+        argTokenVariants = nextVariants;
+      } else {
+        for (const existing of argTokenVariants) {
+          existing.push({ text: token, line: fallbackLine, preExpanded: false });
+        }
       }
     }
 
-    if (imageTokens.length === 0) {
+    if (argExpansionTruncated) {
+      const limitMessage = `${filePath}:${lineNumber}: container command arguments exceed expansion limit and cannot be verified exhaustively`;
+      if (!seenProblems.has(limitMessage)) {
+        seenProblems.add(limitMessage);
+        problems.push(limitMessage);
+      }
+    }
+
+    const imageEntries = [];
+    const seenImageEntries = new Set();
+    const pushImageEntry = (entry) => {
+      const key = `${entry.preExpanded ? "1" : "0"}:${entry.line}:${entry.text}`;
+      if (!seenImageEntries.has(key)) {
+        seenImageEntries.add(key);
+        imageEntries.push(entry);
+      }
+    };
+
+    for (const argList of argTokenVariants) {
+      for (let index = 0; index < argList.length; index += 1) {
+        const entry = argList[index];
+        const token = entry.text;
+        if (token === "--") {
+          if (allowMultipleImages) {
+            for (let restIndex = index + 1; restIndex < argList.length; restIndex += 1) {
+              const restToken = argList[restIndex].text;
+              if (
+                restToken === ">" ||
+                restToken === ">>" ||
+                restToken === ">&" ||
+                restToken === "<"
+              ) {
+                restIndex += 1;
+                continue;
+              }
+              pushImageEntry(argList[restIndex]);
+            }
+          } else if (argList[index + 1] !== undefined) {
+            pushImageEntry(argList[index + 1]);
+          }
+          break;
+        }
+        if (token === ">" || token === ">>" || token === ">&" || token === "<") {
+          index += 1;
+          continue;
+        }
+        if (
+          /^\d+$/u.test(token) &&
+          (argList[index + 1]?.text === ">" ||
+            argList[index + 1]?.text === ">>" ||
+            argList[index + 1]?.text === ">&")
+        ) {
+          index += 2;
+          continue;
+        }
+        if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
+          continue;
+        }
+        if (token.startsWith("-")) {
+          if (flagConsumesNextArg(token, valueFlags)) {
+            index += 1;
+          }
+          continue;
+        }
+        pushImageEntry(entry);
+        if (!allowMultipleImages) {
+          break;
+        }
+      }
+    }
+
+    if (imageEntries.length === 0) {
       continue;
     }
 
     const allowLocalImageId = subcommand === "run";
-    const seenProblems = new Set();
-    for (const imageToken of imageTokens) {
-      const fallbackLine = sourceLines
-        ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber)
-        : lineNumber;
+    for (const imageEntry of imageEntries) {
+      const imageToken = imageEntry.text;
+      const fallbackLine = imageEntry.line;
 
-      const varExpanded = resolveImageTokenCandidates(
-        imageToken,
-        stepEnv,
-        frame.vars,
-        fallbackLine,
-        shellMode,
-      );
+      const varExpanded = imageEntry.preExpanded
+        ? { candidates: [{ text: imageToken, line: fallbackLine }], truncated: false }
+        : resolveImageTokenCandidates(imageToken, stepEnv, frame.vars, fallbackLine, shellMode);
       if (varExpanded.truncated) {
         const limitMessage = `${filePath}:${fallbackLine}: ${imageToken} exceeds expansion limit and cannot be verified exhaustively`;
         if (!seenProblems.has(limitMessage)) {
@@ -5241,30 +5544,52 @@ function checkStepsList(
         if (resolvedActionFiles.length === 0) {
           const contextDirs = [];
           const seenDirs = new Set();
+          let hadExplicitContext = false;
           if (contextNode?.kind === "scalar") {
-            for (const envCandidate of resolveEnvExpressionCandidates(
-              String(contextNode.value).trim(),
-              rowStepEnv,
-              contextNode.line,
-            ).candidates) {
-              for (const candidate of expandMatrixReferences(
-                envCandidate.text,
-                rowList,
-                envCandidate.line,
-              )) {
-                const resolvedDir = resolveContainedPath(
-                  candidate.text,
-                  buildFileContext.root,
-                  buildFileContext.root,
-                );
-                if (resolvedDir && !seenDirs.has(resolvedDir)) {
-                  seenDirs.add(resolvedDir);
-                  contextDirs.push(resolvedDir);
+            const rawContext = String(contextNode.value).trim();
+            if (rawContext) {
+              hadExplicitContext = true;
+              for (const envCandidate of resolveEnvExpressionCandidates(
+                rawContext,
+                rowStepEnv,
+                contextNode.line,
+              ).candidates) {
+                for (const candidate of expandMatrixReferences(
+                  envCandidate.text,
+                  rowList,
+                  envCandidate.line,
+                )) {
+                  const ctxText = candidate.text.trim();
+                  const defaultCtxMatch = /^\{\{defaultContext\}\}(?::(?<subdir>.*))?$/iu.exec(
+                    ctxText,
+                  );
+                  const isRemoteContext =
+                    !defaultCtxMatch &&
+                    (/^(?:https?|git|ssh|docker-image|container-image):\/\//iu.test(ctxText) ||
+                      /^(?:git@|github\.com\/|target:|\{\{defaultContext\}\}#)/iu.test(ctxText));
+                  const localPath = defaultCtxMatch
+                    ? defaultCtxMatch.groups.subdir?.trim() || "."
+                    : ctxText;
+                  const resolvedDir = isRemoteContext
+                    ? null
+                    : resolveContainedPath(localPath, buildFileContext.root, buildFileContext.root);
+                  if (resolvedDir) {
+                    if (!seenDirs.has(resolvedDir)) {
+                      seenDirs.add(resolvedDir);
+                      contextDirs.push(resolvedDir);
+                    }
+                  } else if (ctxText) {
+                    const unverifiableMsg = `${filePath}:${candidate.line}: build context ${ctxText} cannot be verified statically`;
+                    if (!seenActionContextProblems.has(unverifiableMsg)) {
+                      seenActionContextProblems.add(unverifiableMsg);
+                      problems.push(unverifiableMsg);
+                    }
+                  }
                 }
               }
             }
           }
-          if (contextDirs.length === 0) {
+          if (!hadExplicitContext && contextDirs.length === 0) {
             contextDirs.push(path.resolve(buildFileContext.root));
           }
           for (const contextDir of contextDirs) {

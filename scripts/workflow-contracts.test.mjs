@@ -2055,6 +2055,9 @@ describe("workflow contracts", () => {
           "          sudo -E docker run --rm haproxy:3",
           "          env -i -u HOME docker pull memcached:1.6",
           "          command -v docker",
+          "          opts='--rm --platform linux/amd64'",
+          `          docker run $opts node:24@${digest} node -v`,
+          "          docker run $opts vault:1.18 node -v",
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "      - uses: docker/setup-buildx-action@1111111111111111111111111111111111111111 # v4",
           "        with:",
@@ -2113,13 +2116,14 @@ describe("workflow contracts", () => {
       "<memory>:24: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
       "<memory>:28: haproxy:3 is not pinned to a sha256 digest",
       "<memory>:29: memcached:1.6 is not pinned to a sha256 digest",
-      "<memory>:31: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
-      "<memory>:34: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
-      "<memory>:43: docker/dockerfile:1.10 is not pinned to a sha256 digest",
-      "<memory>:51: alpine:3.20 is not pinned to a sha256 digest",
-      "<memory>:55: busybox:1.37 is not pinned to a sha256 digest",
-      "<memory>:57: caddy:2 is not pinned to a sha256 digest",
-      "<memory>:59: debian:12 is not pinned to a sha256 digest",
+      "<memory>:33: vault:1.18 is not pinned to a sha256 digest",
+      "<memory>:34: docker/setup-buildx-action uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
+      "<memory>:37: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
+      "<memory>:46: docker/dockerfile:1.10 is not pinned to a sha256 digest",
+      "<memory>:54: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:58: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:60: caddy:2 is not pinned to a sha256 digest",
+      "<memory>:62: debian:12 is not pinned to a sha256 digest",
     ]);
     const buildFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-builds-"));
     try {
@@ -2130,6 +2134,8 @@ describe("workflow contracts", () => {
       await mkdir(join(buildFixture, "ci", "dual"), { recursive: true });
       await mkdir(join(buildFixture, "ci", "tag-opt"), { recursive: true });
       await mkdir(join(buildFixture, "ci", "cmdsub"), { recursive: true });
+      await mkdir(join(buildFixture, "ci", "podman-fmt"), { recursive: true });
+      await mkdir(join(buildFixture, "ci", "gitctx"), { recursive: true });
       await writeFile(join(buildFixture, "Dockerfile"), "FROM rootctx\n");
       await writeFile(
         join(buildFixture, "ci", "nested-a", "cd.recipe"),
@@ -2172,6 +2178,16 @@ describe("workflow contracts", () => {
       await writeFile(join(buildFixture, "ci", "popd.recipe"), "FROM perl:5.40\n");
       await writeFile(join(buildFixture, "ci", "short-eq.recipe"), "FROM elixir:1.18\n");
       await writeFile(join(buildFixture, "ci", "workspace.recipe"), "FROM zig:0.14\n");
+      await writeFile(join(buildFixture, "ci", "env-chdir.recipe"), "FROM lua:5.4\n");
+      await writeFile(join(buildFixture, "ci", "builder-alias.recipe"), "FROM swift:6.0\n");
+      await writeFile(
+        join(buildFixture, "ci", "podman-fmt", "Containerfile"),
+        `ARG FMT_BASE=node:24@${digest}\nFROM \${FMT_BASE}\n`,
+      );
+      await writeFile(
+        join(buildFixture, "ci", "gitctx", "Dockerfile"),
+        `ARG GITCTX_BASE=node:24@${digest}\nFROM \${GITCTX_BASE}\n`,
+      );
       await writeFile(
         join(buildFixture, ".github", "workflows", "cd-and-ctx.yml"),
         [
@@ -2211,9 +2227,19 @@ describe("workflow contracts", () => {
           "          popd",
           "          docker build -f ci/popd.recipe .",
           "          docker build -f=ci/short-eq.recipe .",
+          "          env -C ci docker build -f env-chdir.recipe .",
+          "          docker builder build -f ci/builder-alias.recipe .",
+          "          podman build --format docker --build-arg FMT_BASE=mariadb:11 ci/podman-fmt",
           "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
           "        with:",
           "          file: ${{ github.workspace }}/ci/workspace.recipe",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          context: '{{defaultContext}}:ci/gitctx'",
+          "          build-args: GITCTX_BASE=mongo:8",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          context: https://github.com/example/remote.git#main",
           "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
           "        with:",
           `          build-contexts: rootctx=docker-image://node:24@${digest}`,
@@ -2226,8 +2252,11 @@ describe("workflow contracts", () => {
         ".github/workflows/cd-and-ctx.yml:24: stdin containerfile input ci/missing.recipe cannot be verified statically",
         ".github/workflows/cd-and-ctx.yml:25: stdin build context archive cannot be verified statically",
         ".github/workflows/cd-and-ctx.yml:26: stdin build context archive ci/context.tar.gz cannot be verified statically",
+        ".github/workflows/cd-and-ctx.yml:49: build context https://github.com/example/remote.git#main cannot be verified statically",
         "Dockerfile:1: rootctx is not pinned to a sha256 digest",
+        "ci/builder-alias.recipe:1: swift:6.0 is not pinned to a sha256 digest",
         "ci/cmdsub/sub.recipe:1: ruby:3.4 is not pinned to a sha256 digest",
+        "ci/env-chdir.recipe:1: lua:5.4 is not pinned to a sha256 digest",
         "ci/nested-b/cd.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
         "ci/popd.recipe:1: perl:5.40 is not pinned to a sha256 digest",
         "ci/shared.recipe:1: maybectx is not pinned to a sha256 digest",
@@ -2242,6 +2271,8 @@ describe("workflow contracts", () => {
         "ci/dual/Containerfile:4: nginx:1.27 is not pinned to a sha256 digest",
         "ci/dual/Dockerfile:2: python:3.13 is not pinned to a sha256 digest",
         "ci/tag-opt/Dockerfile:2: erlang:27 is not pinned to a sha256 digest",
+        "ci/podman-fmt/Containerfile:2: mariadb:11 is not pinned to a sha256 digest",
+        "ci/gitctx/Dockerfile:2: mongo:8 is not pinned to a sha256 digest",
       ]);
     } finally {
       await rm(buildFixture, { recursive: true, force: true });
