@@ -1872,6 +1872,8 @@ describe("workflow contracts", () => {
           "          docker compose logs",
           "          docker compose config",
           "          docker compose --dry-run up",
+          "          docker compose run --help",
+          "          docker compose run --rm app --help",
           "          docker compose up -d",
           "          docker-compose pull",
           "          docker compose -f - up <<'EOF'",
@@ -1888,9 +1890,10 @@ describe("workflow contracts", () => {
       "<memory>:17: docker buildx bake target definitions cannot be verified statically for container image digests",
       "<memory>:18: docker buildx bake target definitions cannot be verified statically for container image digests",
       "<memory>:19: docker buildx bake target definitions cannot be verified statically for container image digests",
-      "<memory>:28: docker compose up target definitions cannot be verified statically for container image digests",
-      "<memory>:29: docker-compose pull target definitions cannot be verified statically for container image digests",
+      "<memory>:29: docker compose run target definitions cannot be verified statically for container image digests",
       "<memory>:30: docker compose up target definitions cannot be verified statically for container image digests",
+      "<memory>:31: docker-compose pull target definitions cannot be verified statically for container image digests",
+      "<memory>:32: docker compose up target definitions cannot be verified statically for container image digests",
     ]);
   });
 
@@ -3423,10 +3426,10 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual([
+      "<memory>:10: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:13: $REGISTRY/buildkit:v0.35.1 is not pinned to a sha256 digest",
       "<memory>:14: $REGISTRY/tools:1.0 is not pinned to a sha256 digest",
       "<memory>:14: $REGISTRY/syft:latest is not pinned to a sha256 digest",
-      "<memory>:10: alpine:3.20 is not pinned to a sha256 digest",
     ]);
     // Event guards (`if: github.event_name == 'workflow_dispatch'`) prevent
     // push/schedule empty-input contexts from flagging dispatch-only jobs and
@@ -3533,6 +3536,47 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r43Fixture, { recursive: true, force: true });
     }
+    // Job/service `container.options` image mounts, literal `GITHUB_OUTPUT`
+    // step outputs (while keeping runtime-derived image IDs dynamic), and
+    // omitted optional `workflow_dispatch` string inputs are checked.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      suffix:",
+          "        description: Optional digest suffix",
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-latest",
+          "    container:",
+          `      image: node:24@${digest}`,
+          "      options: --mount type=image,source=alpine:3.20,target=/mnt",
+          "    services:",
+          "      db:",
+          `        image: postgres:16@${digest}`,
+          "        options: --mount=type=image,src=busybox:1.36,dst=/tools",
+          "    steps:",
+          "      - id: pick",
+          '        run: echo "img=nginx:1.27" >> "$GITHUB_OUTPUT"',
+          "      - id: local-build",
+          "        run: |",
+          "          IMAGE_ID=$(docker images -q local:test)",
+          '          echo "img=$IMAGE_ID" >> "$GITHUB_OUTPUT"',
+          "      - run: |",
+          '          docker run --rm "${{ steps.pick.outputs.img }}" true',
+          '          docker run --rm "${{ steps.local-build.outputs.img }}" true',
+          "          docker pull alpine${{ inputs.suffix }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:11: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:15: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:24: nginx:1.27 is not pinned to a sha256 digest",
+      "<memory>:26: alpine is not pinned to a sha256 digest",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

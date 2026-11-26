@@ -33,6 +33,9 @@ const PWSH_INLINE_ASSIGN_PATTERN =
   /^\$(?:(?<envPrefix>env:)?(?:script:|global:|local:)?(?<bare>[A-Za-z_][A-Za-z0-9_]*)|\{(?<envPrefixBraced>env:)?(?:script:|global:|local:)?(?<braced>[A-Za-z_][A-Za-z0-9_]*)\})=(?<value>.*)$/iu;
 const ENV_EXPRESSION_PATTERN =
   /\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}/giu;
+const STEP_OUTPUT_KEY_PREFIX = "\0step_output:";
+const STEP_OUTPUT_EXPRESSION_PATTERN =
+  /\$\{\{\s*steps(?:\.(?<stepDot>[A-Za-z0-9_-]+)|\[(?:'(?<stepSq>[^']+)'|"(?<stepDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])\s*\}\}/giu;
 const INPUTS_EXPRESSION_PATTERN =
   /\$\{\{\s*inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])\s*\}\}/giu;
 const EVENT_INPUTS_EXPRESSION_PATTERN =
@@ -1186,7 +1189,7 @@ function expandPatternCandidates(candidates, pattern, lookup, initialTruncated =
 }
 
 function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
-  return expandPatternCandidates(
+  const afterEnv = expandPatternCandidates(
     [{ text, line: fallbackLine }],
     new RegExp(ENV_EXPRESSION_PATTERN.source, "iu"),
     (match) => {
@@ -1194,6 +1197,27 @@ function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
       return lookupVarEntries(stepEnv, name, true);
     },
   );
+  const afterStepOutputs = expandPatternCandidates(
+    afterEnv.candidates,
+    new RegExp(STEP_OUTPUT_EXPRESSION_PATTERN.source, "iu"),
+    (match) => {
+      const stepId = (
+        match.groups.stepDot ??
+        match.groups.stepSq ??
+        match.groups.stepDq
+      ).toLowerCase();
+      const outName = (
+        match.groups.outDot ??
+        match.groups.outSq ??
+        match.groups.outDq
+      ).toLowerCase();
+      return stepEnv.get(`${STEP_OUTPUT_KEY_PREFIX}${stepId}\0${outName}`) ?? null;
+    },
+  );
+  return {
+    candidates: afterStepOutputs.candidates,
+    truncated: afterEnv.truncated || afterStepOutputs.truncated,
+  };
 }
 
 function findNextShellParamExpansion(text, startIndex = 0) {
@@ -1873,6 +1897,15 @@ function isGithubEnvTarget(token) {
   );
 }
 
+function isGithubOutputTarget(token) {
+  return (
+    token === "$GITHUB_OUTPUT" ||
+    token === "${GITHUB_OUTPUT}" ||
+    /^\$(?:env:GITHUB_OUTPUT|\{env:GITHUB_OUTPUT\})$/iu.test(token ?? "") ||
+    /^%GITHUB_OUTPUT%$/iu.test(token ?? "")
+  );
+}
+
 function isRedirectionOperator(token) {
   return (
     token === ">" ||
@@ -2384,11 +2417,51 @@ function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTarge
     cursor += flagConsumesNextArg(token, COMPOSE_GLOBAL_VALUE_FLAGS) ? 2 : 1;
   }
 
+  const COMPOSE_RUN_VALUE_FLAGS = new Set([
+    "-e",
+    "--env",
+    "--env-from-file",
+    "-l",
+    "--label",
+    "-p",
+    "--publish",
+    "-v",
+    "--volume",
+    "-w",
+    "--workdir",
+    "-u",
+    "--user",
+    "--name",
+    "--entrypoint",
+    "--pull",
+    "--cap-add",
+    "--cap-drop",
+  ]);
+
+  const COMPOSE_SUBCOMMAND_VALUE_FLAGS = new Set([
+    ...COMPOSE_RUN_VALUE_FLAGS,
+    "--scale",
+    "--timeout",
+    "-t",
+    "--wait-timeout",
+    "--exit-code-from",
+    "--attach",
+    "--no-attach",
+    "--build-arg",
+    "--memory",
+    "-m",
+    "--ssh",
+    "--builder",
+    "--policy",
+  ]);
+
   const subcommand = tokens[cursor];
   if (!subcommand || !COMPOSE_IMAGE_SUBCOMMANDS.has(subcommand)) {
     return { kind: "compose-noop" };
   }
 
+  const subValueFlags =
+    subcommand === "run" ? COMPOSE_RUN_VALUE_FLAGS : COMPOSE_SUBCOMMAND_VALUE_FLAGS;
   for (let i = cursor + 1; i < tokens.length; i += 1) {
     const redirConsumed = consumeShellRedirection(tokens, i, stdinRedirectTargets);
     if (redirConsumed > 0) {
@@ -2398,6 +2471,14 @@ function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTarge
     const token = tokens[i];
     if (token === "--") {
       break;
+    }
+    if (!token.startsWith("-")) {
+      if (subcommand === "run") {
+        // Everything from the service operand onward belongs to the container
+        // command, not Compose itself (e.g. `docker compose run app --help`).
+        break;
+      }
+      continue;
     }
     if (token === "--help" || token === "-h") {
       return { kind: "compose-noop" };
@@ -2409,6 +2490,9 @@ function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTarge
     if (/^--dry-run=(?:false|0)$/iu.test(token)) {
       isDryRun = false;
       continue;
+    }
+    if (flagConsumesNextArg(token, subValueFlags)) {
+      i += 1;
     }
   }
 
@@ -2538,9 +2622,9 @@ function isStdinContainerBuildCommand(tokens) {
   return hasStdinFile || (!hasExplicitFile && contextArg === "-");
 }
 
-function redirectsToGithubEnv(tokens) {
+function redirectsToGithubFile(tokens, targetPredicate) {
   for (let index = 0; index < tokens.length; index += 1) {
-    if ((tokens[index] === ">" || tokens[index] === ">>") && isGithubEnvTarget(tokens[index + 1])) {
+    if ((tokens[index] === ">" || tokens[index] === ">>") && targetPredicate(tokens[index + 1])) {
       return true;
     }
   }
@@ -2548,9 +2632,17 @@ function redirectsToGithubEnv(tokens) {
     (token) => !SHELL_COMMAND_PREFIXES.has(token) && !ENV_PREFIX_ASSIGNMENT_PATTERN.test(token),
   );
   if (commandIndex !== -1 && path.basename(tokens[commandIndex]) === "tee") {
-    return tokens.slice(commandIndex + 1).some((token) => isGithubEnvTarget(token));
+    return tokens.slice(commandIndex + 1).some((token) => targetPredicate(token));
   }
   return false;
+}
+
+function redirectsToGithubEnv(tokens) {
+  return redirectsToGithubFile(tokens, isGithubEnvTarget);
+}
+
+function redirectsToGithubOutput(tokens) {
+  return redirectsToGithubFile(tokens, isGithubOutputTarget);
 }
 
 // Lex an entire shell script preserving quotes across physical newlines,
@@ -2698,6 +2790,15 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         if (redirectsToGithubEnv(spec.ownerTokens)) {
           events.push({
             kind: "github-env-heredoc",
+            lines: bodyLines,
+            startLine: bodyStartLine,
+            quoted: spec.quoted,
+            conditional: spec.conditional,
+          });
+        }
+        if (redirectsToGithubOutput(spec.ownerTokens)) {
+          events.push({
+            kind: "github-output-heredoc",
             lines: bodyLines,
             startLine: bodyStartLine,
             quoted: spec.quoted,
@@ -3659,14 +3760,14 @@ function formatPrintfLines(format, args) {
   return chunks.join("").split(/\r?\n/u);
 }
 
-function extractRedirectedWriteLines(tokens, startIndex) {
+function extractRedirectedWriteLines(tokens, startIndex, targetPredicate = isGithubEnvTarget) {
   const stripped = [];
-  let targetsGithubEnv = false;
+  let targetsFile = false;
   for (let index = startIndex; index < tokens.length; index += 1) {
     const token = tokens[index];
     if (token === ">" || token === ">>" || token === ">&" || token === "<") {
-      if ((token === ">" || token === ">>") && isGithubEnvTarget(tokens[index + 1])) {
-        targetsGithubEnv = true;
+      if ((token === ">" || token === ">>") && targetPredicate(tokens[index + 1])) {
+        targetsFile = true;
       }
       index += 1;
       continue;
@@ -3677,9 +3778,9 @@ function extractRedirectedWriteLines(tokens, startIndex) {
     ) {
       if (
         (tokens[index + 1] === ">" || tokens[index + 1] === ">>") &&
-        isGithubEnvTarget(tokens[index + 2])
+        targetPredicate(tokens[index + 2])
       ) {
-        targetsGithubEnv = true;
+        targetsFile = true;
       }
       index += 2;
       continue;
@@ -3687,7 +3788,7 @@ function extractRedirectedWriteLines(tokens, startIndex) {
     stripped.push(token);
   }
 
-  if (!targetsGithubEnv || stripped.length === 0) {
+  if (!targetsFile || stripped.length === 0) {
     return null;
   }
 
@@ -4644,6 +4745,35 @@ function applyAssignDefaultParamExpansions(
   }
 }
 
+function sanitizeGithubOutputEntries(entries, shellMode) {
+  const sanitized = [];
+  const seen = new Set();
+  for (const entry of entries) {
+    if (entry.unset) {
+      continue;
+    }
+    const value = String(entry.value ?? "");
+    if (isDynamicReference(value, shellMode)) {
+      if (hasProvablyUnpinnedLiteralSuffix(value, shellMode)) {
+        const safeValue = maskDynamicReferenceSpans(value, shellMode).replaceAll(
+          "\0VAR\0",
+          "${{ dynamic }}",
+        );
+        if (!seen.has(safeValue)) {
+          seen.add(safeValue);
+          sanitized.push({ value: safeValue, line: entry.line });
+        }
+      }
+      continue;
+    }
+    if (!seen.has(value)) {
+      seen.add(value);
+      sanitized.push({ value, line: entry.line });
+    }
+  }
+  return sanitized;
+}
+
 function inspectShellText(
   scriptText,
   startLine,
@@ -4657,6 +4787,7 @@ function inspectShellText(
   shellMode = "posix",
   depth = 0,
   buildFileContext = null,
+  emittedGithubOutput = null,
 ) {
   if (depth > MAX_SHELL_NESTING_DEPTH) {
     problems.push(
@@ -4702,7 +4833,9 @@ function inspectShellText(
     ? new Set(buildFileContext.rowCwdsTruncated)
     : new Set();
   const initialExportedVars = new Set(
-    shellMode === "pwsh" ? [...stepEnv.keys()].map((key) => `env:${key}`) : stepEnv.keys(),
+    [...stepEnv.keys()]
+      .filter((key) => !key.startsWith("\0"))
+      .map((key) => (shellMode === "pwsh" ? `env:${key}` : key)),
   );
   const cloneArrayMap = (arrayMap) => {
     const copy = new Map();
@@ -4835,6 +4968,29 @@ function inspectShellText(
       continue;
     }
 
+    if (event.kind === "github-output-heredoc") {
+      const isConditional = frame.branches.length > 0 || event.conditional;
+      for (const assignment of parseGithubEnvPayload(event.lines, event.startLine)) {
+        const resolved = event.quoted
+          ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
+          : resolveImageTokenCandidates(
+              assignment.value,
+              stepEnv,
+              frame.vars,
+              assignment.line,
+              shellMode,
+            );
+        const sanitized = sanitizeGithubOutputEntries(
+          candidatesToVarEntries(resolved, assignment.line),
+          shellMode,
+        );
+        if (sanitized.length > 0) {
+          recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
+        }
+      }
+      continue;
+    }
+
     const { lineNumber, conditional, substitutions } = event;
 
     for (const nested of substitutions) {
@@ -4859,6 +5015,7 @@ function inspectShellText(
               rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
             }
           : null,
+        emittedGithubOutput,
       );
     }
 
@@ -5312,7 +5469,7 @@ function inspectShellText(
       continue;
     }
 
-    const githubEnvLines = extractRedirectedWriteLines(tokens, cursor);
+    const githubEnvLines = extractRedirectedWriteLines(tokens, cursor, isGithubEnvTarget);
     if (githubEnvLines) {
       const isConditional = frame.branches.length > 0 || conditional;
       for (const assignment of parseGithubEnvPayload(githubEnvLines, lineNumber)) {
@@ -5329,6 +5486,28 @@ function inspectShellText(
           candidatesToVarEntries(resolved, lineNumber),
           isConditional,
         );
+      }
+      continue;
+    }
+
+    const githubOutputLines = extractRedirectedWriteLines(tokens, cursor, isGithubOutputTarget);
+    if (githubOutputLines) {
+      const isConditional = frame.branches.length > 0 || conditional;
+      for (const assignment of parseGithubEnvPayload(githubOutputLines, lineNumber)) {
+        const resolved = resolveImageTokenCandidates(
+          assignment.value,
+          stepEnv,
+          frame.vars,
+          lineNumber,
+          shellMode,
+        );
+        const sanitized = sanitizeGithubOutputEntries(
+          candidatesToVarEntries(resolved, lineNumber),
+          shellMode,
+        );
+        if (sanitized.length > 0) {
+          recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
+        }
       }
       continue;
     }
@@ -5639,6 +5818,7 @@ function inspectShellText(
             "posix",
             depth + 1,
             childBuildContext,
+            emittedGithubOutput,
           );
           for (const message of scriptProblems) {
             if (!seenChildProblems.has(message)) {
@@ -7041,6 +7221,7 @@ function inspectShellRunScript(
   emittedGithubEnv = null,
   shellMode = "posix",
   buildFileContext = null,
+  emittedGithubOutput = null,
 ) {
   const scriptText =
     runNode.folded && Array.isArray(runNode.lines)
@@ -7050,25 +7231,29 @@ function inspectShellRunScript(
         : String(runNode.value);
   const sourceLines = runNode.folded && Array.isArray(runNode.lines) ? runNode.lines : null;
 
-  let initialShellVars = stepEnv;
-  if (shellMode === "pwsh") {
-    initialShellVars = new Map();
-    for (const [key, entries] of stepEnv) {
-      initialShellVars.set(`env:${key}`, [...entries]);
+  const initialShellVars = new Map();
+  for (const [key, entries] of stepEnv) {
+    if (key.startsWith("\0")) {
+      continue;
     }
+    initialShellVars.set(shellMode === "pwsh" ? `env:${key}` : key, [...entries]);
   }
 
-  // GitHub Actions substitutes `${{ matrix.* }}` and `${{ env.* }}` expressions
-  // into the `run:` script before the shell parses arguments. Expand statically
-  // known expressions prior to lexing so values like `--platform linux/amd64`
-  // or `--rm` tokenize as flags instead of being mistaken for the image operand.
+  // GitHub Actions substitutes `${{ matrix.* }}`, `${{ env.* }}`, and
+  // `${{ steps.<id>.outputs.* }}` expressions into the `run:` script before
+  // the shell parses arguments. Expand statically known expressions prior to
+  // lexing so values like `--platform linux/amd64` or `--rm` tokenize as flags
+  // instead of being mistaken for the image operand.
   const hasMatrixExpr =
     matrixRows.length > 0 && new RegExp(MATRIX_EXPRESSION_PATTERN.source, "iu").test(scriptText);
   const hasEnvExpr =
-    stepEnv.size > 0 && new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(scriptText);
+    stepEnv.size > 0 &&
+    (new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(scriptText) ||
+      new RegExp(STEP_OUTPUT_EXPRESSION_PATTERN.source, "iu").test(scriptText));
   if (hasMatrixExpr || hasEnvExpr) {
     const seenStepProblems = new Set();
     const perRunEmitted = [];
+    const perRunEmittedOutput = [];
     const substituteMatrixForRow = (text, row) =>
       text.replace(MATRIX_EXPRESSION_PATTERN, (match, _p1, _offset, _str, groups) => {
         const resolved = resolveMatrixPath(row, parseMatrixPathSegments(groups.path));
@@ -7090,7 +7275,11 @@ function inspectShellRunScript(
           : sourceLines;
 
       let scriptVariants = [rowScript];
-      if (hasEnvExpr && new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(rowScript)) {
+      if (
+        hasEnvExpr &&
+        (new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(rowScript) ||
+          new RegExp(STEP_OUTPUT_EXPRESSION_PATTERN.source, "iu").test(rowScript))
+      ) {
         const expandedEnv = resolveEnvExpressionCandidates(rowScript, stepEnv, runNode.line);
         if (expandedEnv.truncated) {
           const limitMessage = `${filePath}:${runNode.line}: run script env expression exceeds expansion limit and cannot be verified exhaustively`;
@@ -7105,6 +7294,7 @@ function inspectShellRunScript(
       for (const expandedScript of scriptVariants) {
         const rowProblems = [];
         const rowEmitted = emittedGithubEnv ? new Map() : null;
+        const rowEmittedOut = emittedGithubOutput ? new Map() : null;
         inspectShellText(
           expandedScript,
           runNode.line,
@@ -7118,6 +7308,7 @@ function inspectShellRunScript(
           shellMode,
           0,
           buildFileContext,
+          rowEmittedOut,
         );
         for (const problem of rowProblems) {
           if (!seenStepProblems.has(problem)) {
@@ -7130,12 +7321,18 @@ function inspectShellRunScript(
         if (rowEmitted) {
           perRunEmitted.push(rowEmitted);
         }
+        if (rowEmittedOut) {
+          perRunEmittedOutput.push(rowEmittedOut);
+        }
       }
     }
 
-    if (emittedGithubEnv && perRunEmitted.length > 0) {
+    const mergeEmittedAcrossRuns = (targetMap, perRunMaps) => {
+      if (!targetMap || perRunMaps.length === 0) {
+        return;
+      }
       const allKeys = new Set();
-      for (const rowMap of perRunEmitted) {
+      for (const rowMap of perRunMaps) {
         for (const key of rowMap.keys()) {
           allKeys.add(key);
         }
@@ -7143,7 +7340,7 @@ function inspectShellRunScript(
       for (const key of allKeys) {
         let mergedEntries = [];
         let conditionalAcrossRuns = false;
-        for (const rowMap of perRunEmitted) {
+        for (const rowMap of perRunMaps) {
           const record = rowMap.get(key);
           if (!record) {
             conditionalAcrossRuns = true;
@@ -7155,10 +7352,12 @@ function inspectShellRunScript(
           mergedEntries = mergeVarEntries(mergedEntries, record.entries);
         }
         if (mergedEntries.length > 0) {
-          recordGithubEnvWrite(emittedGithubEnv, key, mergedEntries, conditionalAcrossRuns);
+          recordGithubEnvWrite(targetMap, key, mergedEntries, conditionalAcrossRuns);
         }
       }
-    }
+    };
+    mergeEmittedAcrossRuns(emittedGithubEnv, perRunEmitted);
+    mergeEmittedAcrossRuns(emittedGithubOutput, perRunEmittedOutput);
     return;
   }
 
@@ -7175,6 +7374,7 @@ function inspectShellRunScript(
     shellMode,
     0,
     buildFileContext,
+    emittedGithubOutput,
   );
 }
 
@@ -8495,6 +8695,10 @@ function checkStepsList(
     );
 
     const runNode = getMapField(stepNode, "run");
+    const stepIdNode = getMapField(stepNode, "id");
+    const stepIdLower =
+      stepIdNode?.kind === "scalar" ? String(stepIdNode.value).trim().toLowerCase() : "";
+    const perRowEmittedOutput = new Map();
     if (runNode?.kind === "scalar") {
       const seenAcrossStepRuns = new Set();
       for (const { shellMode, workingDir, rows } of executionGroups) {
@@ -8511,6 +8715,7 @@ function checkStepsList(
             : null;
           const rowProblems = [];
           const rowEmitted = new Map();
+          const rowEmittedOut = stepIdLower ? new Map() : null;
           inspectShellRunScript(
             runNode,
             rowStepEnv,
@@ -8520,6 +8725,7 @@ function checkStepsList(
             rowEmitted,
             shellMode,
             groupBuildContext,
+            rowEmittedOut,
           );
           for (const message of rowProblems) {
             if (!seenAcrossStepRuns.has(message)) {
@@ -8534,6 +8740,50 @@ function checkStepsList(
             existingRowWrites.push(rowEmitted);
             perRowEmittedEnv.set(row, existingRowWrites);
           }
+          if (rowEmittedOut && rowEmittedOut.size > 0) {
+            const existingRowOutputs = perRowEmittedOutput.get(row) ?? [];
+            existingRowOutputs.push(rowEmittedOut);
+            perRowEmittedOutput.set(row, existingRowOutputs);
+          }
+        }
+      }
+    }
+    if (stepIdLower) {
+      for (const [row, outputMaps] of perRowEmittedOutput) {
+        const targetEnv = rowRunningEnvs.get(row);
+        if (!targetEnv) {
+          continue;
+        }
+        const allOutputNames = new Set();
+        for (const outputMap of outputMaps) {
+          for (const name of outputMap.keys()) {
+            allOutputNames.add(name);
+          }
+        }
+        for (const name of allOutputNames) {
+          let mergedEntries = [];
+          let conditionalAcrossGroups = stepConditional;
+          for (const outputMap of outputMaps) {
+            const write = outputMap.get(name);
+            if (!write) {
+              conditionalAcrossGroups = true;
+              continue;
+            }
+            if (write.conditional) {
+              conditionalAcrossGroups = true;
+            }
+            mergedEntries = mergeVarEntries(mergedEntries, write.entries);
+          }
+          if (mergedEntries.length === 0) {
+            continue;
+          }
+          if (conditionalAcrossGroups) {
+            mergedEntries = mergeVarEntries([{ value: "", line: stepIdNode.line }], mergedEntries);
+          }
+          targetEnv.set(
+            `${STEP_OUTPUT_KEY_PREFIX}${stepIdLower}\0${name.toLowerCase()}`,
+            mergedEntries,
+          );
         }
       }
     }
@@ -9158,7 +9408,7 @@ function collectPinRelevantDispatchInputNames(doc) {
       const runNode = getMapField(stepNode, "run");
       if (runNode?.kind === "scalar") {
         const runText = String(runNode.value);
-        if (CONTAINER_CLI_HINT_PATTERN.test(runText) || /GITHUB_ENV/iu.test(runText)) {
+        if (CONTAINER_CLI_HINT_PATTERN.test(runText) || /GITHUB_(?:ENV|OUTPUT)/iu.test(runText)) {
           collectFromPinNode(runNode);
           collectFromPinNode(getMapField(stepNode, "working-directory"));
           collectFromPinNode(getMapField(stepNode, "shell"));
@@ -9279,11 +9529,31 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
         values.push({ value: text, line: valueNode.line });
       }
     };
-    pushValue(getMapField(defNode, "default"));
+    const defaultNode = getMapField(defNode, "default");
+    pushValue(defaultNode);
     const optionsNode = getMapField(defNode, "options");
     if (optionsNode?.kind === "seq") {
       for (const optionItem of optionsNode.value) {
         pushValue(optionItem);
+      }
+    }
+    if (defaultNode === null) {
+      const requiredNode = getMapField(defNode, "required");
+      const isRequired =
+        requiredNode?.kind === "scalar" &&
+        String(requiredNode.value).trim().toLowerCase() === "true";
+      if (!isRequired) {
+        const typeNode = getMapField(defNode, "type");
+        const inputType =
+          typeNode?.kind === "scalar" ? String(typeNode.value).trim().toLowerCase() : "string";
+        if (inputType !== "choice") {
+          const implicitDefault =
+            inputType === "boolean" ? "false" : inputType === "number" ? "0" : "";
+          if (!seenValues.has(implicitDefault)) {
+            seenValues.add(implicitDefault);
+            values.push({ value: implicitDefault, line: defNode.line });
+          }
+        }
       }
     }
     const carriesContainerCli =
@@ -9675,6 +9945,74 @@ export function unpinnedWorkflowContainerReferences(
     const ctxProblems = [];
     const workflowEnv = extractEnvMap(applyWorkflowInputs(getMapField(doc, "env")), baseEnv);
 
+    const checkContainerOptionsField = (optionsNode, envMap, matrixRows) => {
+      if (optionsNode?.kind !== "scalar") {
+        return;
+      }
+      const rawOptions = String(optionsNode.value).trim();
+      if (!rawOptions) {
+        return;
+      }
+      const seenOptionProblems = new Set();
+      const envExpanded = resolveEnvExpressionCandidates(rawOptions, envMap, optionsNode.line);
+      if (envExpanded.truncated) {
+        const limitMessage = `${filePath}:${optionsNode.line}: ${rawOptions} exceeds expansion limit and cannot be verified exhaustively`;
+        seenOptionProblems.add(limitMessage);
+        ctxProblems.push(limitMessage);
+      }
+      for (const envCandidate of envExpanded.candidates) {
+        for (const candidate of expandMatrixReferences(
+          envCandidate.text,
+          matrixRows,
+          envCandidate.line,
+        )) {
+          for (const event of lexShellScript(candidate.text, candidate.line, "posix")) {
+            if (event.kind !== "command" || event.tokens.length === 0) {
+              continue;
+            }
+            const tokens = event.tokens;
+            for (let i = 0; i < tokens.length; i += 1) {
+              const token = tokens[i];
+              let mountSpec = null;
+              if (token === "--mount") {
+                if (tokens[i + 1] !== undefined) {
+                  mountSpec = tokens[i + 1];
+                  i += 1;
+                }
+              } else if (token.startsWith("--mount=")) {
+                mountSpec = token.slice("--mount=".length);
+              } else if (
+                token.startsWith("-") &&
+                flagConsumesNextArg(token, DOCKER_RUN_VALUE_FLAGS)
+              ) {
+                i += 1;
+                continue;
+              }
+              if (!mountSpec) {
+                continue;
+              }
+              for (const mountImageRef of extractRunMountImageSources(mountSpec)) {
+                if (
+                  !mountImageRef ||
+                  (isDynamicReference(mountImageRef) &&
+                    !hasProvablyUnpinnedLiteralSuffix(mountImageRef))
+                ) {
+                  continue;
+                }
+                if (!isPinnedDigest(mountImageRef)) {
+                  const message = `${filePath}:${candidate.line}: ${mountImageRef} is not pinned to a sha256 digest`;
+                  if (!seenOptionProblems.has(message)) {
+                    seenOptionProblems.add(message);
+                    ctxProblems.push(message);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
     const checkContainerNode = (containerNode, envMap, matrixRows) => {
       if (!containerNode) {
         return;
@@ -9689,6 +10027,7 @@ export function unpinnedWorkflowContainerReferences(
           filePath,
           ctxProblems,
         );
+        checkContainerOptionsField(getMapField(containerNode, "options"), envMap, matrixRows);
       }
     };
 
