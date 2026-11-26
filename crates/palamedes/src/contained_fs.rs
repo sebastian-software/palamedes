@@ -498,6 +498,8 @@ mod platform {
         entry: ExistingEntry,
         acl: Option<ExistingAcl>,
         xattrs: Vec<(CString, Vec<u8>)>,
+        #[cfg(target_os = "linux")]
+        linux_flags: Option<libc::c_int>,
     }
 
     enum SnapshotMatch {
@@ -1280,6 +1282,8 @@ mod platform {
                             if unsafe { libc::fchmod(temp_file.as_raw_fd(), 0o600) } != 0 {
                                 return Err(io::Error::last_os_error());
                             }
+                            #[cfg(target_os = "linux")]
+                            apply_linux_pre_write_inode_flags(temp_file.as_raw_fd(), existing)?;
                             temp_file.write_all(bytes)?;
                             temp_file.flush()?;
                             restore_existing_metadata(temp_file.as_raw_fd(), existing)?;
@@ -1527,7 +1531,15 @@ mod platform {
             };
             let acl = read_existing_acl(existing_fd.as_raw_fd())?;
             let xattrs = read_existing_user_xattrs(existing_fd.as_raw_fd())?;
-            Ok(Some(ExistingTarget { entry, acl, xattrs }))
+            #[cfg(target_os = "linux")]
+            let linux_flags = read_linux_inode_flags(existing_fd.as_raw_fd())?;
+            Ok(Some(ExistingTarget {
+                entry,
+                acl,
+                xattrs,
+                #[cfg(target_os = "linux")]
+                linux_flags,
+            }))
         }
 
         fn inspect_entry(
@@ -1899,9 +1911,14 @@ mod platform {
             if current.entry.identity != expected.entry.identity {
                 return Ok(SnapshotMatch::Replaced);
             }
+            #[cfg(target_os = "linux")]
+            let linux_flags_changed = current.linux_flags != expected.linux_flags;
+            #[cfg(not(target_os = "linux"))]
+            let linux_flags_changed = false;
             if current.entry != expected.entry
                 || !acl_equals(current.acl.as_ref(), expected.acl.as_ref())?
                 || current.xattrs != expected.xattrs
+                || linux_flags_changed
             {
                 return Ok(SnapshotMatch::MetadataChanged);
             }
@@ -4787,6 +4804,7 @@ mod platform {
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn read_existing_user_xattrs(fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
         let mut names_buf = Vec::new();
+        let mut listed = false;
         for _ in 0..4 {
             // SAFETY: querying list size with null buffer.
             let size = unsafe { libc::flistxattr(fd, std::ptr::null_mut(), 0, 0) };
@@ -4815,6 +4833,7 @@ mod platform {
             };
             if read >= 0 {
                 names_buf.truncate(usize::try_from(read).unwrap_or(0));
+                listed = true;
                 break;
             }
             let error = io::Error::last_os_error();
@@ -4829,6 +4848,11 @@ mod platform {
             }
             return Err(error);
         }
+        if !listed {
+            return Err(io::Error::other(
+                "extended attribute list changed concurrently during destination snapshot",
+            ));
+        }
 
         let mut xattrs = Vec::new();
         for raw_name in names_buf.split(|&byte| byte == 0) {
@@ -4838,7 +4862,7 @@ mod platform {
             let Ok(c_name) = CString::new(raw_name) else {
                 continue;
             };
-            let mut value_opt = None;
+            let mut outcome: Option<Option<Vec<u8>>> = None;
             for _ in 0..4 {
                 // SAFETY: querying xattr size with null buffer.
                 let size =
@@ -4846,13 +4870,14 @@ mod platform {
                 if size < 0 {
                     let error = io::Error::last_os_error();
                     if error.raw_os_error() == Some(libc::ENOATTR) {
+                        outcome = Some(None);
                         break;
                     }
                     return Err(error);
                 }
                 let mut value = vec![0u8; usize::try_from(size).unwrap_or(0)];
                 if value.is_empty() {
-                    value_opt = Some(value);
+                    outcome = Some(Some(value));
                     break;
                 }
                 // SAFETY: `value` has `value.len()` writable bytes.
@@ -4868,7 +4893,7 @@ mod platform {
                 };
                 if read >= 0 {
                     value.truncate(usize::try_from(read).unwrap_or(0));
-                    value_opt = Some(value);
+                    outcome = Some(Some(value));
                     break;
                 }
                 let error = io::Error::last_os_error();
@@ -4876,12 +4901,19 @@ mod platform {
                     continue;
                 }
                 if error.raw_os_error() == Some(libc::ENOATTR) {
+                    outcome = Some(None);
                     break;
                 }
                 return Err(error);
             }
-            if let Some(value) = value_opt {
-                xattrs.push((c_name, value));
+            match outcome {
+                Some(Some(value)) => xattrs.push((c_name, value)),
+                Some(None) => {}
+                None => {
+                    return Err(io::Error::other(
+                        "extended attribute value changed concurrently during destination snapshot",
+                    ));
+                }
             }
         }
         xattrs.sort_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
@@ -4931,6 +4963,7 @@ mod platform {
     #[cfg(target_os = "linux")]
     fn read_existing_user_xattrs(fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
         let mut names_buf = Vec::new();
+        let mut listed = false;
         for _ in 0..4 {
             // SAFETY: querying list size with null buffer.
             let size = unsafe { libc::flistxattr(fd, std::ptr::null_mut(), 0) };
@@ -4955,6 +4988,7 @@ mod platform {
             };
             if read >= 0 {
                 names_buf.truncate(usize::try_from(read).unwrap_or(0));
+                listed = true;
                 break;
             }
             let error = io::Error::last_os_error();
@@ -4966,6 +5000,11 @@ mod platform {
             }
             return Err(error);
         }
+        if !listed {
+            return Err(io::Error::other(
+                "extended attribute list changed concurrently during destination snapshot",
+            ));
+        }
 
         let mut xattrs = Vec::new();
         for raw_name in names_buf.split(|&byte| byte == 0) {
@@ -4975,20 +5014,21 @@ mod platform {
             let Ok(c_name) = CString::new(raw_name) else {
                 continue;
             };
-            let mut value_opt = None;
+            let mut outcome: Option<Option<Vec<u8>>> = None;
             for _ in 0..4 {
                 // SAFETY: querying xattr size with null buffer.
                 let size = unsafe { libc::fgetxattr(fd, c_name.as_ptr(), std::ptr::null_mut(), 0) };
                 if size < 0 {
                     let error = io::Error::last_os_error();
                     if error.raw_os_error() == Some(libc::ENODATA) {
+                        outcome = Some(None);
                         break;
                     }
                     return Err(error);
                 }
                 let mut value = vec![0u8; usize::try_from(size).unwrap_or(0)];
                 if value.is_empty() {
-                    value_opt = Some(value);
+                    outcome = Some(Some(value));
                     break;
                 }
                 // SAFETY: `value` has `value.len()` writable bytes.
@@ -5002,7 +5042,7 @@ mod platform {
                 };
                 if read >= 0 {
                     value.truncate(usize::try_from(read).unwrap_or(0));
-                    value_opt = Some(value);
+                    outcome = Some(Some(value));
                     break;
                 }
                 let error = io::Error::last_os_error();
@@ -5010,12 +5050,19 @@ mod platform {
                     continue;
                 }
                 if error.raw_os_error() == Some(libc::ENODATA) {
+                    outcome = Some(None);
                     break;
                 }
                 return Err(error);
             }
-            if let Some(value) = value_opt {
-                xattrs.push((c_name, value));
+            match outcome {
+                Some(Some(value)) => xattrs.push((c_name, value)),
+                Some(None) => {}
+                None => {
+                    return Err(io::Error::other(
+                        "extended attribute value changed concurrently during destination snapshot",
+                    ));
+                }
             }
         }
         xattrs.sort_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
@@ -5046,9 +5093,133 @@ mod platform {
         Ok(())
     }
 
+    #[cfg(target_os = "linux")]
+    const LINUX_USER_MODIFIABLE_INODE_FLAGS: libc::c_int = 0x0000_0001 // FS_SECRM_FL (s)
+        | 0x0000_0002 // FS_UNRM_FL (u)
+        | 0x0000_0004 // FS_COMPR_FL (c)
+        | 0x0000_0008 // FS_SYNC_FL (S)
+        | 0x0000_0010 // FS_IMMUTABLE_FL (i)
+        | 0x0000_0020 // FS_APPEND_FL (a)
+        | 0x0000_0040 // FS_NODUMP_FL (d)
+        | 0x0000_0080 // FS_NOATIME_FL (A)
+        | 0x0000_0400 // FS_NOCOMP_FL (m)
+        | 0x0000_4000 // FS_JOURNAL_DATA_FL (j)
+        | 0x0000_8000 // FS_NOTAIL_FL (t)
+        | 0x0080_0000 // FS_NOCOW_FL (C)
+        | 0x2000_0000; // FS_PROJINHERIT_FL (P)
+
+    #[cfg(target_os = "linux")]
+    const LINUX_PRE_WRITE_INODE_FLAGS: libc::c_int = 0x0000_0004 // FS_COMPR_FL (c)
+        | 0x0000_0400 // FS_NOCOMP_FL (m)
+        | 0x0080_0000; // FS_NOCOW_FL (C) — must be set on empty file on Btrfs
+
+    #[cfg(target_os = "linux")]
+    fn read_linux_inode_flags(fd: std::os::fd::RawFd) -> io::Result<Option<libc::c_int>> {
+        let mut flags: libc::c_int = 0;
+        // SAFETY: Linux `FS_IOC_GETFLAGS` writes a 32-bit `int` flag bitmask.
+        if unsafe { libc::ioctl(fd, libc::FS_IOC_GETFLAGS, &mut flags) } == 0 {
+            return Ok(Some(flags & LINUX_USER_MODIFIABLE_INODE_FLAGS));
+        }
+        let error = io::Error::last_os_error();
+        if matches!(
+            error.raw_os_error(),
+            Some(libc::ENOTTY | libc::EOPNOTSUPP | libc::EINVAL | libc::ENOSYS)
+        ) {
+            return Ok(None);
+        }
+        Err(error)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn apply_linux_pre_write_inode_flags(
+        temp_fd: std::os::fd::RawFd,
+        existing: &ExistingTarget,
+    ) -> io::Result<()> {
+        let Some(expected) = existing.linux_flags else {
+            return Ok(());
+        };
+        let desired_pre = expected & LINUX_PRE_WRITE_INODE_FLAGS;
+        let mut temp_raw: libc::c_int = 0;
+        // SAFETY: Linux `FS_IOC_GETFLAGS` writes a 32-bit `int` flag bitmask.
+        if unsafe { libc::ioctl(temp_fd, libc::FS_IOC_GETFLAGS, &mut temp_raw) } != 0 {
+            let error = io::Error::last_os_error();
+            if desired_pre == 0
+                && matches!(
+                    error.raw_os_error(),
+                    Some(libc::ENOTTY | libc::EOPNOTSUPP | libc::EINVAL | libc::ENOSYS)
+                )
+            {
+                return Ok(());
+            }
+            return Err(error);
+        }
+        if (temp_raw & LINUX_PRE_WRITE_INODE_FLAGS) != desired_pre {
+            let mut next_flags = (temp_raw & !LINUX_PRE_WRITE_INODE_FLAGS) | desired_pre;
+            // SAFETY: Linux `FS_IOC_SETFLAGS` reads a 32-bit `int` flag bitmask.
+            if unsafe { libc::ioctl(temp_fd, libc::FS_IOC_SETFLAGS, &mut next_flags) } != 0 {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    error.kind(),
+                    format!(
+                        "cannot safely preserve Linux inode storage flags on replacement: {error}"
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn apply_linux_post_write_inode_flags(
+        temp_fd: std::os::fd::RawFd,
+        existing: &ExistingTarget,
+    ) -> io::Result<()> {
+        let Some(expected) = existing.linux_flags else {
+            return Ok(());
+        };
+        let mut temp_raw: libc::c_int = 0;
+        // SAFETY: Linux `FS_IOC_GETFLAGS` writes a 32-bit `int` flag bitmask.
+        if unsafe { libc::ioctl(temp_fd, libc::FS_IOC_GETFLAGS, &mut temp_raw) } != 0 {
+            let error = io::Error::last_os_error();
+            if expected == 0
+                && matches!(
+                    error.raw_os_error(),
+                    Some(libc::ENOTTY | libc::EOPNOTSUPP | libc::EINVAL | libc::ENOSYS)
+                )
+            {
+                return Ok(());
+            }
+            return Err(error);
+        }
+        if (temp_raw & LINUX_USER_MODIFIABLE_INODE_FLAGS) != expected {
+            let mut next_flags = (temp_raw & !LINUX_USER_MODIFIABLE_INODE_FLAGS) | expected;
+            // SAFETY: Linux `FS_IOC_SETFLAGS` reads a 32-bit `int` flag bitmask.
+            if unsafe { libc::ioctl(temp_fd, libc::FS_IOC_SETFLAGS, &mut next_flags) } != 0 {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    error.kind(),
+                    format!("cannot safely preserve Linux inode flags on replacement: {error}"),
+                ));
+            }
+            let mut verified: libc::c_int = 0;
+            // SAFETY: Linux `FS_IOC_GETFLAGS` writes a 32-bit `int` flag bitmask.
+            if unsafe { libc::ioctl(temp_fd, libc::FS_IOC_GETFLAGS, &mut verified) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if (verified & LINUX_USER_MODIFIABLE_INODE_FLAGS) != expected {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "cannot verify Linux inode flags preservation on replacement",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
     fn read_existing_user_xattrs(fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
         let mut names_buf = Vec::new();
+        let mut listed = false;
         for _ in 0..4 {
             // SAFETY: querying list size with null buffer.
             let size = unsafe {
@@ -5080,6 +5251,7 @@ mod platform {
             };
             if read >= 0 {
                 names_buf.truncate(usize::try_from(read).unwrap_or(0));
+                listed = true;
                 break;
             }
             let error = io::Error::last_os_error();
@@ -5094,6 +5266,11 @@ mod platform {
                 return Ok(Vec::new());
             }
             return Err(error);
+        }
+        if !listed {
+            return Err(io::Error::other(
+                "extended attribute list changed concurrently during destination snapshot",
+            ));
         }
 
         // BSD `extattr_list_fd` returns `[len: u8][name bytes...]` records.
@@ -5113,7 +5290,7 @@ mod platform {
             let Ok(c_name) = CString::new(raw_name) else {
                 continue;
             };
-            let mut value_opt = None;
+            let mut outcome: Option<Option<Vec<u8>>> = None;
             for _ in 0..4 {
                 // SAFETY: querying attribute size with null buffer.
                 let size = unsafe {
@@ -5128,13 +5305,14 @@ mod platform {
                 if size < 0 {
                     let error = io::Error::last_os_error();
                     if error.raw_os_error() == Some(libc::ENOATTR) {
+                        outcome = Some(None);
                         break;
                     }
                     return Err(error);
                 }
                 let mut value = vec![0u8; usize::try_from(size).unwrap_or(0)];
                 if value.is_empty() {
-                    value_opt = Some(value);
+                    outcome = Some(Some(value));
                     break;
                 }
                 // SAFETY: `value` has `value.len()` writable bytes.
@@ -5149,7 +5327,7 @@ mod platform {
                 };
                 if read >= 0 {
                     value.truncate(usize::try_from(read).unwrap_or(0));
-                    value_opt = Some(value);
+                    outcome = Some(Some(value));
                     break;
                 }
                 let error = io::Error::last_os_error();
@@ -5158,12 +5336,19 @@ mod platform {
                     continue;
                 }
                 if raw == Some(libc::ENOATTR) {
+                    outcome = Some(None);
                     break;
                 }
                 return Err(error);
             }
-            if let Some(value) = value_opt {
-                xattrs.push((c_name, value));
+            match outcome {
+                Some(Some(value)) => xattrs.push((c_name, value)),
+                Some(None) => {}
+                None => {
+                    return Err(io::Error::other(
+                        "extended attribute value changed concurrently during destination snapshot",
+                    ));
+                }
             }
         }
         xattrs.sort_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
@@ -5292,6 +5477,8 @@ mod platform {
         if let Some(acl) = existing.acl.as_ref() {
             apply_existing_acl(temp_fd, acl)?;
         }
+        #[cfg(target_os = "linux")]
+        apply_linux_post_write_inode_flags(temp_fd, existing)?;
         #[cfg(any(target_os = "macos", target_os = "ios", target_os = "openbsd"))]
         if existing.entry.flags != temp_stat.st_flags {
             // SAFETY: `temp_fd` is an open file descriptor we just staged.
@@ -6229,6 +6416,27 @@ mod platform {
         ) -> Result<(), ContainedFsError> {
             super::validate_writable_file_name(file_name)?;
             self.reject_symlink_or_hard_link(file_name)?;
+            let _target_lock = self.lock_target(file_name)?;
+            if let Some((expected_identity, existing_security)) =
+                self.inspect_entry(file_name, true)?
+            {
+                let can_atomic_replace = existing_security.as_ref().is_none_or(|security| {
+                    security.sacl_accessible
+                        && !security.is_encrypted
+                        && !security.has_named_streams
+                        && (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) == 0
+                });
+                if !can_atomic_replace {
+                    return self
+                        .overwrite_existing_exclusively(
+                            file_name,
+                            expected_identity,
+                            bytes,
+                            ContainedWriteDurability::Rename,
+                        )
+                        .map(|_| ());
+                }
+            }
             self.write_file_atomically(
                 file_name,
                 bytes,
@@ -6240,8 +6448,15 @@ mod platform {
 
         /// Atomically writes `bytes` to `file_name` inside this directory
         /// handle, verifying write access on any existing file and preserving
-        /// both its DACL (at creation time) and original owner SID before
-        /// syncing and renaming into place.
+        /// its owner, DACL, security labels/attributes, audit SACL (when
+        /// accessible), compression, and basic attributes before syncing and
+        /// renaming into place.
+        ///
+        /// Never truncates the live destination file in place, so a disk-full
+        /// error or abrupt process exit always leaves the previous catalog
+        /// intact. Fails closed before publication when the destination carries
+        /// EFS encryption, NTFS named streams, or special storage attributes
+        /// that cannot be preserved across atomic replacement.
         ///
         /// # Errors
         ///
@@ -6261,29 +6476,31 @@ mod platform {
                 let existing_identity = existing_entry.as_ref().map(|(identity, _)| *identity);
                 let target_existed = existing_identity.is_some();
                 let mut existing_security = existing_entry.and_then(|(_, security)| security);
-                if let Some(expected_identity) = existing_identity {
-                    // When the caller lacks `SeSecurityPrivilege` (so audit
-                    // SACLs cannot be read or replayed onto a new file object)
-                    // or the file carries EFS encryption, NTFS named streams,
-                    // or special storage attributes, renaming a new file over
-                    // the destination would silently discard kernel metadata.
-                    // Update the verified single-link file object exclusively
-                    // (`share_access = 0`) instead so Windows preserves 100% of
-                    // its SACL, DACL, EFS, named streams, and attributes.
-                    let can_atomic_replace = existing_security.as_ref().is_none_or(|security| {
-                        security.sacl_accessible
-                            && !security.is_encrypted
-                            && !security.has_named_streams
-                            && (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) == 0
-                    });
-                    if !can_atomic_replace {
-                        return self.overwrite_existing_exclusively(
-                            file_name,
-                            expected_identity,
-                            bytes,
-                            durability,
-                        );
-                    }
+                if existing_security
+                    .as_ref()
+                    .is_some_and(|security| security.is_encrypted)
+                {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "cannot safely preserve Windows EFS encryption recipients across atomic replacement",
+                    )));
+                }
+                if existing_security
+                    .as_ref()
+                    .is_some_and(|security| security.has_named_streams)
+                {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "cannot safely preserve Windows NTFS named data streams across atomic replacement",
+                    )));
+                }
+                if existing_security.as_ref().is_some_and(|security| {
+                    (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) != 0
+                }) {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "cannot safely preserve per-file Windows NTFS storage attributes across atomic replacement",
+                    )));
                 }
                 let initial_dacl = existing_security
                     .as_mut()
