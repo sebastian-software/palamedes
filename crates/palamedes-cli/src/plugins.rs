@@ -2297,6 +2297,34 @@ mod unix_pinned_plugin {
         }
     }
 
+    pub(super) fn live_pinned_binary_path(pinned: &PinnedPluginBinary) -> Option<PathBuf> {
+        let fd = pinned.file_fd.as_raw_fd();
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            let mut buf = vec![0_u8; libc::PATH_MAX as usize];
+            // SAFETY: `fd` is open and `buf` has at least `PATH_MAX` writable bytes.
+            if unsafe { libc::fcntl(fd, libc::F_GETPATH, buf.as_mut_ptr()) } == 0 {
+                let len = buf.iter().position(|&byte| byte == 0).unwrap_or(buf.len());
+                buf.truncate(len);
+                if !buf.is_empty() {
+                    return Some(PathBuf::from(OsString::from_vec(buf)));
+                }
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(path) = fs::read_link(format!("/proc/self/fd/{fd}"))
+                && path.is_absolute()
+                && !path.as_os_str().as_bytes().ends_with(b" (deleted)")
+            {
+                return Some(path);
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
+        let _ = fd;
+        None
+    }
+
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     pub(super) fn fd_starts_with_shebang(fd: RawFd) -> io::Result<bool> {
         let mut magic = [0_u8; 2];
@@ -2604,6 +2632,11 @@ mod windows_pinned_plugin {
         Ok(false)
     }
 
+    pub(super) fn live_pinned_binary_path(pinned: &PinnedPluginBinary) -> Option<PathBuf> {
+        let units = final_path_units(pinned._pinned_handle.as_raw_handle()).ok()?;
+        Some(PathBuf::from(OsString::from_wide(&units)))
+    }
+
     pub(super) struct PinnedPackageDir {
         dir_file: File,
         dir_id: FileIdentity,
@@ -2860,26 +2893,43 @@ impl PinnedPackageDir {
     }
 }
 
-fn plugin_host_env<'a>(
-    resolved: &'a ResolvedPlugin,
-    native_executable: &'a Path,
-) -> [(&'static str, &'a OsStr); 3] {
-    let plugin_dir = resolved
+fn pinned_plugin_dir(resolved: &ResolvedPlugin) -> PathBuf {
+    if let Some(ref pinned) = resolved.pinned_binary {
+        #[cfg(unix)]
+        if let Some(live_path) = unix_pinned_plugin::live_pinned_binary_path(pinned)
+            && let Some(parent) = live_path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            return parent.to_path_buf();
+        }
+        #[cfg(windows)]
+        if let Some(live_path) = windows_pinned_plugin::live_pinned_binary_path(pinned)
+            && let Some(parent) = live_path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            return parent.to_path_buf();
+        }
+        #[cfg(not(any(unix, windows)))]
+        let _ = pinned;
+        return resolved
+            .binary_path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+    }
+    resolved
         .invocation_path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    [
-        (NATIVE_EXECUTABLE_ENV, native_executable.as_os_str()),
-        (PLUGIN_PATH_ENV, resolved.invocation_path.as_os_str()),
-        (PLUGIN_DIR_ENV, plugin_dir.as_os_str()),
-    ]
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
 }
 
 #[cfg(any(windows, test))]
 fn is_windows_batch_file(path: &Path) -> bool {
     path.extension()
-        .and_then(|ext| ext.to_str())
+        .and_then(OsStr::to_str)
         .is_some_and(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"))
 }
 
@@ -2890,7 +2940,12 @@ fn spawn_resolved_binary(
 ) -> io::Result<PluginChild> {
     // Keep the verified handle pinned across every platform's spawn call.
     let _pinned_guard = resolved.pinned_binary.as_ref();
-    let env_overrides = plugin_host_env(resolved, native_executable);
+    let plugin_dir = pinned_plugin_dir(resolved);
+    let env_overrides: [(&str, &OsStr); 3] = [
+        (NATIVE_EXECUTABLE_ENV, native_executable.as_os_str()),
+        (PLUGIN_PATH_ENV, resolved.invocation_path.as_os_str()),
+        (PLUGIN_DIR_ENV, plugin_dir.as_os_str()),
+    ];
     #[cfg(windows)]
     if resolved.invocation_path != resolved.binary_path
         && !is_windows_batch_file(&resolved.binary_path)
@@ -5737,14 +5792,14 @@ catalogs:
     #[cfg(unix)]
     #[test]
     fn private_env_bash_package_plugin_runs_via_kernel_and_invokes_sibling_executable() {
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::{PermissionsExt, symlink};
 
         let root = temp_dir("plugin-private-env-bash");
-        let pkg_dir = root.join("node_modules/acme-env-wrapper");
-        let bin_dir = pkg_dir.join("bin");
+        let real_pkg = root.join("real-acme-env-wrapper");
+        let bin_dir = real_pkg.join("bin");
         fs::create_dir_all(&bin_dir).expect("create bin dir");
         fs::write(
-            pkg_dir.join("package.json"),
+            real_pkg.join("package.json"),
             r#"{"name":"acme-env-wrapper","palamedes":{"pluginBinary":"bin/acme-wrapper"}}"#,
         )
         .expect("write package.json");
@@ -5763,18 +5818,41 @@ catalogs:
                 "#!/usr/bin/env bash\n",
                 "# PRIVATE_TOKEN_MUST_NOT_APPEAR_IN_ARGV\n",
                 "if [ \"$#\" -ne 0 ]; then exit 99; fi\n",
-                "if [ \"${PALAMEDES_PLUGIN_PATH}\" != \"${PALAMEDES_PLUGIN_DIR}/acme-wrapper\" ]; then exit 98; fi\n",
+                "case \"${PALAMEDES_PLUGIN_PATH}\" in */acme-wrapper) ;; *) exit 98 ;; esac\n",
                 "exec \"${PALAMEDES_PLUGIN_DIR}/real-plugin\"\n",
             ),
         );
         fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o700)).expect("chmod 0700");
 
+        let evil_pkg = root.join("evil-acme-env-wrapper");
+        let evil_bin = evil_pkg.join("bin");
+        fs::create_dir_all(&evil_bin).expect("create evil bin dir");
+        write_executable_fixture(
+            &evil_bin.join("real-plugin"),
+            concat!(
+                "#!/bin/sh\n",
+                "printf '{\"event\":\"manifest\",\"name\":\"evil-sibling\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}\\n'\n",
+            ),
+        );
+
+        let node_modules = root.join("node_modules");
+        fs::create_dir_all(&node_modules).expect("create node_modules");
+        let pkg_link = node_modules.join("acme-env-wrapper");
+        symlink(&real_pkg, &pkg_link).expect("symlink real package");
+
         let config_path = root.join("palamedes.yaml");
         fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
         let resolved =
             super::resolve_binary_plugin("acme-env-wrapper", &config_path).expect("resolve plugin");
+
+        // Retarget the package symlink after resolution: `PALAMEDES_PLUGIN_DIR`
+        // must still point at the pinned binary's real directory rather than
+        // following the retargeted `node_modules/acme-env-wrapper` symlink.
+        fs::remove_file(&pkg_link).expect("remove original package symlink");
+        symlink(&evil_pkg, &pkg_link).expect("retarget package symlink to evil package");
+
         let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds")).expect(
-            "private env bash wrapper must launch sibling executable via PALAMEDES_PLUGIN_DIR",
+            "private env bash wrapper must launch verified sibling executable via PALAMEDES_PLUGIN_DIR",
         );
         assert_eq!(manifest.name, "env-wrapper-sibling");
     }

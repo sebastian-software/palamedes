@@ -360,6 +360,7 @@ pub(super) fn catalog_locale_matcher(
 
 pub(super) fn normalize_path(path: &Path) -> String {
     let portable = path.to_string_lossy().replace('\\', "/");
+    let has_dir_suffix = portable == "." || portable.ends_with('/') || portable.ends_with("/.");
     let (prefix, rest) = if let Some(after) = portable.strip_prefix("//") {
         ("//", after)
     } else if let Some(after) = portable.strip_prefix('/') {
@@ -376,13 +377,14 @@ pub(super) fn normalize_path(path: &Path) -> String {
             ("", portable.as_str())
         }
     };
-    // Remove harmless repeated separators and `.` segments on both sides while
-    // keeping `..` intact so traversal paths never collapse into a valid match.
+    // Remove harmless repeated separators and interior `.` segments while
+    // keeping `..` and directory-only terminal suffixes (`/` or `/.`) intact so
+    // traversal paths and directory-only spellings never match regular files.
     let segments: Vec<&str> = rest
         .split('/')
         .filter(|segment| !segment.is_empty() && *segment != ".")
         .collect();
-    if segments.is_empty() {
+    let mut normalized = if segments.is_empty() {
         if prefix.is_empty() {
             portable
         } else {
@@ -390,7 +392,11 @@ pub(super) fn normalize_path(path: &Path) -> String {
         }
     } else {
         format!("{prefix}{}", segments.join("/"))
+    };
+    if has_dir_suffix && !normalized.ends_with('/') {
+        normalized.push('/');
     }
+    normalized
 }
 
 #[cfg(test)]
@@ -413,6 +419,18 @@ mod tests {
         assert_eq!(captures.get(1).map(|value| value.as_str()), Some("pt.BR"));
         assert!(!matcher.is_match(&normalize_path(&root.join("locales/pt.BR/messages.po"))));
         assert!(!matcher.is_match(&normalize_path(&root.join("locales/pt.BR/messages.v2.fcl"))));
+        assert!(
+            !matcher.is_match(&normalize_path(Path::new(
+                "workspace/locales/pt.BR/messages.v2.po/"
+            ))),
+            "directory-only trailing slash must not match a catalog file pattern"
+        );
+        assert!(
+            !matcher.is_match(&normalize_path(Path::new(
+                "workspace/locales/pt.BR/messages.v2.po/."
+            ))),
+            "directory-only trailing /. must not match a catalog file pattern"
+        );
     }
 
     #[test]

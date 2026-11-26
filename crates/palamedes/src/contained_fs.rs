@@ -857,14 +857,16 @@ mod platform {
         }
 
         /// Probes whether two single-segment filenames resolve to the same
-        /// entry on this directory's mounted filesystem by creating a private
-        /// `0700` temporary subdirectory inside `self` (inheriting volume
-        /// encoding and Linux `FS_CASEFOLD_FL`) and testing `O_CREAT | O_EXCL`
-        /// for `left` then `right`.
+        /// entry on this directory's mounted filesystem by creating a verified
+        /// private `0700` temporary subdirectory inside `self` (using the same
+        /// safe-parent and identity checks as `create_staging_dir`, inheriting
+        /// volume encoding and Linux `FS_CASEFOLD_FL`) and testing
+        /// `O_CREAT | O_EXCL` for `left` then `right`.
         ///
         /// Returns `Some(true)` when the filesystem treats both names as
         /// equivalent, `Some(false)` when both coexist as distinct files, or
-        /// `None` when the directory is read-only or cannot be probed safely.
+        /// `None` when the directory is read-only, unsafe to stage in, or
+        /// cannot be probed safely.
         #[must_use]
         pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
             if left == right {
@@ -876,53 +878,26 @@ mod platform {
             }
             let c_left = CString::new(left.as_bytes()).ok()?;
             let c_right = CString::new(right.as_bytes()).ok()?;
-            let dir_raw = self.fd.as_raw_fd();
-            let pid = std::process::id();
-            let mut probe_dir_name = None;
-            for _ in 0..8 {
-                let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
-                let name = CString::new(format!(".pmds-eq-{pid}-{nonce}")).ok()?;
-                // SAFETY: `dir_raw` is open and `name` is NUL-terminated.
-                if unsafe { libc::mkdirat(dir_raw, name.as_ptr(), 0o700) } == 0 {
-                    probe_dir_name = Some(name);
-                    break;
-                }
-                if io::Error::last_os_error().raw_os_error() != Some(libc::EEXIST) {
-                    return None;
-                }
-            }
-            let probe_dir_name = probe_dir_name?;
+            let (c_probe_name, probe_dir, probe_identity) = self.create_staging_dir(false).ok()?;
             struct ProbeDirCleanup<'a> {
-                parent_raw: std::os::fd::RawFd,
-                name: &'a CString,
+                parent: &'a ContainedDir,
+                name: CString,
+                dir: Option<ContainedDir>,
+                identity: FileIdentity,
             }
             impl Drop for ProbeDirCleanup<'_> {
                 fn drop(&mut self) {
-                    // SAFETY: `parent_raw` is open and `self.name` is our private probe dir.
-                    unsafe {
-                        let _ =
-                            libc::unlinkat(self.parent_raw, self.name.as_ptr(), libc::AT_REMOVEDIR);
-                    }
+                    self.dir.take();
+                    let _ = self.parent.rmdir_stage_if_same(&self.name, self.identity);
                 }
             }
-            let _cleanup = ProbeDirCleanup {
-                parent_raw: dir_raw,
-                name: &probe_dir_name,
+            let cleanup = ProbeDirCleanup {
+                parent: self,
+                name: c_probe_name,
+                dir: Some(probe_dir),
+                identity: probe_identity,
             };
-            // SAFETY: `dir_raw` is open and `probe_dir_name` was just created with 0700.
-            let probe_raw = unsafe {
-                libc::openat(
-                    dir_raw,
-                    probe_dir_name.as_ptr(),
-                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-                )
-            };
-            if probe_raw < 0 {
-                return None;
-            }
-            // SAFETY: `probe_raw` is a newly opened valid directory descriptor.
-            let probe_fd = unsafe { OwnedFd::from_raw_fd(probe_raw) };
-            let probe_dir_raw = probe_fd.as_raw_fd();
+            let probe_dir_raw = cleanup.dir.as_ref()?.fd.as_raw_fd();
 
             // SAFETY: `probe_dir_raw` is open and `c_left` is a validated single segment.
             let left_raw = unsafe {
@@ -973,7 +948,7 @@ mod platform {
             unsafe {
                 let _ = libc::unlinkat(probe_dir_raw, c_left.as_ptr(), 0);
             }
-            drop(probe_fd);
+            drop(cleanup);
             result
         }
 
@@ -1199,83 +1174,36 @@ mod platform {
             Ok(Some(content))
         }
 
-        /// Writes `bytes` in place to `file_name` through this verified
-        /// directory handle without following symlinks or overwriting hard
-        /// links.
+        /// Writes `bytes` to `file_name` through this verified directory
+        /// handle without following symlinks, overwriting hard-linked files,
+        /// or mutating an existing inode in place.
         ///
-        /// On first creation the kernel applies the destination directory's
-        /// native umask, `setgid` group, and default/inheritable ACLs directly.
-        /// On update, writing to the existing inode preserves live permissions,
-        /// ownership, ACLs, and SELinux labels with no rename-time metadata
-        /// window. Hard-linked destinations (`st_nlink > 1`) are rejected
-        /// before truncation so external links cannot be modified.
+        /// Rejects reserved lock filenames, symlinks, and existing hard-linked
+        /// targets (`st_nlink > 1`), then publishes a replacement file
+        /// atomically so a concurrent hard link created against the previous
+        /// inode cannot have its contents truncated or overwritten while
+        /// preserving umask/ACL inheritance on creation and existing metadata
+        /// on replacement.
         ///
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
-        /// refers to a symlink, or has multiple hard links, or
+        /// reserved, refers to a symlink, or has multiple hard links, or
         /// [`ContainedFsError::Io`] on OS errors.
         pub fn write_file_in_place(
             &self,
             file_name: &OsStr,
             bytes: &[u8],
         ) -> Result<(), ContainedFsError> {
-            validate_single_file_name(file_name)?;
-            let c_target = os_str_to_cstring(file_name)?;
-            // SAFETY: `self.fd` is an open directory descriptor and `c_target` is valid.
-            let raw = unsafe {
-                libc::openat(
-                    self.fd.as_raw_fd(),
-                    c_target.as_ptr(),
-                    libc::O_WRONLY
-                        | libc::O_CREAT
-                        | libc::O_NOFOLLOW
-                        | libc::O_NONBLOCK
-                        | libc::O_CLOEXEC,
-                    0o666 as libc::c_uint,
-                )
-            };
-            if raw < 0 {
-                let error = io::Error::last_os_error();
-                if is_symlink_open_error(error.raw_os_error()) {
-                    return Err(ContainedFsError::Containment(format!(
-                        "refusing to write through symlink \"{}\"",
-                        file_name.to_string_lossy()
-                    )));
-                }
-                return Err(ContainedFsError::Io(error));
-            }
-            // SAFETY: `raw` is a newly opened valid file descriptor.
-            let mut file = File::from(unsafe { OwnedFd::from_raw_fd(raw) });
-            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-            // SAFETY: `file` is open and `stat` is writable.
-            if unsafe { libc::fstat(file.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
-                return Err(ContainedFsError::Io(io::Error::last_os_error()));
-            }
-            // SAFETY: `fstat` succeeded and initialized `stat`.
-            let stat = unsafe { stat.assume_init() };
-            if (stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
-                return Err(ContainedFsError::Io(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!(
-                        "refusing to write non-regular file \"{}\"",
-                        file_name.to_string_lossy()
-                    ),
-                )));
-            }
-            if stat.st_nlink > 1 {
-                return Err(ContainedFsError::Containment(format!(
-                    "refusing to overwrite hard-linked file \"{}\"",
-                    file_name.to_string_lossy()
-                )));
-            }
-            // SAFETY: `file` is an open writable regular file descriptor.
-            if unsafe { libc::ftruncate(file.as_raw_fd(), 0) } != 0 {
-                return Err(ContainedFsError::Io(io::Error::last_os_error()));
-            }
-            file.write_all(bytes)?;
-            file.flush()?;
-            Ok(())
+            super::validate_writable_file_name(file_name)?;
+            self.reject_symlink_or_hard_link(file_name)?;
+            self.write_file_atomically(
+                file_name,
+                bytes,
+                ContainedNewFileMode::RespectUmask,
+                ContainedWriteDurability::Rename,
+            )
+            .map(|_| ())
         }
 
         /// Writes `bytes` to a fresh temporary file and atomically publishes
@@ -5244,55 +5172,35 @@ mod platform {
             Ok(Some(content))
         }
 
-        /// Writes `bytes` in place to `file_name` through this verified
-        /// Windows directory handle without following reparse points or
-        /// overwriting hard links.
+        /// Writes `bytes` to `file_name` through this verified Windows
+        /// directory handle without following reparse points, overwriting
+        /// hard-linked files, or truncating an existing file object in place.
         ///
-        /// Writing directly to the verified handle preserves the destination's
-        /// live owner, DACL, EFS encryption, and EFS recipients on update, and
-        /// inherits the parent directory's native DACL and EFS settings on
-        /// first creation.
+        /// Rejects reserved lock filenames, reparse points, and existing
+        /// hard-linked targets (`number_of_links > 1`), then publishes a
+        /// replacement file atomically so concurrent hard links to the
+        /// previous file cannot be mutated while preserving DACL/owner
+        /// metadata.
         ///
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
-        /// refers to a reparse point, or has multiple hard links, or
+        /// reserved, refers to a reparse point, or has multiple hard links, or
         /// [`ContainedFsError::Io`] on OS errors.
         pub fn write_file_in_place(
             &self,
             file_name: &OsStr,
             bytes: &[u8],
         ) -> Result<(), ContainedFsError> {
-            validate_single_file_name(file_name)?;
-            let handle = nt_create_relative(
-                self.handle.as_raw_handle(),
+            super::validate_writable_file_name(file_name)?;
+            self.reject_symlink_or_hard_link(file_name)?;
+            self.write_file_atomically(
                 file_name,
-                FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-                FILE_ATTRIBUTE_NORMAL,
-                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                FILE_OPEN_IF,
-                FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
-                std::ptr::null_mut(),
+                bytes,
+                ContainedNewFileMode::RespectUmask,
+                ContainedWriteDurability::Rename,
             )
-            .map_err(|status| ContainedFsError::Io(nt_status_to_io_error(status)))?;
-            let info = file_information(handle.as_raw_handle())?;
-            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
-                return Err(ContainedFsError::Containment(format!(
-                    "refusing to write through symlink \"{}\"",
-                    file_name.to_string_lossy()
-                )));
-            }
-            if info.number_of_links > 1 {
-                return Err(ContainedFsError::Containment(format!(
-                    "refusing to overwrite hard-linked file \"{}\"",
-                    file_name.to_string_lossy()
-                )));
-            }
-            let mut file = File::from(handle);
-            file.set_len(0)?;
-            file.write_all(bytes)?;
-            file.flush()?;
-            Ok(())
+            .map(|_| ())
         }
 
         /// Atomically writes `bytes` to `file_name` inside this directory
@@ -6174,15 +6082,21 @@ mod platform {
             }
         }
 
-        /// Writes `bytes` in place to `file_name` after verifying containment.
+        /// Writes `bytes` to `file_name` after verifying containment and
+        /// rejecting reserved lock filenames.
         pub fn write_file_in_place(
             &self,
             file_name: &OsStr,
             bytes: &[u8],
         ) -> Result<(), ContainedFsError> {
-            self.reject_symlink(file_name)?;
-            fs::write(self.dir.join(file_name), bytes)?;
-            Ok(())
+            super::validate_writable_file_name(file_name)?;
+            self.write_file_atomically(
+                file_name,
+                bytes,
+                ContainedNewFileMode::RespectUmask,
+                ContainedWriteDurability::Rename,
+            )
+            .map(|_| ())
         }
 
         /// Atomically writes `bytes` to `file_name`.
@@ -7123,8 +7037,12 @@ mod tests {
                     ContainedNewFileMode::RespectUmask,
                     ContainedWriteDurability::Rename,
                 )
-                .expect_err("reserved lock filename must be rejected");
+                .expect_err("reserved lock filename must be rejected by atomic write");
             assert!(matches!(err, ContainedFsError::Containment(_)));
+            let in_place_err = dir
+                .write_file_in_place(OsStr::new(reserved), b"user-bytes")
+                .expect_err("reserved lock filename must be rejected by in-place write");
+            assert!(matches!(in_place_err, ContainedFsError::Containment(_)));
         }
         assert!(!lock_path.exists());
         dir.write_file_atomically(
