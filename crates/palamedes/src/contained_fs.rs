@@ -321,14 +321,30 @@ mod platform {
     #[cfg(target_os = "macos")]
     impl Drop for ExistingAcl {
         fn drop(&mut self) {
-            // SAFETY: `self.0` was returned by `acl_get_fd_np` and has not been freed.
+            // SAFETY: `self.0` was returned by `acl_get_fd_np`/`acl_init` and has not been freed.
             unsafe {
                 let _ = macos_acl::acl_free(self.0);
             }
         }
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "freebsd")]
+    struct ExistingAcl {
+        acl_type: libc::c_int,
+        ptr: *mut libc::c_void,
+    }
+
+    #[cfg(target_os = "freebsd")]
+    impl Drop for ExistingAcl {
+        fn drop(&mut self) {
+            // SAFETY: `self.ptr` was returned by FreeBSD ACL APIs and has not been freed.
+            unsafe {
+                let _ = freebsd_acl::acl_free(self.ptr);
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
     struct ExistingAcl;
 
     #[cfg(target_os = "macos")]
@@ -337,6 +353,7 @@ mod platform {
         pub(super) const ACL_FIRST_ENTRY: libc::c_int = 0;
 
         unsafe extern "C" {
+            pub(super) fn acl_init(count: libc::c_int) -> *mut libc::c_void;
             pub(super) fn acl_get_fd_np(fd: libc::c_int, type_: libc::c_int) -> *mut libc::c_void;
             pub(super) fn acl_set_fd_np(
                 fd: libc::c_int,
@@ -348,6 +365,30 @@ mod platform {
                 entry_id: libc::c_int,
                 entry_p: *mut *mut libc::c_void,
             ) -> libc::c_int;
+            pub(super) fn acl_free(obj_p: *mut libc::c_void) -> libc::c_int;
+        }
+    }
+
+    #[cfg(target_os = "freebsd")]
+    mod freebsd_acl {
+        pub(super) const ACL_TYPE_ACCESS: libc::c_int = 0x0000_0002;
+        pub(super) const ACL_TYPE_NFS4: libc::c_int = 0x0000_0004;
+
+        unsafe extern "C" {
+            pub(super) fn acl_get_fd_np(fd: libc::c_int, type_: libc::c_int) -> *mut libc::c_void;
+            pub(super) fn acl_set_fd_np(
+                fd: libc::c_int,
+                acl: *mut libc::c_void,
+                type_: libc::c_int,
+            ) -> libc::c_int;
+            pub(super) fn acl_is_trivial_np(
+                acl: *mut libc::c_void,
+                trivialp: *mut libc::c_int,
+            ) -> libc::c_int;
+            pub(super) fn acl_strip_np(
+                acl: *mut libc::c_void,
+                recalculate_mask: libc::c_int,
+            ) -> *mut libc::c_void;
             pub(super) fn acl_free(obj_p: *mut libc::c_void) -> libc::c_int;
         }
     }
@@ -420,7 +461,10 @@ mod platform {
                     if !create_missing && error.raw_os_error() == Some(libc::ENOENT) {
                         return Ok(None);
                     }
-                    if is_symlink_open_error(error.raw_os_error()) {
+                    if is_symlink_open_error(error.raw_os_error())
+                        || (error.raw_os_error() == Some(libc::ENOTDIR)
+                            && current.is_symlink_entry(&c_segment))
+                    {
                         return Err(ContainedFsError::Containment(format!(
                             "refusing to follow symlink at directory component \"{}\"",
                             segment.to_string_lossy()
@@ -534,6 +578,17 @@ mod platform {
             };
             let (temp_name, mut temp_file) = self.create_temp_file(create_mode)?;
             let write_result = (|| -> io::Result<()> {
+                if existing.is_some() {
+                    // Strip any ACL inherited from a parent directory default
+                    // ACL before writing content so the temporary file remains
+                    // strictly private while populated and cannot retain
+                    // inherited entries when the destination had no ACL.
+                    strip_inherited_acl(temp_file.as_raw_fd())?;
+                    // SAFETY: `temp_file` is an open file descriptor.
+                    if unsafe { libc::fchmod(temp_file.as_raw_fd(), 0o600) } != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                }
                 temp_file.write_all(bytes)?;
                 temp_file.flush()?;
                 if let Some(existing) = existing.as_ref() {
@@ -764,6 +819,25 @@ mod platform {
                 Err(io::Error::last_os_error())
             }
         }
+
+        fn is_symlink_entry(&self, c_name: &CString) -> bool {
+            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // SAFETY: `self.fd` is open, `c_name` is valid, and `stat` is writable.
+            let rc = unsafe {
+                libc::fstatat(
+                    self.fd.as_raw_fd(),
+                    c_name.as_ptr(),
+                    stat.as_mut_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            };
+            if rc != 0 {
+                return false;
+            }
+            // SAFETY: `fstatat` succeeded and initialized `stat`.
+            let stat = unsafe { stat.assume_init() };
+            (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK
+        }
     }
 
     fn is_symlink_open_error(raw_os_error: Option<i32>) -> bool {
@@ -788,10 +862,7 @@ mod platform {
             let size = unsafe { libc::fgetxattr(fd, name.as_ptr(), std::ptr::null_mut(), 0) };
             if size < 0 {
                 let error = io::Error::last_os_error();
-                if matches!(
-                    error.raw_os_error(),
-                    Some(libc::ENODATA | libc::ENOTSUP | libc::EOPNOTSUPP)
-                ) {
+                if matches!(error.raw_os_error(), Some(libc::ENODATA | libc::EOPNOTSUPP)) {
                     return Ok(None);
                 }
                 return Err(error);
@@ -825,6 +896,32 @@ mod platform {
         Err(io::Error::other(
             "extended attribute size changed repeatedly while reading destination ACL",
         ))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn remove_linux_xattr_if_present(
+        fd: std::os::fd::RawFd,
+        name: &std::ffi::CStr,
+    ) -> io::Result<()> {
+        // SAFETY: `fd` is open and `name` is a valid C string.
+        if unsafe { libc::fremovexattr(fd, name.as_ptr()) } != 0 {
+            let error = io::Error::last_os_error();
+            if matches!(error.raw_os_error(), Some(libc::ENODATA | libc::EOPNOTSUPP)) {
+                return Ok(());
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("cannot clear inherited Linux ACL on replacement: {error}"),
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn strip_inherited_acl(temp_fd: std::os::fd::RawFd) -> io::Result<()> {
+        remove_linux_xattr_if_present(temp_fd, c"system.posix_acl_access")?;
+        remove_linux_xattr_if_present(temp_fd, c"system.nfs4_acl")?;
+        Ok(())
     }
 
     #[cfg(target_os = "linux")]
@@ -882,6 +979,32 @@ mod platform {
     }
 
     #[cfg(target_os = "macos")]
+    fn strip_inherited_acl(temp_fd: std::os::fd::RawFd) -> io::Result<()> {
+        // SAFETY: creating an empty extended ACL to remove any inherited ACEs.
+        let empty = unsafe { macos_acl::acl_init(0) };
+        if empty.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let empty = ExistingAcl(empty);
+        // SAFETY: `temp_fd` is open and `empty.0` is a valid `acl_t`.
+        if unsafe { macos_acl::acl_set_fd_np(temp_fd, empty.0, macos_acl::ACL_TYPE_EXTENDED) } != 0
+        {
+            let error = io::Error::last_os_error();
+            if matches!(
+                error.raw_os_error(),
+                Some(libc::ENOENT | libc::ENOTSUP | libc::EOPNOTSUPP | libc::EINVAL)
+            ) {
+                return Ok(());
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("cannot clear inherited macOS extended ACL on replacement: {error}"),
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
     fn read_existing_acl(fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
         // SAFETY: `fd` is an open file descriptor.
         let raw = unsafe { macos_acl::acl_get_fd_np(fd, macos_acl::ACL_TYPE_EXTENDED) };
@@ -918,14 +1041,141 @@ mod platform {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    fn read_existing_acl(_fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
+    #[cfg(target_os = "freebsd")]
+    fn strip_inherited_acl(temp_fd: std::os::fd::RawFd) -> io::Result<()> {
+        for acl_type in [freebsd_acl::ACL_TYPE_NFS4, freebsd_acl::ACL_TYPE_ACCESS] {
+            // SAFETY: `temp_fd` is an open file descriptor.
+            let raw = unsafe { freebsd_acl::acl_get_fd_np(temp_fd, acl_type) };
+            if raw.is_null() {
+                let error = io::Error::last_os_error();
+                if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::EINVAL)) {
+                    continue;
+                }
+                return Err(error);
+            }
+            let current = ExistingAcl { acl_type, ptr: raw };
+            let mut trivial: libc::c_int = 0;
+            // SAFETY: `current.ptr` is a valid FreeBSD `acl_t`.
+            if unsafe { freebsd_acl::acl_is_trivial_np(current.ptr, &mut trivial) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if trivial == 0 {
+                // SAFETY: `current.ptr` is a valid FreeBSD `acl_t`.
+                let stripped = unsafe { freebsd_acl::acl_strip_np(current.ptr, 0) };
+                if stripped.is_null() {
+                    return Err(io::Error::last_os_error());
+                }
+                let stripped = ExistingAcl {
+                    acl_type,
+                    ptr: stripped,
+                };
+                // SAFETY: `temp_fd` is open and `stripped.ptr` is a valid FreeBSD `acl_t`.
+                if unsafe { freebsd_acl::acl_set_fd_np(temp_fd, stripped.ptr, acl_type) } != 0 {
+                    let error = io::Error::last_os_error();
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        format!("cannot clear inherited FreeBSD ACL on replacement: {error}"),
+                    ));
+                }
+            }
+            return Ok(());
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "freebsd")]
+    fn read_existing_acl(fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
+        for acl_type in [freebsd_acl::ACL_TYPE_NFS4, freebsd_acl::ACL_TYPE_ACCESS] {
+            // SAFETY: `fd` is an open file descriptor.
+            let raw = unsafe { freebsd_acl::acl_get_fd_np(fd, acl_type) };
+            if raw.is_null() {
+                let error = io::Error::last_os_error();
+                if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::EINVAL)) {
+                    continue;
+                }
+                return Err(error);
+            }
+            let acl = ExistingAcl { acl_type, ptr: raw };
+            let mut trivial: libc::c_int = 0;
+            // SAFETY: `acl.ptr` is a valid FreeBSD `acl_t`.
+            if unsafe { freebsd_acl::acl_is_trivial_np(acl.ptr, &mut trivial) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            return if trivial == 0 {
+                Ok(Some(acl))
+            } else {
+                Ok(None)
+            };
+        }
         Ok(None)
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "freebsd")]
+    fn apply_existing_acl(temp_fd: std::os::fd::RawFd, acl: &ExistingAcl) -> io::Result<()> {
+        // SAFETY: `temp_fd` is open and `acl.ptr` is a valid FreeBSD `acl_t`.
+        if unsafe { freebsd_acl::acl_set_fd_np(temp_fd, acl.ptr, acl.acl_type) } != 0 {
+            let error = io::Error::last_os_error();
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("cannot preserve FreeBSD ACL on replacement: {error}"),
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "openbsd")]
+    fn strip_inherited_acl(_temp_fd: std::os::fd::RawFd) -> io::Result<()> {
+        Ok(())
+    }
+
+    #[cfg(target_os = "openbsd")]
+    fn read_existing_acl(_fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
+        // OpenBSD does not support filesystem ACLs.
+        Ok(None)
+    }
+
+    #[cfg(target_os = "openbsd")]
     fn apply_existing_acl(_temp_fd: std::os::fd::RawFd, _acl: &ExistingAcl) -> io::Result<()> {
         Ok(())
+    }
+
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd"
+    )))]
+    fn strip_inherited_acl(_temp_fd: std::os::fd::RawFd) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "cannot verify or clear inherited filesystem ACLs on this Unix target",
+        ))
+    }
+
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd"
+    )))]
+    fn read_existing_acl(_fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "cannot verify or preserve filesystem ACLs on this Unix target",
+        ))
+    }
+
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd"
+    )))]
+    fn apply_existing_acl(_temp_fd: std::os::fd::RawFd, _acl: &ExistingAcl) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "cannot preserve filesystem ACLs on this Unix target",
+        ))
     }
 
     fn restore_existing_metadata(
@@ -985,9 +1235,10 @@ mod platform {
 #[cfg(windows)]
 mod platform {
     use std::ffi::{OsStr, OsString, c_void};
-    use std::fs::File;
+    use std::fs::{File, OpenOptions};
     use std::io::{self, Read, Write};
     use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::fs::OpenOptionsExt;
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use std::path::Path;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -1011,20 +1262,19 @@ mod platform {
     const FILE_WRITE_DATA: u32 = 0x0000_0002;
     const FILE_READ_ATTRIBUTES: u32 = 0x0000_0080;
     const FILE_TRAVERSE: u32 = 0x0000_0020;
-    const READ_CONTROL: u32 = 0x0002_0000;
     const DELETE: u32 = 0x0001_0000;
+    const READ_CONTROL: u32 = 0x0002_0000;
+    const WRITE_OWNER: u32 = 0x0008_0000;
     const SYNCHRONIZE: u32 = 0x0010_0000;
     const GENERIC_READ: u32 = 0x8000_0000;
     const GENERIC_WRITE: u32 = 0x4000_0000;
     const FILE_SHARE_READ: u32 = 0x0000_0001;
     const FILE_SHARE_WRITE: u32 = 0x0000_0002;
     const FILE_SHARE_DELETE: u32 = 0x0000_0004;
-    const OPEN_EXISTING: u32 = 3;
     const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0000_0010;
     const FILE_ATTRIBUTE_NORMAL: u32 = 0x0000_0080;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-    const INVALID_HANDLE_VALUE: *mut c_void = (-1_isize) as *mut c_void;
 
     const FILE_OPEN: u32 = 0x0000_0001;
     const FILE_CREATE: u32 = 0x0000_0002;
@@ -1036,6 +1286,8 @@ mod platform {
     const OBJ_CASE_INSENSITIVE: u32 = 0x0000_0040;
     const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
     const FILE_DISPOSITION_INFORMATION_CLASS: u32 = 13;
+    const OWNER_SECURITY_INFORMATION: u32 = 0x0000_0001;
+    const GROUP_SECURITY_INFORMATION: u32 = 0x0000_0002;
     const DACL_SECURITY_INFORMATION: u32 = 0x0000_0004;
 
     #[repr(C)]
@@ -1096,15 +1348,6 @@ mod platform {
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
-        fn CreateFileW(
-            file_name: *const u16,
-            desired_access: u32,
-            share_mode: u32,
-            security_attributes: *mut c_void,
-            creation_disposition: u32,
-            flags_and_attributes: u32,
-            template_file: *mut c_void,
-        ) -> *mut c_void;
         fn GetFileInformationByHandle(
             file: *mut c_void,
             file_information: *mut ByHandleFileInformation,
@@ -1120,6 +1363,17 @@ mod platform {
             length: u32,
             length_needed: *mut u32,
         ) -> i32;
+        fn SetKernelObjectSecurity(
+            handle: *mut c_void,
+            security_information: u32,
+            security_descriptor: *mut c_void,
+        ) -> i32;
+        fn GetSecurityDescriptorOwner(
+            security_descriptor: *mut c_void,
+            owner: *mut *mut c_void,
+            owner_defaulted: *mut i32,
+        ) -> i32;
+        fn EqualSid(sid1: *mut c_void, sid2: *mut c_void) -> i32;
     }
 
     #[link(name = "ntdll")]
@@ -1157,29 +1411,19 @@ mod platform {
     impl ContainedDir {
         /// Opens `root_dir` as the anchor directory handle.
         ///
+        /// Uses [`OpenOptions`] so Rust's standard Windows path handling
+        /// transparently supports extended-length (`> MAX_PATH`) project roots.
+        ///
         /// # Errors
         ///
         /// Returns an error when `root_dir` cannot be opened as a directory.
         pub fn open_root(root_dir: &Path) -> Result<Self, ContainedFsError> {
-            let mut wide = encode_utf16_no_nul(root_dir.as_os_str())?;
-            wide.push(0);
-            // SAFETY: `wide` is NUL-terminated UTF-16.
-            let raw = unsafe {
-                CreateFileW(
-                    wide.as_ptr(),
-                    FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                    std::ptr::null_mut(),
-                    OPEN_EXISTING,
-                    FILE_FLAG_BACKUP_SEMANTICS,
-                    std::ptr::null_mut(),
-                )
-            };
-            if raw == INVALID_HANDLE_VALUE {
-                return Err(ContainedFsError::Io(io::Error::last_os_error()));
-            }
-            // SAFETY: `raw` is a newly opened valid Windows handle.
-            let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+            let file = OpenOptions::new()
+                .access_mode(FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+                .open(root_dir)?;
+            let handle = OwnedHandle::from(file);
             let info = file_information(handle.as_raw_handle())?;
             if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 {
                 return Err(ContainedFsError::Io(io::Error::new(
@@ -1314,7 +1558,8 @@ mod platform {
 
         /// Atomically writes `bytes` to `file_name` inside this directory
         /// handle, verifying write access on any existing file and preserving
-        /// its DACL from the moment the temporary file is created.
+        /// both its DACL (at creation time) and original owner SID before
+        /// syncing and renaming into place.
         ///
         /// # Errors
         ///
@@ -1328,19 +1573,20 @@ mod platform {
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             validate_single_file_name(file_name)?;
-            let mut existing_dacl = self
+            let mut existing_sd = self
                 .inspect_entry(file_name, true)?
-                .and_then(|(_, dacl)| dacl);
-            let security_descriptor = existing_dacl
-                .as_mut()
-                .map_or(std::ptr::null_mut(), |buffer| {
-                    buffer.as_mut_ptr().cast::<c_void>()
-                });
+                .and_then(|(_, security)| security);
+            let security_descriptor = existing_sd.as_mut().map_or(std::ptr::null_mut(), |buffer| {
+                buffer.as_mut_ptr().cast::<c_void>()
+            });
 
             let mut temp_file = self.create_temp_file(security_descriptor)?;
             let write_result = (|| -> io::Result<()> {
                 temp_file.write_all(bytes)?;
                 temp_file.flush()?;
+                if let Some(existing_sd) = existing_sd.as_mut() {
+                    restore_windows_owner(temp_file.as_raw_handle(), existing_sd)?;
+                }
                 if durability.syncs_file() {
                     temp_file.sync_all()?;
                 }
@@ -1393,8 +1639,13 @@ mod platform {
                     file_name.to_string_lossy()
                 )));
             }
-            let dacl = if for_replace {
-                read_dacl_security_descriptor(handle.as_raw_handle())?
+            let security = if for_replace {
+                read_security_descriptor(
+                    handle.as_raw_handle(),
+                    OWNER_SECURITY_INFORMATION
+                        | GROUP_SECURITY_INFORMATION
+                        | DACL_SECURITY_INFORMATION,
+                )?
             } else {
                 None
             };
@@ -1404,7 +1655,7 @@ mod platform {
                     file_index_high: info.file_index_high,
                     file_index_low: info.file_index_low,
                 },
-                dacl,
+                security,
             )))
         }
 
@@ -1412,6 +1663,11 @@ mod platform {
             &self,
             security_descriptor: *mut c_void,
         ) -> Result<File, ContainedFsError> {
+            let desired_access = if security_descriptor.is_null() {
+                GENERIC_WRITE | DELETE | SYNCHRONIZE
+            } else {
+                GENERIC_WRITE | READ_CONTROL | WRITE_OWNER | DELETE | SYNCHRONIZE
+            };
             let pid = std::process::id();
             for _ in 0..128 {
                 let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
@@ -1419,7 +1675,7 @@ mod platform {
                 match nt_create_relative(
                     self.handle.as_raw_handle(),
                     &name,
-                    GENERIC_WRITE | DELETE | SYNCHRONIZE,
+                    desired_access,
                     FILE_ATTRIBUTE_NORMAL,
                     0,
                     FILE_CREATE,
@@ -1567,15 +1823,16 @@ mod platform {
         Ok(())
     }
 
-    fn read_dacl_security_descriptor(
+    fn read_security_descriptor(
         handle: *mut c_void,
+        requested_information: u32,
     ) -> Result<Option<Vec<usize>>, ContainedFsError> {
         let mut needed: u32 = 0;
         // SAFETY: querying required buffer size with null output pointer.
         let ok = unsafe {
             GetKernelObjectSecurity(
                 handle,
-                DACL_SECURITY_INFORMATION,
+                requested_information,
                 std::ptr::null_mut(),
                 0,
                 &mut needed,
@@ -1602,7 +1859,7 @@ mod platform {
         let ok = unsafe {
             GetKernelObjectSecurity(
                 handle,
-                DACL_SECURITY_INFORMATION,
+                requested_information,
                 buffer.as_mut_ptr().cast::<c_void>(),
                 needed,
                 &mut needed,
@@ -1612,6 +1869,66 @@ mod platform {
             return Err(ContainedFsError::Io(io::Error::last_os_error()));
         }
         Ok(Some(buffer))
+    }
+
+    fn restore_windows_owner(
+        temp_handle: *mut c_void,
+        existing_sd: &mut [usize],
+    ) -> io::Result<()> {
+        let mut existing_owner: *mut c_void = std::ptr::null_mut();
+        let mut defaulted: i32 = 0;
+        // SAFETY: `existing_sd` is a valid security descriptor returned by `GetKernelObjectSecurity`.
+        if unsafe {
+            GetSecurityDescriptorOwner(
+                existing_sd.as_mut_ptr().cast::<c_void>(),
+                &mut existing_owner,
+                &mut defaulted,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        if existing_owner.is_null() {
+            return Ok(());
+        }
+        let mut temp_owner_sd = read_security_descriptor(temp_handle, OWNER_SECURITY_INFORMATION)
+            .map_err(ContainedFsError::into_io_error)?;
+        let owner_matches = if let Some(temp_sd) = temp_owner_sd.as_mut() {
+            let mut temp_owner: *mut c_void = std::ptr::null_mut();
+            let mut temp_defaulted: i32 = 0;
+            // SAFETY: `temp_sd` is a valid security descriptor returned by `GetKernelObjectSecurity`.
+            if unsafe {
+                GetSecurityDescriptorOwner(
+                    temp_sd.as_mut_ptr().cast::<c_void>(),
+                    &mut temp_owner,
+                    &mut temp_defaulted,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            !temp_owner.is_null() && unsafe { EqualSid(existing_owner, temp_owner) } != 0
+        } else {
+            false
+        };
+        if !owner_matches {
+            // SAFETY: `temp_handle` was opened with `WRITE_OWNER` and `existing_sd` contains the owner SID.
+            if unsafe {
+                SetKernelObjectSecurity(
+                    temp_handle,
+                    OWNER_SECURITY_INFORMATION,
+                    existing_sd.as_mut_ptr().cast::<c_void>(),
+                )
+            } == 0
+            {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("cannot preserve original Windows file owner on replacement: {error}"),
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn file_information(handle: *mut c_void) -> Result<ByHandleFileInformation, ContainedFsError> {
@@ -1948,6 +2265,52 @@ mod tests {
         assert!(
             stdout.contains("everyone allow read"),
             "expected preserved macOS ACL in `ls -le` output, got:\n{stdout}"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn clears_inherited_macos_acl_when_replacing_file_without_acl() {
+        use std::process::Command;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let status = Command::new("/bin/chmod")
+            .args(["+a", "everyone allow read,file_inherit"])
+            .arg(root.path())
+            .status()
+            .expect("invoke /bin/chmod +a on dir");
+        if !status.success() {
+            return;
+        }
+
+        let target = root.path().join("en.mjs");
+        fs::write(&target, "before").expect("seed file");
+        let clear = Command::new("/bin/chmod")
+            .args(["-N"])
+            .arg(&target)
+            .status()
+            .expect("invoke /bin/chmod -N on target");
+        assert!(clear.success(), "chmod -N must strip inherited ACL");
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        dir.write_file_atomically(
+            OsStr::new("en.mjs"),
+            b"after",
+            ContainedNewFileMode::RespectUmask,
+            ContainedWriteDurability::Rename,
+        )
+        .expect("atomic replacement clears inherited ACL");
+        assert_eq!(fs::read_to_string(&target).expect("read replaced"), "after");
+
+        let ls = Command::new("/bin/ls")
+            .args(["-le"])
+            .arg(&target)
+            .output()
+            .expect("invoke /bin/ls -le");
+        let stdout = String::from_utf8_lossy(&ls.stdout);
+        assert!(
+            !stdout.contains("everyone allow read"),
+            "inherited ACL must not survive when original file had no ACL:\n{stdout}"
         );
     }
 }

@@ -7,13 +7,16 @@ mod types;
 #[cfg(test)]
 mod tests;
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
 use ferrocat::{
-    CompileCatalogArtifactOptions, CompileSelectedCatalogArtifactOptions, CompiledCatalogIdIndex,
-    CompiledKeyStrategy, compile_catalog_artifact as ferrocat_compile_catalog_artifact,
+    CompileCatalogArtifactOptions, CompileCatalogArtifactReportOptions,
+    CompileSelectedCatalogArtifactOptions, CompiledCatalogIdIndex, CompiledKeyStrategy,
+    compile_catalog_artifact as ferrocat_compile_catalog_artifact,
+    compile_catalog_artifact_report as ferrocat_compile_catalog_artifact_report,
     compile_catalog_artifact_selected as ferrocat_compile_catalog_artifact_selected,
 };
 
@@ -378,12 +381,74 @@ pub fn compile_catalog_artifact(
 
     build_artifact_result(
         artifact,
-        Some(&prepared.loaded),
         prepared.watch_files,
         prepared.fallback_chain,
         request.config.pseudo_locale.as_deref(),
         &prepared.locale,
     )
+}
+
+/// Compiles a full catalog artifact together with source message identities
+/// derived directly from Ferrocat's compilation provenance report.
+///
+/// Callers that need source identities for cross-catalog conflict diagnostics
+/// (such as `pmds catalog compile --target js`) use this entry point without
+/// adding hashing overhead to ordinary artifact builds or re-reading the
+/// catalog from disk.
+///
+/// # Errors
+///
+/// Returns an error under the same conditions as [`compile_catalog_artifact`].
+pub fn compile_catalog_artifact_with_source_keys(
+    request: &CatalogArtifactRequest,
+) -> PalamedesResult<(
+    CatalogArtifactResult,
+    BTreeMap<String, CatalogArtifactSourceKey>,
+)> {
+    let prepared = prepare_compilation(&request.config, &request.resource_path)?;
+    let catalogs = prepared.loaded.values().collect::<Vec<_>>();
+    let ferrocat_fallback_chain = ferrocat_fallback_chain(
+        &prepared.fallback_chain,
+        &prepared.locale,
+        &request.config.source_locale,
+    );
+    let ferrocat_fallback_chain_refs = ferrocat_fallback_chain
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let icu_options = runtime_icu_options();
+    let artifact_options =
+        CompileCatalogArtifactOptions::new(&prepared.locale, &request.config.source_locale)
+            .with_fallback_chain(&ferrocat_fallback_chain_refs)
+            .with_key_strategy(CompiledKeyStrategy::FerrocatV1)
+            .with_source_fallback(true)
+            .with_icu_compatibility(true)
+            .with_icu_options(icu_options);
+    let report_options =
+        CompileCatalogArtifactReportOptions::new(&prepared.locale, &request.config.source_locale)
+            .with_options(artifact_options);
+
+    let report = ferrocat_compile_catalog_artifact_report(&catalogs, &report_options)
+        .map_err(PalamedesError::CompileCatalogArtifact)?;
+    let source_keys = report
+        .provenance
+        .messages
+        .into_iter()
+        .map(|row| {
+            (
+                row.key,
+                CatalogArtifactSourceKey::new(row.source_key.msgid, row.source_key.msgctxt),
+            )
+        })
+        .collect();
+    let artifact = build_artifact_result(
+        report.artifact,
+        prepared.watch_files,
+        prepared.fallback_chain,
+        request.config.pseudo_locale.as_deref(),
+        &prepared.locale,
+    )?;
+    Ok((artifact, source_keys))
 }
 
 /// Compiles a selected subset of runtime IDs for the requested locale.
@@ -473,7 +538,6 @@ pub(super) fn compile_selected_prepared(
 
     build_artifact_result(
         artifact,
-        None,
         prepared.watch_files.clone(),
         prepared.fallback_chain.clone(),
         request.config.pseudo_locale.as_deref(),

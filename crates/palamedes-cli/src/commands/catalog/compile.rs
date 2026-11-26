@@ -15,7 +15,7 @@ use clap::{Args, ValueEnum};
 use palamedes::{
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSourceKey,
     ContainedDir, ContainedNewFileMode, ContainedWriteDurability, FallbackLocales,
-    compile_catalog_artifact, is_valid_locale, render_catalog_module,
+    compile_catalog_artifact_with_source_keys, is_valid_locale, render_catalog_module,
 };
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
@@ -480,27 +480,28 @@ fn compile_js(
                 artifact_config.fallback_locales =
                     Some(FallbackLocales::Shared(fallback_locales.to_vec()));
             }
-            let artifact = match compile_catalog_artifact(&CatalogArtifactRequest {
-                config: artifact_config,
-                resource_path: resource_path.clone(),
-            }) {
-                Ok(artifact) => artifact,
-                // A catalog that does not parse or normalize, such as one with
-                // a duplicate msgid, is a diagnostic so `--json` reports it.
-                Err(error) => {
-                    diagnostics.push(CompileDiagnostic {
-                        severity: CatalogArtifactDiagnosticSeverity::Error,
-                        code: INVALID_CATALOG.to_owned(),
-                        message: error.to_string(),
-                        catalog_path: Some(resource_path.clone()),
-                        locale: Some(locale.clone()),
-                        requested_locale: Some(locale.clone()),
-                        source_key: None,
-                        conflicting_catalog_path: None,
-                    });
-                    continue;
-                }
-            };
+            let (artifact, source_keys) =
+                match compile_catalog_artifact_with_source_keys(&CatalogArtifactRequest {
+                    config: artifact_config,
+                    resource_path: resource_path.clone(),
+                }) {
+                    Ok(compiled) => compiled,
+                    // A catalog that does not parse or normalize, such as one with
+                    // a duplicate msgid, is a diagnostic so `--json` reports it.
+                    Err(error) => {
+                        diagnostics.push(CompileDiagnostic {
+                            severity: CatalogArtifactDiagnosticSeverity::Error,
+                            code: INVALID_CATALOG.to_owned(),
+                            message: error.to_string(),
+                            catalog_path: Some(resource_path.clone()),
+                            locale: Some(locale.clone()),
+                            requested_locale: Some(locale.clone()),
+                            source_key: None,
+                            conflicting_catalog_path: None,
+                        });
+                        continue;
+                    }
+                };
 
             let errors_before = diagnostics.len();
             for diagnostic in &artifact.diagnostics {
@@ -587,7 +588,7 @@ fn compile_js(
                             catalog_path: Some(resource_path.clone()),
                             locale: Some(locale.clone()),
                             requested_locale: Some(locale.clone()),
-                            source_key: artifact.source_keys.get(entry.key()).cloned(),
+                            source_key: source_keys.get(entry.key()).cloned(),
                             conflicting_catalog_path: Some(existing.catalog_path.clone()),
                         });
                     }

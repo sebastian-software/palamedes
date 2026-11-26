@@ -177,10 +177,6 @@ pub struct CatalogArtifactResult {
     /// Resolved locale chain used to build the artifact.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_locale_chain: Option<Vec<String>>,
-    /// Source identities keyed by compiled runtime ID from the in-memory
-    /// snapshot that produced this artifact.
-    #[serde(skip)]
-    pub source_keys: BTreeMap<String, CatalogArtifactSourceKey>,
 }
 
 /// Source identity for a catalog message.

@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use ferrocat::{
@@ -8,12 +7,10 @@ use ferrocat::{
 };
 
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::icu_text::{RUNTIME_ICU_SYNTAX_POLICY, compiled_message_key};
+use crate::icu_text::RUNTIME_ICU_SYNTAX_POLICY;
 
-use super::load::LocaleCatalogs;
 use super::types::{
     CatalogArtifactDiagnostic, CatalogArtifactMissingMessage, CatalogArtifactResult,
-    CatalogArtifactSourceKey,
 };
 
 /// ICU options that model the JS runtime parser
@@ -30,7 +27,6 @@ pub(super) fn runtime_icu_options() -> CompileCatalogArtifactIcuOptions {
 
 pub(super) fn build_artifact_result(
     artifact: ferrocat::CompiledCatalogArtifact,
-    source_catalogs: Option<&LocaleCatalogs>,
     watch_files: Vec<PathBuf>,
     fallback_chain: Vec<String>,
     pseudo_locale: Option<&str>,
@@ -45,26 +41,6 @@ pub(super) fn build_artifact_result(
     } else {
         artifact
     };
-
-    let mut source_keys = BTreeMap::new();
-    if let Some(loaded) = source_catalogs {
-        for chain_locale in &fallback_chain {
-            let Some(catalog) = loaded.get(chain_locale) else {
-                continue;
-            };
-            for message in &catalog.parsed_catalog().messages {
-                let compiled_id = compiled_message_key(&message.msgid, message.msgctxt.as_deref());
-                if artifact.messages.contains_key(&compiled_id) {
-                    source_keys.entry(compiled_id).or_insert_with(|| {
-                        CatalogArtifactSourceKey::new(
-                            message.msgid.clone(),
-                            message.msgctxt.clone(),
-                        )
-                    });
-                }
-            }
-        }
-    }
 
     Ok(CatalogArtifactResult {
         messages: artifact.messages,
@@ -83,7 +59,6 @@ pub(super) fn build_artifact_result(
             .map(CatalogArtifactDiagnostic::from)
             .collect(),
         resolved_locale_chain: Some(fallback_chain),
-        source_keys,
     })
 }
 
