@@ -1134,11 +1134,9 @@ function expandPatternCandidates(candidates, pattern, lookup, initialTruncated =
               truncated = true;
               continue;
             }
-            if (entry.unset) {
-              continue;
-            }
-            const nextText = `${builder.text}${literal}${entry.value}`;
-            const nextLine = isWholeToken ? entry.line : builder.line;
+            const nextValue = entry.unset ? "" : entry.value;
+            const nextText = `${builder.text}${literal}${nextValue}`;
+            const nextLine = isWholeToken && !entry.unset ? entry.line : builder.line;
             const bKey = `${nextLine}:${nextText}`;
             if (seenBuilder.has(bKey)) {
               continue;
@@ -2462,6 +2460,7 @@ function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTarge
 
   const subValueFlags =
     subcommand === "run" ? COMPOSE_RUN_VALUE_FLAGS : COMPOSE_SUBCOMMAND_VALUE_FLAGS;
+  let isPrintOnly = false;
   for (let i = cursor + 1; i < tokens.length; i += 1) {
     const redirConsumed = consumeShellRedirection(tokens, i, stdinRedirectTargets);
     if (redirConsumed > 0) {
@@ -2483,6 +2482,16 @@ function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTarge
     if (token === "--help" || token === "-h") {
       return { kind: "compose-noop" };
     }
+    if (subcommand === "build") {
+      if (token === "--print" || /^--print=(?:true|1)$/iu.test(token)) {
+        isPrintOnly = true;
+        continue;
+      }
+      if (/^--print=(?:false|0)$/iu.test(token)) {
+        isPrintOnly = false;
+        continue;
+      }
+    }
     if (token === "--dry-run" || /^--dry-run=(?:true|1)$/iu.test(token)) {
       isDryRun = true;
       continue;
@@ -2496,7 +2505,7 @@ function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTarge
     }
   }
 
-  if (isDryRun) {
+  if (isDryRun || isPrintOnly) {
     return { kind: "compose-noop" };
   }
 
@@ -7571,6 +7580,7 @@ function checkStepsList(
   defaultWorkingDir = null,
   emittedGithubEnv = null,
   eventNames = null,
+  finalStepEnvOut = null,
 ) {
   if (stepsNode?.kind !== "seq") {
     return;
@@ -7621,6 +7631,10 @@ function checkStepsList(
         ? applicableContexts.map((ctx) => ctx.row)
         : matrixRows;
     const perRowEmittedEnv = new Map();
+    const stepIdNode = getMapField(stepNode, "id");
+    const stepIdLower =
+      stepIdNode?.kind === "scalar" ? String(stepIdNode.value).trim().toLowerCase() : "";
+    const perRowEmittedOutput = new Map();
 
     const usesNode = getMapField(stepNode, "uses");
     const withNode = getMapField(stepNode, "with");
@@ -8638,8 +8652,10 @@ function checkStepsList(
               pushCompositeProblem(pinProblem);
             }
           }
+          const rowActionOutputs = [];
           for (const inputOverrides of inputCombinations) {
             const actionEmittedEnv = new Map();
+            const actionEmittedOutputs = stepIdLower ? new Map() : null;
             for (const actionProblem of unpinnedWorkflowContainerReferences(
               actionSource,
               actionRelPath,
@@ -8655,6 +8671,7 @@ function checkStepsList(
                 checkoutPrefixes: rowCheckoutPrefixes,
                 foreignCheckoutPrefixes: rowForeignPrefixes,
                 emittedGithubEnv: actionEmittedEnv,
+                emittedActionOutputs: actionEmittedOutputs,
                 callerEventNames: effectiveEventNames,
               },
             )) {
@@ -8671,6 +8688,24 @@ function checkStepsList(
               });
             }
             rowActionEmits.push(remappedEmits);
+            if (actionEmittedOutputs) {
+              const remappedOutputs = new Map();
+              for (const [outName, outRecord] of actionEmittedOutputs) {
+                remappedOutputs.set(outName, {
+                  conditional: outRecord.conditional,
+                  entries: outRecord.entries.map((entry) => ({
+                    ...entry,
+                    line: usesNode.line,
+                  })),
+                });
+              }
+              rowActionOutputs.push(remappedOutputs);
+            }
+          }
+          if (rowActionOutputs.some((emitted) => emitted.size > 0)) {
+            const existingRowOutputs = perRowEmittedOutput.get(row) ?? [];
+            existingRowOutputs.push(...rowActionOutputs);
+            perRowEmittedOutput.set(row, existingRowOutputs);
           }
         }
         if (rowActionEmits.some((emitted) => emitted.size > 0)) {
@@ -8695,10 +8730,6 @@ function checkStepsList(
     );
 
     const runNode = getMapField(stepNode, "run");
-    const stepIdNode = getMapField(stepNode, "id");
-    const stepIdLower =
-      stepIdNode?.kind === "scalar" ? String(stepIdNode.value).trim().toLowerCase() : "";
-    const perRowEmittedOutput = new Map();
     if (runNode?.kind === "scalar") {
       const seenAcrossStepRuns = new Set();
       for (const { shellMode, workingDir, rows } of executionGroups) {
@@ -8846,6 +8877,18 @@ function checkStepsList(
         if (entries.length > 0) {
           recordGithubEnvWrite(emittedGithubEnv, name, entries, meta.conditional);
         }
+      }
+    }
+  }
+  if (finalStepEnvOut) {
+    for (const row of allRows) {
+      const targetEnv = rowRunningEnvs.get(row);
+      if (!targetEnv) {
+        continue;
+      }
+      for (const [key, entries] of targetEnv) {
+        const existing = finalStepEnvOut.get(key) ?? [];
+        finalStepEnvOut.set(key, mergeVarEntries(existing, entries));
       }
     }
   }
@@ -9728,6 +9771,7 @@ export function unpinnedWorkflowContainerReferences(
     checkoutPrefixes = null,
     foreignCheckoutPrefixes = null,
     emittedGithubEnv = null,
+    emittedActionOutputs = null,
     callerEventNames = null,
   } = {},
 ) {
@@ -10119,6 +10163,7 @@ export function unpinnedWorkflowContainerReferences(
           deferUnresolvedInputs: !inputOverrides,
         };
       }
+      const compositeFinalEnv = emittedActionOutputs ? new Map() : null;
       checkStepsList(
         getMapField(effectiveRunsNode, "steps"),
         workflowEnv,
@@ -10130,7 +10175,39 @@ export function unpinnedWorkflowContainerReferences(
         actionBuildContext,
         workflowDefaultWorkingDir,
         emittedGithubEnv,
+        eventNames,
+        compositeFinalEnv,
       );
+      if (emittedActionOutputs) {
+        const outputsNode = getMapField(doc, "outputs");
+        const effectiveOutputsNode =
+          outputsNode && effectiveInputs.size > 0
+            ? substituteInputsInAstNode(outputsNode, effectiveInputs, actionMemo)
+            : outputsNode;
+        if (effectiveOutputsNode?.kind === "map") {
+          for (const [outputName, outputDefNode] of effectiveOutputsNode.value) {
+            if (outputDefNode?.kind !== "map") {
+              continue;
+            }
+            const valueNode = getMapField(outputDefNode, "value");
+            if (valueNode?.kind !== "scalar") {
+              continue;
+            }
+            const resolved = resolveEnvExpressionCandidates(
+              String(valueNode.value),
+              compositeFinalEnv ?? workflowEnv,
+              valueNode.line,
+            );
+            const sanitized = sanitizeGithubOutputEntries(
+              candidatesToVarEntries(resolved, valueNode.line),
+              "posix",
+            );
+            if (sanitized.length > 0) {
+              recordGithubEnvWrite(emittedActionOutputs, outputName, sanitized, false);
+            }
+          }
+        }
+      }
     }
 
     const jobsNode = applyWorkflowInputs(getMapField(doc, "jobs"));
@@ -11271,13 +11348,21 @@ export function checkWorkflowPins(root = process.cwd()) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
-  const { checked, containerFilesChecked, problems } = checkWorkflowPins();
+  const cliRoot = process.argv[2]
+    ? path.resolve(process.argv[2])
+    : path.resolve(import.meta.dirname, "..");
+  const { checked, containerFilesChecked, problems } = checkWorkflowPins(cliRoot);
 
   if (problems.length > 0) {
     console.error("Workflow actions and container images must be pinned to immutable digests:");
     for (const problem of problems) {
       console.error(`  ${problem}`);
     }
+    process.exit(1);
+  }
+
+  if (checked === 0 && containerFilesChecked === 0) {
+    console.error(`check-workflow-pins: no workflow or container files found under ${cliRoot}`);
     process.exit(1);
   }
 

@@ -1872,6 +1872,8 @@ describe("workflow contracts", () => {
           "          docker compose logs",
           "          docker compose config",
           "          docker compose --dry-run up",
+          "          docker compose build --print",
+          "          docker compose build --print=false",
           "          docker compose run --help",
           "          docker compose run --rm app --help",
           "          docker compose up -d",
@@ -1890,10 +1892,11 @@ describe("workflow contracts", () => {
       "<memory>:17: docker buildx bake target definitions cannot be verified statically for container image digests",
       "<memory>:18: docker buildx bake target definitions cannot be verified statically for container image digests",
       "<memory>:19: docker buildx bake target definitions cannot be verified statically for container image digests",
-      "<memory>:29: docker compose run target definitions cannot be verified statically for container image digests",
-      "<memory>:30: docker compose up target definitions cannot be verified statically for container image digests",
-      "<memory>:31: docker-compose pull target definitions cannot be verified statically for container image digests",
+      "<memory>:29: docker compose build target definitions cannot be verified statically for container image digests",
+      "<memory>:31: docker compose run target definitions cannot be verified statically for container image digests",
       "<memory>:32: docker compose up target definitions cannot be verified statically for container image digests",
+      "<memory>:33: docker-compose pull target definitions cannot be verified statically for container image digests",
+      "<memory>:34: docker compose up target definitions cannot be verified statically for container image digests",
     ]);
   });
 
@@ -3577,6 +3580,93 @@ describe("workflow contracts", () => {
       "<memory>:24: nginx:1.27 is not pinned to a sha256 digest",
       "<memory>:26: alpine is not pinned to a sha256 digest",
     ]);
+    // Conditional `GITHUB_ENV` writes preserve the unset branch (empty string)
+    // when expanded via `${{ env.* }}`, and local composite action
+    // `outputs.*.value` mappings propagate literal and step-output image refs
+    // to callers.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - if: github.ref == 'refs/heads/main'",
+          `        run: echo "SUFFIX=@${digest}" >> "$GITHUB_ENV"`,
+          "      - run: docker pull alpine:3.20${{ env.SUFFIX }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:7: alpine:3.20 is not pinned to a sha256 digest"]);
+    const r46Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r46-"));
+    try {
+      await mkdir(join(r46Fixture, ".github", "actions", "pick-image"), { recursive: true });
+      await mkdir(join(r46Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(
+        join(r46Fixture, ".github", "actions", "pick-image", "action.yml"),
+        [
+          "name: pick-image",
+          "outputs:",
+          "  literal_img:",
+          "    description: Literal tag",
+          "    value: redis:7",
+          "  step_img:",
+          "    description: Inner step output",
+          "    value: ${{ steps.inner.outputs.ref }}",
+          "runs:",
+          "  using: composite",
+          "  steps:",
+          "    - id: inner",
+          "      shell: bash",
+          '      run: echo "ref=caddy:2" >> "$GITHUB_OUTPUT"',
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r46Fixture, ".github", "workflows", "ci.yml"),
+        [
+          "on: push",
+          "jobs:",
+          "  run:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - id: pick",
+          "        uses: ./.github/actions/pick-image",
+          "      - run: |",
+          '          docker pull "${{ steps.pick.outputs.literal_img }}"',
+          '          docker pull "${{ steps.pick.outputs.step_img }}"',
+          "",
+        ].join("\n"),
+      );
+      expect(checkWorkflowPins(r46Fixture).problems).toEqual([
+        ".github/workflows/ci.yml:9: redis:7 is not pinned to a sha256 digest",
+        ".github/workflows/ci.yml:10: caddy:2 is not pinned to a sha256 digest",
+      ]);
+      // Running the pin-check CLI from a subdirectory resolves the repository
+      // root instead of passing an empty scan, while an explicit empty target
+      // directory exits non-zero.
+      const subDirRun = spawnSync(
+        process.execPath,
+        [resolve(repositoryRoot, "scripts/check-workflow-pins.mjs")],
+        { cwd: resolve(repositoryRoot, "packages/core"), encoding: "utf8" },
+      );
+      expect(subDirRun.status).toBe(0);
+      expect(subDirRun.stdout).toMatch(/check-workflow-pins: [1-9]\d* workflow files/u);
+      const emptyDir = await mkdtemp(join(tmpdir(), "palamedes-pins-empty-"));
+      try {
+        const emptyRun = spawnSync(
+          process.execPath,
+          [resolve(repositoryRoot, "scripts/check-workflow-pins.mjs"), emptyDir],
+          { cwd: repositoryRoot, encoding: "utf8" },
+        );
+        expect(emptyRun.status).toBe(1);
+        expect(emptyRun.stderr).toContain("no workflow or container files found");
+      } finally {
+        await rm(emptyDir, { recursive: true, force: true });
+      }
+    } finally {
+      await rm(r46Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
