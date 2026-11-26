@@ -2638,6 +2638,94 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r31Fixture, { recursive: true, force: true });
     }
+    // Double-quoted `sh -c "..."` expands unescaped variables in the parent
+    // shell before command-local prefix assignments take effect while preserving
+    // escaped `\$VAR` for the child shell; `actions/checkout` with a different
+    // `ref:` does not map to the current working tree; and local reusable
+    // workflows resolve call-site `with:` inputs and `workflow_call` defaults.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          "  - run: |",
+          `      IMAGE=node:24@${digest}`,
+          '      IMAGE=busybox sh -c "docker pull $IMAGE"',
+          '      IMAGE=alpine:3.20 sh -c "docker pull \\$IMAGE"',
+          "      LOCAL=redis:7",
+          '      sh -c "docker pull $LOCAL"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:5: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:7: redis:7 is not pinned to a sha256 digest",
+    ]);
+    const r32Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r32-"));
+    try {
+      await mkdir(join(r32Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(join(r32Fixture, "Containerfile"), `FROM node:24@${digest}\n`);
+      await writeFile(
+        join(r32Fixture, ".github", "workflows", "reusable.yml"),
+        [
+          "on:",
+          "  workflow_call:",
+          "    inputs:",
+          "      image:",
+          "        required: true",
+          "        type: string",
+          "      fallback:",
+          "        type: string",
+          "        default: busybox:1.37",
+          "jobs:",
+          "  run:",
+          "    runs-on: ubuntu-24.04",
+          "    container: ${{ inputs.image }}",
+          "    steps:",
+          "      - run: docker pull ${{ inputs.fallback }}",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r32Fixture, ".github", "workflows", "caller-and-ref.yml"),
+        [
+          "jobs:",
+          "  call-reusable:",
+          "    uses: ./.github/workflows/reusable.yml",
+          "    with:",
+          "      image: alpine:3.20",
+          "  tag-checkout:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7",
+          "        with:",
+          "          ref: v1.0.0",
+          "      - run: docker build -f Containerfile .",
+          "  mixed-checkout:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7",
+          "        with:",
+          "          ref: ${{ github.sha }}",
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7",
+          "        with:",
+          "          ref: v1.0.0",
+          "          path: release",
+          "      - run: |",
+          "          docker build -f Containerfile .",
+          "          docker build -f release/Containerfile release",
+          "",
+        ].join("\n"),
+      );
+      const r32Result = checkWorkflowPins(r32Fixture);
+      expect(r32Result.problems).toEqual([
+        ".github/workflows/reusable.yml:13: alpine:3.20 is not pinned to a sha256 digest",
+        ".github/workflows/reusable.yml:15: busybox:1.37 is not pinned to a sha256 digest",
+        ".github/workflows/caller-and-ref.yml:12: build file Containerfile cannot be verified statically",
+        ".github/workflows/caller-and-ref.yml:25: build file release/Containerfile cannot be verified statically",
+      ]);
+    } finally {
+      await rm(r32Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

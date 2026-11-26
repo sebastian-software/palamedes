@@ -2068,12 +2068,14 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   let tokens = [];
   let tokenSingleQuoted = [];
   let tokenQuoted = [];
+  let tokenEscapedDollarOffsets = [];
   let commandSubstitutions = [];
   let commandLine = startLine;
   let commandConditional = false;
   let commandHasStdinHeredoc = false;
   let nextConditional = false;
   let current = "";
+  let currentEscapedDollarOffsets = [];
   let tokenStarted = false;
   let currentHasUnquotedOrDoubleQuoted = false;
   let currentSawSingleQuote = false;
@@ -2114,7 +2116,9 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       tokens.push(current);
       tokenSingleQuoted.push(currentSawSingleQuote && !currentHasUnquotedOrDoubleQuoted);
       tokenQuoted.push(currentSawAnyQuote);
+      tokenEscapedDollarOffsets.push(currentEscapedDollarOffsets);
       current = "";
+      currentEscapedDollarOffsets = [];
       tokenStarted = false;
       currentHasUnquotedOrDoubleQuoted = false;
       currentSawSingleQuote = false;
@@ -2130,6 +2134,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         tokens,
         tokenSingleQuoted,
         tokenQuoted,
+        tokenEscapedDollarOffsets,
         lineNumber: commandLine,
         conditional: commandConditional,
         hasStdinHeredoc: commandHasStdinHeredoc,
@@ -2138,6 +2143,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       tokens = [];
       tokenSingleQuoted = [];
       tokenQuoted = [];
+      tokenEscapedDollarOffsets = [];
       commandSubstitutions = [];
       commandConditional = false;
       commandHasStdinHeredoc = false;
@@ -2266,6 +2272,9 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         continue;
       }
       markTokenStart();
+      if (ch === "$") {
+        currentEscapedDollarOffsets.push(current.length);
+      }
       current += ch;
       continue;
     }
@@ -2318,6 +2327,9 @@ function lexShellScript(text, startLine, shellMode = "posix") {
           quote = null;
         }
       } else {
+        if (ch === "$") {
+          currentEscapedDollarOffsets.push(current.length);
+        }
         current += ch;
       }
       continue;
@@ -2937,7 +2949,7 @@ function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
   return candidates.length > 0 ? candidates : [{ text: rawText, line: fallbackLine }];
 }
 
-function extractShellDashCScriptInfo(tokens, tokenSingleQuoted, cursor) {
+function extractShellDashCScriptInfo(tokens, tokenSingleQuoted, tokenEscapedDollarOffsets, cursor) {
   let sawDashC = false;
   for (let index = cursor + 1; index < tokens.length; index += 1) {
     const token = tokens[index];
@@ -2948,6 +2960,7 @@ function extractShellDashCScriptInfo(tokens, tokenSingleQuoted, cursor) {
       return {
         script: tokens[index + 1],
         singleQuoted: Boolean(tokenSingleQuoted?.[index + 1]),
+        escapedDollarOffsets: tokenEscapedDollarOffsets?.[index + 1] ?? [],
       };
     }
     if (token === "-o" || token === "+o" || token === "-O" || token === "+O") {
@@ -2972,9 +2985,44 @@ function extractShellDashCScriptInfo(tokens, tokenSingleQuoted, cursor) {
     if (/^\+[A-Za-z]+$/u.test(token)) {
       continue;
     }
-    return sawDashC ? { script: token, singleQuoted: Boolean(tokenSingleQuoted?.[index]) } : null;
+    return sawDashC
+      ? {
+          script: token,
+          singleQuoted: Boolean(tokenSingleQuoted?.[index]),
+          escapedDollarOffsets: tokenEscapedDollarOffsets?.[index] ?? [],
+        }
+      : null;
   }
   return null;
+}
+
+function expandParentDoubleQuotedScript(
+  script,
+  escapedDollarOffsets,
+  stepEnv,
+  parentVars,
+  lineNumber,
+  shellMode,
+) {
+  const ESCAPED_DOLLAR_SENTINEL = "\uE000";
+  let masked = script;
+  if (escapedDollarOffsets.length > 0) {
+    const offsetSet = new Set(escapedDollarOffsets);
+    let rebuilt = "";
+    for (let index = 0; index < script.length; index += 1) {
+      rebuilt +=
+        script[index] === "$" && offsetSet.has(index) ? ESCAPED_DOLLAR_SENTINEL : script[index];
+    }
+    masked = rebuilt;
+  }
+  const expanded = resolveImageTokenCandidates(masked, stepEnv, parentVars, lineNumber, shellMode);
+  return {
+    truncated: expanded.truncated,
+    candidates: expanded.candidates.map((candidate) => ({
+      ...candidate,
+      text: candidate.text.replaceAll(ESCAPED_DOLLAR_SENTINEL, "$"),
+    })),
+  };
 }
 
 function parseGithubEnvPayload(lines, startLine) {
@@ -3484,14 +3532,34 @@ function mapWorkspacePathToRepo(wsRelPath, root, checkoutPrefix = "") {
   return null;
 }
 
-function resolveWorkspaceTargetsInRepo(wsRelPath, root, checkoutPrefixes = [""]) {
+function matchesWorkspacePrefix(wsRelPath, prefix) {
+  return !prefix || wsRelPath === prefix || wsRelPath.startsWith(`${prefix}/`);
+}
+
+function resolveWorkspaceTargetsInRepo(
+  wsRelPath,
+  root,
+  checkoutPrefixes = null,
+  foreignPrefixes = null,
+) {
   if (wsRelPath === null || wsRelPath === undefined || !root) {
     return [];
   }
   const results = [];
   const seen = new Set();
-  const prefixes = checkoutPrefixes && checkoutPrefixes.length > 0 ? checkoutPrefixes : [""];
+  const prefixes = checkoutPrefixes === null ? [""] : checkoutPrefixes;
+  const blocked = foreignPrefixes ?? [];
   for (const prefix of prefixes) {
+    if (!matchesWorkspacePrefix(wsRelPath, prefix)) {
+      continue;
+    }
+    const shadowedByForeign = blocked.some(
+      (foreignPrefix) =>
+        matchesWorkspacePrefix(wsRelPath, foreignPrefix) && foreignPrefix.length >= prefix.length,
+    );
+    if (shadowedByForeign) {
+      continue;
+    }
     const mapped = mapWorkspacePathToRepo(wsRelPath, root, prefix);
     if (mapped && !seen.has(mapped)) {
       seen.add(mapped);
@@ -4101,6 +4169,9 @@ function inspectShellText(
       ? event.tokenSingleQuoted.slice(peeledCount)
       : [];
     const peeledQuoted = event.tokenQuoted ? event.tokenQuoted.slice(peeledCount) : [];
+    const peeledEscapedDollarOffsets = event.tokenEscapedDollarOffsets
+      ? event.tokenEscapedDollarOffsets.slice(peeledCount)
+      : [];
     if (tokens.length === 0 || tokens[0].startsWith("#")) {
       continue;
     }
@@ -4773,11 +4844,13 @@ function inspectShellText(
     };
 
     if (SHELL_INTERPRETERS.has(normalizedCli)) {
-      const dashCInfo = extractShellDashCScriptInfo(tokens, peeledSingleQuoted, cursor);
+      const dashCInfo = extractShellDashCScriptInfo(
+        tokens,
+        peeledSingleQuoted,
+        peeledEscapedDollarOffsets,
+        cursor,
+      );
       if (dashCInfo) {
-        // Single-quoted `sh -c '...'` receives only exported/prefixed variables;
-        // unquoted/double-quoted `sh -c "..."` is expanded by the parent shell first.
-        const childVars = dashCInfo.singleQuoted ? exportedCommandVars : commandVars;
         let childRowCwds = cloneRowCwds(frame.rowCwds);
         let childRowCwdsTruncated = new Set(frame.rowCwdsTruncated);
         if (wrapperChdirs.length > 0 && buildFileContext) {
@@ -4792,26 +4865,59 @@ function inspectShellText(
             }
           }
         }
-        inspectShellText(
-          dashCInfo.script,
-          lineNumber,
-          sourceLines,
-          dashCInfo.singleQuoted ? childStepEnv : stepEnv,
-          childVars,
-          matrixRows,
-          filePath,
-          problems,
-          emittedGithubEnv,
-          "posix",
-          depth + 1,
-          buildFileContext
-            ? {
-                ...buildFileContext,
-                rowCwds: childRowCwds,
-                rowCwdsTruncated: childRowCwdsTruncated,
-              }
-            : null,
-        );
+        const childBuildContext = buildFileContext
+          ? {
+              ...buildFileContext,
+              rowCwds: childRowCwds,
+              rowCwdsTruncated: childRowCwdsTruncated,
+            }
+          : null;
+        // Single-quoted `sh -c '...'` is passed verbatim to the child shell,
+        // which sees only exported/prefixed variables. Double-quoted/unquoted
+        // `sh -c "..."` is expanded first in the parent shell's environment
+        // (before command-local prefix assignments take effect), then the
+        // resulting script executes in the child shell's exported environment.
+        let childScripts = [dashCInfo.script];
+        if (!dashCInfo.singleQuoted) {
+          const parentExpanded = expandParentDoubleQuotedScript(
+            dashCInfo.script,
+            dashCInfo.escapedDollarOffsets,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          if (parentExpanded.truncated) {
+            problems.push(
+              `${filePath}:${lineNumber}: ${dashCInfo.script} exceeds expansion limit and cannot be verified exhaustively`,
+            );
+          }
+          childScripts = [...new Set(parentExpanded.candidates.map((candidate) => candidate.text))];
+        }
+        const seenChildProblems = new Set();
+        for (const childScript of childScripts) {
+          const scriptProblems = [];
+          inspectShellText(
+            childScript,
+            lineNumber,
+            sourceLines,
+            childStepEnv,
+            exportedCommandVars,
+            matrixRows,
+            filePath,
+            scriptProblems,
+            emittedGithubEnv,
+            "posix",
+            depth + 1,
+            childBuildContext,
+          );
+          for (const message of scriptProblems) {
+            if (!seenChildProblems.has(message)) {
+              seenChildProblems.add(message);
+              problems.push(message);
+            }
+          }
+        }
       }
       continue;
     }
@@ -5247,6 +5353,7 @@ function inspectShellText(
                       wsRel,
                       buildFileContext.root,
                       buildFileContext.checkoutPrefixes,
+                      buildFileContext.foreignCheckoutPrefixes,
                     ).filter((target) => target !== path.resolve(buildFileContext.root));
                     if (mappedTargets.length === 0) {
                       pushStdinProblem(
@@ -5379,6 +5486,7 @@ function inspectShellText(
                   wsRel,
                   buildFileContext.root,
                   buildFileContext.checkoutPrefixes,
+                  buildFileContext.foreignCheckoutPrefixes,
                 ).filter((target) => target !== path.resolve(buildFileContext.root));
                 if (mappedTargets.length === 0) {
                   const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
@@ -5451,6 +5559,7 @@ function inspectShellText(
                     wsCtx,
                     buildFileContext.root,
                     buildFileContext.checkoutPrefixes,
+                    buildFileContext.foreignCheckoutPrefixes,
                   );
                   if (mappedCtxs.length > 0) {
                     for (const resolvedCtx of mappedCtxs) {
@@ -5480,6 +5589,7 @@ function inspectShellText(
                 activeWorkingDir,
                 buildFileContext.root,
                 buildFileContext.checkoutPrefixes,
+                buildFileContext.foreignCheckoutPrefixes,
               )) {
                 if (!seenContextDirs.has(resolvedCtx)) {
                   seenContextDirs.add(resolvedCtx);
@@ -6203,15 +6313,20 @@ function checkStepsList(
   const allRows = matrixRows.length > 0 ? matrixRows : [null];
   const rowRunningEnvs = new Map();
   const rowCheckoutPaths = new Map();
+  const rowForeignCheckoutPaths = new Map();
   const rowHasExplicitCheckout = new Set();
   const rowWrittenEnvKeys = new Map();
   const initialCheckoutPrefixes =
-    buildFileContext?.checkoutPrefixes && buildFileContext.checkoutPrefixes.length > 0
+    buildFileContext?.checkoutPrefixes !== undefined && buildFileContext?.checkoutPrefixes !== null
       ? [...buildFileContext.checkoutPrefixes]
       : [""];
+  const initialForeignPrefixes = Array.isArray(buildFileContext?.foreignCheckoutPrefixes)
+    ? [...buildFileContext.foreignCheckoutPrefixes]
+    : [];
   for (const row of allRows) {
     rowRunningEnvs.set(row, cloneVarMap(baseEnv));
     rowCheckoutPaths.set(row, [...initialCheckoutPrefixes]);
+    rowForeignCheckoutPaths.set(row, [...initialForeignPrefixes]);
     rowWrittenEnvKeys.set(row, new Map());
   }
   for (const stepNode of stepsNode.value) {
@@ -6222,6 +6337,8 @@ function checkStepsList(
     const getRowStepEnv = (row) => extractEnvMap(stepEnvNode, rowRunningEnvs.get(row) ?? baseEnv);
     const getRowCheckoutPrefixes = (row) =>
       rowCheckoutPaths.get(row) ?? [...initialCheckoutPrefixes];
+    const getRowForeignPrefixes = (row) =>
+      rowForeignCheckoutPaths.get(row) ?? [...initialForeignPrefixes];
     const stepIfNode = getMapField(stepNode, "if");
     const stepConditional = stepIfNode !== null;
     const stepShellNode = getMapField(stepNode, "shell");
@@ -6240,6 +6357,7 @@ function checkStepsList(
       /^actions\/checkout@/iu.test(String(usesNode.value).trim())
     ) {
       const repoNode = getMapField(withNode, "repository");
+      const refNode = getMapField(withNode, "ref");
       const pathNode = getMapField(withNode, "path");
       const checkoutRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
       for (const row of checkoutRows) {
@@ -6256,13 +6374,32 @@ function checkStepsList(
             ).candidates.flatMap((envCandidate) =>
               expandMatrixReferences(envCandidate.text, rowList, envCandidate.line),
             );
-            checksOutCurrentRepo = expandedRepos.some((candidate) =>
-              /^\$\{\{\s*github\.repository\s*\}\}$/iu.test(candidate.text.trim()),
-            );
+            checksOutCurrentRepo =
+              expandedRepos.length > 0 &&
+              expandedRepos.every((candidate) =>
+                /^\$\{\{\s*github\.repository\s*\}\}$/iu.test(candidate.text.trim()),
+              );
           }
         }
-        if (!checksOutCurrentRepo) {
-          continue;
+        let checksOutCurrentRef = true;
+        if (refNode?.kind === "scalar") {
+          const rawRef = String(refNode.value).trim();
+          if (rawRef) {
+            const expandedRefs = resolveEnvExpressionCandidates(
+              rawRef,
+              rowStepEnv,
+              refNode.line,
+            ).candidates.flatMap((envCandidate) =>
+              expandMatrixReferences(envCandidate.text, rowList, envCandidate.line),
+            );
+            checksOutCurrentRef =
+              expandedRefs.length > 0 &&
+              expandedRefs.every((candidate) =>
+                /^\$\{\{\s*(?:github\.sha|github\.ref|github\.ref_name|github\.head_ref)\s*\}\}$/iu.test(
+                  candidate.text.trim(),
+                ),
+              );
+          }
         }
         const nextPrefixes = [];
         const seenNext = new Set();
@@ -6288,25 +6425,69 @@ function checkStepsList(
         } else {
           nextPrefixes.push("");
         }
-        if (nextPrefixes.length === 0) {
-          continue;
-        }
         const existingPrefixes = getRowCheckoutPrefixes(row);
-        if (!stepConditional && !rowHasExplicitCheckout.has(row)) {
-          rowCheckoutPaths.set(row, nextPrefixes);
-          rowHasExplicitCheckout.add(row);
-        } else {
-          const merged = [...existingPrefixes];
-          const seenMerged = new Set(merged);
-          for (const prefix of nextPrefixes) {
-            if (!seenMerged.has(prefix)) {
-              seenMerged.add(prefix);
-              merged.push(prefix);
+        const existingForeign = getRowForeignPrefixes(row);
+        const isCurrentTreeCheckout = checksOutCurrentRepo && checksOutCurrentRef;
+        if (isCurrentTreeCheckout) {
+          if (nextPrefixes.length === 0) {
+            if (!stepConditional && !rowHasExplicitCheckout.has(row)) {
+              rowCheckoutPaths.set(row, []);
+              rowHasExplicitCheckout.add(row);
+            }
+            continue;
+          }
+          if (!stepConditional && !rowHasExplicitCheckout.has(row)) {
+            rowCheckoutPaths.set(row, nextPrefixes);
+            rowHasExplicitCheckout.add(row);
+          } else {
+            const merged = [...existingPrefixes];
+            const seenMerged = new Set(merged);
+            for (const prefix of nextPrefixes) {
+              if (!seenMerged.has(prefix)) {
+                seenMerged.add(prefix);
+                merged.push(prefix);
+              }
+            }
+            rowCheckoutPaths.set(row, merged);
+            if (!stepConditional) {
+              rowHasExplicitCheckout.add(row);
             }
           }
-          rowCheckoutPaths.set(row, merged);
+          if (!stepConditional && existingForeign.length > 0) {
+            rowForeignCheckoutPaths.set(
+              row,
+              existingForeign.filter(
+                (foreignPrefix) =>
+                  !nextPrefixes.some((prefix) => matchesWorkspacePrefix(foreignPrefix, prefix)),
+              ),
+            );
+          }
+        } else {
+          const foreignTargets = nextPrefixes.length > 0 ? nextPrefixes : [""];
+          const mergedForeign = [...existingForeign];
+          const seenForeign = new Set(mergedForeign);
+          for (const prefix of foreignTargets) {
+            if (!seenForeign.has(prefix)) {
+              seenForeign.add(prefix);
+              mergedForeign.push(prefix);
+            }
+          }
+          rowForeignCheckoutPaths.set(row, mergedForeign);
           if (!stepConditional) {
-            rowHasExplicitCheckout.add(row);
+            if (!rowHasExplicitCheckout.has(row)) {
+              rowCheckoutPaths.set(row, []);
+              rowHasExplicitCheckout.add(row);
+            } else {
+              rowCheckoutPaths.set(
+                row,
+                existingPrefixes.filter(
+                  (prefix) =>
+                    !foreignTargets.some((foreignPrefix) =>
+                      matchesWorkspacePrefix(prefix, foreignPrefix),
+                    ),
+                ),
+              );
+            }
           }
         }
       }
@@ -6530,6 +6711,7 @@ function checkStepsList(
         // subdirectory while local builds translate through the active checkout
         // path for the current repository.
         const rowCheckoutPrefixes = getRowCheckoutPrefixes(row);
+        const rowForeignPrefixes = getRowForeignPrefixes(row);
         const resolvedContexts = [];
         const seenContexts = new Set();
         let hadExplicitContext = false;
@@ -6594,6 +6776,7 @@ function checkStepsList(
                   wsDir,
                   buildFileContext.root,
                   rowCheckoutPrefixes,
+                  rowForeignPrefixes,
                 );
                 if (mappedDirs.length > 0) {
                   for (const resolvedDir of mappedDirs) {
@@ -6672,6 +6855,7 @@ function checkStepsList(
                       wsFile,
                       buildFileContext.root,
                       rowCheckoutPrefixes,
+                      rowForeignPrefixes,
                     ).filter((target) => target !== path.resolve(buildFileContext.root));
                   }
                   if (mappedPaths.length === 0) {
@@ -6777,6 +6961,7 @@ function checkStepsList(
         const rowStepEnv = getRowStepEnv(row);
         const rowList = row ? [row] : [];
         const rowCheckoutPrefixes = getRowCheckoutPrefixes(row);
+        const rowForeignPrefixes = getRowForeignPrefixes(row);
         const usesCandidates = resolveEnvExpressionCandidates(
           rawLocalUses,
           rowStepEnv,
@@ -6797,6 +6982,7 @@ function checkStepsList(
             wsActionDir,
             buildFileContext.root,
             rowCheckoutPrefixes,
+            rowForeignPrefixes,
           );
           for (const actionDir of actionDirs) {
             for (const manifestName of ["action.yml", "action.yaml"]) {
@@ -6925,6 +7111,7 @@ function checkStepsList(
                 actionCallStack: nextCallStack,
                 checkedLocalActionPins,
                 checkoutPrefixes: rowCheckoutPrefixes,
+                foreignCheckoutPrefixes: rowForeignPrefixes,
                 emittedGithubEnv: actionEmittedEnv,
               },
             )) {
@@ -6974,6 +7161,7 @@ function checkStepsList(
                 ...buildFileContext,
                 workingDir,
                 checkoutPrefixes: getRowCheckoutPrefixes(row),
+                foreignCheckoutPrefixes: getRowForeignPrefixes(row),
               }
             : null;
           const rowProblems = [];
@@ -7341,6 +7529,104 @@ function substituteInputsInAstNode(node, inputValues) {
   return node;
 }
 
+function extractWorkflowCallInputDefaults(doc) {
+  const defaults = new Map();
+  const onNode = getMapField(doc, "on");
+  if (onNode?.kind !== "map") {
+    return defaults;
+  }
+  const wfCallNode = getMapField(onNode, "workflow_call");
+  if (wfCallNode?.kind !== "map") {
+    return defaults;
+  }
+  const inputsNode = getMapField(wfCallNode, "inputs");
+  if (inputsNode?.kind !== "map") {
+    return defaults;
+  }
+  for (const [inputName, defNode] of inputsNode.value) {
+    if (defNode?.kind !== "map") {
+      continue;
+    }
+    const defaultNode = getMapField(defNode, "default");
+    if (defaultNode?.kind === "scalar") {
+      defaults.set(inputName.toLowerCase(), {
+        value: String(defaultNode.value),
+        line: defaultNode.line,
+      });
+    }
+  }
+  return defaults;
+}
+
+function expandWithInputCombinations(
+  withNode,
+  envMap,
+  rowList,
+  filePath,
+  fallbackLine,
+  pushProblem,
+) {
+  const withEntries = [];
+  if (withNode?.kind === "map") {
+    for (const [inputKey, inputNode] of withNode.value) {
+      if (inputNode?.kind !== "scalar") {
+        continue;
+      }
+      const rawInput = String(inputNode.value);
+      const expandedInput = resolveEnvExpressionCandidates(rawInput, envMap, inputNode.line);
+      if (expandedInput.truncated) {
+        pushProblem(
+          `${filePath}:${inputNode.line}: ${rawInput} exceeds expansion limit and cannot be verified exhaustively`,
+        );
+      }
+      const values = [];
+      const seenValues = new Set();
+      for (const envCandidate of expandedInput.candidates) {
+        for (const candidate of expandMatrixReferences(
+          envCandidate.text,
+          rowList,
+          envCandidate.line,
+        )) {
+          if (!seenValues.has(candidate.text)) {
+            seenValues.add(candidate.text);
+            values.push({ value: candidate.text, line: candidate.line });
+          }
+        }
+      }
+      if (values.length > 0) {
+        withEntries.push([inputKey.toLowerCase(), values]);
+      }
+    }
+  }
+
+  let combinations = [new Map()];
+  let truncated = false;
+  for (const [inputKey, values] of withEntries) {
+    const nextCombos = [];
+    for (const combo of combinations) {
+      for (const entry of values) {
+        if (nextCombos.length >= MAX_TOKEN_EXPANSIONS) {
+          truncated = true;
+          break;
+        }
+        const clone = new Map(combo);
+        clone.set(inputKey, entry);
+        nextCombos.push(clone);
+      }
+      if (truncated) {
+        break;
+      }
+    }
+    combinations = nextCombos;
+  }
+  if (truncated) {
+    pushProblem(
+      `${filePath}:${fallbackLine}: reusable workflow input combinations exceed expansion limit and cannot be verified exhaustively`,
+    );
+  }
+  return combinations;
+}
+
 export function unpinnedWorkflowContainerReferences(
   source,
   filePath = "<memory>",
@@ -7353,6 +7639,7 @@ export function unpinnedWorkflowContainerReferences(
     actionCallStack = null,
     checkedLocalActionPins = null,
     checkoutPrefixes = null,
+    foreignCheckoutPrefixes = null,
     emittedGithubEnv = null,
   } = {},
 ) {
@@ -7380,7 +7667,12 @@ export function unpinnedWorkflowContainerReferences(
         actionCallStack: initialCallStack,
         checkedLocalActionPins: checkedLocalActionPins ?? new Set(),
         checkoutPrefixes:
-          checkoutPrefixes && checkoutPrefixes.length > 0 ? [...checkoutPrefixes] : [""],
+          checkoutPrefixes !== undefined && checkoutPrefixes !== null
+            ? [...checkoutPrefixes]
+            : [""],
+        foreignCheckoutPrefixes: Array.isArray(foreignCheckoutPrefixes)
+          ? [...foreignCheckoutPrefixes]
+          : [],
       }
     : null;
 
@@ -7404,8 +7696,19 @@ export function unpinnedWorkflowContainerReferences(
     return problems;
   }
 
+  const effectiveWorkflowInputs = extractWorkflowCallInputDefaults(doc);
+  if (inputOverrides) {
+    for (const [key, entry] of inputOverrides) {
+      effectiveWorkflowInputs.set(key.toLowerCase(), entry);
+    }
+  }
+  const applyWorkflowInputs = (node) =>
+    effectiveWorkflowInputs.size > 0
+      ? substituteInputsInAstNode(node, effectiveWorkflowInputs)
+      : node;
+
   const baseEnv = callerEnv ? cloneVarMap(callerEnv) : new Map();
-  const workflowEnv = extractEnvMap(getMapField(doc, "env"), baseEnv);
+  const workflowEnv = extractEnvMap(applyWorkflowInputs(getMapField(doc, "env")), baseEnv);
   const workflowDefaultShell = extractDefaultShell(doc);
   const workflowDefaultWorkingDir = extractDefaultWorkingDirectory(doc);
 
@@ -7429,11 +7732,17 @@ export function unpinnedWorkflowContainerReferences(
     }
   };
 
-  checkContainerNode(getMapField(doc, "container"), workflowEnv, []);
-  checkServicesNode(getMapField(doc, "services"), workflowEnv, []);
-  checkImageField(getMapField(doc, "image"), workflowEnv, [], filePath, problems);
+  checkContainerNode(applyWorkflowInputs(getMapField(doc, "container")), workflowEnv, []);
+  checkServicesNode(applyWorkflowInputs(getMapField(doc, "services")), workflowEnv, []);
+  checkImageField(
+    applyWorkflowInputs(getMapField(doc, "image")),
+    workflowEnv,
+    [],
+    filePath,
+    problems,
+  );
   checkStepsList(
-    getMapField(doc, "steps"),
+    applyWorkflowInputs(getMapField(doc, "steps")),
     workflowEnv,
     [],
     filePath,
@@ -7480,7 +7789,7 @@ export function unpinnedWorkflowContainerReferences(
     );
   }
 
-  const jobsNode = getMapField(doc, "jobs");
+  const jobsNode = applyWorkflowInputs(getMapField(doc, "jobs"));
   if (jobsNode?.kind === "map") {
     for (const jobNode of jobsNode.value.values()) {
       if (jobNode?.kind !== "map") {
@@ -7488,6 +7797,88 @@ export function unpinnedWorkflowContainerReferences(
       }
       const jobEnv = extractEnvMap(getMapField(jobNode, "env"), workflowEnv);
       const jobMatrixRows = extractJobMatrixRows(jobNode, filePath, problems);
+      const jobUsesNode = getMapField(jobNode, "uses");
+      if (
+        jobUsesNode?.kind === "scalar" &&
+        String(jobUsesNode.value).trim().startsWith("./") &&
+        buildFileContext?.root
+      ) {
+        const rawJobUses = String(jobUsesNode.value).trim();
+        const jobWithNode = getMapField(jobNode, "with");
+        const callRows = jobMatrixRows.length > 0 ? jobMatrixRows : [null];
+        const seenCalleeProblems = new Set();
+        const pushCalleeProblem = (message) => {
+          if (!seenCalleeProblems.has(message)) {
+            seenCalleeProblems.add(message);
+            problems.push(message);
+          }
+        };
+        const resolvedWorkflowPath = resolveContainedPath(
+          rawJobUses,
+          buildFileContext.root,
+          buildFileContext.root,
+        );
+        if (resolvedWorkflowPath) {
+          const targetProblems = [];
+          const safeWorkflowFile = resolveSafeContainerFile(
+            resolvedWorkflowPath,
+            buildFileContext.root,
+            targetProblems,
+          );
+          for (const targetProblem of targetProblems) {
+            pushCalleeProblem(targetProblem);
+          }
+          const activeCallStack = buildFileContext.actionCallStack ?? new Set();
+          if (
+            safeWorkflowFile &&
+            !activeCallStack.has(safeWorkflowFile) &&
+            activeCallStack.size < 8
+          ) {
+            const nextCallStack = new Set(activeCallStack);
+            nextCallStack.add(safeWorkflowFile);
+            const calleeSource = readFileSync(safeWorkflowFile, "utf8");
+            const calleeRelPath = formatPortableRelativePath(
+              buildFileContext.root,
+              safeWorkflowFile,
+            );
+            const checkedLocalActionPins = buildFileContext.checkedLocalActionPins ?? new Set();
+            if (!checkedLocalActionPins.has(safeWorkflowFile)) {
+              checkedLocalActionPins.add(safeWorkflowFile);
+              for (const pinProblem of unpinnedActionReferences(calleeSource, calleeRelPath)) {
+                pushCalleeProblem(pinProblem);
+              }
+            }
+            for (const row of callRows) {
+              const rowList = row ? [row] : [];
+              const calleeInputCombos = expandWithInputCombinations(
+                jobWithNode,
+                jobEnv,
+                rowList,
+                filePath,
+                jobUsesNode.line,
+                pushCalleeProblem,
+              );
+              for (const calleeInputOverrides of calleeInputCombos) {
+                for (const calleeProblem of unpinnedWorkflowContainerReferences(
+                  calleeSource,
+                  calleeRelPath,
+                  {
+                    root: buildFileContext.root,
+                    explicitBuildFiles: buildFileContext.explicitBuildFiles,
+                    buildInvocations: buildFileContext.buildInvocations,
+                    inputOverrides: calleeInputOverrides,
+                    actionCallStack: nextCallStack,
+                    checkedLocalActionPins,
+                  },
+                )) {
+                  pushCalleeProblem(calleeProblem);
+                }
+              }
+            }
+          }
+        }
+        continue;
+      }
       const jobExplicitShell = extractDefaultShell(jobNode) ?? workflowDefaultShell;
       const jobDefaultWorkingDir =
         extractDefaultWorkingDirectory(jobNode) ?? workflowDefaultWorkingDir;
