@@ -768,30 +768,126 @@ fn is_hfs_plus_ignorable(ch: char) -> bool {
     )
 }
 
+/// Frozen Unicode 3.2 post-NFD 1-to-1 lowercase table used by macOS HFS+
+/// (`FastUnicodeCompare` / Apple TN1150). Characters added or given lowercase
+/// pairs after Unicode 3.2 (for example `ẞ` U+1E9E, Georgian Mtavruli, and
+/// Cherokee lowercase) are intentionally absent so they remain distinct on HFS+.
+const HFS_PLUS_LOWERCASE_RUNS: &[(u32, u32, u32, i32)] = &[
+    (0x0041, 0x005A, 1, 32),
+    (0x00C6, 0x00C6, 1, 32),
+    (0x00D0, 0x00D0, 1, 32),
+    (0x00D8, 0x00D8, 1, 32),
+    (0x00DE, 0x00DE, 1, 32),
+    (0x0110, 0x0110, 1, 1),
+    (0x0126, 0x0126, 1, 1),
+    (0x0132, 0x0132, 1, 1),
+    (0x013F, 0x0141, 2, 1),
+    (0x014A, 0x014A, 1, 1),
+    (0x0152, 0x0152, 1, 1),
+    (0x0166, 0x0166, 1, 1),
+    (0x0181, 0x0181, 1, 210),
+    (0x0182, 0x0184, 2, 1),
+    (0x0186, 0x0186, 1, 206),
+    (0x0187, 0x0187, 1, 1),
+    (0x0189, 0x018A, 1, 205),
+    (0x018B, 0x018B, 1, 1),
+    (0x018E, 0x018E, 1, 79),
+    (0x018F, 0x018F, 1, 202),
+    (0x0190, 0x0190, 1, 203),
+    (0x0191, 0x0191, 1, 1),
+    (0x0193, 0x0193, 1, 205),
+    (0x0194, 0x0194, 1, 207),
+    (0x0196, 0x0196, 1, 211),
+    (0x0197, 0x0197, 1, 209),
+    (0x0198, 0x0198, 1, 1),
+    (0x019C, 0x019C, 1, 211),
+    (0x019D, 0x019D, 1, 213),
+    (0x019F, 0x019F, 1, 214),
+    (0x01A2, 0x01A4, 2, 1),
+    (0x01A6, 0x01A6, 1, 218),
+    (0x01A7, 0x01A7, 1, 1),
+    (0x01A9, 0x01A9, 1, 218),
+    (0x01AC, 0x01AC, 1, 1),
+    (0x01AE, 0x01AE, 1, 218),
+    (0x01B1, 0x01B2, 1, 217),
+    (0x01B3, 0x01B5, 2, 1),
+    (0x01B7, 0x01B7, 1, 219),
+    (0x01B8, 0x01B8, 1, 1),
+    (0x01BC, 0x01BC, 1, 1),
+    (0x01C4, 0x01C4, 1, 2),
+    (0x01C5, 0x01C5, 1, 1),
+    (0x01C7, 0x01C7, 1, 2),
+    (0x01C8, 0x01C8, 1, 1),
+    (0x01CA, 0x01CA, 1, 2),
+    (0x01CB, 0x01CB, 1, 1),
+    (0x01E4, 0x01E4, 1, 1),
+    (0x01F1, 0x01F1, 1, 2),
+    (0x01F2, 0x01F2, 1, 1),
+    (0x01F6, 0x01F6, 1, -97),
+    (0x01F7, 0x01F7, 1, -56),
+    (0x021C, 0x021C, 1, 1),
+    (0x0220, 0x0220, 1, -130),
+    (0x0222, 0x0224, 2, 1),
+    (0x0391, 0x03A1, 1, 32),
+    (0x03A3, 0x03A9, 1, 32),
+    (0x03D8, 0x03EE, 2, 1),
+    (0x03F4, 0x03F4, 1, -60),
+    (0x0402, 0x0404, 2, 80),
+    (0x0405, 0x0406, 1, 80),
+    (0x0408, 0x040B, 1, 80),
+    (0x040F, 0x040F, 1, 80),
+    (0x0410, 0x0418, 1, 32),
+    (0x041A, 0x042F, 1, 32),
+    (0x0460, 0x0474, 2, 1),
+    (0x0478, 0x0480, 2, 1),
+    (0x048A, 0x04BE, 2, 1),
+    (0x04C3, 0x04CD, 2, 1),
+    (0x04D4, 0x04D4, 1, 1),
+    (0x04D8, 0x04D8, 1, 1),
+    (0x04E0, 0x04E0, 1, 1),
+    (0x04E8, 0x04E8, 1, 1),
+    (0x0500, 0x050E, 2, 1),
+    (0x0531, 0x0556, 1, 48),
+    (0x2126, 0x2126, 1, -7517),
+    (0x212A, 0x212A, 1, -8383),
+    (0x212B, 0x212B, 1, -8262),
+    (0x2160, 0x216F, 1, 16),
+    (0x24B6, 0x24CF, 1, 26),
+    (0xFF21, 0xFF3A, 1, 32),
+];
+
+fn hfs_plus_lowercase(ch: char) -> char {
+    let cp = ch as u32;
+    if cp > 0xFFFF {
+        return ch;
+    }
+    let idx = HFS_PLUS_LOWERCASE_RUNS.partition_point(|&(_, end, _, _)| end < cp);
+    if let Some(&(start, end, step, delta)) = HFS_PLUS_LOWERCASE_RUNS.get(idx)
+        && cp >= start
+        && cp <= end
+        && (cp - start).is_multiple_of(step)
+    {
+        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+        let mapped = (cp as i32 + delta) as u32;
+        if let Some(lower) = char::from_u32(mapped) {
+            return lower;
+        }
+    }
+    ch
+}
+
 fn hfs_plus_casefold_nfd(text: &str) -> String {
     // HFS+ case-insensitive comparison applies HFS+ NFD (with TN1150
-    // exclusions), strips its Unicode 3.2 ignorable code points, and applies a
-    // 1-to-1 BMP code-unit lowercase fold (so `straße` != `strasse` and
-    // `U+F900` != `U+8C48`, unlike APFS).
+    // exclusions), strips its Unicode 3.2 ignorable code points, and applies
+    // the frozen Unicode 3.2 1-to-1 lowercase table (so `straße` != `strasse`,
+    // `ẞ` != `ß`, and `U+F900` != `U+8C48`, unlike APFS).
     let decomposed = hfs_plus_nfd(text);
     let mut folded = String::with_capacity(decomposed.len());
     for ch in decomposed.chars() {
         if is_hfs_plus_ignorable(ch) {
             continue;
         }
-        if (ch as u32) > 0xFFFF {
-            folded.push(ch);
-            continue;
-        }
-        let mut lower = ch.to_lowercase();
-        if let Some(first) = lower.next()
-            && lower.next().is_none()
-            && (first as u32) <= 0xFFFF
-        {
-            folded.push(first);
-        } else {
-            folded.push(ch);
-        }
+        folded.push(hfs_plus_lowercase(ch));
     }
     folded
 }
@@ -1871,6 +1967,11 @@ catalogs:
             super::fold_os_segment(OsStr::new("stra\u{00df}e.po"), hfs_plus),
             super::fold_os_segment(OsStr::new("strasse.po"), hfs_plus),
             "HFS+ per-code-unit folding keeps ß and ss distinct"
+        );
+        assert_ne!(
+            super::fold_os_segment(OsStr::new("\u{1e9e}.po"), hfs_plus),
+            super::fold_os_segment(OsStr::new("\u{00df}.po"), hfs_plus),
+            "HFS+ frozen Unicode 3.2 table keeps post-3.2 capital sharp S (ẞ) distinct from ß"
         );
         assert_eq!(
             super::fold_os_segment(OsStr::new("caf\u{00e9}.po"), hfs_plus),

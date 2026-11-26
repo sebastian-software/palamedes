@@ -2165,6 +2165,49 @@ mod platform {
         }
     }
 
+    fn wait_for_readonly_lock_release(
+        dir: &ContainedDir,
+        existing_fd: OwnedFd,
+        existing_id: FileIdentity,
+    ) -> Result<(), ContainedFsError> {
+        // Attempt a blocking `LOCK_SH` first (which Linux NFS permits on
+        // `O_RDONLY` descriptors and wakes as soon as the writer releases
+        // `LOCK_EX`). Always drop the descriptor before polling so we never
+        // pin the lock open against another writer.
+        loop {
+            // SAFETY: `existing_fd` is an open file descriptor.
+            let rc = unsafe { libc::flock(existing_fd.as_raw_fd(), libc::LOCK_SH) };
+            if rc == 0 {
+                break;
+            }
+            if io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            break;
+        }
+        drop(existing_fd);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut backoff_ms: u64 = 2;
+        loop {
+            match fstatat_nofollow(dir.fd.as_raw_fd(), UNIX_DIR_LOCK_NAME) {
+                Ok(stat) if stat_identity(&stat) == existing_id => {
+                    if std::time::Instant::now() >= deadline {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "timed out waiting for active catalog lock \".pmds-lock\" to release",
+                        )));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                    backoff_ms = (backoff_ms * 2).min(50);
+                }
+                Ok(_) => return Ok(()),
+                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(()),
+                Err(error) => return Err(ContainedFsError::Io(error)),
+            }
+        }
+    }
+
     fn write_all_fd(fd: std::os::fd::RawFd, mut bytes: &[u8]) -> io::Result<()> {
         while !bytes.is_empty() {
             // SAFETY: `fd` is open and `bytes` is readable for `bytes.len()`.
@@ -2390,7 +2433,8 @@ mod platform {
             // `.pmds-lock` already exists: try `O_RDWR` first (needed for Linux
             // NFS remote `flock`), falling back to `O_RDONLY` on `EACCES` so
             // another authorized user in a shared sticky directory can still
-            // wait on `flock(LOCK_EX)` against the owner's `0644` lock file.
+            // wait on the owner's `0644` lock file.
+            let mut opened_read_only = false;
             // SAFETY: `dir.fd` is open and `UNIX_DIR_LOCK_NAME` is valid.
             let mut existing_raw = unsafe {
                 libc::openat(
@@ -2400,6 +2444,7 @@ mod platform {
                 )
             };
             if existing_raw < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EACCES) {
+                opened_read_only = true;
                 // SAFETY: `dir.fd` is open and `UNIX_DIR_LOCK_NAME` is valid.
                 existing_raw = unsafe {
                     libc::openat(
@@ -2435,7 +2480,30 @@ mod platform {
                     "refusing to use non-regular file as catalog lock \".pmds-lock\"".to_owned(),
                 ));
             }
-            flock_exclusive(existing_fd.as_raw_fd())?;
+            if let Err(lock_err) = flock_exclusive(existing_fd.as_raw_fd()) {
+                if opened_read_only
+                    && matches!(
+                        lock_err.raw_os_error(),
+                        Some(libc::EBADF | libc::EACCES | libc::EINVAL)
+                    )
+                {
+                    // Linux NFS remote locking rejects `LOCK_EX` on a read-only
+                    // descriptor. Confirm this is a Palamedes lock file (so
+                    // foreign user files fail immediately), then wait via
+                    // `LOCK_SH` / bounded polling until the holder unlinks it
+                    // and retry acquiring our own writable lock.
+                    if !verify_lock_file_magic(existing_fd.as_raw_fd(), &pre_stat)? {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            "refusing to overwrite or remove pre-existing non-lock file \".pmds-lock\"",
+                        )));
+                    }
+                    let existing_id = stat_identity(&pre_stat);
+                    wait_for_readonly_lock_release(dir, existing_fd, existing_id)?;
+                    continue;
+                }
+                return Err(ContainedFsError::Io(lock_err));
+            }
 
             let mut post_stat = fstat_fd(existing_fd.as_raw_fd())?;
             let fd_id = stat_identity(&post_stat);
@@ -4396,7 +4464,7 @@ mod platform {
                                 backoff_ms = (backoff_ms * 2).min(50);
                             }
                             Err(status) if is_not_found_status(status) => continue,
-                            Ok(_unowned) | Err(_) => {
+                            Ok(_) | Err(_) => {
                                 return Err(ContainedFsError::Io(io::Error::new(
                                     io::ErrorKind::AlreadyExists,
                                     format!(
