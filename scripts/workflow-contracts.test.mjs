@@ -1973,32 +1973,62 @@ describe("workflow contracts", () => {
       "<memory>:14: redis:7 is not pinned to a sha256 digest",
       "<memory>:16: docker/bake-action target definitions cannot be verified statically for container image digests",
     ]);
-    const symlinkFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-symlink-"));
-    const outsideDir = await mkdtemp(join(tmpdir(), "palamedes-pins-outside-"));
+    // `docker buildx bake` CLI fails closed, `--blkio-weight-device` consumes
+    // its value, `unset` clears/marks variables unset, unexported parent vars do
+    // not leak into single-quoted `sh -c`, and BuildKit forward `COPY --from`
+    // stage references are accepted.
+    expect(
+      unpinnedContainerfileReferences(
+        "FROM scratch\nCOPY --from=assets /data /data\nFROM scratch AS assets\n",
+      ),
+    ).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  bake-unset-and-child-env:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - run: |",
+          `          docker run --rm --blkio-weight-device /dev/sda:500 node:24@${digest} node -v`,
+          "          IMAGE=node:24",
+          `          sh -c 'docker pull "\${IMAGE:-node:24@${digest}}"'`,
+          "          unset IMAGE",
+          `          docker pull "\${IMAGE:-node:24@${digest}}"`,
+          `          CLEARABLE=node:24@${digest}`,
+          '          [ "$CLEAR" = "1" ] && unset CLEARABLE',
+          '          docker pull "${CLEARABLE:-alpine:3.20}"',
+          "          docker buildx bake app",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:13: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:14: docker buildx bake target definitions cannot be verified statically for container image digests",
+    ]);
+    const buildFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-builds-"));
     try {
-      await mkdir(join(symlinkFixture, ".github", "workflows"), { recursive: true });
-      await mkdir(join(symlinkFixture, "ci", "nested-a"), { recursive: true });
-      await mkdir(join(symlinkFixture, "ci", "nested-b"), { recursive: true });
-      await writeFile(join(outsideDir, "escaped.recipe"), "FROM alpine:3.20\n");
-      await symlink(outsideDir, join(symlinkFixture, "ci", "escaped-link"));
-      await writeFile(join(symlinkFixture, "ci", "target.recipe"), "FROM alpine:3.20\n");
-      await symlink("ci/target.recipe", join(symlinkFixture, "Dockerfile"));
+      await mkdir(join(buildFixture, ".github", "workflows"), { recursive: true });
+      await mkdir(join(buildFixture, "ci", "nested-a"), { recursive: true });
+      await mkdir(join(buildFixture, "ci", "nested-b"), { recursive: true });
+      await mkdir(join(buildFixture, "ci", "win"), { recursive: true });
       await writeFile(
-        join(symlinkFixture, "ci", "nested-a", "cd.recipe"),
+        join(buildFixture, "ci", "nested-a", "cd.recipe"),
         `FROM node:24@${digest}\n`,
       );
-      await writeFile(join(symlinkFixture, "ci", "nested-b", "cd.recipe"), "FROM busybox:1.37\n");
+      await writeFile(join(buildFixture, "ci", "nested-b", "cd.recipe"), "FROM busybox:1.37\n");
+      await writeFile(join(buildFixture, "ci", "win", "win.recipe"), "FROM alpine:3.20\n");
       await writeFile(
-        join(symlinkFixture, "ci", "arg-env.recipe"),
+        join(buildFixture, "ci", "arg-env.recipe"),
         `ARG BASE=node:24@${digest}\nFROM \${BASE}\n`,
       );
       await writeFile(
-        join(symlinkFixture, "ci", "arg-local.recipe"),
+        join(buildFixture, "ci", "arg-local.recipe"),
         `ARG BASE=node:24@${digest}\nFROM \${BASE}\n`,
       );
-      await writeFile(join(symlinkFixture, "ci", "shared.recipe"), "FROM maybectx\n");
+      await writeFile(join(buildFixture, "ci", "shared.recipe"), "FROM maybectx\n");
       await writeFile(
-        join(symlinkFixture, ".github", "workflows", "cd-and-ctx.yml"),
+        join(buildFixture, ".github", "workflows", "cd-and-ctx.yml"),
         [
           "jobs:",
           "  build:",
@@ -2010,7 +2040,7 @@ describe("workflow contracts", () => {
           "            DIR=ci/nested-b",
           "          fi",
           '          cd "$DIR"',
-          "          docker build -f cd.recipe .",
+          "          sh -c 'docker build -f cd.recipe .'",
           "      - run: |",
           "          BASE=ubuntu:24.04",
           "          docker build --build-arg BASE -f ci/arg-local.recipe .",
@@ -2018,18 +2048,58 @@ describe("workflow contracts", () => {
           "          BASE=redis:7 docker build --build-arg BASE -f ci/arg-env.recipe .",
           `      - run: docker build --build-context maybectx=docker-image://node:24@${digest} -f ci/shared.recipe .`,
           "      - run: docker build -f ci/shared.recipe .",
-          "      - run: docker build -f ci/escaped-link/escaped.recipe .",
+          "      - shell: pwsh",
+          "        run: docker build -f ci\\win\\win.recipe .",
           "",
         ].join("\n"),
       );
-      const symlinkResult = checkWorkflowPins(symlinkFixture);
-      expect(symlinkResult.problems).toEqual([
-        "ci/escaped-link/escaped.recipe:1: symlink target escapes repository root and cannot be verified",
+      const buildResult = checkWorkflowPins(buildFixture);
+      expect(buildResult.problems).toEqual([
         "ci/nested-b/cd.recipe:1: busybox:1.37 is not pinned to a sha256 digest",
         "ci/shared.recipe:1: maybectx is not pinned to a sha256 digest",
-        "ci/target.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
+        "ci/win/win.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
         "ci/arg-env.recipe:2: redis:7 is not pinned to a sha256 digest",
       ]);
+    } finally {
+      await rm(buildFixture, { recursive: true, force: true });
+    }
+    // Symlink boundary assertions are isolated so Windows checkouts without
+    // symlink privileges still run every non-symlink contract assertion above.
+    const symlinkFixture = await mkdtemp(join(tmpdir(), "palamedes-pins-symlink-"));
+    const outsideDir = await mkdtemp(join(tmpdir(), "palamedes-pins-outside-"));
+    try {
+      await mkdir(join(symlinkFixture, ".github", "workflows"), { recursive: true });
+      await mkdir(join(symlinkFixture, "ci"), { recursive: true });
+      await writeFile(join(outsideDir, "escaped.recipe"), "FROM alpine:3.20\n");
+      await writeFile(join(symlinkFixture, "ci", "target.recipe"), "FROM alpine:3.20\n");
+      let symlinksCreated = false;
+      try {
+        await symlink(outsideDir, join(symlinkFixture, "ci", "escaped-link"));
+        await symlink("ci/target.recipe", join(symlinkFixture, "Dockerfile"));
+        symlinksCreated = true;
+      } catch (error) {
+        if (process.platform !== "win32" || (error?.code !== "EPERM" && error?.code !== "EACCES")) {
+          throw error;
+        }
+      }
+      if (symlinksCreated) {
+        await writeFile(
+          join(symlinkFixture, ".github", "workflows", "symlink.yml"),
+          [
+            "jobs:",
+            "  build:",
+            "    runs-on: ubuntu-24.04",
+            "    steps:",
+            "      - run: docker build -f ci/escaped-link/escaped.recipe .",
+            "",
+          ].join("\n"),
+        );
+        const symlinkResult = checkWorkflowPins(symlinkFixture);
+        expect(symlinkResult.problems).toEqual([
+          "ci/escaped-link/escaped.recipe:1: symlink target escapes repository root and cannot be verified",
+          "ci/target.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
+        ]);
+      }
     } finally {
       await rm(symlinkFixture, { recursive: true, force: true });
       await rm(outsideDir, { recursive: true, force: true });

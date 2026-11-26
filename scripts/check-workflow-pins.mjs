@@ -68,6 +68,7 @@ const MAX_MATRIX_ROWS = 256;
 const MAX_MATRIX_WORK = 10_000;
 const MAX_VAR_VALUES = 32;
 const MAX_TOKEN_EXPANSIONS = 64;
+const MAX_WORKING_DIRS_PER_ROW = 32;
 
 const DOCKER_GLOBAL_VALUE_FLAGS = new Set([
   "--config",
@@ -126,6 +127,7 @@ const DOCKER_RUN_VALUE_FLAGS = new Set([
   "--add-host",
   "--annotation",
   "--blkio-weight",
+  "--blkio-weight-device",
   "--cap-add",
   "--cap-drop",
   "--cgroup-parent",
@@ -221,7 +223,6 @@ const PODMAN_RUN_VALUE_FLAGS = new Set([
   ...DOCKER_RUN_VALUE_FLAGS,
   "--arch",
   "--authfile",
-  "--blkio-weight-device",
   "--cert-dir",
   "--cgroup-conf",
   "--cgroups",
@@ -1447,12 +1448,15 @@ function redirectsToGithubEnv(tokens) {
 function lexShellScript(text, startLine, shellMode = "posix") {
   const events = [];
   let tokens = [];
+  let tokenSingleQuoted = [];
   let commandSubstitutions = [];
   let commandLine = startLine;
   let commandConditional = false;
   let nextConditional = false;
   let current = "";
   let tokenStarted = false;
+  let currentHasUnquotedOrDoubleQuoted = false;
+  let currentSawSingleQuote = false;
   let quote = null;
   let escaping = false;
   let arithDepth = 0;
@@ -1462,13 +1466,18 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   const isPwsh = shellMode === "pwsh";
   const isCmd = shellMode === "cmd";
 
-  const markTokenStart = () => {
+  const markTokenStart = ({ singleQuoted = false } = {}) => {
     if (!tokenStarted && tokens.length === 0) {
       commandLine = line;
       commandConditional = nextConditional;
       nextConditional = false;
     }
     tokenStarted = true;
+    if (singleQuoted) {
+      currentSawSingleQuote = true;
+    } else {
+      currentHasUnquotedOrDoubleQuoted = true;
+    }
   };
 
   const flushToken = () => {
@@ -1477,8 +1486,11 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         commandLine = line;
       }
       tokens.push(current);
+      tokenSingleQuoted.push(currentSawSingleQuote && !currentHasUnquotedOrDoubleQuoted);
       current = "";
       tokenStarted = false;
+      currentHasUnquotedOrDoubleQuoted = false;
+      currentSawSingleQuote = false;
     }
   };
 
@@ -1488,11 +1500,13 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       events.push({
         kind: "command",
         tokens,
+        tokenSingleQuoted,
         lineNumber: commandLine,
         conditional: commandConditional,
         substitutions: commandSubstitutions,
       });
       tokens = [];
+      tokenSingleQuoted = [];
       commandSubstitutions = [];
       commandConditional = false;
     }
@@ -1695,7 +1709,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
     }
 
     if (ch === "'" || ch === '"') {
-      markTokenStart();
+      markTokenStart({ singleQuoted: ch === "'" });
       quote = ch;
       continue;
     }
@@ -1788,12 +1802,15 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       }
       if (text[index + 1] === ">") {
         tokens.push(">>");
+        tokenSingleQuoted.push(false);
         index += 1;
       } else if (text[index + 1] === "&") {
         tokens.push(">&");
+        tokenSingleQuoted.push(false);
         index += 1;
       } else {
         tokens.push(">");
+        tokenSingleQuoted.push(false);
       }
       continue;
     }
@@ -2201,12 +2218,18 @@ function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
   return candidates.length > 0 ? candidates : [{ text: rawText, line: fallbackLine }];
 }
 
-function extractShellDashCScript(tokens, cursor) {
+function extractShellDashCScriptInfo(tokens, tokenSingleQuoted, cursor) {
   let sawDashC = false;
   for (let index = cursor + 1; index < tokens.length; index += 1) {
     const token = tokens[index];
     if (token === "--" || token === "-") {
-      return sawDashC ? (tokens[index + 1] ?? null) : null;
+      if (!sawDashC || tokens[index + 1] === undefined) {
+        return null;
+      }
+      return {
+        script: tokens[index + 1],
+        singleQuoted: Boolean(tokenSingleQuoted?.[index + 1]),
+      };
     }
     if (token === "-o" || token === "+o" || token === "-O" || token === "+O") {
       index += 1;
@@ -2230,7 +2253,7 @@ function extractShellDashCScript(tokens, cursor) {
     if (/^\+[A-Za-z]+$/u.test(token)) {
       continue;
     }
-    return sawDashC ? token : null;
+    return sawDashC ? { script: token, singleQuoted: Boolean(tokenSingleQuoted?.[index]) } : null;
   }
   return null;
 }
@@ -2552,13 +2575,19 @@ const DOCKER_BUILD_VALUE_FLAGS = new Set([
   "--ulimit",
 ]);
 
-function resolveContainedPath(rawPath, baseDir, root) {
+function resolveContainedPath(rawPath, baseDir, root, { windowsPath = false } = {}) {
   if (!root || !rawPath) {
     return null;
   }
-  const trimmed = rawPath.trim();
+  let trimmed = rawPath.trim();
   if (!trimmed || trimmed === "-" || isDynamicReference(trimmed)) {
     return null;
+  }
+  if (windowsPath) {
+    trimmed = trimmed.replaceAll("\\", "/");
+    if (/^[A-Za-z]:/u.test(trimmed) || trimmed.startsWith("//")) {
+      return null;
+    }
   }
   const resolvedRoot = path.resolve(root);
   const resolvedPath = path.resolve(baseDir, trimmed);
@@ -2569,11 +2598,17 @@ function resolveContainedPath(rawPath, baseDir, root) {
   return resolvedPath;
 }
 
-function recordExplicitBuildFile(rawPath, baseDir, root, explicitBuildFiles) {
+function recordExplicitBuildFile(
+  rawPath,
+  baseDir,
+  root,
+  explicitBuildFiles,
+  { windowsPath = false } = {},
+) {
   if (!explicitBuildFiles) {
     return null;
   }
-  const resolvedPath = resolveContainedPath(rawPath, baseDir, root);
+  const resolvedPath = resolveContainedPath(rawPath, baseDir, root, { windowsPath });
   if (!resolvedPath || resolvedPath === path.resolve(root)) {
     return null;
   }
@@ -2817,13 +2852,26 @@ function inspectShellText(
     return;
   }
 
-  const initialRowCwds = new Map();
-  if (buildFileContext?.workingDir) {
+  const cloneRowCwds = (rowCwds) => {
+    const copy = new Map();
+    for (const [key, dirs] of rowCwds) {
+      copy.set(key, [...dirs]);
+    }
+    return copy;
+  };
+
+  const initialRowCwds = buildFileContext?.rowCwds
+    ? cloneRowCwds(buildFileContext.rowCwds)
+    : new Map();
+  if (initialRowCwds.size === 0 && buildFileContext?.workingDir) {
     const rowsForCwd = matrixRows.length > 0 ? matrixRows : [null];
     for (const row of rowsForCwd) {
       initialRowCwds.set(row, [buildFileContext.workingDir]);
     }
   }
+  const initialRowCwdsTruncated = buildFileContext?.rowCwdsTruncated
+    ? new Set(buildFileContext.rowCwdsTruncated)
+    : new Set();
   const initialExportedVars = new Set(
     shellMode === "pwsh" ? [...stepEnv.keys()].map((key) => `env:${key}`) : stepEnv.keys(),
   );
@@ -2833,17 +2881,11 @@ function inspectShellText(
       exportedVars: initialExportedVars,
       branches: [],
       rowCwds: initialRowCwds,
+      rowCwdsTruncated: initialRowCwdsTruncated,
       pendingStdinBuilds: [],
     },
   ];
-
-  const cloneRowCwds = (rowCwds) => {
-    const copy = new Map();
-    for (const [key, dirs] of rowCwds) {
-      copy.set(key, [...dirs]);
-    }
-    return copy;
-  };
+  const isWindowsShell = shellMode === "pwsh" || shellMode === "cmd";
 
   for (const event of lexShellScript(scriptText, startLine, shellMode)) {
     if (event.kind === "enter-subshell") {
@@ -2853,6 +2895,7 @@ function inspectShellText(
         exportedVars: new Set(parent.exportedVars),
         branches: [],
         rowCwds: cloneRowCwds(parent.rowCwds),
+        rowCwdsTruncated: new Set(parent.rowCwdsTruncated),
         pendingStdinBuilds: [],
       });
       continue;
@@ -2970,7 +3013,46 @@ function inspectShellText(
     }
 
     const tokens = peelControlKeywords(event.tokens, frame, lineNumber, stepEnv, shellMode);
+    const peeledCount = event.tokens.length - tokens.length;
+    const peeledSingleQuoted = event.tokenSingleQuoted
+      ? event.tokenSingleQuoted.slice(peeledCount)
+      : [];
     if (tokens.length === 0 || tokens[0].startsWith("#")) {
+      continue;
+    }
+
+    // `unset VAR ...` clears tracked shell variables (or marks them possibly unset
+    // when executed conditionally).
+    if (tokens[0] === "unset" && tokens.length > 1) {
+      let unsetFunctions = false;
+      const unsetNames = [];
+      for (const token of tokens.slice(1)) {
+        if (token === "-f") {
+          unsetFunctions = true;
+          break;
+        }
+        if (token === "-v" || token === "--") {
+          continue;
+        }
+        if (/^[A-Za-z_][A-Za-z0-9_]*$/u.test(token)) {
+          unsetNames.push(token);
+        }
+      }
+      if (!unsetFunctions) {
+        for (const name of unsetNames) {
+          if (conditional) {
+            if (frame.vars.has(name)) {
+              frame.vars.set(
+                name,
+                mergeVarEntries(frame.vars.get(name), [{ value: "", line: 0, unset: true }]),
+              );
+            }
+          } else {
+            frame.vars.delete(name);
+            frame.exportedVars.delete(name);
+          }
+        }
+      }
       continue;
     }
 
@@ -3225,11 +3307,17 @@ function inspectShellText(
                   candidate.text,
                   baseDir,
                   buildFileContext.root,
+                  { windowsPath: isWindowsShell },
                 );
-                if (resolved && !seenDirs.has(resolved)) {
-                  seenDirs.add(resolved);
-                  nextDirs.push(resolved);
+                if (!resolved || seenDirs.has(resolved)) {
+                  continue;
                 }
+                if (nextDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
+                  frame.rowCwdsTruncated.add(row);
+                  continue;
+                }
+                seenDirs.add(resolved);
+                nextDirs.push(resolved);
               }
             }
           }
@@ -3242,23 +3330,30 @@ function inspectShellText(
     }
 
     if (SHELL_INTERPRETERS.has(normalizedCli)) {
-      const dashCScript = extractShellDashCScript(tokens, cursor);
-      if (dashCScript) {
-        const firstDirs = frame.rowCwds.values().next().value;
-        const firstCwd = firstDirs?.[0] ?? buildFileContext?.workingDir;
+      const dashCInfo = extractShellDashCScriptInfo(tokens, peeledSingleQuoted, cursor);
+      if (dashCInfo) {
+        // Single-quoted `sh -c '...'` receives only exported/prefixed variables;
+        // unquoted/double-quoted `sh -c "..."` is expanded by the parent shell first.
+        const childVars = dashCInfo.singleQuoted ? exportedCommandVars : commandVars;
         inspectShellText(
-          dashCScript,
+          dashCInfo.script,
           lineNumber,
           sourceLines,
           stepEnv,
-          commandVars,
+          childVars,
           matrixRows,
           filePath,
           problems,
           emittedGithubEnv,
           "posix",
           depth + 1,
-          buildFileContext ? { ...buildFileContext, workingDir: firstCwd } : null,
+          buildFileContext
+            ? {
+                ...buildFileContext,
+                rowCwds: cloneRowCwds(frame.rowCwds),
+                rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
+              }
+            : null,
         );
       }
       continue;
@@ -3284,6 +3379,15 @@ function inspectShellText(
     }
 
     let subcommand = tokens[argIndex];
+    if (
+      normalizedCli !== "buildah" &&
+      (subcommand === "bake" || (subcommand === "buildx" && tokens[argIndex + 1] === "bake"))
+    ) {
+      problems.push(
+        `${filePath}:${lineNumber}: ${normalizedCli} buildx bake target definitions cannot be verified statically for container image digests`,
+      );
+      continue;
+    }
     if (
       (normalizedCli === "buildah" && (subcommand === "bud" || subcommand === "build")) ||
       (normalizedCli !== "buildah" &&
@@ -3430,6 +3534,12 @@ function inspectShellText(
           continue;
         }
 
+        if (frame.rowCwdsTruncated.has(row)) {
+          problems.push(
+            `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
+          );
+        }
+
         const resolvedBuildFiles = [];
         const seenResolvedFiles = new Set();
         const pushResolvedFile = (resolved) => {
@@ -3460,6 +3570,7 @@ function inspectShellText(
                   activeWorkingDir,
                   buildFileContext.root,
                   buildFileContext.explicitBuildFiles,
+                  { windowsPath: isWindowsShell },
                 );
                 if (recorded) {
                   dirResolvedFiles.push(recorded);
@@ -3490,6 +3601,7 @@ function inspectShellText(
                     candidate.text,
                     activeWorkingDir,
                     buildFileContext.root,
+                    { windowsPath: isWindowsShell },
                   );
                   if (resolvedCtx && !seenContextDirs.has(resolvedCtx)) {
                     seenContextDirs.add(resolvedCtx);
@@ -3771,7 +3883,14 @@ function checkImageField(
   }
 }
 
-function resolveWorkingDirsForRow(stepWorkingDirNode, defaultWorkingDir, stepEnv, row, root) {
+function resolveWorkingDirsForRow(
+  stepWorkingDirNode,
+  defaultWorkingDir,
+  stepEnv,
+  row,
+  root,
+  windowsPath = false,
+) {
   if (!root) {
     return [null];
   }
@@ -3788,7 +3907,7 @@ function resolveWorkingDirsForRow(stepWorkingDirNode, defaultWorkingDir, stepEnv
   const seen = new Set();
   for (const envCandidate of resolveEnvExpressionCandidates(rawDir, stepEnv, line).candidates) {
     for (const candidate of expandMatrixReferences(envCandidate.text, rowList, envCandidate.line)) {
-      const resolved = resolveContainedPath(candidate.text, root, root);
+      const resolved = resolveContainedPath(candidate.text, root, root, { windowsPath });
       if (resolved && !seen.has(resolved)) {
         seen.add(resolved);
         dirs.push(resolved);
@@ -3847,6 +3966,7 @@ function resolveStepExecutionGroups(
       stepEnv,
       ctx.row,
       root,
+      ctx.runnerOs === "Windows",
     );
     for (const mode of modes) {
       for (const workingDir of workingDirs) {
@@ -4775,6 +4895,21 @@ export function unpinnedContainerfileReferences(
   }
 
   const stages = new Set();
+  const allStages = new Set();
+  for (const { text } of logicalLines) {
+    const fromMatch = /^FROM\s+(?<rest>.+)$/iu.exec(text);
+    if (!fromMatch) {
+      continue;
+    }
+    const tokens = fromMatch.groups.rest.trim().split(/\s+/u);
+    let cursor = 0;
+    while (cursor < tokens.length && tokens[cursor].startsWith("--")) {
+      cursor += 1;
+    }
+    if (tokens[cursor + 1] && tokens[cursor + 1].toLowerCase() === "as" && tokens[cursor + 2]) {
+      allStages.add(tokens[cursor + 2].toLowerCase());
+    }
+  }
   const globalArgs = new Map();
   let stageArgs = new Map();
   let seenFrom = false;
@@ -4954,7 +5089,7 @@ export function unpinnedContainerfileReferences(
       for (const sourceRef of expandedCopy.values) {
         if (
           /^\d+$/u.test(sourceRef) ||
-          stages.has(sourceRef.toLowerCase()) ||
+          allStages.has(sourceRef.toLowerCase()) ||
           namedContexts?.has(sourceRef.toLowerCase()) ||
           isDynamicReference(sourceRef)
         ) {
@@ -4985,7 +5120,7 @@ export function unpinnedContainerfileReferences(
         for (const sourceRef of expandedMount.values) {
           if (
             /^\d+$/u.test(sourceRef) ||
-            stages.has(sourceRef.toLowerCase()) ||
+            allStages.has(sourceRef.toLowerCase()) ||
             namedContexts?.has(sourceRef.toLowerCase()) ||
             isDynamicReference(sourceRef)
           ) {
