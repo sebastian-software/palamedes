@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
-import { type Dirent, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import {
+  type Dirent,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { readFile, readdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import vm from "node:vm";
 
@@ -583,6 +591,89 @@ function resolveSourceSegmentDirectory(
   return match ? path.join(parentDir, match.name) : undefined;
 }
 
+function canonicalPath(filePath: string): string {
+  try {
+    return realpathSync(filePath);
+  } catch {
+    return path.resolve(filePath);
+  }
+}
+
+function isNonEmptyStringArray(value: unknown): value is readonly string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((entry) => typeof entry === "string" && entry.length > 0)
+  );
+}
+
+function readNextBuildContextPageExtensions(
+  distDir: string,
+  projectRoot: string,
+): readonly string[] | undefined {
+  const targetDistDir = canonicalPath(distDir);
+  const anchors = [
+    path.join(projectRoot, "package.json"),
+    path.join(distDir, "package.json"),
+    path.join(process.cwd(), "package.json"),
+    import.meta.url,
+  ];
+  const seen = new Set<string>();
+  for (const anchor of anchors) {
+    try {
+      const nextRequire = createRequire(anchor);
+      const resolved = nextRequire.resolve("next/dist/build/build-context");
+      if (seen.has(resolved)) continue;
+      seen.add(resolved);
+      const buildContextModule = nextRequire(resolved) as {
+        NextBuildContext?: {
+          dir?: unknown;
+          distDir?: unknown;
+          config?: { pageExtensions?: unknown };
+        };
+      };
+      const ctx = buildContextModule.NextBuildContext;
+      if (!ctx || typeof ctx.distDir !== "string") continue;
+      const contextDistDir = path.isAbsolute(ctx.distDir)
+        ? ctx.distDir
+        : path.resolve(typeof ctx.dir === "string" ? ctx.dir : projectRoot, ctx.distDir);
+      if (canonicalPath(contextDistDir) !== targetDistDir) continue;
+      const extensions = ctx.config?.pageExtensions;
+      if (isNonEmptyStringArray(extensions)) return extensions;
+    } catch {
+      // Try the next resolution anchor or fall back to disk/options.
+    }
+  }
+  return;
+}
+
+function readRequiredServerFilesPageExtensions(distDir: string): readonly string[] | undefined {
+  try {
+    const manifest = JSON.parse(
+      readFileSync(path.join(distDir, "required-server-files.json"), "utf8"),
+    ) as { config?: { pageExtensions?: unknown } };
+    const extensions = manifest.config?.pageExtensions;
+    if (isNonEmptyStringArray(extensions)) return extensions;
+  } catch {
+    // required-server-files.json is written after runAfterProductionCompile.
+  }
+  return;
+}
+
+function resolveEffectivePageExtensions(
+  distDir: string,
+  projectRoot: string,
+  fallbackPageExtensions?: readonly string[],
+): readonly string[] {
+  return (
+    readNextBuildContextPageExtensions(distDir, projectRoot) ??
+    readRequiredServerFilesPageExtensions(distDir) ??
+    (isNonEmptyStringArray(fallbackPageExtensions)
+      ? fallbackPageExtensions
+      : DEFAULT_PAGE_EXTENSIONS)
+  );
+}
+
 /**
  * Determines from the App Router directory tree whether `manifestRelativePath`
  * (relative to `<distDir>/server/app`) has an optional catch-all
@@ -861,7 +952,11 @@ export async function emitClientCatalogPermutations(
       `Palamedes client catalog permutations: the source locale "${compiler.sourceLocale}" is not in the configured locales, so renders without a locale have no fallback chunk copy.`,
     );
   }
-  const pageExtensions = options.pageExtensions ?? DEFAULT_PAGE_EXTENSIONS;
+  const pageExtensions = resolveEffectivePageExtensions(
+    distDir,
+    options.projectRoot,
+    options.pageExtensions,
+  );
   const standardAdapter = renderManifestAdapter(compiler.locales, compiler.sourceLocale, variants, {
     optionalRootLocale: false,
   });

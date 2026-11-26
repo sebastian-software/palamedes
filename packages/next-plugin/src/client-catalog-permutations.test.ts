@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
@@ -836,49 +837,105 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
         ),
       ).toBeUndefined();
 
-      // End-to-end check: when the compiled loaderTree has a nonliteral child,
-      // emitClientCatalogPermutations() falls back to the source tree and still
-      // marks optionalRootLocale=true when app/[[...locale]]/layout.tsx exists.
-      writeFileSync(
-        path.join(projectRoot, "app/[[...locale]]/layout.tsx"),
-        "export default function Layout({ children }) { return children; }\n",
-      );
+      // End-to-end check: when the compiled loaderTree has a nonliteral child AND
+      // a later config wrapper added `page.tsx` (so only `layout.page.tsx` exists,
+      // with no default-named `layout.tsx`), emitClientCatalogPermutations() reads
+      // Next's effective pageExtensions (from NextBuildContext during `next build`
+      // or required-server-files.json post-build) and still marks optionalRootLocale=true.
       writeFileSync(
         templateChunk,
-        `module.exports=[1,a=>{let child=["[[...locale]]",{},{layout:[l,"[project]/app/[[...locale]]/layout.tsx"]},[]];let j=["",{children:child},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]"});}];`,
-      );
-      writeFileSync(
-        manifestPath,
-        `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
-globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
-          entryCSSFiles: {},
-          entryJSFiles: { "[project]/app/[[...locale]]/page": ["static/chunks/page.js"] },
-        })};`,
+        `module.exports=[1,a=>{let child=["[[...locale]]",{},{layout:[l,"[project]/app/[[...locale]]/layout.page.tsx"]},[]];let j=["",{children:child},{"global-error":[g,"builtin"]},[]];let m=(0,c.f)({tree:j,page:"/[[...locale]]/page",pathname:"/[[...locale]]"});}];`,
       );
       expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
+      const resetManifest = () => {
+        writeFileSync(
+          manifestPath,
+          `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
+globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
+            entryCSSFiles: {},
+            entryJSFiles: { "[project]/app/[[...locale]]/page": ["static/chunks/page.js"] },
+          })};`,
+        );
+      };
+      const evalRenderedEntry = () => {
+        const ctx: Record<string, unknown> = { process: { env: {} } };
+        vm.runInNewContext(readFileSync(manifestPath, "utf8"), ctx);
+        const bindFn = ctx.__PALAMEDES_CLIENT_CATALOG_BIND as (
+          fn: (
+            locales: readonly string[],
+            fallback: string,
+            optionalRootLocale?: boolean,
+          ) => string,
+        ) => void;
+        bindFn((availableLocales, fallbackLocale, optionalRootLocale) =>
+          resolveRenderLocale(
+            availableLocales,
+            fallbackLocale,
+            render("/[[...locale]]"),
+            unit({ rootParams: {}, headers: header("de") }),
+            typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
+          ),
+        );
+        return (ctx.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>)[
+          "/[[...locale]]/page"
+        ]!.entryJSFiles["[project]/app/[[...locale]]/page"]![0]!;
+      };
+
+      const nextRequire = createRequire(import.meta.url);
+      const { NextBuildContext } = nextRequire("next/dist/build/build-context") as {
+        NextBuildContext: {
+          dir?: string;
+          distDir?: string;
+          config?: { pageExtensions?: string[] };
+        };
+      };
+      const prevDir = NextBuildContext.dir;
+      const prevDistDir = NextBuildContext.distDir;
+      const prevConfig = NextBuildContext.config;
+      try {
+        NextBuildContext.dir = projectRoot;
+        NextBuildContext.distDir = distDir;
+        NextBuildContext.config = { pageExtensions: ["page.tsx", "page.jsx"] };
+        resetManifest();
+        await emitClientCatalogPermutations({
+          distDir,
+          projectRoot,
+          // Even if an earlier config captured stale pageExtensions, Next's
+          // final effective pageExtensions win.
+          pageExtensions: ["tsx", "jsx"],
+          failOnMissing: false,
+        });
+        expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+
+        // An unrelated NextBuildContext.distDir must not leak its pageExtensions.
+        NextBuildContext.distDir = path.join(projectRoot, ".other-next");
+        resetManifest();
+        await emitClientCatalogPermutations({
+          distDir,
+          projectRoot,
+          failOnMissing: false,
+        });
+        expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.de-[0-9a-f]{8}\.js$/u);
+      } finally {
+        NextBuildContext.dir = prevDir;
+        NextBuildContext.distDir = prevDistDir;
+        NextBuildContext.config = prevConfig;
+      }
+
+      // Post-build fallback: when NextBuildContext is absent, required-server-files.json
+      // provides Next's effective pageExtensions.
+      writeFileSync(
+        path.join(distDir, "required-server-files.json"),
+        JSON.stringify({ config: { pageExtensions: ["page.tsx", "page.jsx"] } }),
+      );
+      resetManifest();
       await emitClientCatalogPermutations({
         distDir,
         projectRoot,
         failOnMissing: false,
       });
-      const fallbackContext: Record<string, unknown> = { process: { env: {} } };
-      vm.runInNewContext(readFileSync(manifestPath, "utf8"), fallbackContext);
-      const fallbackBind = fallbackContext.__PALAMEDES_CLIENT_CATALOG_BIND as (
-        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
-      ) => void;
-      fallbackBind((availableLocales, fallbackLocale, optionalRootLocale) =>
-        resolveRenderLocale(
-          availableLocales,
-          fallbackLocale,
-          render("/[[...locale]]"),
-          unit({ rootParams: {}, headers: header("de") }),
-          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
-        ),
-      );
-      const fallbackEntryFiles = (
-        fallbackContext.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
-      )["/[[...locale]]/page"]!.entryJSFiles["[project]/app/[[...locale]]/page"]!;
-      expect(fallbackEntryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+      expect(evalRenderedEntry()).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
 
       // If no entrypoint binds `tree` for this page, return undefined so the
       // source-tree fallback runs instead of trusting an unrelated array.
