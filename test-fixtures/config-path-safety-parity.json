@@ -39,6 +39,8 @@
     "locales\\..\\..\\outside\\{locale}",
     "locales/{locale}/",
     "locales\\{locale}\\",
+    "locales/{locale}/.",
+    "locales\\{locale}\\.",
     "locales/\u0000/{locale}"
   ],
   "resourcePathParity": [

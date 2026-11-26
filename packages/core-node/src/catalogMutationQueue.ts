@@ -45,7 +45,22 @@ function isSafeRelativeCatalogPath(value: string): boolean {
       return false;
     }
   }
-  return !value.split(/[\\/]/).some((segment) => segment === "..");
+  const segments = value.split(/[\\/]/);
+  let lastNonEmpty = "";
+  let hasNormal = false;
+  for (const segment of segments) {
+    if (segment === "") {
+      continue;
+    }
+    lastNonEmpty = segment;
+    if (segment === "..") {
+      return false;
+    }
+    if (segment !== ".") {
+      hasNormal = true;
+    }
+  }
+  return hasNormal && lastNonEmpty !== ".";
 }
 
 export function translationPatchTargetPaths(request: TranslationPatchRequest): string[] {

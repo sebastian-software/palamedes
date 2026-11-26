@@ -651,7 +651,7 @@ fn compile_js(
             .map_err(|error| format!("{}: {error}", output.display()))?;
         for (file_name, module_path, _) in &modules {
             output_dir
-                .reject_symlink(file_name)
+                .reject_symlink_or_hard_link(file_name)
                 .map_err(|error| format!("{}: {error}", module_path.display()))?;
         }
         for (file_name, module_path, code) in modules {
@@ -913,30 +913,51 @@ mod tests {
     fn compile_js_refuses_to_overwrite_hard_linked_output_target() {
         let outside = temp_dir("compile-js-hardlink-outside");
         let app = temp_dir("compile-js-hardlink-app");
-        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::create_dir_all(app.join("locales/en")).expect("create en locale dir");
+        fs::create_dir_all(app.join("locales/de")).expect("create de locale dir");
         fs::write(
             app.join("palamedes.yaml"),
-            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+            "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
         )
         .expect("write config");
         fs::write(
             app.join("locales/en/messages.po"),
             "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
         )
-        .expect("write po");
+        .expect("write en po");
+        fs::write(
+            app.join("locales/de/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hallo\"\n",
+        )
+        .expect("write de po");
         let config = load_config(&app, None).expect("load config");
         let output = app.join("out");
         fs::create_dir_all(&output).expect("create output dir");
 
+        // Seed an earlier writable locale (`en.mjs`) and a later hard-linked
+        // locale (`de.mjs`); preflight must reject `de.mjs` before touching `en.mjs`.
+        let en_module = output.join("en.mjs");
+        fs::write(&en_module, "export const prior = true;\n").expect("seed en.mjs");
         let outside_file = outside.join("victim.mjs");
         fs::write(&outside_file, "do-not-overwrite").expect("seed outside file");
-        fs::hard_link(&outside_file, output.join("en.mjs")).expect("create hard link");
+        fs::hard_link(&outside_file, output.join("de.mjs")).expect("create hard link");
 
-        let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
-            .expect_err("hard-linked output target must be rejected");
+        let error = compile_js(
+            &config,
+            &["en".to_owned(), "de".to_owned()],
+            &[],
+            false,
+            &output,
+        )
+        .expect_err("hard-linked output target must be rejected");
         assert!(
             error.contains("hard-linked"),
             "expected hard-link containment error, got: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&en_module).expect("read prior en.mjs"),
+            "export const prior = true;\n",
+            "earlier locale must not be rewritten when a later locale fails preflight"
         );
         assert_eq!(
             fs::read_to_string(&outside_file).expect("read outside file"),

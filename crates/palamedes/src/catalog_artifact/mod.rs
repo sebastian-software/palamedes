@@ -84,6 +84,9 @@ pub fn validate_catalog_path_pattern(catalog_path: &str) -> Result<(), &'static 
         return Err("catalog path must not end with a path separator");
     }
     let portable = catalog_path.replace('\\', "/");
+    if portable.split('/').rfind(|segment| !segment.is_empty()) == Some(".") {
+        return Err("catalog path must not end with a current-directory ('.') segment");
+    }
     let mut has_normal = false;
     for component in Path::new(&portable).components() {
         match component {

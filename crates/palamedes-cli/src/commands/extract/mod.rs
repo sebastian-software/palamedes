@@ -614,6 +614,65 @@ enum ExtractTargetAnchor {
     Path(PathBuf),
 }
 
+fn unicode_full_casefold_nfd(text: &str) -> String {
+    let mut folded = String::with_capacity(text.len());
+    for ch in text.nfd() {
+        match ch {
+            // Cherokee case folding maps to uppercase (U+13A0..=U+13F5).
+            '\u{13a0}'..='\u{13f5}' => folded.push(ch),
+            '\u{13f8}'..='\u{13fd}' => {
+                folded.push(char::from_u32((ch as u32) - 8).unwrap_or(ch));
+            }
+            '\u{ab70}'..='\u{abbf}' => {
+                folded.push(char::from_u32(0x13a0 + ((ch as u32) - 0xab70)).unwrap_or(ch));
+            }
+            // Complete Unicode CaseFolding (C + F) delta from `char::to_lowercase()`
+            // after NFD decomposition (for example `ß`/`ẞ` -> `ss`, `ﬁ` -> `fi`,
+            // `ς` -> `σ`, `µ` -> `μ`, matching APFS and Linux `FS_CASEFOLD_FL`).
+            '\u{00b5}' => folded.push('\u{03bc}'),
+            '\u{00df}' | '\u{1e9e}' => folded.push_str("ss"),
+            '\u{0149}' => folded.push_str("\u{02bc}n"),
+            '\u{017f}' => folded.push('s'),
+            '\u{0345}' => folded.push('\u{03b9}'),
+            '\u{03c2}' => folded.push('\u{03c3}'),
+            '\u{03d0}' => folded.push('\u{03b2}'),
+            '\u{03d1}' => folded.push('\u{03b8}'),
+            '\u{03d5}' => folded.push('\u{03c6}'),
+            '\u{03d6}' => folded.push('\u{03c0}'),
+            '\u{03f0}' => folded.push('\u{03ba}'),
+            '\u{03f1}' => folded.push('\u{03c1}'),
+            '\u{03f5}' => folded.push('\u{03b5}'),
+            '\u{0587}' => folded.push_str("\u{0565}\u{0582}"),
+            '\u{1c80}' => folded.push('\u{0432}'),
+            '\u{1c81}' => folded.push('\u{0434}'),
+            '\u{1c82}' => folded.push('\u{043e}'),
+            '\u{1c83}' => folded.push('\u{0441}'),
+            '\u{1c84}' | '\u{1c85}' => folded.push('\u{0442}'),
+            '\u{1c86}' => folded.push('\u{044a}'),
+            '\u{1c87}' => folded.push('\u{0463}'),
+            '\u{1c88}' => folded.push('\u{a64b}'),
+            '\u{1e9a}' => folded.push_str("a\u{02be}"),
+            '\u{fb00}' => folded.push_str("ff"),
+            '\u{fb01}' => folded.push_str("fi"),
+            '\u{fb02}' => folded.push_str("fl"),
+            '\u{fb03}' => folded.push_str("ffi"),
+            '\u{fb04}' => folded.push_str("ffl"),
+            '\u{fb05}' | '\u{fb06}' => folded.push_str("st"),
+            '\u{fb13}' => folded.push_str("\u{0574}\u{0576}"),
+            '\u{fb14}' => folded.push_str("\u{0574}\u{0565}"),
+            '\u{fb15}' => folded.push_str("\u{0574}\u{056b}"),
+            '\u{fb16}' => folded.push_str("\u{057e}\u{0576}"),
+            '\u{fb17}' => folded.push_str("\u{0574}\u{056d}"),
+            other => {
+                for lower in other.to_lowercase() {
+                    folded.push(lower);
+                }
+            }
+        }
+    }
+    folded.nfd().collect()
+}
+
 fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirectoryEquivalence) -> OsString {
     if !equivalence.case_insensitive && !equivalence.unicode_normalizing {
         return segment.to_os_string();
@@ -621,17 +680,15 @@ fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirectoryEquivalence)
     segment.to_str().map_or_else(
         || segment.to_os_string(),
         |text| {
-            let mut normalized = if equivalence.unicode_normalizing {
-                text.nfd().collect::<String>()
-            } else {
-                text.to_owned()
+            let normalized = match (
+                equivalence.case_insensitive,
+                equivalence.unicode_normalizing,
+            ) {
+                (true, true) => unicode_full_casefold_nfd(text),
+                (false, true) => text.nfd().collect(),
+                (true, false) => text.to_lowercase(),
+                (false, false) => text.to_owned(),
             };
-            if equivalence.case_insensitive {
-                normalized = normalized.to_lowercase();
-                if equivalence.unicode_normalizing {
-                    normalized = normalized.nfd().collect::<String>();
-                }
-            }
             OsString::from(normalized)
         },
     )
@@ -1535,6 +1592,28 @@ catalogs:
             );
             assert!(!app.join("locales/en/caf\u{00e9}.po").exists());
             assert!(!app.join("locales/en/cafe\u{0301}.po").exists());
+        }
+
+        // Full Unicode case folding collision (`straße` vs `strasse`) on
+        // case-insensitive normalizing filesystems (for example default APFS).
+        if is_ci && is_unicode_norm {
+            fs::write(
+                app.join("palamedes.yaml"),
+                "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/stra\u{00df}e\n    include: [app/a]\n  - path: locales/{locale}/strasse\n    include: [app/b]\n",
+            )
+            .expect("write casefold-aliased config");
+            let config = load_config(&app, Some(&app.join("palamedes.yaml"))).expect("load config");
+            let error = run_extraction(&config, &extract_options()).expect_err(
+                "Unicode full-casefold extract scopes on case-insensitive normalizing filesystem must fail",
+            );
+            assert!(
+                error
+                    .to_string()
+                    .contains("resolve to the same target file"),
+                "unexpected error: {error}"
+            );
+            assert!(!app.join("locales/en/stra\u{00df}e.po").exists());
+            assert!(!app.join("locales/en/strasse.po").exists());
         }
     }
 }

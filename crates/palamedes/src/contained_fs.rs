@@ -341,10 +341,10 @@ mod platform {
         selinux_label: Option<Vec<u8>>,
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     struct ExistingAcl(*mut libc::c_void);
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     impl Drop for ExistingAcl {
         fn drop(&mut self) {
             // SAFETY: `self.0` was returned by `acl_get_fd_np`/`acl_init` and has not been freed.
@@ -370,10 +370,15 @@ mod platform {
         }
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd"
+    )))]
     struct ExistingAcl;
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     mod macos_acl {
         pub(super) const ACL_TYPE_EXTENDED: libc::c_int = 0x0000_0100;
         pub(super) const ACL_FIRST_ENTRY: libc::c_int = 0;
@@ -443,6 +448,9 @@ mod platform {
     mod freebsd_acl {
         pub(super) const ACL_TYPE_ACCESS: libc::c_int = 0x0000_0002;
         pub(super) const ACL_TYPE_NFS4: libc::c_int = 0x0000_0004;
+        pub(super) const ACL_FIRST_ENTRY: libc::c_int = 0;
+        pub(super) const ACL_NEXT_ENTRY: libc::c_int = 1;
+        pub(super) const ACL_ENTRY_FILE_INHERIT: u16 = 0x0001;
 
         unsafe extern "C" {
             pub(super) fn acl_get_fd_np(fd: libc::c_int, type_: libc::c_int) -> *mut libc::c_void;
@@ -459,6 +467,16 @@ mod platform {
                 acl: *mut libc::c_void,
                 recalculate_mask: libc::c_int,
             ) -> *mut libc::c_void;
+            pub(super) fn acl_get_entry(
+                acl: *mut libc::c_void,
+                entry_id: libc::c_int,
+                entry_p: *mut *mut libc::c_void,
+            ) -> libc::c_int;
+            pub(super) fn acl_get_flagset_np(
+                entry_d: *mut libc::c_void,
+                flagset_p: *mut *mut libc::c_void,
+            ) -> libc::c_int;
+            pub(super) fn acl_get_flag_np(flagset_d: *mut libc::c_void, flag: u16) -> libc::c_int;
             pub(super) fn acl_to_text_np(
                 acl: *mut libc::c_void,
                 len_p: *mut libc::ssize_t,
@@ -674,6 +692,53 @@ mod platform {
         pub fn reject_symlink(&self, file_name: &OsStr) -> Result<(), ContainedFsError> {
             validate_single_file_name(file_name)?;
             let _ = self.inspect_entry(file_name)?;
+            Ok(())
+        }
+
+        /// Rejects `file_name` if it already exists as a symlink or a
+        /// multi-link hard link (`st_nlink > 1`).
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
+        /// refers to a symlink, or has multiple hard links.
+        pub fn reject_symlink_or_hard_link(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<(), ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            let c_name = os_str_to_cstring(file_name)?;
+            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // SAFETY: `self.fd` is open, `c_name` is valid, and `stat` is writable.
+            let rc = unsafe {
+                libc::fstatat(
+                    self.fd.as_raw_fd(),
+                    c_name.as_ptr(),
+                    stat.as_mut_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            };
+            if rc != 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::ENOENT) {
+                    return Ok(());
+                }
+                return Err(ContainedFsError::Io(error));
+            }
+            // SAFETY: `fstatat` succeeded and initialized `stat`.
+            let stat = unsafe { stat.assume_init() };
+            if (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to write through symlink \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
+            if stat.st_nlink > 1 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to overwrite hard-linked file \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
             Ok(())
         }
 
@@ -1694,7 +1759,7 @@ mod platform {
     }
 
     fn detect_unix_dir_case_insensitivity(dir: &ContainedDir) -> Option<bool> {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
         {
             // SAFETY: `dir.fd` is an open directory descriptor.
             let mut value =
@@ -1777,7 +1842,7 @@ mod platform {
             }
             None
         }
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
         {
             let readable = open_readable_self(dir)?;
             probe_directory_case_insensitivity(dir, readable.as_raw_fd())
@@ -1785,7 +1850,7 @@ mod platform {
     }
 
     fn detect_unix_dir_unicode_normalizing(dir: &ContainedDir) -> Option<bool> {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
         {
             let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
             // SAFETY: `dir.fd` is an open directory descriptor and `fs_stat` is writable.
@@ -1821,7 +1886,7 @@ mod platform {
             }
             Some(false)
         }
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
         {
             let _ = dir;
             None
@@ -1868,7 +1933,7 @@ mod platform {
                 return Err(error);
             }
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
         {
             // SAFETY: both directory descriptors and C strings are valid.
             let rc = unsafe {
@@ -2107,7 +2172,7 @@ mod platform {
         Ok(())
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn serialize_macos_acl(acl: &ExistingAcl) -> io::Result<Vec<u8>> {
         // SAFETY: `acl.0` is a valid `acl_t`.
         let size = unsafe { macos_acl::acl_size(acl.0) };
@@ -2126,7 +2191,7 @@ mod platform {
         Ok(buffer)
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn acl_equals(left: Option<&ExistingAcl>, right: Option<&ExistingAcl>) -> io::Result<bool> {
         match (left, right) {
             (None, None) => Ok(true),
@@ -2135,7 +2200,7 @@ mod platform {
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn strip_inherited_acl(
         temp_fd: std::os::fd::RawFd,
         _preserve_default_acl: bool,
@@ -2164,7 +2229,7 @@ mod platform {
         Ok(())
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn read_inherited_new_file_acl(parent_dir: &ContainedDir) -> io::Result<Option<ExistingAcl>> {
         // SAFETY: `parent_dir.fd` is an open directory descriptor.
         let mut raw = unsafe {
@@ -2265,7 +2330,7 @@ mod platform {
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn read_existing_acl(fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
         // SAFETY: `fd` is an open file descriptor.
         let raw = unsafe { macos_acl::acl_get_fd_np(fd, macos_acl::ACL_TYPE_EXTENDED) };
@@ -2289,7 +2354,7 @@ mod platform {
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn apply_existing_acl(temp_fd: std::os::fd::RawFd, acl: &ExistingAcl) -> io::Result<()> {
         // SAFETY: `temp_fd` is open and `acl.0` is a valid `acl_t`.
         if unsafe { macos_acl::acl_set_fd_np(temp_fd, acl.0, macos_acl::ACL_TYPE_EXTENDED) } != 0 {
@@ -2423,9 +2488,149 @@ mod platform {
     }
 
     #[cfg(target_os = "freebsd")]
-    fn read_inherited_new_file_acl(_parent_dir: &ContainedDir) -> io::Result<Option<ExistingAcl>> {
-        // POSIX `ACL_TYPE_DEFAULT` is preserved on the staging directory.
+    fn read_inherited_new_file_acl(parent_dir: &ContainedDir) -> io::Result<Option<ExistingAcl>> {
+        // POSIX `ACL_TYPE_DEFAULT` is preserved on the staging directory. For
+        // FreeBSD NFSv4 ACLs, check whether the destination parent has any
+        // non-trivial `file_inherit` ACE and fail closed rather than publishing
+        // a file missing its inherited access controls.
+        // SAFETY: `parent_dir.fd` is an open directory descriptor.
+        let mut raw = unsafe {
+            freebsd_acl::acl_get_fd_np(parent_dir.fd.as_raw_fd(), freebsd_acl::ACL_TYPE_NFS4)
+        };
+        if raw.is_null() {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EBADF)
+                && let Some(readable) = open_readable_self(parent_dir)
+            {
+                // SAFETY: `readable` is an open directory descriptor.
+                raw = unsafe {
+                    freebsd_acl::acl_get_fd_np(readable.as_raw_fd(), freebsd_acl::ACL_TYPE_NFS4)
+                };
+            } else if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::EINVAL)) {
+                return Ok(None);
+            } else {
+                return Err(error);
+            }
+        }
+        if raw.is_null() {
+            let error = io::Error::last_os_error();
+            if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::EINVAL)) {
+                return Ok(None);
+            }
+            return Err(error);
+        }
+        let parent_acl = ExistingAcl {
+            acl_type: freebsd_acl::ACL_TYPE_NFS4,
+            ptr: raw,
+        };
+        let mut trivial: libc::c_int = 0;
+        // SAFETY: `parent_acl.ptr` is a valid FreeBSD `acl_t`.
+        if unsafe { freebsd_acl::acl_is_trivial_np(parent_acl.ptr, &mut trivial) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if trivial != 0 {
+            return Ok(None);
+        }
+        let mut entry_id = freebsd_acl::ACL_FIRST_ENTRY;
+        let mut entry: *mut libc::c_void = std::ptr::null_mut();
+        loop {
+            // SAFETY: `parent_acl.ptr` is a valid FreeBSD `acl_t`.
+            let rc = unsafe { freebsd_acl::acl_get_entry(parent_acl.ptr, entry_id, &mut entry) };
+            if rc == 0 {
+                return Ok(None);
+            }
+            if rc < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            entry_id = freebsd_acl::ACL_NEXT_ENTRY;
+            let mut flagset: *mut libc::c_void = std::ptr::null_mut();
+            // SAFETY: `entry` is a valid FreeBSD `acl_entry_t`.
+            if unsafe { freebsd_acl::acl_get_flagset_np(entry, &mut flagset) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: `flagset` is a valid FreeBSD `acl_flagset_t`.
+            if unsafe { freebsd_acl::acl_get_flag_np(flagset, freebsd_acl::ACL_ENTRY_FILE_INHERIT) }
+                == 1
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "cannot safely preserve inheritable FreeBSD NFSv4 ACLs during staged atomic file creation",
+                ));
+            }
+        }
+    }
+
+    #[cfg(target_os = "netbsd")]
+    fn netbsd_fd_supports_acls(fd: std::os::fd::RawFd) -> io::Result<bool> {
+        // NetBSD `_PC_ACL_NFS4` (16 in `<sys/unistd.h>`) complements
+        // `libc::_PC_ACL_EXTENDED` (14).
+        const PC_ACL_NFS4: libc::c_int = 16;
+        for name in [libc::_PC_ACL_EXTENDED, PC_ACL_NFS4] {
+            // SAFETY: `fd` is an open file descriptor.
+            let val = unsafe { libc::fpathconf(fd, name) };
+            if val > 0 {
+                return Ok(true);
+            }
+            if val < 0 {
+                let error = io::Error::last_os_error();
+                if !matches!(
+                    error.raw_os_error(),
+                    Some(libc::EINVAL | libc::EOPNOTSUPP | libc::ENOTSUP)
+                ) {
+                    return Err(error);
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    #[cfg(target_os = "netbsd")]
+    fn acl_equals(left: Option<&ExistingAcl>, right: Option<&ExistingAcl>) -> io::Result<bool> {
+        Ok(left.is_none() && right.is_none())
+    }
+
+    #[cfg(target_os = "netbsd")]
+    fn strip_inherited_acl(
+        temp_fd: std::os::fd::RawFd,
+        _preserve_default_acl: bool,
+    ) -> io::Result<()> {
+        if netbsd_fd_supports_acls(temp_fd)? {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cannot verify or clear inherited filesystem ACLs on an ACL-enabled NetBSD mount",
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "netbsd")]
+    fn read_inherited_new_file_acl(parent_dir: &ContainedDir) -> io::Result<Option<ExistingAcl>> {
+        if netbsd_fd_supports_acls(parent_dir.fd.as_raw_fd())? {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cannot verify or preserve inherited filesystem ACLs on an ACL-enabled NetBSD mount",
+            ));
+        }
         Ok(None)
+    }
+
+    #[cfg(target_os = "netbsd")]
+    fn read_existing_acl(fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
+        if netbsd_fd_supports_acls(fd)? {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cannot verify or preserve filesystem ACLs on an ACL-enabled NetBSD mount",
+            ));
+        }
+        Ok(None)
+    }
+
+    #[cfg(target_os = "netbsd")]
+    fn apply_existing_acl(_temp_fd: std::os::fd::RawFd, _acl: &ExistingAcl) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "cannot preserve filesystem ACLs on NetBSD",
+        ))
     }
 
     #[cfg(target_os = "openbsd")]
@@ -2460,7 +2665,9 @@ mod platform {
     #[cfg(not(any(
         target_os = "linux",
         target_os = "macos",
+        target_os = "ios",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd"
     )))]
     fn acl_equals(left: Option<&ExistingAcl>, right: Option<&ExistingAcl>) -> io::Result<bool> {
@@ -2470,7 +2677,9 @@ mod platform {
     #[cfg(not(any(
         target_os = "linux",
         target_os = "macos",
+        target_os = "ios",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd"
     )))]
     fn strip_inherited_acl(
@@ -2486,7 +2695,9 @@ mod platform {
     #[cfg(not(any(
         target_os = "linux",
         target_os = "macos",
+        target_os = "ios",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd"
     )))]
     fn read_inherited_new_file_acl(_parent_dir: &ContainedDir) -> io::Result<Option<ExistingAcl>> {
@@ -2496,7 +2707,9 @@ mod platform {
     #[cfg(not(any(
         target_os = "linux",
         target_os = "macos",
+        target_os = "ios",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd"
     )))]
     fn read_existing_acl(_fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
@@ -2509,7 +2722,9 @@ mod platform {
     #[cfg(not(any(
         target_os = "linux",
         target_os = "macos",
+        target_os = "ios",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd"
     )))]
     fn apply_existing_acl(_temp_fd: std::os::fd::RawFd, _acl: &ExistingAcl) -> io::Result<()> {
@@ -2994,6 +3209,48 @@ mod platform {
         pub fn reject_symlink(&self, file_name: &OsStr) -> Result<(), ContainedFsError> {
             validate_single_file_name(file_name)?;
             let _ = self.inspect_entry(file_name, false)?;
+            Ok(())
+        }
+
+        /// Rejects `file_name` if it exists as a symlink/reparse point or a
+        /// multi-link hard link (`number_of_links > 1`).
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
+        /// refers to a reparse point, or has multiple hard links.
+        pub fn reject_symlink_or_hard_link(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<(), ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            let handle = match nt_create_relative(
+                self.handle.as_raw_handle(),
+                file_name,
+                FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                FILE_ATTRIBUTE_NORMAL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_OPEN,
+                FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            ) {
+                Ok(handle) => handle,
+                Err(status) if is_not_found_status(status) => return Ok(()),
+                Err(status) => return Err(ContainedFsError::Io(nt_status_to_io_error(status))),
+            };
+            let info = file_information(handle.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to write through symlink \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
+            if info.number_of_links > 1 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to overwrite hard-linked file \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
             Ok(())
         }
 
@@ -3884,6 +4141,15 @@ mod platform {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
                 Err(error) => Err(ContainedFsError::Io(error)),
             }
+        }
+
+        /// Rejects `file_name` if it exists as a symlink (hard-link count is
+        /// unavailable on fallback targets).
+        pub fn reject_symlink_or_hard_link(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<(), ContainedFsError> {
+            self.reject_symlink(file_name)
         }
 
         /// Unsupported file identity lookup fallback.

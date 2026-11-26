@@ -831,14 +831,22 @@ function validateCatalogPathPattern(catalogPath: string): string | undefined {
   }
   const segments = catalogPath.replaceAll("\\", "/").split("/");
   let hasNormal = false;
+  let lastNonEmpty = "";
   for (const segment of segments) {
-    if (segment === "" || segment === ".") {
+    if (segment === "") {
+      continue;
+    }
+    lastNonEmpty = segment;
+    if (segment === ".") {
       continue;
     }
     if (segment === "..") {
       return "catalog path must not contain parent-directory ('..') segments";
     }
     hasNormal = true;
+  }
+  if (lastNonEmpty === ".") {
+    return "catalog path must not end with a current-directory ('.') segment";
   }
   if (!hasNormal) {
     return "catalog path must name a file path inside the config directory";
