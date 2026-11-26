@@ -298,7 +298,7 @@ mod platform {
         target_os = "netbsd"
     ));
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, PartialEq, Eq)]
     struct ExistingEntry {
         mode: libc::mode_t,
         uid: libc::uid_t,
@@ -312,6 +312,7 @@ mod platform {
     }
 
     #[cfg(target_os = "linux")]
+    #[derive(PartialEq, Eq)]
     struct ExistingAcl {
         posix_access: Option<Vec<u8>>,
         nfs4: Option<Vec<u8>>,
@@ -354,6 +355,10 @@ mod platform {
     mod macos_acl {
         pub(super) const ACL_TYPE_EXTENDED: libc::c_int = 0x0000_0100;
         pub(super) const ACL_FIRST_ENTRY: libc::c_int = 0;
+        pub(super) const ACL_NEXT_ENTRY: libc::c_int = -1;
+        pub(super) const ACL_ENTRY_FILE_INHERIT: libc::c_int = 1 << 5;
+        pub(super) const ACL_ENTRY_DIRECTORY_INHERIT: libc::c_int = 1 << 6;
+        pub(super) const ACL_ENTRY_ONLY_INHERIT: libc::c_int = 1 << 8;
         pub(super) const RENAME_EXCL: libc::c_uint = 0x0000_0004;
 
         unsafe extern "C" {
@@ -369,6 +374,32 @@ mod platform {
                 entry_id: libc::c_int,
                 entry_p: *mut *mut libc::c_void,
             ) -> libc::c_int;
+            pub(super) fn acl_delete_entry(
+                acl: *mut libc::c_void,
+                entry_d: *mut libc::c_void,
+            ) -> libc::c_int;
+            pub(super) fn acl_get_flagset_np(
+                obj_p: *mut libc::c_void,
+                flagset_p: *mut *mut libc::c_void,
+            ) -> libc::c_int;
+            pub(super) fn acl_get_flag_np(
+                flagset_d: *mut libc::c_void,
+                flag: libc::c_int,
+            ) -> libc::c_int;
+            pub(super) fn acl_add_flag_np(
+                flagset_d: *mut libc::c_void,
+                flag: libc::c_int,
+            ) -> libc::c_int;
+            pub(super) fn acl_delete_flag_np(
+                flagset_d: *mut libc::c_void,
+                flag: libc::c_int,
+            ) -> libc::c_int;
+            pub(super) fn acl_size(acl: *mut libc::c_void) -> libc::ssize_t;
+            pub(super) fn acl_copy_ext_native(
+                buf_p: *mut libc::c_void,
+                acl: *mut libc::c_void,
+                size: libc::ssize_t,
+            ) -> libc::ssize_t;
             pub(super) fn acl_free(obj_p: *mut libc::c_void) -> libc::c_int;
             pub(super) fn renameatx_np(
                 fromfd: libc::c_int,
@@ -400,6 +431,11 @@ mod platform {
                 acl: *mut libc::c_void,
                 recalculate_mask: libc::c_int,
             ) -> *mut libc::c_void;
+            pub(super) fn acl_to_text_np(
+                acl: *mut libc::c_void,
+                len_p: *mut libc::ssize_t,
+                flags: libc::c_int,
+            ) -> *mut libc::c_char;
             pub(super) fn acl_free(obj_p: *mut libc::c_void) -> libc::c_int;
         }
     }
@@ -585,7 +621,9 @@ mod platform {
 
             for _ in 0..8 {
                 let existing = self.open_existing_for_replace(file_name)?;
-                let (stage_name, stage_dir, stage_identity) = self.create_staging_dir()?;
+                let preserve_file_inherit = existing.is_none();
+                let (stage_name, stage_dir, stage_identity) =
+                    self.create_staging_dir(preserve_file_inherit)?;
                 enum StageOutcome {
                     Published,
                     Retry,
@@ -616,8 +654,8 @@ mod platform {
                         }
 
                         // Guard against concurrent destination replacement or
-                        // access-control tightening while staging.
-                        if !self.destination_matches_snapshot(&c_target, existing.entry) {
+                        // mode/owner/ACL/SELinux tightening while staging.
+                        if !self.destination_matches_snapshot(file_name, existing)? {
                             let _ = stage_dir.unlink_temp(&temp_name);
                             return Ok(StageOutcome::Retry);
                         }
@@ -890,7 +928,10 @@ mod platform {
             )))
         }
 
-        fn create_staging_dir(&self) -> Result<(CString, Self, FileIdentity), ContainedFsError> {
+        fn create_staging_dir(
+            &self,
+            preserve_file_inherit: bool,
+        ) -> Result<(CString, Self, FileIdentity), ContainedFsError> {
             let mut parent_stat = std::mem::MaybeUninit::<libc::stat>::uninit();
             // SAFETY: `self.fd` is an open directory descriptor and `parent_stat` is writable.
             if unsafe { libc::fstat(self.fd.as_raw_fd(), parent_stat.as_mut_ptr()) } != 0 {
@@ -975,18 +1016,39 @@ mod platform {
                 }
 
                 let harden = (|| -> io::Result<()> {
-                    strip_inherited_acl(fd.as_raw_fd())?;
+                    harden_staging_dir_acl(
+                        self.fd.as_raw_fd(),
+                        fd.as_raw_fd(),
+                        preserve_file_inherit,
+                    )?;
+                    // Preserve `S_ISGID` on first creation so brand-new files
+                    // inherit the destination directory's group just like
+                    // `openat` directly in `self.fd`, while keeping `0700`
+                    // access restrictions on the staging directory itself.
+                    let target_mode: libc::mode_t = if preserve_file_inherit {
+                        0o700 | (stage_stat.st_mode & libc::S_ISGID)
+                    } else {
+                        0o700
+                    };
                     // SAFETY: `fd` has been verified as our fresh private empty directory.
-                    if unsafe { libc::fchmod(fd.as_raw_fd(), 0o700) } != 0 {
-                        let error = io::Error::last_os_error();
-                        // Filesystems without POSIX mode bits (e.g. exFAT) may
-                        // reject `fchmod` with `EOPNOTSUPP`/`ENOSYS`/`EINVAL`.
-                        if !matches!(
-                            error.raw_os_error(),
-                            Some(libc::EOPNOTSUPP | libc::ENOSYS | libc::EINVAL)
-                        ) {
-                            return Err(error);
-                        }
+                    if unsafe { libc::fchmod(fd.as_raw_fd(), target_mode) } != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    // Verify effective mode bits after hardening so mounts that
+                    // ignore `fchmod` (for example world-writable non-POSIX
+                    // mounts) fail closed rather than exposing staged files.
+                    let mut post_stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+                    // SAFETY: `fd` is open and `post_stat` is writable.
+                    if unsafe { libc::fstat(fd.as_raw_fd(), post_stat.as_mut_ptr()) } != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    // SAFETY: `fstat` succeeded and initialized `post_stat`.
+                    let post_stat = unsafe { post_stat.assume_init() };
+                    if (post_stat.st_mode & 0o0077) != 0 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::PermissionDenied,
+                            "staging directory cannot be made private on this filesystem",
+                        ));
                     }
                     Ok(())
                 })();
@@ -1003,32 +1065,18 @@ mod platform {
             )))
         }
 
-        fn destination_matches_snapshot(&self, c_name: &CString, expected: ExistingEntry) -> bool {
-            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-            // SAFETY: `self.fd` is open, `c_name` is valid, and `stat` is writable.
-            let rc = unsafe {
-                libc::fstatat(
-                    self.fd.as_raw_fd(),
-                    c_name.as_ptr(),
-                    stat.as_mut_ptr(),
-                    libc::AT_SYMLINK_NOFOLLOW,
-                )
+        fn destination_matches_snapshot(
+            &self,
+            file_name: &OsStr,
+            expected: &ExistingTarget,
+        ) -> Result<bool, ContainedFsError> {
+            let Some(current) = self.open_existing_for_replace(file_name)? else {
+                return Ok(false);
             };
-            if rc != 0 {
-                return false;
+            if current.entry != expected.entry {
+                return Ok(false);
             }
-            // SAFETY: `fstatat` succeeded and initialized `stat`.
-            let stat = unsafe { stat.assume_init() };
-            #[allow(clippy::unnecessary_cast)]
-            let identity = FileIdentity {
-                dev: stat.st_dev as u64,
-                ino: stat.st_ino as u64,
-            };
-            (stat.st_mode & libc::S_IFMT) == libc::S_IFREG
-                && identity == expected.identity
-                && (stat.st_mode & 0o7777) == expected.mode
-                && stat.st_uid == expected.uid
-                && stat.st_gid == expected.gid
+            Ok(acl_equals(current.acl.as_ref(), expected.acl.as_ref())?)
         }
 
         fn entry_identity(&self, c_name: &CString) -> Option<FileIdentity> {
@@ -1103,6 +1151,26 @@ mod platform {
         }
     }
 
+    fn errno_location() -> *mut libc::c_int {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        unsafe {
+            libc::__errno_location()
+        }
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "freebsd",
+            target_os = "dragonfly"
+        ))]
+        unsafe {
+            libc::__error()
+        }
+        #[cfg(any(target_os = "netbsd", target_os = "openbsd"))]
+        unsafe {
+            libc::__errno()
+        }
+    }
+
     fn is_empty_dir(fd: std::os::fd::RawFd) -> io::Result<bool> {
         // SAFETY: `fd` is an open readable directory descriptor.
         let dup_fd = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) };
@@ -1119,17 +1187,28 @@ mod platform {
             }
             return Err(error);
         }
-        let mut empty = true;
+        let mut result = Ok(true);
+        let errno_ptr = errno_location();
         loop {
+            // SAFETY: clearing thread-local `errno` before `readdir` per POSIX
+            // so EOF (`errno == 0`) is distinguished from directory-read errors.
+            unsafe {
+                *errno_ptr = 0;
+            }
             // SAFETY: `dir` is a valid `DIR*`.
             let entry = unsafe { libc::readdir(dir) };
             if entry.is_null() {
+                // SAFETY: reading thread-local `errno` immediately after `readdir`.
+                let err = unsafe { *errno_ptr };
+                if err != 0 {
+                    result = Err(io::Error::from_raw_os_error(err));
+                }
                 break;
             }
             // SAFETY: `entry` is non-null and `d_name` is a NUL-terminated C string.
             let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
             if name != c"." && name != c".." {
-                empty = false;
+                result = Ok(false);
                 break;
             }
         }
@@ -1137,7 +1216,7 @@ mod platform {
         unsafe {
             libc::closedir(dir);
         }
-        Ok(empty)
+        result
     }
 
     /// Publishes `temp_name` from `stage_fd` into `target_dir_fd` as `c_target`
@@ -1307,11 +1386,30 @@ mod platform {
     }
 
     #[cfg(target_os = "linux")]
+    fn harden_staging_dir_acl(
+        _parent_fd: std::os::fd::RawFd,
+        stage_fd: std::os::fd::RawFd,
+        preserve_file_inherit: bool,
+    ) -> io::Result<()> {
+        remove_linux_xattr_if_present(stage_fd, c"system.posix_acl_access")?;
+        remove_linux_xattr_if_present(stage_fd, c"system.nfs4_acl")?;
+        if !preserve_file_inherit {
+            remove_linux_xattr_if_present(stage_fd, c"system.posix_acl_default")?;
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
     fn strip_inherited_acl(temp_fd: std::os::fd::RawFd) -> io::Result<()> {
         remove_linux_xattr_if_present(temp_fd, c"system.posix_acl_access")?;
         remove_linux_xattr_if_present(temp_fd, c"system.posix_acl_default")?;
         remove_linux_xattr_if_present(temp_fd, c"system.nfs4_acl")?;
         Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn acl_equals(left: Option<&ExistingAcl>, right: Option<&ExistingAcl>) -> io::Result<bool> {
+        Ok(left == right)
     }
 
     #[cfg(target_os = "linux")]
@@ -1403,6 +1501,97 @@ mod platform {
     }
 
     #[cfg(target_os = "macos")]
+    fn harden_staging_dir_acl(
+        parent_fd: std::os::fd::RawFd,
+        stage_fd: std::os::fd::RawFd,
+        preserve_file_inherit: bool,
+    ) -> io::Result<()> {
+        strip_inherited_acl(stage_fd)?;
+        if !preserve_file_inherit {
+            return Ok(());
+        }
+        // Propagate `ACL_ENTRY_FILE_INHERIT` entries from the destination
+        // directory onto the staging directory as `ACL_ENTRY_ONLY_INHERIT` so
+        // the staging directory itself grants zero access to other principals
+        // while newly created files inside it inherit the destination
+        // directory's exact file-inheritance ACL entries (even when the parent
+        // only sets `file_inherit` without `directory_inherit`).
+        let Some(acl) = read_existing_acl(parent_fd)? else {
+            return Ok(());
+        };
+        let mut entry: *mut libc::c_void = std::ptr::null_mut();
+        let mut entry_id = macos_acl::ACL_FIRST_ENTRY;
+        let mut to_delete = Vec::new();
+        let mut kept_any = false;
+        // SAFETY: `acl.0` is a valid `acl_t`.
+        while unsafe { macos_acl::acl_get_entry(acl.0, entry_id, &mut entry) } == 0 {
+            entry_id = macos_acl::ACL_NEXT_ENTRY;
+            let mut flagset: *mut libc::c_void = std::ptr::null_mut();
+            // SAFETY: `entry` is a valid `acl_entry_t`.
+            if unsafe { macos_acl::acl_get_flagset_np(entry, &mut flagset) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: `flagset` is a valid `acl_flagset_t`.
+            let inherits_to_file =
+                unsafe { macos_acl::acl_get_flag_np(flagset, macos_acl::ACL_ENTRY_FILE_INHERIT) }
+                    == 1;
+            if inherits_to_file {
+                kept_any = true;
+                // SAFETY: `flagset` is a valid `acl_flagset_t`.
+                if unsafe { macos_acl::acl_add_flag_np(flagset, macos_acl::ACL_ENTRY_ONLY_INHERIT) }
+                    != 0
+                {
+                    return Err(io::Error::last_os_error());
+                }
+                // SAFETY: `flagset` is a valid `acl_flagset_t`.
+                let _ = unsafe {
+                    macos_acl::acl_delete_flag_np(flagset, macos_acl::ACL_ENTRY_DIRECTORY_INHERIT)
+                };
+            } else {
+                to_delete.push(entry);
+            }
+        }
+        if !kept_any {
+            return Ok(());
+        }
+        for entry in to_delete {
+            // SAFETY: `entry` belongs to `acl.0`.
+            if unsafe { macos_acl::acl_delete_entry(acl.0, entry) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        apply_existing_acl(stage_fd, &acl)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn serialize_macos_acl(acl: &ExistingAcl) -> io::Result<Vec<u8>> {
+        // SAFETY: `acl.0` is a valid `acl_t`.
+        let size = unsafe { macos_acl::acl_size(acl.0) };
+        if size <= 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut buffer = vec![0u8; usize::try_from(size).unwrap_or(0)];
+        // SAFETY: `buffer` has `size` writable bytes and `acl.0` is valid.
+        let copied = unsafe {
+            macos_acl::acl_copy_ext_native(buffer.as_mut_ptr().cast::<libc::c_void>(), acl.0, size)
+        };
+        if copied <= 0 {
+            return Err(io::Error::last_os_error());
+        }
+        buffer.truncate(usize::try_from(copied).unwrap_or(0));
+        Ok(buffer)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn acl_equals(left: Option<&ExistingAcl>, right: Option<&ExistingAcl>) -> io::Result<bool> {
+        match (left, right) {
+            (None, None) => Ok(true),
+            (Some(a), Some(b)) => Ok(serialize_macos_acl(a)? == serialize_macos_acl(b)?),
+            _ => Ok(false),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
     fn strip_inherited_acl(temp_fd: std::os::fd::RawFd) -> io::Result<()> {
         // SAFETY: creating an empty extended ACL to remove any inherited ACEs.
         let empty = unsafe { macos_acl::acl_init(0) };
@@ -1463,6 +1652,50 @@ mod platform {
             ));
         }
         Ok(())
+    }
+
+    #[cfg(target_os = "freebsd")]
+    fn harden_staging_dir_acl(
+        _parent_fd: std::os::fd::RawFd,
+        stage_fd: std::os::fd::RawFd,
+        _preserve_file_inherit: bool,
+    ) -> io::Result<()> {
+        strip_inherited_acl(stage_fd)
+    }
+
+    #[cfg(target_os = "freebsd")]
+    fn serialize_freebsd_acl(acl: &ExistingAcl) -> io::Result<Vec<u8>> {
+        let mut len: libc::ssize_t = 0;
+        // SAFETY: `acl.ptr` is a valid FreeBSD `acl_t`.
+        let text = unsafe { freebsd_acl::acl_to_text_np(acl.ptr, &mut len, 0) };
+        if text.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let bytes = if len > 0 {
+            // SAFETY: `text` has `len` valid bytes allocated by `acl_to_text_np`.
+            unsafe {
+                std::slice::from_raw_parts(text.cast::<u8>(), usize::try_from(len).unwrap_or(0))
+            }
+            .to_vec()
+        } else {
+            Vec::new()
+        };
+        // SAFETY: `text` was allocated by `acl_to_text_np` and must be freed with `acl_free`.
+        unsafe {
+            let _ = freebsd_acl::acl_free(text.cast::<libc::c_void>());
+        }
+        Ok(bytes)
+    }
+
+    #[cfg(target_os = "freebsd")]
+    fn acl_equals(left: Option<&ExistingAcl>, right: Option<&ExistingAcl>) -> io::Result<bool> {
+        match (left, right) {
+            (None, None) => Ok(true),
+            (Some(a), Some(b)) if a.acl_type == b.acl_type => {
+                Ok(serialize_freebsd_acl(a)? == serialize_freebsd_acl(b)?)
+            }
+            _ => Ok(false),
+        }
     }
 
     #[cfg(target_os = "freebsd")]
@@ -1548,6 +1781,20 @@ mod platform {
     }
 
     #[cfg(target_os = "openbsd")]
+    fn harden_staging_dir_acl(
+        _parent_fd: std::os::fd::RawFd,
+        _stage_fd: std::os::fd::RawFd,
+        _preserve_file_inherit: bool,
+    ) -> io::Result<()> {
+        Ok(())
+    }
+
+    #[cfg(target_os = "openbsd")]
+    fn acl_equals(_left: Option<&ExistingAcl>, _right: Option<&ExistingAcl>) -> io::Result<bool> {
+        Ok(true)
+    }
+
+    #[cfg(target_os = "openbsd")]
     fn strip_inherited_acl(_temp_fd: std::os::fd::RawFd) -> io::Result<()> {
         Ok(())
     }
@@ -1561,6 +1808,37 @@ mod platform {
     #[cfg(target_os = "openbsd")]
     fn apply_existing_acl(_temp_fd: std::os::fd::RawFd, _acl: &ExistingAcl) -> io::Result<()> {
         Ok(())
+    }
+
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd"
+    )))]
+    fn harden_staging_dir_acl(
+        _parent_fd: std::os::fd::RawFd,
+        _stage_fd: std::os::fd::RawFd,
+        preserve_file_inherit: bool,
+    ) -> io::Result<()> {
+        if preserve_file_inherit {
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cannot verify or clear inherited filesystem ACLs on this Unix target",
+            ))
+        }
+    }
+
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd"
+    )))]
+    fn acl_equals(left: Option<&ExistingAcl>, right: Option<&ExistingAcl>) -> io::Result<bool> {
+        Ok(left.is_none() && right.is_none())
     }
 
     #[cfg(not(any(
@@ -1699,6 +1977,7 @@ mod platform {
     const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0000_0010;
     const FILE_ATTRIBUTE_NORMAL: u32 = 0x0000_0080;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+    const FILE_ATTRIBUTE_ENCRYPTED: u32 = 0x0000_4000;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
 
     const FILE_OPEN: u32 = 0x0000_0001;
@@ -1727,6 +2006,30 @@ mod platform {
     struct ExistingWindowsSecurity {
         owner_sd: Option<Vec<usize>>,
         dacl_sd: Option<Vec<usize>>,
+        is_encrypted: bool,
+    }
+
+    struct WindowsTempFileGuard {
+        file: File,
+        armed: bool,
+    }
+
+    impl WindowsTempFileGuard {
+        fn new(file: File) -> Self {
+            Self { file, armed: true }
+        }
+
+        fn disarm(&mut self) {
+            self.armed = false;
+        }
+    }
+
+    impl Drop for WindowsTempFileGuard {
+        fn drop(&mut self) {
+            if self.armed {
+                let _ = nt_mark_delete_on_close(self.file.as_raw_handle());
+            }
+        }
     }
 
     #[repr(C)]
@@ -2028,6 +2331,9 @@ mod platform {
                 let existing_identity = existing_entry.as_ref().map(|(identity, _)| *identity);
                 let target_existed = existing_identity.is_some();
                 let mut existing_security = existing_entry.and_then(|(_, security)| security);
+                let require_encrypted = existing_security
+                    .as_ref()
+                    .is_some_and(|security| security.is_encrypted);
                 let initial_dacl = existing_security
                     .as_mut()
                     .and_then(|sec| sec.dacl_sd.as_mut())
@@ -2035,54 +2341,63 @@ mod platform {
                         buffer.as_mut_ptr().cast::<c_void>()
                     });
 
-                let mut temp_file =
-                    self.create_temp_file(initial_dacl, existing_security.is_some())?;
-                let write_result = (|| -> io::Result<()> {
-                    temp_file.write_all(bytes)?;
-                    temp_file.flush()?;
-                    if let Some(existing_security) = existing_security.as_mut() {
-                        if let Some(owner_sd) = existing_security.owner_sd.as_mut() {
-                            restore_windows_owner(temp_file.as_raw_handle(), owner_sd)?;
-                        }
-                        if let Some(dacl_sd) = existing_security.dacl_sd.as_mut() {
-                            restore_and_verify_windows_dacl(temp_file.as_raw_handle(), dacl_sd)?;
-                        }
+                let mut temp_guard = WindowsTempFileGuard::new(self.create_temp_file(
+                    initial_dacl,
+                    existing_security.is_some(),
+                    require_encrypted,
+                )?);
+                if require_encrypted {
+                    let temp_info = file_information(temp_guard.file.as_raw_handle())?;
+                    if (temp_info.file_attributes & FILE_ATTRIBUTE_ENCRYPTED) == 0 {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::PermissionDenied,
+                            "cannot preserve Windows EFS encryption on replacement",
+                        )));
                     }
-                    if durability.syncs_file() {
-                        temp_file.sync_all()?;
+                }
+                temp_guard.file.write_all(bytes)?;
+                temp_guard.file.flush()?;
+                if let Some(existing_security) = existing_security.as_mut() {
+                    if let Some(owner_sd) = existing_security.owner_sd.as_mut() {
+                        restore_windows_owner(temp_guard.file.as_raw_handle(), owner_sd)?;
                     }
-                    Ok(())
-                })();
-                if let Err(error) = write_result {
-                    let _ = nt_mark_delete_on_close(temp_file.as_raw_handle());
-                    return Err(ContainedFsError::Io(error));
+                    if let Some(dacl_sd) = existing_security.dacl_sd.as_mut() {
+                        restore_and_verify_windows_dacl(temp_guard.file.as_raw_handle(), dacl_sd)?;
+                    }
+                }
+                if durability.syncs_file() {
+                    temp_guard.file.sync_all()?;
                 }
 
                 if let Some(expected_identity) = existing_identity {
-                    let current_identity = self
-                        .inspect_entry(file_name, false)?
-                        .map(|(identity, _)| identity);
-                    if current_identity != Some(expected_identity) {
-                        let _ = nt_mark_delete_on_close(temp_file.as_raw_handle());
-                        drop(temp_file);
+                    let current = self.inspect_entry(file_name, true)?;
+                    let Some((current_identity, mut current_security)) = current else {
+                        continue;
+                    };
+                    if current_identity != expected_identity
+                        || !windows_security_matches(
+                            existing_security.as_mut(),
+                            current_security.as_mut(),
+                        )?
+                    {
                         continue;
                     }
                 }
 
                 match nt_rename_relative(
-                    temp_file.as_raw_handle(),
+                    temp_guard.file.as_raw_handle(),
                     self.handle.as_raw_handle(),
                     file_name,
                     target_existed,
                 ) {
-                    Ok(()) => return Ok(ContainedWriteOutcome::Committed),
+                    Ok(()) => {
+                        temp_guard.disarm();
+                        return Ok(ContainedWriteOutcome::Committed);
+                    }
                     Err(STATUS_OBJECT_NAME_COLLISION) if !target_existed => {
-                        let _ = nt_mark_delete_on_close(temp_file.as_raw_handle());
-                        drop(temp_file);
                         continue;
                     }
                     Err(status) => {
-                        let _ = nt_mark_delete_on_close(temp_file.as_raw_handle());
                         return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
                     }
                 }
@@ -2134,14 +2449,19 @@ mod platform {
                 )));
             }
             let security = if for_replace {
+                let is_encrypted = (info.file_attributes & FILE_ATTRIBUTE_ENCRYPTED) != 0;
                 let owner_sd =
                     read_security_descriptor(handle.as_raw_handle(), OWNER_SECURITY_INFORMATION)?;
                 let dacl_sd =
                     read_security_descriptor(handle.as_raw_handle(), DACL_SECURITY_INFORMATION)?;
-                if owner_sd.is_none() && dacl_sd.is_none() {
+                if !is_encrypted && owner_sd.is_none() && dacl_sd.is_none() {
                     None
                 } else {
-                    Some(ExistingWindowsSecurity { owner_sd, dacl_sd })
+                    Some(ExistingWindowsSecurity {
+                        owner_sd,
+                        dacl_sd,
+                        is_encrypted,
+                    })
                 }
             } else {
                 None
@@ -2160,11 +2480,17 @@ mod platform {
             &self,
             security_descriptor: *mut c_void,
             preserving_security: bool,
+            encrypted: bool,
         ) -> Result<File, ContainedFsError> {
             let desired_access = if preserving_security {
                 GENERIC_WRITE | READ_CONTROL | WRITE_DAC | WRITE_OWNER | DELETE | SYNCHRONIZE
             } else {
                 GENERIC_WRITE | DELETE | SYNCHRONIZE
+            };
+            let file_attributes = if encrypted {
+                FILE_ATTRIBUTE_ENCRYPTED
+            } else {
+                FILE_ATTRIBUTE_NORMAL
             };
             let pid = std::process::id();
             for _ in 0..128 {
@@ -2174,7 +2500,7 @@ mod platform {
                     self.handle.as_raw_handle(),
                     &name,
                     desired_access,
-                    FILE_ATTRIBUTE_NORMAL,
+                    file_attributes,
                     0,
                     FILE_CREATE,
                     FILE_NON_DIRECTORY_FILE
@@ -2483,6 +2809,78 @@ mod platform {
         let expected = extract_windows_dacl(expected_sd)?;
         let actual = extract_windows_dacl(actual_sd)?;
         Ok(expected == actual)
+    }
+
+    fn windows_owner_matches(
+        expected_sd: &mut [usize],
+        actual_sd: Option<&mut [usize]>,
+    ) -> io::Result<bool> {
+        let mut expected_owner: *mut c_void = std::ptr::null_mut();
+        let mut expected_defaulted: i32 = 0;
+        // SAFETY: `expected_sd` is a valid security descriptor.
+        if unsafe {
+            GetSecurityDescriptorOwner(
+                expected_sd.as_mut_ptr().cast::<c_void>(),
+                &mut expected_owner,
+                &mut expected_defaulted,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let Some(actual_sd) = actual_sd else {
+            return Ok(expected_owner.is_null());
+        };
+        let mut actual_owner: *mut c_void = std::ptr::null_mut();
+        let mut actual_defaulted: i32 = 0;
+        // SAFETY: `actual_sd` is a valid security descriptor.
+        if unsafe {
+            GetSecurityDescriptorOwner(
+                actual_sd.as_mut_ptr().cast::<c_void>(),
+                &mut actual_owner,
+                &mut actual_defaulted,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        if expected_owner.is_null() && actual_owner.is_null() {
+            return Ok(true);
+        }
+        if expected_owner.is_null() || actual_owner.is_null() {
+            return Ok(false);
+        }
+        // SAFETY: both SID pointers are non-null and owned by their respective descriptors.
+        Ok(unsafe { EqualSid(expected_owner, actual_owner) } != 0)
+    }
+
+    fn windows_security_matches(
+        expected: Option<&mut ExistingWindowsSecurity>,
+        actual: Option<&mut ExistingWindowsSecurity>,
+    ) -> io::Result<bool> {
+        match (expected, actual) {
+            (None, None) => Ok(true),
+            (Some(exp), Some(act)) => {
+                if exp.is_encrypted != act.is_encrypted {
+                    return Ok(false);
+                }
+                let owners_equal = match (exp.owner_sd.as_deref_mut(), act.owner_sd.as_deref_mut())
+                {
+                    (None, None) => true,
+                    (Some(exp_owner), act_owner) => windows_owner_matches(exp_owner, act_owner)?,
+                    (None, Some(_)) => false,
+                };
+                if !owners_equal {
+                    return Ok(false);
+                }
+                match (exp.dacl_sd.as_deref_mut(), act.dacl_sd.as_deref_mut()) {
+                    (None, None) => Ok(true),
+                    (Some(exp_dacl), act_dacl) => windows_dacl_matches(exp_dacl, act_dacl),
+                    (None, Some(_)) => Ok(false),
+                }
+            }
+            _ => Ok(false),
+        }
     }
 
     fn restore_and_verify_windows_dacl(
@@ -2959,5 +3357,40 @@ mod tests {
             read_macos_acl_native_bytes(&target).is_none(),
             "inherited ACL must not survive when original file had no ACL"
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn preserves_directory_file_inherit_acl_on_first_creation() {
+        use std::process::Command;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let status = Command::new("/bin/chmod")
+            .args(["+a", "everyone allow read,file_inherit"])
+            .arg(root.path())
+            .status()
+            .expect("invoke /bin/chmod +a on dir");
+        if !status.success() {
+            return;
+        }
+
+        let baseline = root.path().join("baseline.mjs");
+        fs::write(&baseline, "baseline").expect("seed baseline file");
+        let expected_acl =
+            read_macos_acl_native_bytes(&baseline).expect("baseline file must inherit ACL");
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        dir.write_file_atomically(
+            OsStr::new("fresh.mjs"),
+            b"fresh",
+            ContainedNewFileMode::RespectUmask,
+            ContainedWriteDurability::Rename,
+        )
+        .expect("initial creation succeeds");
+        let fresh = root.path().join("fresh.mjs");
+        assert_eq!(fs::read_to_string(&fresh).expect("read fresh"), "fresh");
+        let actual_acl = read_macos_acl_native_bytes(&fresh)
+            .expect("newly created file must preserve destination directory file_inherit ACL");
+        assert_eq!(actual_acl, expected_acl);
     }
 }

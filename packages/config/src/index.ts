@@ -826,6 +826,9 @@ function validateCatalogPathPattern(catalogPath: string): string | undefined {
   ) {
     return "catalog path must be relative to the config directory";
   }
+  if (catalogPath.endsWith("/") || catalogPath.endsWith("\\")) {
+    return "catalog path must not end with a path separator";
+  }
   const segments = catalogPath.replaceAll("\\", "/").split("/");
   let hasNormal = false;
   for (const segment of segments) {

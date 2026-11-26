@@ -12,7 +12,8 @@ impl ExtractOptions {
 mod test_support;
 mod watch;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -21,8 +22,9 @@ use clap::Args;
 use palamedes::{
     CatalogUpdateMessage, CatalogUpdateRequest, ContainedDir, ContainedFsError,
     ContainedNewFileMode, ContainedWriteDurability, ExtractCache, ExtractCatalogFileFailure,
-    SourceFileAnalysisRequest, collect_runtime_macro_manifest, extract_catalog_messages_cached,
-    preview_catalog_update_from_content, split_relative_catalog_path,
+    FileIdentity, SourceFileAnalysisRequest, collect_runtime_macro_manifest,
+    extract_catalog_messages_cached, preview_catalog_update_from_content,
+    split_relative_catalog_path,
 };
 use serde::Serialize;
 
@@ -537,6 +539,8 @@ fn process_catalogs(
     options: &ExtractOptions,
     operation: CatalogOperation,
 ) -> Result<Vec<CatalogDrift>, CliError> {
+    reject_colliding_extract_targets(write_jobs, config)?;
+
     let worker_count = write_jobs.len().min(
         std::thread::available_parallelism()
             .map(std::num::NonZeroUsize::get)
@@ -595,6 +599,70 @@ fn process_catalogs(
         }
     }
     Ok(drift)
+}
+
+fn reject_colliding_extract_targets(
+    write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
+    config: &LoadedConfig,
+) -> Result<(), CliError> {
+    let mut seen_paths: HashMap<(PathBuf, OsString), &str> = HashMap::new();
+    let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
+
+    for (catalog, _, locale) in write_jobs {
+        let catalog_path =
+            config.resolve_contained_catalog_path(&catalog.path, locale, catalog.format)?;
+        let (relative_parent, file_name) =
+            split_relative_catalog_path(&config.root_dir, &catalog_path).map_err(|error| {
+                CliError::Io {
+                    path: catalog_path.clone(),
+                    source: error.into_io_error(),
+                }
+            })?;
+        if let Some(first_scope) = seen_paths.insert(
+            (relative_parent.clone(), file_name.clone()),
+            catalog.path.as_str(),
+        ) {
+            return Err(CliError::Io {
+                path: catalog_path,
+                source: std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!(
+                        "multiple catalog scopes ({first_scope:?} and {:?}) resolve to the same target file",
+                        catalog.path
+                    ),
+                ),
+            });
+        }
+        if let Some(parent_dir) =
+            ContainedDir::open_subpath(&config.root_dir, &relative_parent, false).map_err(
+                |error| CliError::Io {
+                    path: catalog_path.clone(),
+                    source: error.into_io_error(),
+                },
+            )?
+            && let Some(identity) =
+                parent_dir
+                    .file_identity(&file_name)
+                    .map_err(|error| CliError::Io {
+                        path: catalog_path.clone(),
+                        source: error.into_io_error(),
+                    })?
+            && let Some((first_scope, _)) =
+                seen_identities.insert(identity, (catalog.path.as_str(), catalog_path.clone()))
+        {
+            return Err(CliError::Io {
+                path: catalog_path,
+                source: std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!(
+                        "multiple catalog scopes ({first_scope:?} and {:?}) resolve to the same on-disk catalog file",
+                        catalog.path
+                    ),
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn process_catalog(

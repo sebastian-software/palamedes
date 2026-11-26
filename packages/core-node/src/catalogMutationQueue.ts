@@ -27,7 +27,13 @@ function isAsciiAlnum(code: number): boolean {
 }
 
 function isSafeRelativeCatalogPath(value: string): boolean {
-  if (value.length === 0 || value.startsWith("/") || value.startsWith("\\")) {
+  if (
+    value.length === 0 ||
+    value.startsWith("/") ||
+    value.startsWith("\\") ||
+    value.endsWith("/") ||
+    value.endsWith("\\")
+  ) {
     return false;
   }
   if (/^[A-Za-z]:/.test(value)) {

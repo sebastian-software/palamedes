@@ -80,6 +80,9 @@ pub fn validate_catalog_path_pattern(catalog_path: &str) -> Result<(), &'static 
     {
         return Err("catalog path must be relative to the config directory");
     }
+    if catalog_path.ends_with('/') || catalog_path.ends_with('\\') {
+        return Err("catalog path must not end with a path separator");
+    }
     let portable = catalog_path.replace('\\', "/");
     let mut has_normal = false;
     for component in Path::new(&portable).components() {
