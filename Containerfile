@@ -88,7 +88,11 @@ RUN rm -rf target \
   fuzz \
   site \
   video \
-  && find /app /usr/local/share/corepack ! -type l -exec chmod a+rX,go-w {} +
+  && find /app /usr/local/share/corepack ! -type l \( \
+    -perm /022 \
+    -o \( -type d ! -perm -0555 \) \
+    -o \( ! -type d \( ! -perm -0444 -o \( -perm /0111 ! -perm -0111 \) \) \) \
+  \) -exec chmod a+rX,go-w {} +
 
 # --- Runtime stage -----------------------------------------------------------
 # Dev dependencies stay installed on purpose: TanStack's `vite preview` needs

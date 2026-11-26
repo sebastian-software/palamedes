@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { LineCounter, isAlias, isMap, isScalar, isSeq, parseDocument } from "yaml";
+
 // GitHub resolves a tag at run time, so a compromised or moved tag silently
 // changes what CI executes. Every third-party action is therefore pinned to a
 // full commit SHA with a version comment, and every static container image
@@ -16,10 +18,10 @@ const ENV_EXPRESSION_PATTERN =
 const SINGLE_ENV_EXPRESSION_PATTERN =
   /^\$\{\{\s*env(?:\.(?<dot>[A-Za-z_][A-Za-z0-9_]*)|\[(?:'(?<sq>[A-Za-z_][A-Za-z0-9_]*)'|"(?<dq>[A-Za-z_][A-Za-z0-9_]*)")\])\s*\}\}$/u;
 const MATRIX_EXPRESSION_PATTERN =
-  /\$\{\{\s*matrix(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[A-Za-z0-9_-]+)'|"(?<dq>[A-Za-z0-9_-]+)")\])\s*\}\}/gu;
+  /\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}/gu;
 const SINGLE_MATRIX_EXPRESSION_PATTERN =
-  /^\$\{\{\s*matrix(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[A-Za-z0-9_-]+)'|"(?<dq>[A-Za-z0-9_-]+)")\])\s*\}\}$/u;
-const BLOCK_SCALAR_HEADER_PATTERN = /^[|>](?:[+-]\d*|\d+[+-]?)?$/u;
+  /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}$/u;
+const MATRIX_SEGMENT_PATTERN = /\.([A-Za-z0-9_-]+)|\[(?:'([^']+)'|"([^"]+)")\]/gu;
 const ENV_PREFIX_ASSIGNMENT_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$/u;
 const SHELL_COMMAND_PREFIXES = new Set([
   "if",
@@ -226,16 +228,11 @@ function lookupSingleVarLine(token, vars, fallbackLine) {
   return fallbackLine;
 }
 
-// --- Zero-dependency YAML parser with 1-based line tracking ------------------
-// Handles the YAML 1.2 subset used by GitHub Actions workflows and actions:
-// block/flow mappings & sequences, quoted/plain scalars, literal (`|`) and
-// folded (`>`) block scalars, and inline comments.
-
-function stripInlineComment(text) {
+function hasUnquotedComment(line) {
   let quote = null;
   let escaping = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const ch = text[index];
+  for (let index = 0; index < line.length; index += 1) {
+    const ch = line[index];
     if (escaping) {
       escaping = false;
       continue;
@@ -246,7 +243,7 @@ function stripInlineComment(text) {
     }
     if (quote) {
       if (ch === quote) {
-        if (quote === "'" && text[index + 1] === "'") {
+        if (quote === "'" && line[index + 1] === "'") {
           index += 1;
         } else {
           quote = null;
@@ -258,745 +255,182 @@ function stripInlineComment(text) {
       quote = ch;
       continue;
     }
-    if (ch === "#" && (index === 0 || /\s/u.test(text[index - 1]))) {
-      return text.slice(0, index).trimEnd();
-    }
-  }
-  return text.trimEnd();
-}
-
-function hasClosedQuote(text) {
-  const quote = text[0];
-  if (quote !== '"' && quote !== "'") {
-    return true;
-  }
-  let escaping = false;
-  for (let index = 1; index < text.length; index += 1) {
-    const ch = text[index];
-    if (escaping) {
-      escaping = false;
-      continue;
-    }
-    if (ch === "\\" && quote === '"') {
-      escaping = true;
-      continue;
-    }
-    if (ch === quote) {
-      if (quote === "'" && text[index + 1] === "'") {
-        index += 1;
-        continue;
-      }
-      return index === text.length - 1;
+    if (ch === "#" && (index === 0 || /\s/u.test(line[index - 1]))) {
+      return true;
     }
   }
   return false;
 }
 
-function isFlowBalanced(text) {
-  let quote = null;
-  let escaping = false;
-  let depth = 0;
+// --- YAML AST parsing via `yaml` with 1-based line numbers -------------------
 
-  for (let index = 0; index < text.length; index += 1) {
-    const ch = text[index];
-    if (escaping) {
-      escaping = false;
-      continue;
-    }
-    if (ch === "\\" && quote === '"') {
-      escaping = true;
-      continue;
-    }
-    if (quote) {
-      if (ch === quote) {
-        if (quote === "'" && text[index + 1] === "'") {
-          index += 1;
-        } else {
-          quote = null;
-        }
-      }
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-    if (ch === "{" || ch === "[") {
-      depth += 1;
-      continue;
-    }
-    if (ch === "}" || ch === "]") {
-      depth -= 1;
-    }
-  }
-
-  return quote === null && depth === 0;
-}
-
-function decodeDoubleQuoted(raw) {
-  let out = "";
-  for (let index = 1; index < raw.length - 1; index += 1) {
-    const ch = raw[index];
-    if (ch !== "\\") {
-      out += ch;
-      continue;
-    }
-    index += 1;
-    const esc = raw[index];
-    switch (esc) {
-      case "n":
-        out += "\n";
-        break;
-      case "r":
-        out += "\r";
-        break;
-      case "t":
-        out += "\t";
-        break;
-      case '"':
-        out += '"';
-        break;
-      case "\\":
-        out += "\\";
-        break;
-      case "/":
-        out += "/";
-        break;
-      default:
-        out += esc ?? "";
-        break;
-    }
-  }
-  return out;
-}
-
-function decodeScalar(raw) {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
-    return decodeDoubleQuoted(trimmed);
-  }
-  if (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2) {
-    return trimmed.slice(1, -1).replaceAll("''", "'");
-  }
-  return trimmed;
-}
-
-function findMappingColon(text) {
-  let quote = null;
-  let escaping = false;
-  let flowDepth = 0;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const ch = text[index];
-    if (escaping) {
-      escaping = false;
-      continue;
-    }
-    if (ch === "\\" && quote === '"') {
-      escaping = true;
-      continue;
-    }
-    if (quote) {
-      if (ch === quote) {
-        if (quote === "'" && text[index + 1] === "'") {
-          index += 1;
-        } else {
-          quote = null;
-        }
-      }
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-    if (ch === "{" || ch === "[") {
-      flowDepth += 1;
-      continue;
-    }
-    if (ch === "}" || ch === "]") {
-      flowDepth = Math.max(0, flowDepth - 1);
-      continue;
-    }
-    if (
-      flowDepth === 0 &&
-      ch === ":" &&
-      (index + 1 === text.length || /\s/u.test(text[index + 1]))
-    ) {
-      return index;
-    }
-  }
-
-  return -1;
-}
-
-function splitFlowEntries(inner) {
-  const parts = [];
-  let current = "";
-  let quote = null;
-  let escaping = false;
-  let depth = 0;
-
-  for (let index = 0; index < inner.length; index += 1) {
-    const ch = inner[index];
-    if (escaping) {
-      current += ch;
-      escaping = false;
-      continue;
-    }
-    if (ch === "\\" && quote === '"') {
-      current += ch;
-      escaping = true;
-      continue;
-    }
-    if (quote) {
-      current += ch;
-      if (ch === quote) {
-        if (quote === "'" && inner[index + 1] === "'") {
-          current += inner[index + 1];
-          index += 1;
-        } else {
-          quote = null;
-        }
-      }
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-      continue;
-    }
-    if (ch === "{" || ch === "[") {
-      depth += 1;
-      current += ch;
-      continue;
-    }
-    if (ch === "}" || ch === "]") {
-      depth = Math.max(0, depth - 1);
-      current += ch;
-      continue;
-    }
-    if (depth === 0 && ch === ",") {
-      if (current.trim().length > 0) {
-        parts.push(current.trim());
-      }
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-
-  if (current.trim().length > 0) {
-    parts.push(current.trim());
-  }
-  return parts;
-}
-
-function stripYamlNodeProperties(raw) {
-  let remaining = raw.trim();
-  let anchor = null;
-
-  for (;;) {
-    const anchorMatch = /^&(?<name>[^\s,[\]{}]+)(?:\s+(?<rest>.*))?$/u.exec(remaining);
-    if (anchorMatch) {
-      anchor = anchorMatch.groups.name;
-      remaining = (anchorMatch.groups.rest ?? "").trim();
-      continue;
-    }
-    const tagMatch = /^![^\s,[\]{}]*(?:\s+(?<rest>.*))?$/u.exec(remaining);
-    if (tagMatch) {
-      remaining = (tagMatch.groups.rest ?? "").trim();
-      continue;
-    }
-    break;
-  }
-
-  return { anchor, rest: remaining };
-}
-
-function mergeYamlMappingEntry(map, key, valueNode) {
-  if (key === "<<") {
-    const sources =
-      valueNode?.kind === "map"
-        ? [valueNode]
-        : valueNode?.kind === "seq"
-          ? valueNode.value.filter((item) => item?.kind === "map")
-          : [];
-    for (const source of sources) {
-      for (const [sourceKey, sourceValue] of source.value) {
-        if (!map.has(sourceKey)) {
-          map.set(sourceKey, sourceValue);
-        }
-      }
-    }
-    return;
-  }
-  map.set(key, valueNode);
-}
-
-function parseFlowValue(raw, line, anchors = new Map()) {
-  const { anchor, rest: trimmed } = stripYamlNodeProperties(stripInlineComment(raw));
-  const aliasMatch = /^\*(?<name>[^\s,[\]{}]+)$/u.exec(trimmed);
-  if (aliasMatch) {
-    const target = anchors.get(aliasMatch.groups.name);
-    if (target) {
-      return target;
-    }
-    return { kind: "scalar", value: "", line };
-  }
-
-  let node;
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    const map = new Map();
-    const inner = trimmed.slice(1, -1).trim();
-    if (inner.length > 0) {
-      for (const entry of splitFlowEntries(inner)) {
-        const colon = findMappingColon(entry);
-        if (colon === -1) {
-          continue;
-        }
-        const key = decodeScalar(entry.slice(0, colon));
-        const rest = entry.slice(colon + 1).trim();
-        mergeYamlMappingEntry(map, key, parseFlowValue(rest, line, anchors));
-      }
-    }
-    node = { kind: "map", value: map, line };
-  } else if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-    const items = [];
-    const inner = trimmed.slice(1, -1).trim();
-    if (inner.length > 0) {
-      for (const entry of splitFlowEntries(inner)) {
-        items.push(parseFlowValue(entry, line, anchors));
-      }
-    }
-    node = { kind: "seq", value: items, line };
-  } else {
-    node = { kind: "scalar", value: decodeScalar(trimmed), line };
-  }
-
-  if (anchor) {
-    anchors.set(anchor, node);
-  }
-  return node;
-}
-
-function parseYaml(source) {
+function dedentYamlSnippet(source) {
   const rawLines = source.split(/\r?\n/u);
-  const isTopLevelMarker = (line) =>
-    line === "---" || line === "..." || /^%(?:YAML|TAG)\b/u.test(line);
-
-  // Dedent snippet inputs (like indented fragments in unit tests) while keeping
-  // original 1-based line numbers intact. Preserve indentation of `---`/`...`
-  // inside block scalars so YAML heredocs inside `run: |` stay intact.
   let minIndent = Number.POSITIVE_INFINITY;
   for (const line of rawLines) {
     const trimmed = line.trim();
-    if (trimmed.length === 0 || trimmed.startsWith("#") || isTopLevelMarker(line)) {
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
       continue;
     }
-    minIndent = Math.min(minIndent, line.length - line.trimStart().length);
+    const indent = line.length - line.trimStart().length;
+    minIndent = Math.min(minIndent, indent);
+    if (minIndent === 0) {
+      return source;
+    }
   }
-  if (!Number.isFinite(minIndent)) {
-    return { doc: null, error: null };
+  if (!Number.isFinite(minIndent) || minIndent === 0) {
+    return source;
   }
-
-  const lines = rawLines.map((line, index) => ({
-    lineNumber: index + 1,
-    text: line.length >= minIndent ? line.slice(minIndent) : line.trimStart(),
-  }));
-
-  const anchors = new Map();
-
-  function nextNonEmpty(start) {
-    let cursor = start;
-    while (cursor < lines.length) {
-      const trimmed = lines[cursor].text.trim();
-      if (trimmed.length > 0 && !trimmed.startsWith("#")) {
-        return cursor;
-      }
-      cursor += 1;
-    }
-    return lines.length;
-  }
-
-  function indentOf(index) {
-    const text = lines[index].text;
-    return text.length - text.trimStart().length;
-  }
-
-  function parseBlockScalar(headerLineIndex, parentIndent, style) {
-    const isFolded = style.startsWith(">");
-    const body = [];
-    let cursor = headerLineIndex + 1;
-    let contentIndent = null;
-
-    while (cursor < lines.length) {
-      const { text, lineNumber } = lines[cursor];
-      if (text.trim().length === 0) {
-        body.push({ text: "", lineNumber });
-        cursor += 1;
-        continue;
-      }
-      const lineIndent = text.length - text.trimStart().length;
-      if (lineIndent <= parentIndent) {
-        break;
-      }
-      if (contentIndent === null) {
-        contentIndent = lineIndent;
-      }
-      body.push({
-        text: text.length >= contentIndent ? text.slice(contentIndent) : text.trimStart(),
-        lineNumber,
-      });
-      cursor += 1;
-    }
-
-    while (body.length > 0 && body.at(-1).text === "") {
-      body.pop();
-    }
-
-    if (isFolded) {
-      let folded = "";
-      for (let idx = 0; idx < body.length; idx += 1) {
-        const entry = body[idx];
-        if (entry.text === "") {
-          folded += "\n";
-        } else {
-          if (folded.length > 0 && !folded.endsWith("\n")) {
-            folded += " ";
-          }
-          folded += entry.text;
-        }
-      }
-      return {
-        node: {
-          kind: "scalar",
-          value: folded,
-          line: body[0]?.lineNumber ?? lines[headerLineIndex].lineNumber,
-          lines: body,
-          folded: true,
-        },
-        nextIndex: cursor,
-      };
-    }
-
-    return {
-      node: {
-        kind: "scalar",
-        value: body.map((entry) => entry.text).join("\n"),
-        line: body[0]?.lineNumber ?? lines[headerLineIndex].lineNumber,
-        lines: body,
-        folded: false,
-      },
-      nextIndex: cursor,
-    };
-  }
-
-  function parseNode(startIndex, expectedIndent) {
-    const index = nextNonEmpty(startIndex);
-    if (index >= lines.length) {
-      return { node: null, nextIndex: index };
-    }
-    const lineIndent = indentOf(index);
-    if (lineIndent < expectedIndent) {
-      return { node: null, nextIndex: index };
-    }
-    const content = lines[index].text.slice(lineIndent);
-    if (content === "-" || content.startsWith("- ")) {
-      return parseSequence(index, lineIndent);
-    }
-    if (findMappingColon(content) !== -1) {
-      return parseMapping(index, lineIndent);
-    }
-    return {
-      node: parseFlowValue(content, lines[index].lineNumber, anchors),
-      nextIndex: index + 1,
-    };
-  }
-
-  function parseSequence(startIndex, seqIndent) {
-    const items = [];
-    let cursor = startIndex;
-
-    while (cursor < lines.length) {
-      cursor = nextNonEmpty(cursor);
-      if (cursor >= lines.length) {
-        break;
-      }
-      const lineIndent = indentOf(cursor);
-      if (lineIndent !== seqIndent) {
-        break;
-      }
-      const content = lines[cursor].text.slice(lineIndent);
-      if (content !== "-" && !content.startsWith("- ")) {
-        break;
-      }
-      const lineNumber = lines[cursor].lineNumber;
-      const afterDash = content.slice(1).trimStart();
-      const { anchor: itemAnchor, rest: itemRest } = stripYamlNodeProperties(
-        stripInlineComment(afterDash),
-      );
-
-      if (itemRest.length === 0) {
-        const child = parseNode(cursor + 1, seqIndent + 1);
-        const childNode = child.node ?? { kind: "scalar", value: "", line: lineNumber };
-        if (itemAnchor) {
-          anchors.set(itemAnchor, childNode);
-        }
-        items.push(childNode);
-        cursor = child.nextIndex;
-        continue;
-      }
-
-      const inlineIndent = lineIndent + (content.length - afterDash.length);
-      const colon = findMappingColon(itemRest);
-      if (colon !== -1 && !itemRest.startsWith("{") && !itemRest.startsWith("[")) {
-        // Inline mapping starting on the `- ` line (e.g. `- name: Build\n  run: ...`
-        // or `- &checkout uses: actions/checkout@v7`).
-        const map = new Map();
-        const parsedFirst = parseMappingEntry(cursor, itemRest, inlineIndent);
-        mergeYamlMappingEntry(map, parsedFirst.key, parsedFirst.valueNode);
-        cursor = parsedFirst.nextIndex;
-
-        while (cursor < lines.length) {
-          const next = nextNonEmpty(cursor);
-          if (next >= lines.length) {
-            cursor = next;
-            break;
-          }
-          const nextIndent = indentOf(next);
-          if (nextIndent !== inlineIndent) {
-            cursor = next;
-            break;
-          }
-          const nextContent = lines[next].text.slice(nextIndent);
-          if (nextContent === "-" || nextContent.startsWith("- ")) {
-            cursor = next;
-            break;
-          }
-          if (findMappingColon(nextContent) === -1) {
-            cursor = next + 1;
-            continue;
-          }
-          const entry = parseMappingEntry(next, nextContent, inlineIndent);
-          mergeYamlMappingEntry(map, entry.key, entry.valueNode);
-          cursor = entry.nextIndex;
-        }
-        const mapNode = { kind: "map", value: map, line: lineNumber };
-        if (itemAnchor) {
-          anchors.set(itemAnchor, mapNode);
-        }
-        items.push(mapNode);
-        continue;
-      }
-
-      if (BLOCK_SCALAR_HEADER_PATTERN.test(itemRest)) {
-        const block = parseBlockScalar(cursor, seqIndent, itemRest);
-        if (itemAnchor) {
-          anchors.set(itemAnchor, block.node);
-        }
-        items.push(block.node);
-        cursor = block.nextIndex;
-        continue;
-      }
-
-      let itemCombined = itemRest;
-      let itemCursor = cursor + 1;
-      if (
-        (itemCombined.startsWith('"') || itemCombined.startsWith("'")) &&
-        !hasClosedQuote(itemCombined)
-      ) {
-        while (itemCursor < lines.length && !hasClosedQuote(itemCombined)) {
-          itemCombined = `${itemCombined} ${lines[itemCursor].text.trim()}`;
-          itemCursor += 1;
-        }
-      } else if (
-        (itemCombined.startsWith("{") || itemCombined.startsWith("[")) &&
-        !isFlowBalanced(itemCombined)
-      ) {
-        while (itemCursor < lines.length && !isFlowBalanced(itemCombined)) {
-          itemCombined = `${itemCombined} ${stripInlineComment(lines[itemCursor].text.trim()).trim()}`;
-          itemCursor += 1;
-        }
-      }
-      const itemNode = parseFlowValue(itemCombined, lineNumber, anchors);
-      if (itemAnchor) {
-        anchors.set(itemAnchor, itemNode);
-      }
-      items.push(itemNode);
-      cursor = itemCursor;
-    }
-
-    return {
-      node: { kind: "seq", value: items, line: lines[startIndex].lineNumber },
-      nextIndex: cursor,
-    };
-  }
-
-  function parseMappingEntry(lineIndex, content, entryIndent) {
-    const colon = findMappingColon(content);
-    const key = decodeScalar(content.slice(0, colon));
-    const lineNumber = lines[lineIndex].lineNumber;
-    const rawRest = content.slice(colon + 1).trim();
-    const { anchor, rest: restWithoutComment } = stripYamlNodeProperties(
-      stripInlineComment(rawRest),
-    );
-
-    const recordAnchor = (node) => {
-      if (anchor) {
-        anchors.set(anchor, node);
-      }
-      return node;
-    };
-
-    if (BLOCK_SCALAR_HEADER_PATTERN.test(restWithoutComment)) {
-      const block = parseBlockScalar(lineIndex, entryIndent, restWithoutComment);
-      return { key, valueNode: recordAnchor(block.node), nextIndex: block.nextIndex };
-    }
-
-    if (restWithoutComment.length === 0) {
-      const next = nextNonEmpty(lineIndex + 1);
-      if (next < lines.length) {
-        const nextIndent = indentOf(next);
-        const nextContent = lines[next].text.slice(nextIndent);
-        // Allow block sequence indented at the same level as its mapping key.
-        if (
-          nextIndent > entryIndent ||
-          (nextIndent === entryIndent && (nextContent === "-" || nextContent.startsWith("- ")))
-        ) {
-          const child = parseNode(next, nextIndent);
-          return {
-            key,
-            valueNode: recordAnchor(child.node ?? { kind: "scalar", value: "", line: lineNumber }),
-            nextIndex: child.nextIndex,
-          };
-        }
-      }
-      return {
-        key,
-        valueNode: recordAnchor({ kind: "scalar", value: "", line: lineNumber }),
-        nextIndex: lineIndex + 1,
-      };
-    }
-
-    // Handle multi-line quoted scalars, multi-line flow collections, and
-    // indented multi-line plain scalars.
-    let combined = restWithoutComment;
-    let cursor = lineIndex + 1;
-    if ((combined.startsWith('"') || combined.startsWith("'")) && !hasClosedQuote(combined)) {
-      while (cursor < lines.length && !hasClosedQuote(combined)) {
-        combined = `${combined} ${lines[cursor].text.trim()}`;
-        cursor += 1;
-      }
-      combined = stripInlineComment(combined).trim();
-    } else if (
-      (combined.startsWith("{") || combined.startsWith("[")) &&
-      !isFlowBalanced(combined)
-    ) {
-      while (cursor < lines.length && !isFlowBalanced(combined)) {
-        const nextText = stripInlineComment(lines[cursor].text.trim()).trim();
-        combined = `${combined} ${nextText}`;
-        cursor += 1;
-      }
-    } else if (
-      !combined.startsWith('"') &&
-      !combined.startsWith("'") &&
-      !combined.startsWith("{") &&
-      !combined.startsWith("[") &&
-      !combined.startsWith("*")
-    ) {
-      // Multi-line plain scalar continuation indented deeper than key.
-      while (cursor < lines.length) {
-        const nextText = lines[cursor].text;
-        if (nextText.trim().length === 0 || nextText.trimStart().startsWith("#")) {
-          break;
-        }
-        const nextIndent = nextText.length - nextText.trimStart().length;
-        if (nextIndent <= entryIndent) {
-          break;
-        }
-        const nextTrimmed = stripInlineComment(nextText.trim()).trim();
-        if (
-          nextTrimmed === "-" ||
-          nextTrimmed.startsWith("- ") ||
-          findMappingColon(nextTrimmed) !== -1
-        ) {
-          break;
-        }
-        combined = `${combined} ${nextTrimmed}`;
-        cursor += 1;
-      }
-    }
-
-    return {
-      key,
-      valueNode: recordAnchor(parseFlowValue(combined, lineNumber, anchors)),
-      nextIndex: cursor,
-    };
-  }
-
-  function parseMapping(startIndex, mapIndent) {
-    const map = new Map();
-    let cursor = startIndex;
-
-    while (cursor < lines.length) {
-      cursor = nextNonEmpty(cursor);
-      if (cursor >= lines.length) {
-        break;
-      }
-      const lineIndent = indentOf(cursor);
-      if (lineIndent !== mapIndent) {
-        break;
-      }
-      const content = lines[cursor].text.slice(lineIndent);
-      if (content === "-" || content.startsWith("- ") || findMappingColon(content) === -1) {
-        break;
-      }
-      const entry = parseMappingEntry(cursor, content, mapIndent);
-      mergeYamlMappingEntry(map, entry.key, entry.valueNode);
-      cursor = entry.nextIndex;
-    }
-
-    return {
-      node: { kind: "map", value: map, line: lines[startIndex].lineNumber },
-      nextIndex: cursor,
-    };
-  }
-
-  let startIndex = nextNonEmpty(0);
-  while (startIndex < lines.length) {
-    const trimmed = lines[startIndex].text.trim();
-    if (trimmed === "---" || /^%(?:YAML|TAG)\b/u.test(trimmed)) {
-      startIndex = nextNonEmpty(startIndex + 1);
-      continue;
-    }
-    break;
-  }
-
-  if (startIndex >= lines.length || lines[startIndex].text.trim() === "...") {
-    return { doc: null, error: null };
-  }
-
-  const parsed = parseNode(startIndex, 0);
-  let trailing = nextNonEmpty(parsed.nextIndex);
-  while (trailing < lines.length && lines[trailing].text.trim() === "...") {
-    trailing = nextNonEmpty(trailing + 1);
-  }
-
-  if (trailing < lines.length) {
-    return {
-      doc: parsed.node,
-      error: {
-        line: lines[trailing].lineNumber,
-        message: "unexpected trailing YAML content; refusing to skip pin checks",
-      },
-    };
-  }
-
-  return { doc: parsed.node, error: null };
+  return rawLines
+    .map((line) => (line.length >= minIndent ? line.slice(minIndent) : line.trimStart()))
+    .join("\n");
 }
 
-// --- Shell tokenization & Docker/Podman extraction ---------------------------
+function isMergeKey(keyNode) {
+  if (!isScalar(keyNode)) {
+    return false;
+  }
+  return (
+    keyNode.value === "<<" ||
+    (typeof keyNode.value === "symbol" && keyNode.value.description === "<<")
+  );
+}
+
+function nodeStartLine(node, lineCounter) {
+  if (Array.isArray(node?.range) && typeof node.range[0] === "number") {
+    return lineCounter.linePos(node.range[0]).line;
+  }
+  return 1;
+}
+
+function convertYamlNode(node, doc, lineCounter, rawLines, seen = new Set()) {
+  if (!node) {
+    return null;
+  }
+  if (isAlias(node)) {
+    const target = node.resolve(doc);
+    if (!target || seen.has(target)) {
+      return null;
+    }
+    const nextSeen = new Set(seen);
+    nextSeen.add(target);
+    return convertYamlNode(target, doc, lineCounter, rawLines, nextSeen);
+  }
+  if (isMap(node)) {
+    const map = new Map();
+    const deferredMerges = [];
+    for (const pair of node.items) {
+      if (isMergeKey(pair.key)) {
+        const mergedVal = convertYamlNode(pair.value, doc, lineCounter, rawLines, seen);
+        if (mergedVal?.kind === "map") {
+          deferredMerges.push(mergedVal);
+        } else if (mergedVal?.kind === "seq") {
+          for (const entry of mergedVal.value) {
+            if (entry?.kind === "map") {
+              deferredMerges.push(entry);
+            }
+          }
+        }
+        continue;
+      }
+      if (!isScalar(pair.key)) {
+        continue;
+      }
+      const key = String(pair.key.value);
+      const val = convertYamlNode(pair.value, doc, lineCounter, rawLines, seen);
+      map.set(
+        key,
+        val ?? { kind: "scalar", value: "", line: nodeStartLine(pair.key, lineCounter) },
+      );
+    }
+    // Explicit keys take precedence over merged keys per YAML merge semantics.
+    for (const sourceMap of deferredMerges) {
+      for (const [key, val] of sourceMap.value) {
+        if (!map.has(key)) {
+          map.set(key, val);
+        }
+      }
+    }
+    return { kind: "map", value: map, line: nodeStartLine(node, lineCounter) };
+  }
+  if (isSeq(node)) {
+    const items = [];
+    for (const item of node.items) {
+      const converted = convertYamlNode(item, doc, lineCounter, rawLines, seen);
+      if (converted) {
+        items.push(converted);
+      }
+    }
+    return { kind: "seq", value: items, line: nodeStartLine(node, lineCounter) };
+  }
+  if (isScalar(node)) {
+    const startLine = nodeStartLine(node, lineCounter);
+    const value = node.value === null || node.value === undefined ? "" : String(node.value);
+    const scalar = {
+      kind: "scalar",
+      value,
+      line: startLine,
+      comment: node.comment ?? null,
+    };
+
+    if (
+      (node.type === "BLOCK_LITERAL" || node.type === "BLOCK_FOLDED") &&
+      Array.isArray(node.range)
+    ) {
+      const startPos = lineCounter.linePos(node.range[0]);
+      const endOffset = Math.max(node.range[0], node.range[1] - 1);
+      const endPos = lineCounter.linePos(endOffset);
+      const bodyRaw = [];
+      let contentIndent = Number.POSITIVE_INFINITY;
+      for (let lineNo = startPos.line + 1; lineNo <= endPos.line; lineNo += 1) {
+        const raw = rawLines[lineNo - 1] ?? "";
+        if (raw.trim().length > 0) {
+          contentIndent = Math.min(contentIndent, raw.length - raw.trimStart().length);
+        }
+        bodyRaw.push({ raw, lineNumber: lineNo });
+      }
+      const stripIndent = Number.isFinite(contentIndent) ? contentIndent : 0;
+      const bodyLines = bodyRaw.map(({ raw, lineNumber }) => ({
+        text: raw.length >= stripIndent ? raw.slice(stripIndent) : raw.trimStart(),
+        lineNumber,
+      }));
+      while (bodyLines.length > 0 && bodyLines.at(-1).text.trim() === "") {
+        bodyLines.pop();
+      }
+      scalar.lines = bodyLines;
+      scalar.folded = node.type === "BLOCK_FOLDED";
+      if (bodyLines.length > 0) {
+        scalar.line = bodyLines[0].lineNumber;
+      }
+    }
+
+    return scalar;
+  }
+  return null;
+}
+
+function parseWorkflowYaml(source) {
+  const normalized = dedentYamlSnippet(source);
+  const rawLines = normalized.split(/\r?\n/u);
+  const lineCounter = new LineCounter();
+  const doc = parseDocument(normalized, { lineCounter, merge: true });
+
+  if (doc.errors.length > 0) {
+    const first = doc.errors[0];
+    const line = first.linePos?.[0]?.line ?? 1;
+    return {
+      doc: convertYamlNode(doc.contents, doc, lineCounter, rawLines),
+      error: { line, message: `failed to parse workflow YAML: ${first.message.split("\n")[0]}` },
+    };
+  }
+
+  return {
+    doc: convertYamlNode(doc.contents, doc, lineCounter, rawLines),
+    error: null,
+  };
+}
+
+// --- Shell tokenization, heredocs, and command substitutions -----------------
 
 function splitShellCommands(command) {
   const commands = [];
@@ -1049,7 +483,8 @@ function splitShellCommands(command) {
     }
 
     // Keep GitHub Actions `${{ ... }}` expressions intact as a single token so
-    // spaces inside `${{ env.IMAGE }}` do not split the image argument.
+    // spaces inside `${{ env.IMAGE }}` or `${{ matrix.platform.image }}` do
+    // not split the image argument.
     if (ch === "$" && command[index + 1] === "{" && command[index + 2] === "{") {
       const closeIndex = command.indexOf("}}", index + 3);
       if (closeIndex !== -1) {
@@ -1102,6 +537,118 @@ function splitShellCommands(command) {
 
   flushCommand();
   return commands;
+}
+
+// Extract executable command substitutions `$(...)` and `` `...` `` from a
+// shell line (both unquoted and inside double quotes; never inside single
+// quotes or arithmetic `$((...))`).
+function extractCommandSubstitutions(command) {
+  const substitutions = [];
+  let quote = null;
+  let escaping = false;
+
+  for (let index = 0; index < command.length; index += 1) {
+    const ch = command[index];
+
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (ch === "\\" && quote !== "'") {
+      escaping = true;
+      continue;
+    }
+    if (quote === "'") {
+      if (ch === "'") {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === "'" && quote === null) {
+      quote = "'";
+      continue;
+    }
+    if (ch === '"') {
+      quote = quote === '"' ? null : '"';
+      continue;
+    }
+    if (quote === null && ch === "#" && (index === 0 || /\s/u.test(command[index - 1]))) {
+      break;
+    }
+
+    // `$(...)` (skipping arithmetic `$((...))`)
+    if (ch === "$" && command[index + 1] === "(" && command[index + 2] !== "(") {
+      let depth = 1;
+      let cursor = index + 2;
+      let innerQuote = null;
+      let innerEscape = false;
+      while (cursor < command.length && depth > 0) {
+        const ich = command[cursor];
+        if (innerEscape) {
+          innerEscape = false;
+          cursor += 1;
+          continue;
+        }
+        if (ich === "\\" && innerQuote !== "'") {
+          innerEscape = true;
+          cursor += 1;
+          continue;
+        }
+        if (innerQuote) {
+          if (ich === innerQuote) {
+            innerQuote = null;
+          }
+          cursor += 1;
+          continue;
+        }
+        if (ich === "'" || ich === '"') {
+          innerQuote = ich;
+          cursor += 1;
+          continue;
+        }
+        if (ich === "(") {
+          depth += 1;
+        } else if (ich === ")") {
+          depth -= 1;
+        }
+        cursor += 1;
+      }
+      if (depth === 0) {
+        substitutions.push(command.slice(index + 2, cursor - 1));
+        index = cursor - 1;
+      }
+      continue;
+    }
+
+    // Backtick substitution `` `...` ``
+    if (ch === "`") {
+      let cursor = index + 1;
+      let btEscape = false;
+      while (cursor < command.length) {
+        const bch = command[cursor];
+        if (btEscape) {
+          btEscape = false;
+          cursor += 1;
+          continue;
+        }
+        if (bch === "\\") {
+          btEscape = true;
+          cursor += 1;
+          continue;
+        }
+        if (bch === "`") {
+          break;
+        }
+        cursor += 1;
+      }
+      if (cursor < command.length && command[cursor] === "`") {
+        substitutions.push(command.slice(index + 1, cursor));
+        index = cursor;
+      }
+    }
+  }
+
+  return substitutions;
 }
 
 function extractHeredocDelimiters(line) {
@@ -1230,82 +777,67 @@ function collectExecutableShellLines(entries) {
   return logicalLines;
 }
 
-function extractJobMatrixValues(jobNode) {
-  const matrixValues = new Map();
+// --- Matrix row expansion (including nested object-valued axes & include) ----
+
+function parseMatrixPathSegments(pathSuffix) {
+  const segments = [];
+  for (const match of pathSuffix.matchAll(MATRIX_SEGMENT_PATTERN)) {
+    segments.push(match[1] ?? match[2] ?? match[3]);
+  }
+  return segments;
+}
+
+function resolveMatrixPath(rowMap, segments) {
+  let current = { kind: "map", value: rowMap };
+  for (const segment of segments) {
+    if (current?.kind !== "map" || !current.value.has(segment)) {
+      return null;
+    }
+    current = current.value.get(segment);
+  }
+  if (current?.kind === "scalar") {
+    return { value: String(current.value), line: current.line };
+  }
+  return null;
+}
+
+function extractJobMatrixRows(jobNode) {
   const strategyNode = jobNode?.value?.get("strategy");
   const matrixNode = strategyNode?.kind === "map" ? strategyNode.value.get("matrix") : null;
   if (matrixNode?.kind !== "map") {
-    return matrixValues;
+    return [];
   }
 
-  const recordValue = (key, valueNode) => {
-    if (valueNode?.kind !== "scalar") {
-      return;
-    }
-    const list = matrixValues.get(key) ?? [];
-    list.push({ value: String(valueNode.value), line: valueNode.line });
-    matrixValues.set(key, list);
-  };
+  const axes = [];
+  const includeRows = [];
 
   for (const [key, entryNode] of matrixNode.value) {
     if (key === "exclude") {
       continue;
     }
-    if (key === "include" && entryNode?.kind === "seq") {
-      for (const rowNode of entryNode.value) {
-        if (rowNode?.kind !== "map") {
-          continue;
-        }
-        for (const [rowKey, rowVal] of rowNode.value) {
-          recordValue(rowKey, rowVal);
+    if (key === "include") {
+      if (entryNode?.kind === "seq") {
+        for (const rowNode of entryNode.value) {
+          if (rowNode?.kind === "map") {
+            includeRows.push(rowNode.value);
+          }
         }
       }
       continue;
     }
-    if (entryNode?.kind === "seq") {
-      for (const itemNode of entryNode.value) {
-        recordValue(key, itemNode);
-      }
+    if (entryNode?.kind === "seq" && entryNode.value.length > 0) {
+      axes.push([key, entryNode.value]);
     }
   }
 
-  return matrixValues;
-}
-
-function expandMatrixReferences(rawText, matrixValues, fallbackLine) {
-  const matches = [...rawText.matchAll(MATRIX_EXPRESSION_PATTERN)];
-  if (matches.length === 0 || !matrixValues || matrixValues.size === 0) {
-    return [{ text: rawText, line: fallbackLine }];
-  }
-
-  const singleMatrix = SINGLE_MATRIX_EXPRESSION_PATTERN.exec(rawText);
-  if (singleMatrix) {
-    const key = singleMatrix.groups.dot ?? singleMatrix.groups.sq ?? singleMatrix.groups.dq;
-    const candidates = matrixValues.get(key);
-    if (!candidates || candidates.length === 0) {
-      return [{ text: rawText, line: fallbackLine }];
-    }
-    return candidates.map((entry) => ({ text: entry.value, line: entry.line }));
-  }
-
-  const keys = [...new Set(matches.map((m) => m.groups.dot ?? m.groups.sq ?? m.groups.dq))];
-  if (keys.some((key) => !matrixValues.has(key))) {
-    return [{ text: rawText, line: fallbackLine }];
-  }
-
-  let combinations = [{ text: rawText, line: fallbackLine }];
-  for (const key of keys) {
+  let rows = axes.length > 0 ? [new Map()] : [];
+  for (const [axisKey, axisValues] of axes) {
     const next = [];
-    for (const combo of combinations) {
-      for (const candidate of matrixValues.get(key)) {
-        const replaced = combo.text.replace(
-          MATRIX_EXPRESSION_PATTERN,
-          (match, _p1, _p2, _p3, _offset, _str, groups) => {
-            const name = groups.dot ?? groups.sq ?? groups.dq;
-            return name === key ? candidate.value : match;
-          },
-        );
-        next.push({ text: replaced, line: candidate.line });
+    for (const baseRow of rows) {
+      for (const valueNode of axisValues) {
+        const clone = new Map(baseRow);
+        clone.set(axisKey, valueNode);
+        next.push(clone);
         if (next.length >= 256) {
           break;
         }
@@ -1314,16 +846,211 @@ function expandMatrixReferences(rawText, matrixValues, fallbackLine) {
         break;
       }
     }
-    combinations = next;
+    rows = next;
   }
 
-  return combinations;
+  for (const includeMap of includeRows) {
+    rows.push(includeMap);
+  }
+
+  return rows;
 }
 
-function inspectShellRunScript(runNode, inheritedEnv, matrixValues, filePath, problems) {
+function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
+  const matches = [...rawText.matchAll(MATRIX_EXPRESSION_PATTERN)];
+  if (matches.length === 0 || !matrixRows || matrixRows.length === 0) {
+    return [{ text: rawText, line: fallbackLine }];
+  }
+
+  const singleMatrix = SINGLE_MATRIX_EXPRESSION_PATTERN.exec(rawText);
+  const candidates = [];
+  const seen = new Set();
+
+  for (const row of matrixRows) {
+    if (singleMatrix) {
+      const resolved = resolveMatrixPath(row, parseMatrixPathSegments(singleMatrix.groups.path));
+      if (!resolved) {
+        continue;
+      }
+      const key = `${resolved.line}:${resolved.value}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        candidates.push({ text: resolved.value, line: resolved.line });
+      }
+      continue;
+    }
+
+    let resolvedLine = fallbackLine;
+    let matchedAny = false;
+    const expanded = rawText.replace(
+      MATRIX_EXPRESSION_PATTERN,
+      (match, _p1, _offset, _str, groups) => {
+        const resolved = resolveMatrixPath(row, parseMatrixPathSegments(groups.path));
+        if (!resolved) {
+          return match;
+        }
+        matchedAny = true;
+        resolvedLine = resolved.line;
+        return resolved.value;
+      },
+    );
+    if (matchedAny) {
+      const key = `${resolvedLine}:${expanded}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        candidates.push({ text: expanded, line: resolvedLine });
+      }
+    }
+  }
+
+  return candidates.length > 0 ? candidates : [{ text: rawText, line: fallbackLine }];
+}
+
+function inspectShellCommandText(
+  text,
+  lineNumber,
+  sourceLines,
+  vars,
+  matrixRows,
+  filePath,
+  problems,
+) {
+  // Inspect executable command substitutions (`$(...)` and `` `...` ``) even
+  // when nested inside shell variable assignments (`cid=$(docker run -d ...)`).
+  for (const nested of extractCommandSubstitutions(text)) {
+    inspectShellCommandText(
+      nested,
+      lineNumber,
+      sourceLines,
+      new Map(vars),
+      matrixRows,
+      filePath,
+      problems,
+    );
+  }
+
+  for (const tokens of splitShellCommands(text)) {
+    if (tokens.length === 0 || tokens[0].startsWith("#")) {
+      continue;
+    }
+
+    // Pure variable assignment (`image=rust:1.96-alpine` or `export IMAGE=node:24`).
+    const assignStart = tokens[0] === "export" ? 1 : 0;
+    if (
+      assignStart < tokens.length &&
+      tokens.slice(assignStart).every((token) => ENV_PREFIX_ASSIGNMENT_PATTERN.test(token))
+    ) {
+      for (const token of tokens.slice(assignStart)) {
+        const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+        if (match) {
+          vars.set(match.groups.name, {
+            value: resolveVars(match.groups.value, vars),
+            line: lineNumber,
+          });
+        }
+      }
+      continue;
+    }
+
+    const commandVars = new Map(vars);
+    let cursor = 0;
+    while (cursor < tokens.length) {
+      const token = tokens[cursor];
+      if (SHELL_COMMAND_PREFIXES.has(token)) {
+        cursor += 1;
+        continue;
+      }
+      const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+      if (prefixAssign) {
+        commandVars.set(prefixAssign.groups.name, {
+          value: resolveVars(prefixAssign.groups.value, commandVars),
+          line: lineNumber,
+        });
+        cursor += 1;
+        continue;
+      }
+      break;
+    }
+
+    const cli = tokens[cursor];
+    if (cli !== "docker" && cli !== "podman") {
+      continue;
+    }
+
+    let argIndex = cursor + 1;
+    while (argIndex < tokens.length && tokens[argIndex].startsWith("-")) {
+      const flag = tokens[argIndex];
+      argIndex += !flag.includes("=") && DOCKER_GLOBAL_VALUE_FLAGS.has(flag) ? 2 : 1;
+    }
+
+    let subcommand = tokens[argIndex];
+    if (subcommand === "image" && tokens[argIndex + 1] === "pull") {
+      subcommand = "pull";
+      argIndex += 2;
+    } else if (
+      subcommand === "container" &&
+      (tokens[argIndex + 1] === "run" || tokens[argIndex + 1] === "create")
+    ) {
+      subcommand = "run";
+      argIndex += 2;
+    } else if (subcommand === "pull" || subcommand === "run" || subcommand === "create") {
+      subcommand = subcommand === "create" ? "run" : subcommand;
+      argIndex += 1;
+    } else {
+      continue;
+    }
+
+    const valueFlags = subcommand === "pull" ? DOCKER_PULL_VALUE_FLAGS : DOCKER_RUN_VALUE_FLAGS;
+    let imageToken = null;
+
+    for (let index = argIndex; index < tokens.length; index += 1) {
+      const token = tokens[index];
+      if (token === "--") {
+        imageToken = tokens[index + 1] ?? null;
+        break;
+      }
+      if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
+        continue;
+      }
+      if (token.startsWith("-")) {
+        if (!token.includes("=") && valueFlags.has(token)) {
+          index += 1;
+        }
+        continue;
+      }
+      imageToken = token;
+      break;
+    }
+
+    if (!imageToken) {
+      continue;
+    }
+
+    const varLine = lookupSingleVarLine(imageToken, commandVars, lineNumber);
+    const defaultLine =
+      varLine !== lineNumber
+        ? varLine
+        : sourceLines
+          ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber)
+          : lineNumber;
+
+    const resolvedWithVars = resolveVars(imageToken, commandVars);
+    for (const candidate of expandMatrixReferences(resolvedWithVars, matrixRows, defaultLine)) {
+      if (isDynamicReference(candidate.text)) {
+        continue;
+      }
+      if (!isPinnedDigest(candidate.text)) {
+        problems.push(
+          `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`,
+        );
+      }
+    }
+  }
+}
+
+function inspectShellRunScript(runNode, inheritedEnv, matrixRows, filePath, problems) {
   const vars = new Map(inheritedEnv);
 
-  // Build executable shell lines with accurate line numbers, skipping heredoc bodies.
   const logicalLines =
     runNode.folded && Array.isArray(runNode.lines)
       ? [{ text: runNode.value, lineNumber: runNode.line, sourceLines: runNode.lines }]
@@ -1336,123 +1063,7 @@ function inspectShellRunScript(runNode, inheritedEnv, matrixValues, filePath, pr
           );
 
   for (const { text, lineNumber, sourceLines } of logicalLines) {
-    for (const tokens of splitShellCommands(text)) {
-      if (tokens.length === 0 || tokens[0].startsWith("#")) {
-        continue;
-      }
-
-      // Pure variable assignment (`image=rust:1.96-alpine` or `export IMAGE=node:24`).
-      const assignStart = tokens[0] === "export" ? 1 : 0;
-      if (
-        assignStart < tokens.length &&
-        tokens.slice(assignStart).every((token) => ENV_PREFIX_ASSIGNMENT_PATTERN.test(token))
-      ) {
-        for (const token of tokens.slice(assignStart)) {
-          const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
-          if (match) {
-            vars.set(match.groups.name, {
-              value: resolveVars(match.groups.value, vars),
-              line: lineNumber,
-            });
-          }
-        }
-        continue;
-      }
-
-      const commandVars = new Map(vars);
-      let cursor = 0;
-      while (cursor < tokens.length) {
-        const token = tokens[cursor];
-        if (SHELL_COMMAND_PREFIXES.has(token)) {
-          cursor += 1;
-          continue;
-        }
-        const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
-        if (prefixAssign) {
-          commandVars.set(prefixAssign.groups.name, {
-            value: resolveVars(prefixAssign.groups.value, commandVars),
-            line: lineNumber,
-          });
-          cursor += 1;
-          continue;
-        }
-        break;
-      }
-
-      const cli = tokens[cursor];
-      if (cli !== "docker" && cli !== "podman") {
-        continue;
-      }
-
-      let argIndex = cursor + 1;
-      while (argIndex < tokens.length && tokens[argIndex].startsWith("-")) {
-        const flag = tokens[argIndex];
-        argIndex += !flag.includes("=") && DOCKER_GLOBAL_VALUE_FLAGS.has(flag) ? 2 : 1;
-      }
-
-      let subcommand = tokens[argIndex];
-      if (subcommand === "image" && tokens[argIndex + 1] === "pull") {
-        subcommand = "pull";
-        argIndex += 2;
-      } else if (
-        subcommand === "container" &&
-        (tokens[argIndex + 1] === "run" || tokens[argIndex + 1] === "create")
-      ) {
-        subcommand = "run";
-        argIndex += 2;
-      } else if (subcommand === "pull" || subcommand === "run" || subcommand === "create") {
-        subcommand = subcommand === "create" ? "run" : subcommand;
-        argIndex += 1;
-      } else {
-        continue;
-      }
-
-      const valueFlags = subcommand === "pull" ? DOCKER_PULL_VALUE_FLAGS : DOCKER_RUN_VALUE_FLAGS;
-      let imageToken = null;
-
-      for (let index = argIndex; index < tokens.length; index += 1) {
-        const token = tokens[index];
-        if (token === "--") {
-          imageToken = tokens[index + 1] ?? null;
-          break;
-        }
-        if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
-          continue;
-        }
-        if (token.startsWith("-")) {
-          if (!token.includes("=") && valueFlags.has(token)) {
-            index += 1;
-          }
-          continue;
-        }
-        imageToken = token;
-        break;
-      }
-
-      if (!imageToken) {
-        continue;
-      }
-
-      const defaultLine =
-        lookupSingleVarLine(imageToken, commandVars, lineNumber) !== lineNumber
-          ? lookupSingleVarLine(imageToken, commandVars, lineNumber)
-          : sourceLines
-            ? (sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ??
-              lineNumber)
-            : lineNumber;
-
-      const resolvedWithVars = resolveVars(imageToken, commandVars);
-      for (const candidate of expandMatrixReferences(resolvedWithVars, matrixValues, defaultLine)) {
-        if (isDynamicReference(candidate.text)) {
-          continue;
-        }
-        if (!isPinnedDigest(candidate.text)) {
-          problems.push(
-            `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`,
-          );
-        }
-      }
-    }
+    inspectShellCommandText(text, lineNumber, sourceLines, vars, matrixRows, filePath, problems);
   }
 }
 
@@ -1472,7 +1083,7 @@ function extractEnvMap(envNode, baseEnv) {
 function checkImageField(
   node,
   envMap,
-  matrixValues,
+  matrixRows,
   filePath,
   problems,
   { allowLocalDockerAction = false } = {},
@@ -1484,7 +1095,7 @@ function checkImageField(
   const envResolved = resolveEnvExpressions(rawRef, envMap);
   const envLine = lookupSingleVarLine(rawRef, envMap, node.line);
 
-  for (const candidate of expandMatrixReferences(envResolved, matrixValues, envLine)) {
+  for (const candidate of expandMatrixReferences(envResolved, matrixRows, envLine)) {
     const imageRef = candidate.text.trim();
     if (!imageRef || isDynamicReference(imageRef)) {
       continue;
@@ -1498,7 +1109,7 @@ function checkImageField(
   }
 }
 
-function checkStepsList(stepsNode, baseEnv, matrixValues, filePath, problems) {
+function checkStepsList(stepsNode, baseEnv, matrixRows, filePath, problems) {
   if (stepsNode?.kind !== "seq") {
     return;
   }
@@ -1509,7 +1120,7 @@ function checkStepsList(stepsNode, baseEnv, matrixValues, filePath, problems) {
     const stepEnv = extractEnvMap(stepNode.value.get("env"), baseEnv);
     const runNode = stepNode.value.get("run");
     if (runNode?.kind === "scalar") {
-      inspectShellRunScript(runNode, stepEnv, matrixValues, filePath, problems);
+      inspectShellRunScript(runNode, stepEnv, matrixRows, filePath, problems);
     }
   }
 }
@@ -1594,40 +1205,6 @@ export function collectContainerFiles(root) {
   return collectContainerFilesFromFilesystem(root);
 }
 
-function hasUnquotedComment(line) {
-  let quote = null;
-  let escaping = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const ch = line[index];
-    if (escaping) {
-      escaping = false;
-      continue;
-    }
-    if (ch === "\\" && quote === '"') {
-      escaping = true;
-      continue;
-    }
-    if (quote) {
-      if (ch === quote) {
-        if (quote === "'" && line[index + 1] === "'") {
-          index += 1;
-        } else {
-          quote = null;
-        }
-      }
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-    if (ch === "#" && (index === 0 || /\s/u.test(line[index - 1]))) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function collectUsesNodes(doc) {
   const usesNodes = [];
   if (!doc) {
@@ -1689,7 +1266,7 @@ function collectUsesNodes(doc) {
 export function unpinnedActionReferences(source, filePath = "<memory>") {
   const problems = [];
   const rawLines = source.split(/\r?\n/u);
-  const { doc, error } = parseYaml(source);
+  const { doc, error } = parseWorkflowYaml(source);
 
   if (error) {
     problems.push(`${filePath}:${error.line}: ${error.message}`);
@@ -1716,7 +1293,7 @@ export function unpinnedActionReferences(source, filePath = "<memory>") {
     }
 
     const sourceLine = rawLines[usesNode.line - 1] ?? "";
-    if (!hasUnquotedComment(sourceLine)) {
+    if (!usesNode.comment && !hasUnquotedComment(sourceLine)) {
       problems.push(`${location}: ${value} has no version comment`);
     }
   }
@@ -1726,7 +1303,7 @@ export function unpinnedActionReferences(source, filePath = "<memory>") {
 
 export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>") {
   const problems = [];
-  const { doc, error } = parseYaml(source);
+  const { doc, error } = parseWorkflowYaml(source);
   if (error) {
     problems.push(`${filePath}:${error.line}: ${error.message}`);
   }
@@ -1735,7 +1312,7 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
   }
 
   if (doc.kind === "seq") {
-    checkStepsList(doc, new Map(), new Map(), filePath, problems);
+    checkStepsList(doc, new Map(), [], filePath, problems);
     return problems;
   }
 
@@ -1745,39 +1322,37 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
 
   const workflowEnv = extractEnvMap(doc.value.get("env"), new Map());
 
-  // Support snippet inputs containing top-level `container`, `image`, `services`, or `steps`.
-  const checkContainerNode = (containerNode, envMap, matrixValues) => {
+  const checkContainerNode = (containerNode, envMap, matrixRows) => {
     if (!containerNode) {
       return;
     }
     if (containerNode.kind === "scalar") {
-      checkImageField(containerNode, envMap, matrixValues, filePath, problems);
+      checkImageField(containerNode, envMap, matrixRows, filePath, problems);
     } else if (containerNode.kind === "map") {
-      checkImageField(containerNode.value.get("image"), envMap, matrixValues, filePath, problems);
+      checkImageField(containerNode.value.get("image"), envMap, matrixRows, filePath, problems);
     }
   };
 
-  const checkServicesNode = (servicesNode, envMap, matrixValues) => {
+  const checkServicesNode = (servicesNode, envMap, matrixRows) => {
     if (servicesNode?.kind !== "map") {
       return;
     }
     for (const serviceNode of servicesNode.value.values()) {
-      checkContainerNode(serviceNode, envMap, matrixValues);
+      checkContainerNode(serviceNode, envMap, matrixRows);
     }
   };
 
-  const emptyMatrix = new Map();
-  checkContainerNode(doc.value.get("container"), workflowEnv, emptyMatrix);
-  checkServicesNode(doc.value.get("services"), workflowEnv, emptyMatrix);
-  checkImageField(doc.value.get("image"), workflowEnv, emptyMatrix, filePath, problems);
-  checkStepsList(doc.value.get("steps"), workflowEnv, emptyMatrix, filePath, problems);
+  checkContainerNode(doc.value.get("container"), workflowEnv, []);
+  checkServicesNode(doc.value.get("services"), workflowEnv, []);
+  checkImageField(doc.value.get("image"), workflowEnv, [], filePath, problems);
+  checkStepsList(doc.value.get("steps"), workflowEnv, [], filePath, problems);
 
   const runsNode = doc.value.get("runs");
   if (runsNode?.kind === "map") {
-    checkImageField(runsNode.value.get("image"), workflowEnv, emptyMatrix, filePath, problems, {
+    checkImageField(runsNode.value.get("image"), workflowEnv, [], filePath, problems, {
       allowLocalDockerAction: true,
     });
-    checkStepsList(runsNode.value.get("steps"), workflowEnv, emptyMatrix, filePath, problems);
+    checkStepsList(runsNode.value.get("steps"), workflowEnv, [], filePath, problems);
   }
 
   const jobsNode = doc.value.get("jobs");
@@ -1787,10 +1362,10 @@ export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>
         continue;
       }
       const jobEnv = extractEnvMap(jobNode.value.get("env"), workflowEnv);
-      const jobMatrix = extractJobMatrixValues(jobNode);
-      checkContainerNode(jobNode.value.get("container"), jobEnv, jobMatrix);
-      checkServicesNode(jobNode.value.get("services"), jobEnv, jobMatrix);
-      checkStepsList(jobNode.value.get("steps"), jobEnv, jobMatrix, filePath, problems);
+      const jobMatrixRows = extractJobMatrixRows(jobNode);
+      checkContainerNode(jobNode.value.get("container"), jobEnv, jobMatrixRows);
+      checkServicesNode(jobNode.value.get("services"), jobEnv, jobMatrixRows);
+      checkStepsList(jobNode.value.get("steps"), jobEnv, jobMatrixRows, filePath, problems);
     }
   }
 
@@ -1807,7 +1382,6 @@ function resolveBuildArgs(token, buildArgs) {
 function extractRunMountSources(runText) {
   const sources = [];
   const rest = runText.replace(/^RUN\s+/iu, "");
-  // Parse leading `--mount=...` (and any other `--flag` options) before the command.
   const tokens = splitShellCommands(rest)[0] ?? [];
   for (const token of tokens) {
     if (!token.startsWith("--")) {

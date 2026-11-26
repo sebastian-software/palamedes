@@ -1430,23 +1430,70 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:7: node:24 is not pinned to a sha256 digest"]);
-    // Anchored inline step mappings and literal job matrix image references are checked.
+    // Anchored step mappings (block and flow) and literal job matrix image references are checked.
     expect(
       unpinnedActionReferences(
         [
           "jobs:",
           "  first:",
           "    steps:",
-          "      - &checkout uses: actions/checkout@v7",
+          "      - &checkout",
+          "        uses: actions/checkout@v7",
           "  second:",
           "    steps:",
           "      - *checkout",
+          "      - &inline_key uses: actions/checkout@v7",
           "",
         ].join("\n"),
       ),
     ).toEqual([
-      "<memory>:4: actions/checkout@v7 is not pinned to a full commit SHA",
-      "<memory>:4: actions/checkout@v7 is not pinned to a full commit SHA",
+      "<memory>:5: actions/checkout@v7 is not pinned to a full commit SHA",
+      "<memory>:5: actions/checkout@v7 is not pinned to a full commit SHA",
+      "<memory>:9: actions/checkout@v7 is not pinned to a full commit SHA",
+    ]);
+    // Multiline quoted scalars followed by YAML comments must not swallow later steps.
+    const multilineCommentWorkflow = [
+      "jobs:",
+      "  test:",
+      "    runs-on: ubuntu-24.04",
+      "    steps:",
+      '      - name: "Multi-line quoted',
+      '          step title" # trailing YAML comment',
+      "        uses: actions/checkout@v7",
+      "      - run: cid=$(docker run -d node:24)",
+      "",
+    ].join("\n");
+    expect(unpinnedActionReferences(multilineCommentWorkflow)).toEqual([
+      "<memory>:7: actions/checkout@v7 is not pinned to a full commit SHA",
+    ]);
+    expect(unpinnedWorkflowContainerReferences(multilineCommentWorkflow)).toEqual([
+      "<memory>:8: node:24 is not pinned to a sha256 digest",
+    ]);
+    expect(
+      unpinnedWorkflowContainerReferences(`      - run: cid=$(docker run -d node:24@${digest})\n`),
+    ).toEqual([]);
+    // Nested object-valued matrix entries (`matrix.platform.image`) are resolved.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  matrix-objects:",
+          "    strategy:",
+          "      matrix:",
+          "        platform:",
+          "          - runner: ubuntu-24.04",
+          "            image: node:24",
+          "          - runner: ubuntu-24.04-arm",
+          `            image: node:24@${digest}`,
+          "    container: ${{ matrix.platform.image }}",
+          "    steps:",
+          "      - run: docker pull ${{ matrix.platform.image }}",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:7: node:24 is not pinned to a sha256 digest",
+      "<memory>:7: node:24 is not pinned to a sha256 digest",
     ]);
     expect(
       unpinnedWorkflowContainerReferences(
