@@ -17,6 +17,7 @@ import {
   assertNoBootstrapChunks,
   assertChunkCoverage,
   chunkReferences,
+  compiledRouteHasOptionalRootLocale,
   emitClientCatalogPermutations,
   filterLoadableManifest,
   inlineMessageExpression,
@@ -369,6 +370,17 @@ describe("locale resolution", () => {
         ),
       ).toBe(true);
 
+      // A colocated directory named `layout.tsx/` is not a layout file and must
+      // not mask the real root layout under `[[...locale]]`.
+      mkdirSync(path.join(fixtureRoot, "colocated-dir/app/layout.tsx"), { recursive: true });
+      writeLayout("colocated-dir", "app/[[...locale]]/layout.tsx");
+      expect(
+        routeHasOptionalRootLocale(
+          path.join(fixtureRoot, "colocated-dir"),
+          "[[...locale]]/page_client-reference-manifest.js",
+        ),
+      ).toBe(true);
+
       // src/app/(marketing)/[[...locale]]/layout.page.tsx with custom pageExtensions.
       writeLayout("src-custom-ext", "src/app/(marketing)/[[...locale]]/layout.page.tsx");
       expect(
@@ -588,6 +600,105 @@ globalThis.__RSC_MANIFEST["/_shop/[[...locale]]/page"] = ${JSON.stringify({
         context.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
       )["/_shop/[[...locale]]/page"]!.entryJSFiles["[project]/app/%5Fshop/[[...locale]]/page"]!;
       expect(entryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("derives the root-layout boundary from Next's compiled loaderTree even when wrapper-configured pageExtensions differ", async () => {
+    const projectRoot = mkdtempSync(path.join(os.tmpdir(), "palamedes-compiled-loader-tree-"));
+    try {
+      // A wrapper applied after withPalamedes() added `page.tsx`, so the layout
+      // file is `layout.page.tsx` while emitClientCatalogPermutations() receives
+      // only the default pageExtensions. Reading Next's compiled loaderTree
+      // still detects the exact root layout boundary.
+      mkdirSync(path.join(projectRoot, "app/[[...locale]]"), { recursive: true });
+      mkdirSync(path.join(projectRoot, "locales"), { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "palamedes.yaml"),
+        "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [app]\n",
+      );
+      writeFileSync(path.join(projectRoot, "locales/en.po"), 'msgid "Hello"\nmsgstr "Hello"\n');
+      writeFileSync(path.join(projectRoot, "locales/de.po"), 'msgid "Hello"\nmsgstr "Hallo"\n');
+      writeFileSync(
+        path.join(projectRoot, "app/[[...locale]]/layout.page.tsx"),
+        "export default function Layout({ children }) { return children; }\n",
+      );
+
+      const distDir = path.join(projectRoot, ".next");
+      mkdirSync(path.join(distDir, "static/chunks"), { recursive: true });
+      mkdirSync(path.join(distDir, "server/app/[[...locale]]"), { recursive: true });
+      mkdirSync(path.join(distDir, "server/chunks/ssr"), { recursive: true });
+      const payload = Buffer.from(
+        JSON.stringify({ source: "app/[[...locale]]/page.page.tsx", ids: ["Hello"] }),
+      ).toString("base64url");
+      writeFileSync(
+        path.join(distDir, "static/chunks/page.js"),
+        `export const msgs = clientCatalogMessages("pmds-next:aaaaaaaaaaaa:${payload}");\n`,
+      );
+      writeFileSync(
+        path.join(distDir, "build-manifest.json"),
+        JSON.stringify({ rootMainFiles: [] }),
+      );
+      const manifestPath = path.join(
+        distDir,
+        "server/app/[[...locale]]/page_client-reference-manifest.js",
+      );
+      writeFileSync(
+        manifestPath,
+        `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
+globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
+          entryCSSFiles: {},
+          entryJSFiles: { "[project]/app/[[...locale]]/page": ["static/chunks/page.js"] },
+        })};`,
+      );
+      writeFileSync(
+        path.join(distDir, "server/app/[[...locale]]/page.js"),
+        `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\n`,
+      );
+      const templateChunk = path.join(
+        distDir,
+        "server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js",
+      );
+      writeFileSync(
+        templateChunk,
+        `module.exports=[1,a=>{let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{},layout:[l,"[project]/app/[[...locale]]/layout.page.tsx"]},[]]},{"global-error":[g,"builtin"]},[]];}];`,
+      );
+
+      expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(true);
+      await emitClientCatalogPermutations({
+        distDir,
+        projectRoot,
+        failOnMissing: false,
+      });
+
+      const context: Record<string, unknown> = { process: { env: {} } };
+      vm.runInNewContext(readFileSync(manifestPath, "utf8"), context);
+      const bind = context.__PALAMEDES_CLIENT_CATALOG_BIND as (
+        fn: (locales: readonly string[], fallback: string, optionalRootLocale?: boolean) => string,
+      ) => void;
+      bind((availableLocales, fallbackLocale, optionalRootLocale) =>
+        resolveRenderLocale(
+          availableLocales,
+          fallbackLocale,
+          render("/[[...locale]]"),
+          unit({ rootParams: {}, headers: header("de") }),
+          typeof optionalRootLocale === "boolean" ? { optionalRootLocale } : {},
+        ),
+      );
+      const entryFiles = (
+        context.__RSC_MANIFEST as Record<string, { entryJSFiles: Record<string, string[]> }>
+      )["/[[...locale]]/page"]!.entryJSFiles["[project]/app/[[...locale]]/page"]!;
+      expect(entryFiles[0]).toMatch(/^static\/chunks\/page\.en-[0-9a-f]{8}\.js$/u);
+
+      // When the compiled loaderTree has a root layout at "" above [[...locale]],
+      // compiledRouteHasOptionalRootLocale returns false even if no default-named
+      // layout file exists.
+      writeFileSync(
+        templateChunk,
+        `module.exports=[1,a=>{let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{}},[]]},{layout:[l,"[project]/app/layout.page.tsx"],"global-error":[g,"builtin"]},[]];}];`,
+      );
+      expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
