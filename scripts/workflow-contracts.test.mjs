@@ -2530,6 +2530,114 @@ describe("workflow contracts", () => {
     } finally {
       await rm(compositeAndContextFixture, { recursive: true, force: true });
     }
+    // Image-backed `--mount type=image` sources in `docker`/`podman` `run` and
+    // `create` are validated while bind/volume mounts are ignored; local actions
+    // outside `.github/actions` have their nested `uses:` pins checked, their
+    // `GITHUB_ENV` writes propagate to callers, `actions/checkout` `path:`
+    // translates workspace-relative build paths, and Docker's lowercase
+    // `dockerfile` fallback is honored.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          `  - run: docker run --mount type=image,source=alpine:3.20,destination=/mnt node:24@${digest}`,
+          `  - run: docker create --mount=type=image,src=busybox:1.37,dst=/mnt node:24@${digest}`,
+          `  - run: podman run --mount type=image,src=node:24@${digest},target=/mnt node:24@${digest}`,
+          `  - run: docker run --mount type=bind,source=./local,target=/mnt --mount type=volume,source=myvol,target=/data node:24@${digest}`,
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:2: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:3: busybox:1.37 is not pinned to a sha256 digest",
+    ]);
+    const r31Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r31-"));
+    try {
+      await mkdir(join(r31Fixture, ".github", "workflows"), { recursive: true });
+      await mkdir(join(r31Fixture, ".github", "actions", "set-img"), { recursive: true });
+      await mkdir(join(r31Fixture, "tools", "docker-step"), { recursive: true });
+      await mkdir(join(r31Fixture, "ci", "lower-ok"), { recursive: true });
+      await mkdir(join(r31Fixture, "ci", "lower-bad"), { recursive: true });
+      await writeFile(join(r31Fixture, "Containerfile"), `FROM node:24@${digest}\n`);
+      await writeFile(join(r31Fixture, "bad.recipe"), "FROM perl:5.40\n");
+      await writeFile(join(r31Fixture, "ci", "lower-ok", "dockerfile"), `FROM node:24@${digest}\n`);
+      await writeFile(
+        join(r31Fixture, "ci", "lower-bad", "dockerfile"),
+        `ARG LOWER_BASE=node:24@${digest}\nFROM \${LOWER_BASE}\n`,
+      );
+      await writeFile(
+        join(r31Fixture, "tools", "docker-step", "action.yml"),
+        [
+          "name: External local action",
+          "runs:",
+          "  using: composite",
+          "  steps:",
+          "    - uses: docker://alpine:3.20",
+          "    - uses: actions/checkout@v4",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r31Fixture, ".github", "actions", "set-img", "action.yml"),
+        [
+          "name: Set image env",
+          "description: Emits an image reference into GITHUB_ENV",
+          "runs:",
+          "  using: composite",
+          "  steps:",
+          "    - name: Emit image",
+          "      shell: bash",
+          '      run: echo "RESOLVED_IMG=redis:7" >> "$GITHUB_ENV"',
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r31Fixture, ".github", "workflows", "checkout-and-actions.yml"),
+        [
+          "jobs:",
+          "  default-checkout:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - uses: ./tools/docker-step",
+          "      - uses: ./.github/actions/set-img",
+          '      - run: docker pull "$RESOLVED_IMG"',
+          "      - run: |",
+          "          docker build ci/lower-ok",
+          "          docker build --build-arg LOWER_BASE=elixir:1.18 ci/lower-bad",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          context: ci/lower-ok",
+          "  subdir-checkout:",
+          "    runs-on: ubuntu-24.04",
+          "    steps:",
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7",
+          "        with:",
+          "          path: src",
+          "      - run: |",
+          "          docker build -f src/Containerfile src",
+          "          docker build -f src/bad.recipe src",
+          "          docker build -f Containerfile .",
+          "      - working-directory: src",
+          "        run: docker build -f Containerfile .",
+          "      - uses: docker/build-push-action@1111111111111111111111111111111111111111 # v6",
+          "        with:",
+          "          context: src",
+          "          file: src/Containerfile",
+          "",
+        ].join("\n"),
+      );
+      const r31Result = checkWorkflowPins(r31Fixture);
+      expect(r31Result.problems).toEqual([
+        "tools/docker-step/action.yml:5: docker://alpine:3.20 is not pinned to a sha256 digest",
+        "tools/docker-step/action.yml:6: actions/checkout@v4 is not pinned to a full commit SHA",
+        ".github/workflows/checkout-and-actions.yml:6: redis:7 is not pinned to a sha256 digest",
+        ".github/workflows/checkout-and-actions.yml:23: build file Containerfile cannot be verified statically",
+        "bad.recipe:1: perl:5.40 is not pinned to a sha256 digest",
+        "ci/lower-bad/dockerfile:2: elixir:1.18 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r31Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
