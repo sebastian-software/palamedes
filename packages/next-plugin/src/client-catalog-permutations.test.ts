@@ -956,6 +956,14 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
+      // Spreading `...t` aliases its inner modules object and must be treated
+      // as an intervening reference rather than a property access `.t`.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const parts=[...t]; delete parts[2].layout; ${ep("tree:t")};`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
           `let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const note = \`\${(t[2] = {}, "")}\`; ${ep("tree:t")};`,

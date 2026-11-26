@@ -710,6 +710,15 @@ function resolveIdentifierArrayInScope(
       continue;
     }
     if (ch === ".") {
+      // Spread/rest (`...ident`) references the identifier rather than a
+      // property access, so it must not set `prevTokenKind = "dot"`.
+      if (source[index + 1] === "." && source[index + 2] === ".") {
+        index += 3;
+        prevTokenKind = "other";
+        prevNonWsChar = ".";
+        regexAllowed = true;
+        continue;
+      }
       index += 1;
       prevTokenKind = "dot";
       prevNonWsChar = ".";
