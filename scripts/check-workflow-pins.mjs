@@ -1315,6 +1315,19 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
   if (lowerBranch === "true") {
     return { known: true, values: ["true"], mayBeEmpty: false };
   }
+  if (branch.startsWith("!") && !branch.startsWith("!=")) {
+    const inner = evaluateActionsFallbackBranch(branch.slice(1), stepEnv);
+    if (inner.known) {
+      const alwaysFalsy = inner.values.every((v) => v.length === 0);
+      if (alwaysFalsy) {
+        return { known: true, values: ["true"], mayBeEmpty: false };
+      }
+      if (!inner.mayBeEmpty) {
+        return { known: true, values: [], mayBeEmpty: true };
+      }
+    }
+    return { known: false, values: [], mayBeEmpty: true };
+  }
   if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(branch)) {
     const numVal = Number(branch);
     if (numVal === 0 || Number.isNaN(numVal)) {
@@ -9992,14 +10005,20 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
         pushValue(optionItem);
       }
     }
-    if (defaultNode === null) {
+    if (normalizedType === "boolean") {
+      for (const boolVal of ["true", "false"]) {
+        if (!seenValues.has(boolVal)) {
+          seenValues.add(boolVal);
+          values.push({ value: boolVal, line: defaultNode?.line ?? defNode.line, type: "boolean" });
+        }
+      }
+    } else if (defaultNode === null) {
       const requiredNode = getMapField(defNode, "required");
       const isRequired =
         requiredNode?.kind === "scalar" &&
         String(requiredNode.value).trim().toLowerCase() === "true";
       if (!isRequired && rawType !== "choice") {
-        const implicitDefault =
-          normalizedType === "boolean" ? "false" : normalizedType === "number" ? "0" : "";
+        const implicitDefault = normalizedType === "number" ? "0" : "";
         if (!seenValues.has(implicitDefault)) {
           seenValues.add(implicitDefault);
           values.push({ value: implicitDefault, line: defNode.line, type: normalizedType });

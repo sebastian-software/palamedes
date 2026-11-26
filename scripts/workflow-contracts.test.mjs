@@ -1118,6 +1118,9 @@ describe("workflow contracts", () => {
     expect(report.text).toContain("scripts/open-or-refresh-issue.mjs");
     expect(report.text).toContain("const failures = [];");
     expect(report.text).toContain("if (failures.length > 0)");
+    expect(report.text).toContain(
+      '(contractOutcome === "skipped" || contractOutcome === "success")',
+    );
     expect(report.text).toContain("Unexpected upstream state");
   });
 
@@ -3777,20 +3780,27 @@ describe("workflow contracts", () => {
           "      use_custom:",
           "        type: boolean",
           "        default: false",
+          "      use_canary:",
+          "        type: boolean",
+          "        default: false",
           "      count:",
           "        type: number",
           "        default: 0",
           "jobs:",
           "  typed-falsy:",
           "    runs-on: ubuntu-latest",
-          `    container: \${{ inputs.use_custom || 'node:24@${digest}' }}`,
+          `    container: \${{ inputs.use_custom && 'alpine:3.20@${digest}' || 'node:24@${digest}' }}`,
           "    steps:",
           `      - run: docker pull "\${{ inputs.count || 'alpine:3.20@${digest}' }}"`,
-          "      - run: docker pull \"${{ inputs.use_custom || 'busybox:1.36' }}\"",
+          "      - run: docker pull \"${{ inputs.count || 'busybox:1.36' }}\"",
+          `      - run: docker pull "\${{ inputs.use_canary && 'node:24' || 'node:24@${digest}' }}"`,
           "",
         ].join("\n"),
       ),
-    ).toEqual(["<memory>:16: busybox:1.36 is not pinned to a sha256 digest"]);
+    ).toEqual([
+      "<memory>:19: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:20: node:24 is not pinned to a sha256 digest",
+    ]);
     const r48Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r48-"));
     try {
       await mkdir(join(r48Fixture, ".github", "workflows"), { recursive: true });

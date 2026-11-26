@@ -193,8 +193,14 @@ jobs:
                 continue;
               }
 
-              if (jobResult === "failure" && contractOutcome === "skipped") {
-                // Setup failed before the contract step ran; leave tracking issues unchanged.
+              if (
+                jobResult === "failure" &&
+                (contractOutcome === "skipped" || contractOutcome === "success")
+              ) {
+                // Setup failed before the contract step ran, or a post-job action
+                // failed after the contract step succeeded; leave tracking issues
+                // unchanged so the upstream job failure stands without falsely
+                // failing issue reporting.
                 continue;
               }
 
