@@ -50,6 +50,24 @@
       "expectedRelative": "locales/en/messages.po"
     },
     {
+      "path": "locales\\{locale}\\messages.PO",
+      "locale": "de",
+      "format": "po",
+      "expectedRelative": "locales/de/messages.po"
+    },
+    {
+      "path": "locales\\{locale}\\messages.",
+      "locale": "de",
+      "format": "po",
+      "expectedRelative": "locales/de/messages.po"
+    },
+    {
+      "path": "locales\\{locale}\\messages.v2.",
+      "locale": "pt.BR",
+      "format": "po",
+      "expectedRelative": "locales/pt.BR/messages.v2.po"
+    },
+    {
       "path": "locales\\{locale}\\messages.v2",
       "locale": "pt.BR",
       "format": "po",
@@ -57,6 +75,12 @@
     },
     {
       "path": "locales\\{locale}\\messages.fcl",
+      "locale": "de",
+      "format": "fcl",
+      "expectedRelative": "locales/de/messages.fcl"
+    },
+    {
+      "path": "locales\\{locale}\\messages.FCL",
       "locale": "de",
       "format": "fcl",
       "expectedRelative": "locales/de/messages.fcl"

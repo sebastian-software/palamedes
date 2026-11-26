@@ -125,6 +125,26 @@ pub struct FileIdentity {
     _unsupported: (),
 }
 
+impl FileIdentity {
+    /// Returns whether two identities reside on the same filesystem volume.
+    #[must_use]
+    pub const fn same_volume(self, other: Self) -> bool {
+        #[cfg(unix)]
+        {
+            self.dev == other.dev
+        }
+        #[cfg(windows)]
+        {
+            self.volume_serial == other.volume_serial
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = (self, other);
+            true
+        }
+    }
+}
+
 /// Splits a validated catalog path inside `root_dir` into its relative parent
 /// directory and single-segment filename.
 ///
@@ -531,6 +551,81 @@ mod platform {
             Ok(Some(current))
         }
 
+        /// Opens a direct existing child directory named `segment` without
+        /// following symlinks.
+        ///
+        /// Returns `Ok(None)` when `segment` does not exist.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `segment` is invalid or
+        /// refers to a symlink, or [`ContainedFsError::Io`] on OS errors.
+        pub fn open_existing_child_dir(
+            &self,
+            segment: &OsStr,
+        ) -> Result<Option<Self>, ContainedFsError> {
+            validate_single_file_name(segment)?;
+            let c_segment = os_str_to_cstring(segment)?;
+            // SAFETY: `self.fd` is an open directory descriptor and `c_segment` is valid.
+            let next = unsafe {
+                libc::openat(
+                    self.fd.as_raw_fd(),
+                    c_segment.as_ptr(),
+                    DIR_TRAVERSAL_FLAGS | libc::O_NOFOLLOW,
+                )
+            };
+            if next < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::ENOENT) {
+                    return Ok(None);
+                }
+                if is_symlink_open_error(error.raw_os_error())
+                    || (error.raw_os_error() == Some(libc::ENOTDIR)
+                        && self.is_symlink_entry(&c_segment))
+                {
+                    return Err(ContainedFsError::Containment(format!(
+                        "refusing to follow symlink at directory component \"{}\"",
+                        segment.to_string_lossy()
+                    )));
+                }
+                return Err(ContainedFsError::Io(error));
+            }
+            // SAFETY: `next` is a newly opened valid file descriptor.
+            Ok(Some(Self {
+                fd: unsafe { OwnedFd::from_raw_fd(next) },
+            }))
+        }
+
+        /// Returns the on-disk identity of this directory itself.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Io`] if `fstat` fails.
+        pub fn self_identity(&self) -> Result<Option<FileIdentity>, ContainedFsError> {
+            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // SAFETY: `self.fd` is open and `stat` is writable.
+            if unsafe { libc::fstat(self.fd.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
+                return Err(ContainedFsError::Io(io::Error::last_os_error()));
+            }
+            // SAFETY: `fstat` succeeded and initialized `stat`.
+            let stat = unsafe { stat.assume_init() };
+            #[allow(clippy::unnecessary_cast)]
+            Ok(Some(FileIdentity {
+                dev: stat.st_dev as u64,
+                ino: stat.st_ino as u64,
+            }))
+        }
+
+        /// Detects whether filenames in this specific directory are compared
+        /// case-insensitively without mutating the filesystem.
+        ///
+        /// Returns `None` when case sensitivity cannot be determined directly
+        /// (for example, an empty directory on an unrecognized mount).
+        #[must_use]
+        pub fn is_case_insensitive(&self) -> Option<bool> {
+            detect_unix_dir_case_insensitivity(self)
+        }
+
         /// Rejects `file_name` if it already exists in this directory as a symlink.
         ///
         /// # Errors
@@ -676,17 +771,24 @@ mod platform {
             Ok(())
         }
 
-        /// Writes `bytes` to a fresh temporary file inside this directory and
-        /// atomically replaces `file_name`.
+        /// Writes `bytes` to a fresh temporary file and atomically publishes
+        /// `file_name` inside this directory.
         ///
         /// When replacing an existing file, write permission on the existing
         /// destination is verified without truncating it. The replacement is
         /// staged inside a private `0700` temporary directory (with inherited
-        /// ACLs stripped) so no other principal can observe the temporary file
-        /// while its content, ownership/group, mode bits, and extended ACLs are
-        /// applied and synced before the single atomic `renameat` into place.
-        /// If the original principals or ACLs cannot be preserved safely,
-        /// replacement fails without modifying the destination.
+        /// ACLs stripped and `setgid` preserved) so no other principal can
+        /// observe the temporary file while its content, ownership/group, mode
+        /// bits, and extended ACLs are applied and synced before the single
+        /// atomic `renameat` into place. If the original principals or ACLs
+        /// cannot be preserved safely, replacement fails without modifying the
+        /// destination.
+        ///
+        /// When creating a new file, the temporary file is created directly in
+        /// this directory with `O_CREAT | O_EXCL | O_NOFOLLOW` so the kernel
+        /// natively applies the destination directory's `setgid` group,
+        /// `file_inherit` / default ACLs, and SELinux context, then published
+        /// atomically without overwriting any concurrently created file.
         ///
         /// # Errors
         ///
@@ -704,15 +806,14 @@ mod platform {
 
             for _ in 0..8 {
                 let existing = self.open_existing_for_replace(file_name)?;
-                let (stage_name, stage_dir, stage_identity, expected_new_gid) =
-                    self.create_staging_dir()?;
                 enum StageOutcome {
                     Published,
                     Retry,
                 }
 
                 let stage_result = if let Some(existing) = existing.as_ref() {
-                    (|| -> Result<StageOutcome, ContainedFsError> {
+                    let (stage_name, stage_dir, stage_identity) = self.create_staging_dir()?;
+                    let replace_result = (|| -> Result<StageOutcome, ContainedFsError> {
                         let (temp_name, mut temp_file) = stage_dir.create_temp_file(0o600)?;
                         let mut temp_guard = UnixTempFileGuard::new(&stage_dir, temp_name);
                         let write_result = (|| -> io::Result<()> {
@@ -752,19 +853,23 @@ mod platform {
                         }
                         temp_guard.disarm();
                         Ok(StageOutcome::Published)
-                    })()
+                    })();
+                    drop(stage_dir);
+                    let _ = self.rmdir_stage_if_same(&stage_name, stage_identity);
+                    replace_result
                 } else {
                     (|| -> Result<StageOutcome, ContainedFsError> {
                         let create_mode: libc::c_uint = match new_file_mode {
                             ContainedNewFileMode::RespectUmask => 0o666,
                             ContainedNewFileMode::Private => 0o600,
                         };
-                        let (temp_name, mut temp_file) = stage_dir.create_temp_file(create_mode)?;
-                        let mut temp_guard = UnixTempFileGuard::new(&stage_dir, temp_name);
+                        // Create the sibling temporary file directly in `self`
+                        // so kernel inheritance (`setgid`, `file_inherit` and
+                        // default ACLs, SELinux defaults) matches a direct
+                        // child of the destination directory.
+                        let (temp_name, mut temp_file) = self.create_temp_file(create_mode)?;
+                        let mut temp_guard = UnixTempFileGuard::new(self, temp_name);
                         let write_result = (|| -> io::Result<()> {
-                            if let Some(expected_gid) = expected_new_gid {
-                                ensure_inherited_group(temp_file.as_raw_fd(), expected_gid)?;
-                            }
                             temp_file.write_all(bytes)?;
                             temp_file.flush()?;
                             if durability.syncs_file() {
@@ -775,12 +880,12 @@ mod platform {
                         drop(temp_file);
                         write_result?;
 
-                        // Publish from our private staging directory without
-                        // overwriting any concurrently created target, using
-                        // atomic no-replace rename where supported so creation
-                        // also works on filesystems without hard links (exFAT).
+                        // Publish without overwriting any concurrently created
+                        // target, using atomic no-replace rename where
+                        // supported so creation also works on filesystems
+                        // without hard links (exFAT).
                         match publish_file_noreplace(
-                            stage_dir.fd.as_raw_fd(),
+                            self.fd.as_raw_fd(),
                             &temp_guard.name,
                             self.fd.as_raw_fd(),
                             &c_target,
@@ -794,9 +899,6 @@ mod platform {
                         }
                     })()
                 };
-
-                drop(stage_dir);
-                let _ = self.rmdir_stage_if_same(&stage_name, stage_identity);
 
                 match stage_result? {
                     StageOutcome::Retry => continue,
@@ -972,7 +1074,11 @@ mod platform {
             let pid = std::process::id();
             for _ in 0..128 {
                 let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
-                let name = OsString::from(format!(".pmds-tmp-{pid}-{nonce}"));
+                let mut hasher = RandomState::new().build_hasher();
+                hasher.write_u32(pid);
+                hasher.write_u64(nonce);
+                let token = hasher.finish();
+                let name = OsString::from(format!(".pmds-tmp-{pid}-{nonce}-{token:016x}"));
                 let c_name = os_str_to_cstring(&name)?;
                 // SAFETY: `self.fd` is open, `c_name` is valid, and `mode` is promoted to `c_uint`.
                 let raw = unsafe {
@@ -1002,9 +1108,7 @@ mod platform {
             )))
         }
 
-        fn create_staging_dir(
-            &self,
-        ) -> Result<(CString, Self, FileIdentity, Option<libc::gid_t>), ContainedFsError> {
+        fn create_staging_dir(&self) -> Result<(CString, Self, FileIdentity), ContainedFsError> {
             let mut parent_stat = std::mem::MaybeUninit::<libc::stat>::uninit();
             // SAFETY: `self.fd` is an open directory descriptor and `parent_stat` is writable.
             if unsafe { libc::fstat(self.fd.as_raw_fd(), parent_stat.as_mut_ptr()) } != 0 {
@@ -1012,8 +1116,6 @@ mod platform {
             }
             // SAFETY: `fstat` succeeded and initialized `parent_stat`.
             let parent_stat = unsafe { parent_stat.assume_init() };
-            let expected_new_gid =
-                ((parent_stat.st_mode & libc::S_ISGID) != 0).then_some(parent_stat.st_gid);
             // SAFETY: `geteuid` has no preconditions.
             let euid = unsafe { libc::geteuid() };
 
@@ -1092,20 +1194,35 @@ mod platform {
 
                 let harden = (|| -> io::Result<()> {
                     strip_inherited_acl(fd.as_raw_fd())?;
-                    // SAFETY: `fd` has been verified as our fresh private empty directory.
-                    if unsafe { libc::fchmod(fd.as_raw_fd(), 0o700) } != 0 {
-                        return Err(io::Error::last_os_error());
-                    }
-                    // Verify effective mode bits after hardening so mounts that
-                    // ignore `fchmod` (for example world-writable non-POSIX
-                    // mounts) fail closed rather than exposing staged files.
+                    // Inspect mode after stripping ACLs. Skip `fchmod` when
+                    // `mkdirat(..., 0o700)` already produced exact owner-only
+                    // `0700` permission bits so Linux retains any kernel-inherited
+                    // `S_ISGID` bit even when the writer is not a member of the
+                    // directory's group.
                     let mut post_stat = std::mem::MaybeUninit::<libc::stat>::uninit();
                     // SAFETY: `fd` is open and `post_stat` is writable.
                     if unsafe { libc::fstat(fd.as_raw_fd(), post_stat.as_mut_ptr()) } != 0 {
                         return Err(io::Error::last_os_error());
                     }
                     // SAFETY: `fstat` succeeded and initialized `post_stat`.
-                    let post_stat = unsafe { post_stat.assume_init() };
+                    let mut post_stat = unsafe { post_stat.assume_init() };
+                    if (post_stat.st_mode & 0o0777) != 0o700 {
+                        let target_mode = 0o700 | (post_stat.st_mode & libc::S_ISGID);
+                        // SAFETY: `fd` has been verified as our fresh private empty directory.
+                        if unsafe { libc::fchmod(fd.as_raw_fd(), target_mode) } != 0 {
+                            return Err(io::Error::last_os_error());
+                        }
+                        let mut rechecked = std::mem::MaybeUninit::<libc::stat>::uninit();
+                        // SAFETY: `fd` is open and `rechecked` is writable.
+                        if unsafe { libc::fstat(fd.as_raw_fd(), rechecked.as_mut_ptr()) } != 0 {
+                            return Err(io::Error::last_os_error());
+                        }
+                        // SAFETY: `fstat` succeeded and initialized `rechecked`.
+                        post_stat = unsafe { rechecked.assume_init() };
+                    }
+                    // Verify effective mode bits after hardening so mounts that
+                    // ignore `fchmod` (for example world-writable non-POSIX
+                    // mounts) fail closed rather than exposing staged files.
                     if (post_stat.st_mode & 0o0077) != 0 {
                         return Err(io::Error::new(
                             io::ErrorKind::PermissionDenied,
@@ -1119,7 +1236,7 @@ mod platform {
                     let _ = self.rmdir_stage_if_same(&c_name, identity);
                     return Err(ContainedFsError::Io(error));
                 }
-                return Ok((c_name, Self { fd }, identity, expected_new_gid));
+                return Ok((c_name, Self { fd }, identity));
             }
             Err(ContainedFsError::Io(io::Error::new(
                 io::ErrorKind::AlreadyExists,
@@ -1327,28 +1444,197 @@ mod platform {
         result
     }
 
-    fn ensure_inherited_group(
-        temp_fd: std::os::fd::RawFd,
-        expected_gid: libc::gid_t,
-    ) -> io::Result<()> {
-        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-        // SAFETY: `temp_fd` is an open file descriptor and `stat` is writable.
-        if unsafe { libc::fstat(temp_fd, stat.as_mut_ptr()) } != 0 {
-            return Err(io::Error::last_os_error());
+    fn probe_directory_case_insensitivity(
+        dir: &ContainedDir,
+        readable_fd: std::os::fd::RawFd,
+    ) -> Option<bool> {
+        // SAFETY: `readable_fd` is an open readable directory descriptor.
+        let dup_fd = unsafe { libc::fcntl(readable_fd, libc::F_DUPFD_CLOEXEC, 0) };
+        if dup_fd < 0 {
+            return None;
         }
-        // SAFETY: `fstat` succeeded and initialized `stat`.
-        let stat = unsafe { stat.assume_init() };
-        if stat.st_gid != expected_gid {
-            // SAFETY: `temp_fd` is an open file descriptor.
-            if unsafe { libc::fchown(temp_fd, libc::uid_t::MAX, expected_gid) } != 0 {
-                let error = io::Error::last_os_error();
-                return Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    format!("cannot preserve inherited directory group on new file: {error}"),
-                ));
+        // SAFETY: `dup_fd` is valid; `fdopendir` takes ownership on success.
+        let dir_ptr = unsafe { libc::fdopendir(dup_fd) };
+        if dir_ptr.is_null() {
+            // SAFETY: `fdopendir` failed, so we still own `dup_fd`.
+            unsafe {
+                libc::close(dup_fd);
+            }
+            return None;
+        }
+        let mut detected = None;
+        loop {
+            // SAFETY: `dir_ptr` is a valid `DIR*`.
+            let entry = unsafe { libc::readdir(dir_ptr) };
+            if entry.is_null() {
+                break;
+            }
+            // SAFETY: `entry` is non-null and `d_name` is a NUL-terminated C string.
+            let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
+            if name == c"." || name == c".." {
+                continue;
+            }
+            let Ok(name_str) = name.to_str() else {
+                continue;
+            };
+            let Some((idx, ch)) = name_str
+                .char_indices()
+                .find(|(_, ch)| ch.is_ascii_alphabetic())
+            else {
+                continue;
+            };
+            let flipped = if ch.is_ascii_lowercase() {
+                ch.to_ascii_uppercase()
+            } else {
+                ch.to_ascii_lowercase()
+            };
+            let mut variant = String::with_capacity(name_str.len());
+            variant.push_str(&name_str[..idx]);
+            variant.push(flipped);
+            variant.push_str(&name_str[idx + ch.len_utf8()..]);
+            let Ok(original_c) = CString::new(name.to_bytes()) else {
+                continue;
+            };
+            let Ok(variant_c) = CString::new(variant.as_bytes()) else {
+                continue;
+            };
+            let original_id = dir.entry_identity(&original_c);
+            let variant_id = dir.entry_identity(&variant_c);
+            if original_id.is_some() {
+                detected = Some(original_id == variant_id);
+                break;
             }
         }
-        Ok(())
+        // SAFETY: `dir_ptr` is a valid `DIR*` owned by this function.
+        unsafe {
+            libc::closedir(dir_ptr);
+        }
+        detected
+    }
+
+    fn open_readable_self(dir: &ContainedDir) -> Option<OwnedFd> {
+        let dot = c".";
+        // SAFETY: `dir.fd` is an open directory descriptor and `dot` is valid.
+        let raw = unsafe {
+            libc::openat(
+                dir.fd.as_raw_fd(),
+                dot.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+            )
+        };
+        if raw < 0 {
+            None
+        } else {
+            // SAFETY: `raw` is a newly opened valid file descriptor.
+            Some(unsafe { OwnedFd::from_raw_fd(raw) })
+        }
+    }
+
+    fn detect_unix_dir_case_insensitivity(dir: &ContainedDir) -> Option<bool> {
+        #[cfg(target_os = "macos")]
+        {
+            // SAFETY: `dir.fd` is an open directory descriptor.
+            let mut value =
+                unsafe { libc::fpathconf(dir.fd.as_raw_fd(), libc::_PC_CASE_SENSITIVE) };
+            let mut readable_fd = None;
+            if value < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EBADF) {
+                readable_fd = open_readable_self(dir);
+                if let Some(ref readable) = readable_fd {
+                    // SAFETY: `readable` is an open directory descriptor.
+                    value =
+                        unsafe { libc::fpathconf(readable.as_raw_fd(), libc::_PC_CASE_SENSITIVE) };
+                }
+            }
+            if value > 0 {
+                return Some(false);
+            }
+            if value == 0 {
+                return Some(true);
+            }
+            let readable = readable_fd.or_else(|| open_readable_self(dir))?;
+            probe_directory_case_insensitivity(dir, readable.as_raw_fd())
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let readable = open_readable_self(dir)?;
+            let mut checked_casefold_flag = false;
+            #[cfg(any(
+                target_arch = "x86_64",
+                target_arch = "aarch64",
+                target_arch = "riscv64",
+                target_arch = "x86",
+                target_arch = "arm",
+                target_arch = "s390x"
+            ))]
+            {
+                const FS_CASEFOLD_FL: libc::c_long = 0x4000_0000;
+                const FS_IOC_GETFLAGS: libc::c_ulong = (2u64 << 30)
+                    | ((std::mem::size_of::<libc::c_long>() as u64) << 16)
+                    | ((b'f' as u64) << 8)
+                    | 1;
+                let mut flags: libc::c_long = 0;
+                // SAFETY: `FS_IOC_GETFLAGS` writes a single `c_long` flag bitmask.
+                #[allow(clippy::cast_possible_truncation)]
+                if unsafe { libc::ioctl(readable.as_raw_fd(), FS_IOC_GETFLAGS as _, &mut flags) }
+                    == 0
+                {
+                    checked_casefold_flag = true;
+                    if (flags & FS_CASEFOLD_FL) != 0 {
+                        return Some(true);
+                    }
+                }
+            }
+            if let Some(probed) = probe_directory_case_insensitivity(dir, readable.as_raw_fd()) {
+                return Some(probed);
+            }
+            let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
+            // SAFETY: `readable` is open and `fs_stat` is writable.
+            if unsafe { libc::fstatfs(readable.as_raw_fd(), fs_stat.as_mut_ptr()) } == 0 {
+                // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
+                let fs_stat = unsafe { fs_stat.assume_init() };
+                #[allow(clippy::unnecessary_cast)]
+                let f_type = fs_stat.f_type as u64;
+                const MSDOS_SUPER_MAGIC: u64 = 0x4d44;
+                const EXFAT_SUPER_MAGIC: u64 = 0x2011_bab0;
+                const SMB_SUPER_MAGIC: u64 = 0x517b;
+                const CIFS_MAGIC_NUMBER: u64 = 0xff53_4d42;
+                const SMB2_MAGIC_NUMBER: u64 = 0xfe53_4d42;
+                const NTFS_SB_MAGIC: u64 = 0x5346_544e;
+                const NTFS3_SUPER_MAGIC: u64 = 0x7366_746e;
+                const EXT4_SUPER_MAGIC: u64 = 0xef53;
+                const TMPFS_MAGIC: u64 = 0x0102_1994;
+                const BTRFS_SUPER_MAGIC: u64 = 0x9123_683e;
+                const XFS_SUPER_MAGIC: u64 = 0x5846_5342;
+                const F2FS_SUPER_MAGIC: u64 = 0xf2f5_2010;
+                const OVERLAYFS_SUPER_MAGIC: u64 = 0x794c_7630;
+                if matches!(
+                    f_type,
+                    MSDOS_SUPER_MAGIC
+                        | EXFAT_SUPER_MAGIC
+                        | SMB_SUPER_MAGIC
+                        | CIFS_MAGIC_NUMBER
+                        | SMB2_MAGIC_NUMBER
+                        | NTFS_SB_MAGIC
+                        | NTFS3_SUPER_MAGIC
+                ) {
+                    return Some(true);
+                }
+                if matches!(
+                    f_type,
+                    BTRFS_SUPER_MAGIC | XFS_SUPER_MAGIC | OVERLAYFS_SUPER_MAGIC
+                ) || (checked_casefold_flag
+                    && matches!(f_type, EXT4_SUPER_MAGIC | TMPFS_MAGIC | F2FS_SUPER_MAGIC))
+                {
+                    return Some(false);
+                }
+            }
+            None
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        {
+            let readable = open_readable_self(dir)?;
+            probe_directory_case_insensitivity(dir, readable.as_raw_fd())
+        }
     }
 
     /// Publishes `temp_name` from `stage_fd` into `target_dir_fd` as `c_target`
@@ -2145,6 +2431,14 @@ mod platform {
         fn EqualSid(sid1: *mut c_void, sid2: *mut c_void) -> i32;
     }
 
+    #[repr(C)]
+    struct FileCaseSensitiveInformation {
+        flags: u32,
+    }
+
+    const FILE_CASE_SENSITIVE_INFORMATION_CLASS: u32 = 71;
+    const FILE_CS_FLAG_CASE_SENSITIVE_DIR: u32 = 0x0000_0001;
+
     #[link(name = "ntdll")]
     unsafe extern "system" {
         fn NtCreateFile(
@@ -2159,6 +2453,13 @@ mod platform {
             create_options: u32,
             ea_buffer: *mut c_void,
             ea_length: u32,
+        ) -> NtStatus;
+        fn NtQueryInformationFile(
+            file_handle: *mut c_void,
+            io_status_block: *mut IoStatusBlock,
+            file_information: *mut c_void,
+            length: u32,
+            file_information_class: u32,
         ) -> NtStatus;
         fn NtSetInformationFile(
             file_handle: *mut c_void,
@@ -2256,6 +2557,88 @@ mod platform {
                 current = Self { handle: next };
             }
             Ok(Some(current))
+        }
+
+        /// Opens a direct existing child directory named `segment` without
+        /// following symlinks or junctions.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `segment` is invalid or
+        /// refers to a reparse point, or [`ContainedFsError::Io`] on OS errors.
+        pub fn open_existing_child_dir(
+            &self,
+            segment: &OsStr,
+        ) -> Result<Option<Self>, ContainedFsError> {
+            validate_single_file_name(segment)?;
+            let next = match nt_create_relative(
+                self.handle.as_raw_handle(),
+                segment,
+                FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE,
+                FILE_ATTRIBUTE_DIRECTORY,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_OPEN,
+                FILE_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            ) {
+                Ok(handle) => handle,
+                Err(status) if is_not_found_status(status) => return Ok(None),
+                Err(status) => return Err(ContainedFsError::Io(nt_status_to_io_error(status))),
+            };
+            let info = file_information(next.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to follow symlink or junction at directory component \"{}\"",
+                    segment.to_string_lossy()
+                )));
+            }
+            if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 {
+                return Err(ContainedFsError::Io(io::Error::new(
+                    io::ErrorKind::NotADirectory,
+                    format!("\"{}\" is not a directory", segment.to_string_lossy()),
+                )));
+            }
+            Ok(Some(Self { handle: next }))
+        }
+
+        /// Returns the on-disk identity of this directory itself.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Io`] on OS errors.
+        pub fn self_identity(&self) -> Result<Option<FileIdentity>, ContainedFsError> {
+            let info = file_information(self.handle.as_raw_handle())?;
+            Ok(Some(FileIdentity {
+                volume_serial: info.volume_serial_number,
+                file_index_high: info.file_index_high,
+                file_index_low: info.file_index_low,
+            }))
+        }
+
+        /// Detects whether filenames in this directory are compared
+        /// case-insensitively, respecting NTFS per-directory case sensitivity.
+        #[must_use]
+        pub fn is_case_insensitive(&self) -> Option<bool> {
+            let mut iosb = IoStatusBlock {
+                status_or_pointer: 0,
+                information: 0,
+            };
+            let mut info = FileCaseSensitiveInformation { flags: 0 };
+            // SAFETY: `self.handle` is open and `info` is valid for its size.
+            let status = unsafe {
+                NtQueryInformationFile(
+                    self.handle.as_raw_handle(),
+                    &mut iosb,
+                    (&mut info as *mut FileCaseSensitiveInformation).cast::<c_void>(),
+                    u32::try_from(std::mem::size_of::<FileCaseSensitiveInformation>()).unwrap_or(0),
+                    FILE_CASE_SENSITIVE_INFORMATION_CLASS,
+                )
+            };
+            if status >= 0 {
+                Some((info.flags & FILE_CS_FLAG_CASE_SENSITIVE_DIR) == 0)
+            } else {
+                Some(true)
+            }
         }
 
         /// Rejects `file_name` if it exists as a symlink or reparse point.
@@ -3083,6 +3466,53 @@ mod platform {
             Ok(Some(Self { dir: current }))
         }
 
+        /// Opens a direct existing child directory named `segment` without
+        /// following symlinks.
+        pub fn open_existing_child_dir(
+            &self,
+            segment: &OsStr,
+        ) -> Result<Option<Self>, ContainedFsError> {
+            validate_single_file_name(segment)?;
+            let next = self.dir.join(segment);
+            match fs::symlink_metadata(&next) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(ContainedFsError::Containment(format!(
+                        "refusing to follow symlink at directory component \"{}\"",
+                        segment.to_string_lossy()
+                    )));
+                }
+                Ok(metadata) if !metadata.is_dir() => {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::NotADirectory,
+                        format!("\"{}\" is not a directory", segment.to_string_lossy()),
+                    )));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+                Err(error) => return Err(ContainedFsError::Io(error)),
+            }
+            let canonical = fs::canonicalize(&next)?;
+            if !canonical.starts_with(&self.dir) {
+                return Err(ContainedFsError::Containment(format!(
+                    "directory {} escapes parent directory {}",
+                    next.display(),
+                    self.dir.display()
+                )));
+            }
+            Ok(Some(Self { dir: canonical }))
+        }
+
+        /// Unsupported directory identity lookup fallback.
+        pub fn self_identity(&self) -> Result<Option<FileIdentity>, ContainedFsError> {
+            Ok(None)
+        }
+
+        /// Unsupported directory case-sensitivity lookup fallback.
+        #[must_use]
+        pub fn is_case_insensitive(&self) -> Option<bool> {
+            None
+        }
+
         /// Rejects `file_name` if it exists as a symlink.
         pub fn reject_symlink(&self, file_name: &OsStr) -> Result<(), ContainedFsError> {
             validate_single_file_name(file_name)?;
@@ -3451,12 +3881,74 @@ mod tests {
             read_macos_acl_native_bytes(&baseline).expect("baseline file must inherit ACL");
 
         let dir = ContainedDir::open_root(root.path()).expect("open root");
-        dir.write_file_in_place(OsStr::new("fresh.mjs"), b"fresh")
+        dir.write_file_in_place(OsStr::new("fresh-inplace.mjs"), b"fresh-inplace")
             .expect("initial in-place creation succeeds");
-        let fresh = root.path().join("fresh.mjs");
-        assert_eq!(fs::read_to_string(&fresh).expect("read fresh"), "fresh");
-        let actual_acl = read_macos_acl_native_bytes(&fresh)
-            .expect("newly created file must preserve destination directory file_inherit ACL");
-        assert_eq!(actual_acl, expected_acl);
+        let fresh_inplace = root.path().join("fresh-inplace.mjs");
+        assert_eq!(
+            fs::read_to_string(&fresh_inplace).expect("read fresh inplace"),
+            "fresh-inplace"
+        );
+        let actual_inplace_acl = read_macos_acl_native_bytes(&fresh_inplace).expect(
+            "newly created in-place file must preserve destination directory file_inherit ACL",
+        );
+        assert_eq!(actual_inplace_acl, expected_acl);
+
+        for (file_name, mode) in [
+            ("fresh-atomic-private.po", ContainedNewFileMode::Private),
+            ("fresh-atomic-umask.po", ContainedNewFileMode::RespectUmask),
+        ] {
+            dir.write_file_atomically(
+                OsStr::new(file_name),
+                b"fresh-atomic",
+                mode,
+                ContainedWriteDurability::Rename,
+            )
+            .expect("initial atomic creation succeeds");
+            let fresh_atomic = root.path().join(file_name);
+            assert_eq!(
+                fs::read_to_string(&fresh_atomic).expect("read fresh atomic"),
+                "fresh-atomic"
+            );
+            let actual_atomic_acl = read_macos_acl_native_bytes(&fresh_atomic).expect(
+                "newly created atomic file must preserve destination directory file_inherit ACL",
+            );
+            assert_eq!(actual_atomic_acl, expected_acl);
+        }
+    }
+
+    #[test]
+    fn open_existing_child_dir_and_case_insensitivity_probe_work() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let child_path = root.path().join("locales");
+        fs::create_dir(&child_path).expect("create child dir");
+        fs::write(child_path.join("Sample.po"), "hello").expect("seed entry");
+
+        let root_dir = ContainedDir::open_root(root.path()).expect("open root");
+        let root_id = root_dir.self_identity().expect("root identity");
+        let child_dir = root_dir
+            .open_existing_child_dir(OsStr::new("locales"))
+            .expect("open child")
+            .expect("child exists");
+        let child_id = child_dir.self_identity().expect("child identity");
+        assert!(
+            root_dir
+                .open_existing_child_dir(OsStr::new("missing"))
+                .expect("missing lookup")
+                .is_none()
+        );
+        #[cfg(any(unix, windows))]
+        {
+            let root_id = root_id.expect("platform identity");
+            let child_id = child_id.expect("platform identity");
+            assert_ne!(root_id, child_id);
+            assert!(root_id.same_volume(child_id));
+            let expected_ci = child_dir
+                .file_identity(OsStr::new("sample.po"))
+                .expect("identity probe")
+                == child_dir
+                    .file_identity(OsStr::new("Sample.po"))
+                    .expect("identity probe");
+            assert_eq!(child_dir.is_case_insensitive(), Some(expected_ci));
+        }
     }
 }

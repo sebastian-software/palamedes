@@ -601,76 +601,55 @@ fn process_catalogs(
     Ok(drift)
 }
 
-fn is_case_insensitive_directory(root_dir: &Path) -> bool {
-    if let Ok(entries) = fs::read_dir(root_dir) {
-        let Ok(root_handle) = ContainedDir::open_root(root_dir) else {
-            return cfg!(any(target_os = "macos", target_os = "windows"));
-        };
-        for entry in entries.flatten() {
-            let file_name = entry.file_name();
-            let Some(name_str) = file_name.to_str() else {
-                continue;
-            };
-            let Some((idx, ch)) = name_str
-                .char_indices()
-                .find(|(_, ch)| ch.is_ascii_alphabetic())
-            else {
-                continue;
-            };
-            let flipped = if ch.is_ascii_lowercase() {
-                ch.to_ascii_uppercase()
-            } else {
-                ch.to_ascii_lowercase()
-            };
-            let mut variant = String::with_capacity(name_str.len());
-            variant.push_str(&name_str[..idx]);
-            variant.push(flipped);
-            variant.push_str(&name_str[idx + ch.len_utf8()..]);
-            let original_id = root_handle.file_identity(&file_name).ok().flatten();
-            let variant_id = root_handle
-                .file_identity(std::ffi::OsStr::new(&variant))
-                .ok()
-                .flatten();
-            if original_id.is_some() {
-                return original_id == variant_id;
-            }
-        }
-    }
-    cfg!(any(target_os = "macos", target_os = "windows"))
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum ExtractTargetAnchor {
+    Identity(FileIdentity),
+    Path(PathBuf),
 }
 
-fn normalized_extract_target_key(
-    relative_parent: &Path,
-    file_name: &std::ffi::OsStr,
-    case_insensitive: bool,
-) -> (PathBuf, OsString) {
+fn fold_os_segment(segment: &std::ffi::OsStr, case_insensitive: bool) -> OsString {
     if !case_insensitive {
-        return (relative_parent.to_path_buf(), file_name.to_os_string());
+        return segment.to_os_string();
     }
-    let folded_parent = relative_parent
-        .components()
-        .fold(PathBuf::new(), |mut acc, component| {
-            let part = component.as_os_str();
-            if let Some(text) = part.to_str() {
-                acc.push(text.to_lowercase());
-            } else {
-                acc.push(part);
-            }
-            acc
-        });
-    let folded_name = file_name.to_str().map_or_else(
-        || file_name.to_os_string(),
+    segment.to_str().map_or_else(
+        || segment.to_os_string(),
         |text| OsString::from(text.to_lowercase()),
-    );
-    (folded_parent, folded_name)
+    )
+}
+
+fn resolve_directory_case_insensitivity(
+    dir: &ContainedDir,
+    identity: Option<FileIdentity>,
+    parent: Option<(Option<FileIdentity>, bool)>,
+    cache: &mut HashMap<FileIdentity, bool>,
+) -> bool {
+    if let Some(id) = identity
+        && let Some(&cached) = cache.get(&id)
+    {
+        return cached;
+    }
+    let detected = dir.is_case_insensitive().unwrap_or_else(|| {
+        if let (Some(id), Some((Some(parent_id), parent_ci))) = (identity, parent)
+            && id.same_volume(parent_id)
+        {
+            parent_ci
+        } else {
+            cfg!(any(target_os = "macos", target_os = "windows"))
+        }
+    });
+    if let Some(id) = identity {
+        cache.insert(id, detected);
+    }
+    detected
 }
 
 fn reject_colliding_extract_targets(
     write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
     config: &LoadedConfig,
 ) -> Result<(), CliError> {
-    let case_insensitive = is_case_insensitive_directory(&config.root_dir);
-    let mut seen_paths: HashMap<(PathBuf, OsString), &str> = HashMap::new();
+    let mut dir_case_cache: HashMap<FileIdentity, bool> = HashMap::new();
+    let mut seen_paths: HashMap<(ExtractTargetAnchor, Vec<OsString>, OsString), &str> =
+        HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
 
     for (catalog, _, locale) in write_jobs {
@@ -683,7 +662,65 @@ fn reject_colliding_extract_targets(
                     source: error.into_io_error(),
                 }
             })?;
-        let key = normalized_extract_target_key(&relative_parent, &file_name, case_insensitive);
+
+        let mut current =
+            ContainedDir::open_root(&config.root_dir).map_err(|error| CliError::Io {
+                path: config.root_dir.clone(),
+                source: error.into_io_error(),
+            })?;
+        let mut current_id = current.self_identity().map_err(|error| CliError::Io {
+            path: config.root_dir.clone(),
+            source: error.into_io_error(),
+        })?;
+        let mut current_ci =
+            resolve_directory_case_insensitivity(&current, current_id, None, &mut dir_case_cache);
+        let mut existing_prefix = PathBuf::new();
+        let mut remaining_segments: Vec<OsString> = Vec::new();
+        let mut hit_missing = false;
+
+        for component in relative_parent.components() {
+            let std::path::Component::Normal(segment) = component else {
+                continue;
+            };
+            if hit_missing {
+                remaining_segments.push(fold_os_segment(segment, current_ci));
+                continue;
+            }
+            match current
+                .open_existing_child_dir(segment)
+                .map_err(|error| CliError::Io {
+                    path: catalog_path.clone(),
+                    source: error.into_io_error(),
+                })? {
+                Some(child) => {
+                    let child_id = child.self_identity().map_err(|error| CliError::Io {
+                        path: catalog_path.clone(),
+                        source: error.into_io_error(),
+                    })?;
+                    let child_ci = resolve_directory_case_insensitivity(
+                        &child,
+                        child_id,
+                        Some((current_id, current_ci)),
+                        &mut dir_case_cache,
+                    );
+                    current = child;
+                    current_id = child_id;
+                    current_ci = child_ci;
+                    existing_prefix.push(segment);
+                }
+                None => {
+                    hit_missing = true;
+                    remaining_segments.push(fold_os_segment(segment, current_ci));
+                }
+            }
+        }
+
+        let anchor = current_id.map_or_else(
+            || ExtractTargetAnchor::Path(existing_prefix),
+            ExtractTargetAnchor::Identity,
+        );
+        let normalized_name = fold_os_segment(&file_name, current_ci);
+        let key = (anchor, remaining_segments, normalized_name);
         if let Some(first_scope) = seen_paths.insert(key, catalog.path.as_str()) {
             return Err(CliError::Io {
                 path: catalog_path,
@@ -696,15 +733,9 @@ fn reject_colliding_extract_targets(
                 ),
             });
         }
-        if let Some(parent_dir) =
-            ContainedDir::open_subpath(&config.root_dir, &relative_parent, false).map_err(
-                |error| CliError::Io {
-                    path: catalog_path.clone(),
-                    source: error.into_io_error(),
-                },
-            )?
+        if !hit_missing
             && let Some(identity) =
-                parent_dir
+                current
                     .file_identity(&file_name)
                     .map_err(|error| CliError::Io {
                         path: catalog_path.clone(),
@@ -1428,7 +1459,11 @@ catalogs:
         assert!(!app.join("locales/en/messages.po").exists());
 
         // Case-insensitive collision on clean checkout (when running on a case-insensitive volume).
-        if super::is_case_insensitive_directory(&app) {
+        let is_ci = super::ContainedDir::open_root(&app)
+            .expect("open root")
+            .is_case_insensitive()
+            .unwrap_or(cfg!(any(target_os = "macos", target_os = "windows")));
+        if is_ci {
             fs::write(
                 app.join("palamedes.yaml"),
                 "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/Messages\n    include: [app/a]\n  - path: locales/{locale}/messages\n    include: [app/b]\n",

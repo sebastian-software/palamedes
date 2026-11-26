@@ -953,8 +953,12 @@ export function catalogResourcePath(
 ): string {
   const extension = catalog.format ?? "po";
   const configuredPath = resolveCatalogPath(config, catalog.path, locale);
-  if (path.posix.extname(catalog.path.replaceAll("\\", "/")) === `.${extension}`) {
+  const configuredExtension = path.posix.extname(catalog.path.replaceAll("\\", "/"));
+  if (configuredExtension === `.${extension}`) {
     return configuredPath;
+  }
+  if (configuredExtension === "." || configuredExtension.toLowerCase() === `.${extension}`) {
+    return `${configuredPath.slice(0, -configuredExtension.length)}.${extension}`;
   }
   return `${configuredPath}.${extension}`;
 }
