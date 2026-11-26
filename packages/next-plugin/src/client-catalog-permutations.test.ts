@@ -1279,7 +1279,10 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
           path.join(distDir, "server/app/[[...locale]]/page.js"),
           `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_app_page_runtime_unmin.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(1).exports\n`,
         );
-        const sharedChunkCache = new Map<string, Map<string, string | null> | null>();
+        const sharedChunkCache = new Map<
+          string,
+          { groups: Array<{ ids: string[]; factory: string }> } | null
+        >();
         expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath, sharedChunkCache)).toBe(
           false,
         );
@@ -1475,6 +1478,93 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
           expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
         } finally {
           rmSync(conflictingChunk, { force: true });
+        }
+
+        // Overlapping ID groups across chunks with conflicting factories must
+        // taint the ENTIRE connected group (including previously unseen sibling
+        // IDs like `71830`), matching Turbopack's `installCompressedModuleFactories()`.
+        const overlapChunkA = path.join(distDir, "server/chunks/ssr/overlap_a.js");
+        const overlapChunkB = path.join(distDir, "server/chunks/ssr/overlap_b.js");
+        try {
+          writeFileSync(
+            overlapChunkA,
+            `module.exports = [
+71829, a => { "use strict"; var c = a.i('${namedRuntimeId}'); const k = ["", { children: ["[[...locale]]", {}, { layout: [ly, "[project]/app/[[...locale]]/layout.tsx"] }, []] }, {}, []], n = (0, c.f)({ tree: k, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: a.r.bind(a), loadChunk: a.l.bind(a), interopDefault: d.interopDefault }); a.s(["j", () => n, a => n = a]); }
+];\n`,
+          );
+          writeFileSync(
+            overlapChunkB,
+            `module.exports = [
+71829, 71830, a => { "use strict"; var c = a.i('${namedRuntimeId}'); const k = ["", { children: ["[[...locale]]", {}, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []], n = (0, c.f)({ tree: k, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: a.r.bind(a), loadChunk: a.l.bind(a), interopDefault: d.interopDefault }); a.s(["j", () => n, a => n = a]); }
+];\n`,
+          );
+          writeFileSync(
+            templateChunk,
+            `module.exports = [
+'${namedEntryId}', a => { "use strict"; var b = a.i(62310); a.S([b, "routeModule,l"]); },
+62310, a => { "use strict"; var b = a.i(71830); const c = b.j.routeModule; a.s(["l", () => c, a => c = a]); }
+];\n`,
+          );
+          writeFileSync(
+            path.join(distDir, "server/app/[[...locale]]/page.js"),
+            `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/overlap_a.js")\nR.c("server/chunks/ssr/overlap_b.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+        } finally {
+          rmSync(overlapChunkA, { force: true });
+          rmSync(overlapChunkB, { force: true });
+        }
+
+        // A second chunk whose filename also matches `next_dist_build_templates_app-page_`
+        // (for example a user route segment named `next_dist_build_templates_app-page_store`)
+        // must NOT cause ambiguity when `page.js` names its exact entry module ID.
+        // Also verify shared runtime factories using `ctx.s([...], modId)` with
+        // duplicate minified export names across distinct module IDs, and
+        // parenthesized `module.exports = ([...])` vs unparsed `module.exports = wrap([...])`.
+        const collidingFilenameChunk = path.join(
+          distDir,
+          "server/chunks/ssr/next_dist_build_templates_app-page_store_chunk.js",
+        );
+        const unparsedChunk = path.join(distDir, "server/chunks/ssr/unparsed_wrapper_chunk.js");
+        try {
+          writeFileSync(
+            namedRuntimeChunk,
+            `module.exports = ([
+'[project]/other-shared-mod', '${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function otherHelper() { return null; }], '[project]/other-shared-mod'); a.s(["f", 0, function({tree:O,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},V=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:O}}); async function W(){return null} return {__next_app__:U,routeModule:V,handler:W}; }], '${namedRuntimeId}'); },
+'${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
+'${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
+]);\n`,
+          );
+          writeFileSync(
+            collidingFilenameChunk,
+            `module.exports = [92e3, a => { a.s([]); }, '[project]/user-page-mod', a => { a.s([]); }];\n`,
+          );
+          writeFileSync(
+            templateChunk,
+            `module.exports = [
+'${namedEntryId}', a => { "use strict"; let c = a.i('${namedRuntimeId}'); let j = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []]; let m = (0, c.f)({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: k, loadChunk: lc, interopDefault: d.interopDefault }), n = m.__next_app__, o = m.routeModule, p = m.handler; a.s(["__next_app__", 0, n, "handler", 0, p, "routeModule", 0, o]); }
+];\n`,
+          );
+          writeFileSync(
+            path.join(distDir, "server/app/[[...locale]]/page.js"),
+            `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/next_dist_build_templates_app-page_store_chunk.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+          // An unparseable sibling chunk (for example `module.exports = wrap([...])`)
+          // must fail closed rather than being treated as an empty factory table.
+          writeFileSync(
+            unparsedChunk,
+            `module.exports = wrap(['${namedEntryId}', a => { a.s([]); }]);\n`,
+          );
+          writeFileSync(
+            path.join(distDir, "server/app/[[...locale]]/page.js"),
+            `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/unparsed_wrapper_chunk.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+        } finally {
+          rmSync(collidingFilenameChunk, { force: true });
+          rmSync(unparsedChunk, { force: true });
         }
       } finally {
         writeFileSync(path.join(distDir, "server/app/[[...locale]]/page.js"), savedEntryForNamed);
