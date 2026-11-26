@@ -1065,7 +1065,8 @@ describe("workflow contracts", () => {
     ]);
     const header = canary.slice(0, canary.indexOf("\njobs:\n"));
     const jobs = workflowJobs(canary);
-    const contract = jobs.get("contract");
+    const assets = jobs.get("contract-assets");
+    const permutations = jobs.get("contract-permutations");
     const report = jobs.get("report-issues");
 
     // Canary changes independently of pull requests, so it must not gate them.
@@ -1074,33 +1075,43 @@ describe("workflow contracts", () => {
     expect(canary).not.toMatch(/^ {2}(push|pull_request):/mu);
     expect(header).toContain("permissions:\n  contents: read");
     expect(header).not.toMatch(/^ {2}issues:/mu);
-    expect(contract.text).not.toMatch(/^ {6}issues:/mu);
-    expect(contract.text).toContain(
-      'pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"',
-    );
-    expect(contract.text).toContain("fail-fast: false");
-    for (const delivery of ["assets", "permutations"]) {
-      expect(contract.text).toContain(`delivery: ${delivery}`);
+
+    for (const [delivery, label, contractJob] of [
+      ["assets", "asset", assets],
+      ["permutations", "permutation", permutations],
+    ]) {
+      expect(contractJob, delivery).toBeDefined();
+      expect(contractJob.needs).toEqual([]);
+      expect(contractJob.text).not.toMatch(/^ {6}issues:/mu);
+      expect(contractJob.text).toContain(`client catalog ${label} contract`);
+      expect(contractJob.text).toContain(
+        'pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"',
+      );
+      expect(contractJob.text).toContain(
+        `run: pnpm --dir examples/nextjs-route build:catalog-${delivery}`,
+      );
+      expect(contractJob.text).toContain("contract_outcome: ${{ steps.contract.outcome }}");
+      expect(contractJob.text).toContain("next_version: ${{ steps.next.outputs.version }}");
       expect(JSON.parse(example).scripts[`build:catalog-${delivery}`]).toContain(
         `check-next-client-catalog-${delivery}.mjs`,
       );
     }
-    expect(contract.text).toContain(
-      "run: pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}",
-    );
-    expect(contract.text).toContain("if: matrix.delivery == 'permutations'");
-    expect(contract.text).toContain("pnpm exec playwright install --with-deps chromium");
-    expect(contract.text).toContain("client catalog ${{ matrix.label }} contract");
-    expect(contract.text).toContain("CONTRACT_OUTCOME: ${{ steps.contract.outcome }}");
+    expect(assets.text).not.toContain("playwright install");
+    expect(permutations.text).toContain("pnpm exec playwright install --with-deps chromium");
 
     expect(report).toBeDefined();
-    expect(report.needs).toEqual(["contract"]);
+    expect(report.needs.toSorted()).toEqual(["contract-assets", "contract-permutations"]);
     expect(report.if).toContain("always()");
     expect(report.if).toContain("github.event_name == 'schedule'");
     expect(report.text).toMatch(/permissions:\n {6}contents: read\n {6}issues: write/u);
+    expect(report.text).toContain("ASSETS_JOB_RESULT: ${{ needs.contract-assets.result }}");
+    expect(report.text).toContain(
+      "PERMUTATIONS_JOB_RESULT: ${{ needs.contract-permutations.result }}",
+    );
     expect(report.text).toContain("scripts/open-or-refresh-issue.mjs");
     expect(report.text).toContain("const failures = [];");
     expect(report.text).toContain("if (failures.length > 0)");
+    expect(report.text).toContain("Unexpected upstream state");
   });
 
   it("scopes GitHub Pages write permissions strictly to the site deploy job", async () => {
@@ -1232,6 +1243,12 @@ describe("workflow contracts", () => {
       "<memory>:1: node:24 is not pinned to a sha256 digest",
     ]);
     expect(unpinnedWorkflowContainerReferences(`    container: node:24@${digest}\n`)).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(`    container: { image: node:24@${digest} }\n`),
+    ).toEqual([]);
+    expect(unpinnedWorkflowContainerReferences("    container: { image: node:24 }\n")).toEqual([
+      "<memory>:1: node:24 is not pinned to a sha256 digest",
+    ]);
     expect(unpinnedWorkflowContainerReferences("    image: node:24-alpine\n")).toHaveLength(1);
     expect(unpinnedWorkflowContainerReferences(`    image: node:24-alpine@${digest}\n`)).toEqual(
       [],
@@ -1244,6 +1261,21 @@ describe("workflow contracts", () => {
         "runs:\n  using: docker\n  image: docker://alpine:3.20\n",
       ),
     ).toEqual(["<memory>:3: docker://alpine:3.20 is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        '      - name: Quoted\n        run: "docker pull node:24"\n',
+      ),
+    ).toEqual(["<memory>:2: node:24 is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        'env:\n  IMAGE: node:24\njobs:\n  test:\n    steps:\n      - run: docker pull "$IMAGE"\n',
+      ),
+    ).toEqual(["<memory>:2: node:24 is not pinned to a sha256 digest"]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        `env:\n  IMAGE: node:24\njobs:\n  test:\n    env:\n      IMAGE: node:24@${digest}\n    steps:\n      - run: docker pull "$IMAGE"\n`,
+      ),
+    ).toEqual([]);
     expect(
       unpinnedWorkflowContainerReferences(
         '      - name: Pull\n        run: |\n          image=rust:1.96-alpine\n          docker pull "$image"\n',
@@ -1275,21 +1307,24 @@ describe("workflow contracts", () => {
       ),
     ).toEqual([]);
 
-    // Containerfiles/Dockerfiles must pin FROM and external COPY --from stages,
+    // Containerfiles/Dockerfiles must pin FROM, external COPY --from stages,
+    // BuildKit `# syntax=` frontends, and `RUN --mount=...,from=` sources,
     // resolve static ARG defaults embedded in image references, reject self-named
     // unpinned stages, and allow `scratch` and earlier build stage aliases.
     expect(
       unpinnedContainerfileReferences(
-        `ARG NODE_VERSION=24\nFROM alpine AS alpine\nFROM node:\${NODE_VERSION} AS build\nCOPY --from=build /app /app\nCOPY --from=busybox:1.37 /bin/sh /bin/sh\nFROM scratch\n`,
+        `# syntax=docker/dockerfile:1\nARG NODE_VERSION=24\nFROM alpine AS alpine\nFROM node:\${NODE_VERSION} AS build\nRUN --mount=type=bind,from=golang:1.24,source=/bin,target=/tmp/bin true\nCOPY --from=build /app /app\nCOPY --from=busybox:1.37 /bin/sh /bin/sh\nFROM scratch\n`,
       ),
     ).toEqual([
-      "<memory>:2: alpine is not pinned to a sha256 digest",
-      "<memory>:3: node:24 is not pinned to a sha256 digest",
-      "<memory>:5: busybox:1.37 is not pinned to a sha256 digest",
+      "<memory>:1: docker/dockerfile:1 is not pinned to a sha256 digest",
+      "<memory>:3: alpine is not pinned to a sha256 digest",
+      "<memory>:4: node:24 is not pinned to a sha256 digest",
+      "<memory>:5: golang:1.24 is not pinned to a sha256 digest",
+      "<memory>:7: busybox:1.37 is not pinned to a sha256 digest",
     ]);
     expect(
       unpinnedContainerfileReferences(
-        `FROM rust:1.96-bookworm@${digest} AS toolchain\nFROM node:24-bookworm@${digest} AS build\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nFROM build AS runtime\n`,
+        `# syntax=docker/dockerfile:1@${digest}\nFROM rust:1.96-bookworm@${digest} AS toolchain\nFROM node:24-bookworm@${digest} AS build\nRUN --mount=type=bind,from=toolchain,source=/usr/local,target=/mnt/rust --mount=type=bind,from=golang:1.24@${digest},source=/bin,target=/mnt/go true\nCOPY --from=toolchain /usr/local/cargo /usr/local/cargo\nFROM build AS runtime\n`,
       ),
     ).toEqual([]);
 

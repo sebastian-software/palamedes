@@ -1,7 +1,7 @@
 # Run all 41 Palamedes example apps side by side in a single container, each
 # on its fixed port from the shared container inventory. Built and run with Podman:
 #
-#   podman build -f Containerfile -t palamedes-examples .
+#   podman build --format docker -f Containerfile -t palamedes-examples .
 #   podman run --rm --init \
 #     -p 4010:4010 -p 4011:4011 -p 4012:4012 -p 4013:4013 \
 #     -p 4020:4020 -p 4021:4021 -p 4022:4022 -p 4023:4023 \

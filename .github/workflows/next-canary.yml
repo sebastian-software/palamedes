@@ -15,8 +15,8 @@ on:
         default: canary
         type: string
 
-# The contract job installs unvetted Next.js canary packages and runs Playwright,
-# so it stays read-only; only the downstream reporting job opts into `issues: write`.
+# The contract jobs install unvetted Next.js canary packages and run Playwright,
+# so they stay read-only; only the downstream reporting job opts into `issues: write`.
 permissions:
   contents: read
 
@@ -28,19 +28,54 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  contract:
-    name: client catalog ${{ matrix.label }} contract
+  contract-assets:
+    name: client catalog asset contract
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - delivery: assets
-            label: asset
-          - delivery: permutations
-            label: permutation
+    outputs:
+      next_version: ${{ steps.next.outputs.version }}
+      contract_outcome: ${{ steps.contract.outcome }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      # The plugin's own `next` dev dependency moves too, so the build resolves
+      # one Next copy. pnpm records the exact version as a release-age exclusion.
+      - name: Install Next.js ${{ inputs.next_version || 'canary' }}
+        id: next
+        env:
+          NEXT_TAG: ${{ inputs.next_version || 'canary' }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$NEXT_TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::next_version must be one version or dist-tag"
+            exit 1
+          fi
+          version="$(npm view "next@$NEXT_TAG" version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Verifying the client catalog asset contract against next@$version." >> "$GITHUB_STEP_SUMMARY"
+          pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"
+
+      - name: Verify Next client catalog asset contract
+        id: contract
+        run: pnpm --dir examples/nextjs-route build:catalog-assets
+
+  contract-permutations:
+    name: client catalog permutation contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      next_version: ${{ steps.next.outputs.version }}
+      contract_outcome: ${{ steps.contract.outcome }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -52,7 +87,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Chromium for the permutation browser contract
-        if: matrix.delivery == 'permutations'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Build workspace packages
@@ -72,55 +106,22 @@ jobs:
           fi
           version="$(npm view "next@$NEXT_TAG" version)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Verifying the client catalog ${{ matrix.label }} contract against next@$version." >> "$GITHUB_STEP_SUMMARY"
+          echo "Verifying the client catalog permutation contract against next@$version." >> "$GITHUB_STEP_SUMMARY"
           pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"
 
-      - name: Verify Next client catalog ${{ matrix.label }} contract
+      - name: Verify Next client catalog permutation contract
         id: contract
-        run: pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}
-
-      - name: Record scheduled canary outcome
-        if: always() && github.event_name == 'schedule'
-        env:
-          DELIVERY: ${{ matrix.delivery }}
-          LABEL: ${{ matrix.label }}
-          NEXT_VERSION: ${{ steps.next.outputs.version }}
-          CONTRACT_OUTCOME: ${{ steps.contract.outcome }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          node <<'NODE'
-          const fs = require("node:fs");
-          const action =
-            process.env.JOB_STATUS === "success"
-              ? "close"
-              : process.env.JOB_STATUS === "failure" && process.env.CONTRACT_OUTCOME === "failure"
-                ? "open"
-                : "none";
-          fs.writeFileSync(
-            `canary-outcome-${process.env.DELIVERY}.json`,
-            JSON.stringify({
-              delivery: process.env.DELIVERY,
-              label: process.env.LABEL,
-              nextVersion: process.env.NEXT_VERSION || "",
-              action,
-            }),
-          );
-          NODE
-
-      - name: Upload scheduled canary outcome
-        if: always() && github.event_name == 'schedule'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: next-canary-outcome-${{ matrix.delivery }}
-          path: canary-outcome-${{ matrix.delivery }}.json
-          retention-days: 7
+        run: pnpm --dir examples/nextjs-route build:catalog-permutations
 
   # Separate long-lived issues let one delivery recover independently while
-  # keeping `issues: write` out of the job that installs Next.js canary.
+  # keeping `issues: write` out of the jobs that install Next.js canary. Each
+  # delivery's update is authorized directly by its own upstream job result.
   report-issues:
     name: update canary tracking issues
-    needs: contract
-    if: always() && github.event_name == 'schedule' && needs.contract.result != 'cancelled'
+    needs:
+      - contract-assets
+      - contract-permutations
+    if: always() && github.event_name == 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -132,43 +133,46 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download scheduled canary outcomes
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: next-canary-outcome-*
-          path: canary-outcomes
-          merge-multiple: true
-
       - name: Open, refresh, or close tracking issues
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          CONTRACT_RESULT: ${{ needs.contract.result }}
+          ASSETS_JOB_RESULT: ${{ needs.contract-assets.result }}
+          ASSETS_CONTRACT_OUTCOME: ${{ needs.contract-assets.outputs.contract_outcome }}
+          ASSETS_NEXT_VERSION: ${{ needs.contract-assets.outputs.next_version }}
+          PERMUTATIONS_JOB_RESULT: ${{ needs.contract-permutations.result }}
+          PERMUTATIONS_CONTRACT_OUTCOME: ${{ needs.contract-permutations.outputs.contract_outcome }}
+          PERMUTATIONS_NEXT_VERSION: ${{ needs.contract-permutations.outputs.next_version }}
         run: |
           node <<'NODE'
           const { execFileSync } = require("node:child_process");
           const fs = require("node:fs");
-          const path = require("node:path");
 
           const DELIVERIES = [
-            { delivery: "assets", label: "asset" },
-            { delivery: "permutations", label: "permutation" },
+            {
+              delivery: "assets",
+              label: "asset",
+              jobResult: process.env.ASSETS_JOB_RESULT || "",
+              contractOutcome: process.env.ASSETS_CONTRACT_OUTCOME || "",
+              nextVersion: process.env.ASSETS_NEXT_VERSION || "",
+            },
+            {
+              delivery: "permutations",
+              label: "permutation",
+              jobResult: process.env.PERMUTATIONS_JOB_RESULT || "",
+              contractOutcome: process.env.PERMUTATIONS_CONTRACT_OUTCOME || "",
+              nextVersion: process.env.PERMUTATIONS_NEXT_VERSION || "",
+            },
           ];
           const VERSION_PATTERN = /^[A-Za-z0-9._-]+$/u;
           const failures = [];
 
-          for (const { delivery, label } of DELIVERIES) {
+          for (const { delivery, label, jobResult, contractOutcome, nextVersion } of DELIVERIES) {
             try {
-              const outcomePath = path.join("canary-outcomes", `canary-outcome-${delivery}.json`);
-              if (!fs.existsSync(outcomePath)) {
-                continue;
-              }
-
-              const outcome = JSON.parse(fs.readFileSync(outcomePath, "utf8"));
               const title = `fix(next-plugin): Next.js canary breaks the client catalog ${label} contract`;
 
-              if (outcome.action === "close") {
+              if (jobResult === "success") {
                 execFileSync(
                   process.execPath,
                   [
@@ -185,19 +189,20 @@ jobs:
                 continue;
               }
 
-              if (outcome.action === "open") {
-                if (process.env.CONTRACT_RESULT !== "failure") {
-                  throw new Error(
-                    `Refusing to open tracking issue for ${delivery} when contract job result is ${process.env.CONTRACT_RESULT}`,
-                  );
-                }
-                const nextVersion =
-                  typeof outcome.nextVersion === "string" && VERSION_PATTERN.test(outcome.nextVersion)
-                    ? outcome.nextVersion
-                    : "unknown";
+              if (jobResult === "cancelled") {
+                continue;
+              }
+
+              if (jobResult === "failure" && contractOutcome === "skipped") {
+                // Setup failed before the contract step ran; leave tracking issues unchanged.
+                continue;
+              }
+
+              if (jobResult === "failure" && contractOutcome === "failure") {
+                const safeVersion = VERSION_PATTERN.test(nextVersion) ? nextVersion : "unknown";
                 const bodyFile = `issue-body-${delivery}.md`;
                 const body = [
-                  `\`pnpm --dir examples/nextjs-route build:catalog-${delivery}\` failed against \`next@${nextVersion}\`.`,
+                  `\`pnpm --dir examples/nextjs-route build:catalog-${delivery}\` failed against \`next@${safeVersion}\`.`,
                   "",
                   "Check emitted markers and, for permutations, manifest selection, request isolation",
                   "and lazy chunk URLs before this release reaches the `next` peer range. See",
@@ -221,7 +226,12 @@ jobs:
                   ],
                   { stdio: "inherit" },
                 );
+                continue;
               }
+
+              throw new Error(
+                `Unexpected upstream state for ${delivery}: jobResult=${JSON.stringify(jobResult)}, contractOutcome=${JSON.stringify(contractOutcome)}`,
+              );
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               console.error(`Failed to update tracking issue for ${delivery}: ${message}`);

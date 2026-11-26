@@ -135,6 +135,13 @@ describe("container publish contract", () => {
     expect(containerfile).not.toContain("--chown=node:node");
     expect(containerfile).toContain("USER node");
     expect(containerfile).toMatch(/^HEALTHCHECK\b.*127\.0\.0\.1:4080\/ready/msu);
+    expect(containerfile).toContain("podman build --format docker -f Containerfile");
+
+    const runExamplesDoc = await readFile(
+      resolve(import.meta.dirname, "../../docs/operations/run-examples-container.md"),
+      "utf8",
+    );
+    expect(runExamplesDoc).toContain("podman build --format docker -f Containerfile");
 
     for (const dir of ["crates", "docs", "adr", "tests", "benchmarks", "fuzz", "site", "video"]) {
       expect(containerfile).toMatch(new RegExp(`\\b${dir}\\b`, "u"));

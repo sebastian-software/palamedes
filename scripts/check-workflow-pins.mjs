@@ -10,17 +10,9 @@ import path from "node:path";
 const USES_PATTERN = /^\s*(?:-\s+)?uses:\s*(?<value>\S+)(?<rest>.*)$/u;
 const PINNED_ACTION_PATTERN = /^[^\s@]+@[0-9a-f]{40}$/u;
 const PINNED_DIGEST_PATTERN = /@sha256:[0-9a-f]{64}$/u;
-const YAML_CONTAINER_SHORTHAND_PATTERN =
-  /^(?<indent>\s*)container:\s*(?<value>[^#\s][^#]*?)\s*(?:#.*)?$/u;
-const YAML_IMAGE_PATTERN = /^(?<indent>\s*)(?:-\s+)?image:\s*(?<value>[^#\s][^#]*?)\s*(?:#.*)?$/u;
-const YAML_KEY_PATTERN = /^(?<indent>\s*)(?:-\s+)?(?<key>[A-Za-z0-9_-]+):\s*(?<rest>.*)$/u;
-const SHELL_ASSIGNMENT_PATTERN =
-  /^\s*(?:export\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<raw>[^\s#].*)$/u;
-const SHELL_VAR_REFERENCE_PATTERN =
-  /^\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))$/u;
 const EMBEDDED_VAR_PATTERN =
   /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu;
-const ENV_PREFIX_ASSIGNMENT_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*=/u;
+const ENV_PREFIX_ASSIGNMENT_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$/u;
 const CONTAINER_FILENAME_PATTERN =
   /^(?:Containerfile|Dockerfile)(?:\..+)?$|\.(?:Containerfile|Dockerfile)$/u;
 const IGNORED_DIRECTORIES = new Set([
@@ -146,8 +138,593 @@ function stripQuotes(value) {
   return trimmed;
 }
 
-// Split a shell snippet into command token arrays on unquoted command separators
-// (`&&`, `||`, `;`, `|`, `&`, newline) while preserving quoting.
+function isPinnedDigest(imageReference) {
+  return PINNED_DIGEST_PATTERN.test(imageReference);
+}
+
+function isDynamicReference(value) {
+  return value.includes("${{") || value.includes("$");
+}
+
+function isLocalDockerActionImage(imageReference) {
+  if (imageReference.startsWith("docker://")) {
+    return false;
+  }
+  return (
+    imageReference.startsWith("./") ||
+    imageReference.startsWith("../") ||
+    CONTAINER_FILENAME_PATTERN.test(path.basename(imageReference))
+  );
+}
+
+function resolveVars(token, vars) {
+  return token.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
+    const name = groups.braced ?? groups.bare;
+    return vars.has(name) ? vars.get(name).value : match;
+  });
+}
+
+// --- Zero-dependency YAML parser with 1-based line tracking ------------------
+// Handles the YAML 1.2 subset used by GitHub Actions workflows and actions:
+// block/flow mappings & sequences, quoted/plain scalars, literal (`|`) and
+// folded (`>`) block scalars, and inline comments.
+
+function stripInlineComment(text) {
+  let quote = null;
+  let escaping = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const ch = text[index];
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (ch === "\\" && quote === '"') {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        if (quote === "'" && text[index + 1] === "'") {
+          index += 1;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "#" && (index === 0 || /\s/u.test(text[index - 1]))) {
+      return text.slice(0, index).trimEnd();
+    }
+  }
+  return text.trimEnd();
+}
+
+function decodeDoubleQuoted(raw) {
+  let out = "";
+  for (let index = 1; index < raw.length - 1; index += 1) {
+    const ch = raw[index];
+    if (ch !== "\\") {
+      out += ch;
+      continue;
+    }
+    index += 1;
+    const esc = raw[index];
+    switch (esc) {
+      case "n":
+        out += "\n";
+        break;
+      case "r":
+        out += "\r";
+        break;
+      case "t":
+        out += "\t";
+        break;
+      case '"':
+        out += '"';
+        break;
+      case "\\":
+        out += "\\";
+        break;
+      case "/":
+        out += "/";
+        break;
+      default:
+        out += esc ?? "";
+        break;
+    }
+  }
+  return out;
+}
+
+function decodeScalar(raw) {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
+    return decodeDoubleQuoted(trimmed);
+  }
+  if (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2) {
+    return trimmed.slice(1, -1).replaceAll("''", "'");
+  }
+  return trimmed;
+}
+
+function findMappingColon(text) {
+  let quote = null;
+  let escaping = false;
+  let flowDepth = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const ch = text[index];
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (ch === "\\" && quote === '"') {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        if (quote === "'" && text[index + 1] === "'") {
+          index += 1;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "{" || ch === "[") {
+      flowDepth += 1;
+      continue;
+    }
+    if (ch === "}" || ch === "]") {
+      flowDepth = Math.max(0, flowDepth - 1);
+      continue;
+    }
+    if (
+      flowDepth === 0 &&
+      ch === ":" &&
+      (index + 1 === text.length || /\s/u.test(text[index + 1]))
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function splitFlowEntries(inner) {
+  const parts = [];
+  let current = "";
+  let quote = null;
+  let escaping = false;
+  let depth = 0;
+
+  for (let index = 0; index < inner.length; index += 1) {
+    const ch = inner[index];
+    if (escaping) {
+      current += ch;
+      escaping = false;
+      continue;
+    }
+    if (ch === "\\" && quote === '"') {
+      current += ch;
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      current += ch;
+      if (ch === quote) {
+        if (quote === "'" && inner[index + 1] === "'") {
+          current += inner[index + 1];
+          index += 1;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === "{" || ch === "[") {
+      depth += 1;
+      current += ch;
+      continue;
+    }
+    if (ch === "}" || ch === "]") {
+      depth = Math.max(0, depth - 1);
+      current += ch;
+      continue;
+    }
+    if (depth === 0 && ch === ",") {
+      if (current.trim().length > 0) {
+        parts.push(current.trim());
+      }
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+
+  if (current.trim().length > 0) {
+    parts.push(current.trim());
+  }
+  return parts;
+}
+
+function parseFlowValue(raw, line) {
+  const trimmed = stripInlineComment(raw).trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    const map = new Map();
+    const inner = trimmed.slice(1, -1).trim();
+    if (inner.length > 0) {
+      for (const entry of splitFlowEntries(inner)) {
+        const colon = findMappingColon(entry);
+        if (colon === -1) {
+          continue;
+        }
+        const key = decodeScalar(entry.slice(0, colon));
+        const rest = entry.slice(colon + 1).trim();
+        map.set(key, parseFlowValue(rest, line));
+      }
+    }
+    return { kind: "map", value: map, line };
+  }
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    const items = [];
+    const inner = trimmed.slice(1, -1).trim();
+    if (inner.length > 0) {
+      for (const entry of splitFlowEntries(inner)) {
+        items.push(parseFlowValue(entry, line));
+      }
+    }
+    return { kind: "seq", value: items, line };
+  }
+  return { kind: "scalar", value: decodeScalar(trimmed), line };
+}
+
+function parseYaml(source) {
+  const rawLines = source.split(/\r?\n/u);
+  // Dedent snippet inputs (like indented fragments in unit tests) while keeping
+  // original 1-based line numbers intact.
+  let minIndent = Number.POSITIVE_INFINITY;
+  for (const line of rawLines) {
+    if (line.trim().length === 0 || line.trimStart().startsWith("#")) {
+      continue;
+    }
+    minIndent = Math.min(minIndent, line.length - line.trimStart().length);
+  }
+  if (!Number.isFinite(minIndent)) {
+    return null;
+  }
+
+  const lines = rawLines.map((line, index) => ({
+    lineNumber: index + 1,
+    text: line.length >= minIndent ? line.slice(minIndent) : line.trimStart(),
+  }));
+
+  function nextNonEmpty(start) {
+    let cursor = start;
+    while (cursor < lines.length) {
+      const trimmed = lines[cursor].text.trim();
+      if (trimmed.length > 0 && !trimmed.startsWith("#")) {
+        return cursor;
+      }
+      cursor += 1;
+    }
+    return lines.length;
+  }
+
+  function indentOf(index) {
+    const text = lines[index].text;
+    return text.length - text.trimStart().length;
+  }
+
+  function parseBlockScalar(headerLineIndex, parentIndent, style) {
+    const isFolded = style.startsWith(">");
+    const body = [];
+    let cursor = headerLineIndex + 1;
+    let contentIndent = null;
+
+    while (cursor < lines.length) {
+      const { text, lineNumber } = lines[cursor];
+      if (text.trim().length === 0) {
+        body.push({ text: "", lineNumber });
+        cursor += 1;
+        continue;
+      }
+      const lineIndent = text.length - text.trimStart().length;
+      if (lineIndent <= parentIndent) {
+        break;
+      }
+      if (contentIndent === null) {
+        contentIndent = lineIndent;
+      }
+      body.push({
+        text: text.length >= contentIndent ? text.slice(contentIndent) : text.trimStart(),
+        lineNumber,
+      });
+      cursor += 1;
+    }
+
+    while (body.length > 0 && body.at(-1).text === "") {
+      body.pop();
+    }
+
+    if (isFolded) {
+      let folded = "";
+      for (let idx = 0; idx < body.length; idx += 1) {
+        const entry = body[idx];
+        if (entry.text === "") {
+          folded += "\n";
+        } else {
+          if (folded.length > 0 && !folded.endsWith("\n")) {
+            folded += " ";
+          }
+          folded += entry.text;
+        }
+      }
+      return {
+        node: {
+          kind: "scalar",
+          value: folded,
+          line: body[0]?.lineNumber ?? lines[headerLineIndex].lineNumber,
+          lines: body,
+          folded: true,
+        },
+        nextIndex: cursor,
+      };
+    }
+
+    return {
+      node: {
+        kind: "scalar",
+        value: body.map((entry) => entry.text).join("\n"),
+        line: body[0]?.lineNumber ?? lines[headerLineIndex].lineNumber,
+        lines: body,
+        folded: false,
+      },
+      nextIndex: cursor,
+    };
+  }
+
+  function parseNode(startIndex, expectedIndent) {
+    const index = nextNonEmpty(startIndex);
+    if (index >= lines.length) {
+      return { node: null, nextIndex: index };
+    }
+    const lineIndent = indentOf(index);
+    if (lineIndent < expectedIndent) {
+      return { node: null, nextIndex: index };
+    }
+    const content = lines[index].text.slice(lineIndent);
+    if (content === "-" || content.startsWith("- ")) {
+      return parseSequence(index, lineIndent);
+    }
+    if (findMappingColon(content) !== -1) {
+      return parseMapping(index, lineIndent);
+    }
+    return {
+      node: parseFlowValue(content, lines[index].lineNumber),
+      nextIndex: index + 1,
+    };
+  }
+
+  function parseSequence(startIndex, seqIndent) {
+    const items = [];
+    let cursor = startIndex;
+
+    while (cursor < lines.length) {
+      cursor = nextNonEmpty(cursor);
+      if (cursor >= lines.length) {
+        break;
+      }
+      const lineIndent = indentOf(cursor);
+      if (lineIndent !== seqIndent) {
+        break;
+      }
+      const content = lines[cursor].text.slice(lineIndent);
+      if (content !== "-" && !content.startsWith("- ")) {
+        break;
+      }
+      const lineNumber = lines[cursor].lineNumber;
+      const afterDash = content.slice(1).trimStart();
+
+      if (afterDash.length === 0 || afterDash.startsWith("#")) {
+        const child = parseNode(cursor + 1, seqIndent + 1);
+        items.push(child.node ?? { kind: "scalar", value: "", line: lineNumber });
+        cursor = child.nextIndex;
+        continue;
+      }
+
+      const inlineIndent = lineIndent + (content.length - afterDash.length);
+      const colon = findMappingColon(afterDash);
+      if (colon !== -1 && !afterDash.startsWith("{") && !afterDash.startsWith("[")) {
+        // Inline mapping starting on the `- ` line (e.g. `- name: Build\n  run: ...`).
+        const map = new Map();
+        const parsedFirst = parseMappingEntry(cursor, afterDash, inlineIndent);
+        map.set(parsedFirst.key, parsedFirst.valueNode);
+        cursor = parsedFirst.nextIndex;
+
+        while (cursor < lines.length) {
+          const next = nextNonEmpty(cursor);
+          if (next >= lines.length) {
+            cursor = next;
+            break;
+          }
+          const nextIndent = indentOf(next);
+          if (nextIndent !== inlineIndent) {
+            cursor = next;
+            break;
+          }
+          const nextContent = lines[next].text.slice(nextIndent);
+          if (nextContent === "-" || nextContent.startsWith("- ")) {
+            cursor = next;
+            break;
+          }
+          if (findMappingColon(nextContent) === -1) {
+            cursor = next + 1;
+            continue;
+          }
+          const entry = parseMappingEntry(next, nextContent, inlineIndent);
+          map.set(entry.key, entry.valueNode);
+          cursor = entry.nextIndex;
+        }
+        items.push({ kind: "map", value: map, line: lineNumber });
+        continue;
+      }
+
+      if (/^[|>][+-]?\d*$/u.test(stripInlineComment(afterDash).trim())) {
+        const block = parseBlockScalar(cursor, seqIndent, stripInlineComment(afterDash).trim());
+        items.push(block.node);
+        cursor = block.nextIndex;
+        continue;
+      }
+
+      items.push(parseFlowValue(afterDash, lineNumber));
+      cursor += 1;
+    }
+
+    return {
+      node: { kind: "seq", value: items, line: lines[startIndex].lineNumber },
+      nextIndex: cursor,
+    };
+  }
+
+  function parseMappingEntry(lineIndex, content, entryIndent) {
+    const colon = findMappingColon(content);
+    const key = decodeScalar(content.slice(0, colon));
+    const lineNumber = lines[lineIndex].lineNumber;
+    const rawRest = content.slice(colon + 1).trim();
+    const restWithoutComment = stripInlineComment(rawRest).trim();
+
+    if (/^[|>][+-]?\d*$/u.test(restWithoutComment)) {
+      const block = parseBlockScalar(lineIndex, entryIndent, restWithoutComment);
+      return { key, valueNode: block.node, nextIndex: block.nextIndex };
+    }
+
+    if (restWithoutComment.length === 0) {
+      const next = nextNonEmpty(lineIndex + 1);
+      if (next < lines.length) {
+        const nextIndent = indentOf(next);
+        const nextContent = lines[next].text.slice(nextIndent);
+        // Allow block sequence indented at the same level as its mapping key.
+        if (
+          nextIndent > entryIndent ||
+          (nextIndent === entryIndent && (nextContent === "-" || nextContent.startsWith("- ")))
+        ) {
+          const child = parseNode(next, nextIndent);
+          return {
+            key,
+            valueNode: child.node ?? { kind: "scalar", value: "", line: lineNumber },
+            nextIndex: child.nextIndex,
+          };
+        }
+      }
+      return {
+        key,
+        valueNode: { kind: "scalar", value: "", line: lineNumber },
+        nextIndex: lineIndex + 1,
+      };
+    }
+
+    // Handle multi-line flow mapping/sequence spanning lines if unclosed.
+    let combined = restWithoutComment;
+    let cursor = lineIndex + 1;
+    if (
+      (combined.startsWith("{") && !combined.endsWith("}")) ||
+      (combined.startsWith("[") && !combined.endsWith("]"))
+    ) {
+      while (cursor < lines.length) {
+        const nextText = stripInlineComment(lines[cursor].text.trim()).trim();
+        combined = `${combined} ${nextText}`;
+        cursor += 1;
+        if (
+          (combined.startsWith("{") && combined.endsWith("}")) ||
+          (combined.startsWith("[") && combined.endsWith("]"))
+        ) {
+          break;
+        }
+      }
+    } else if (
+      !combined.startsWith('"') &&
+      !combined.startsWith("'") &&
+      !combined.startsWith("{") &&
+      !combined.startsWith("[")
+    ) {
+      // Multi-line plain scalar continuation indented deeper than key.
+      while (cursor < lines.length) {
+        const nextText = lines[cursor].text;
+        if (nextText.trim().length === 0 || nextText.trimStart().startsWith("#")) {
+          break;
+        }
+        const nextIndent = nextText.length - nextText.trimStart().length;
+        if (nextIndent <= entryIndent) {
+          break;
+        }
+        const nextTrimmed = stripInlineComment(nextText.trim()).trim();
+        if (
+          nextTrimmed === "-" ||
+          nextTrimmed.startsWith("- ") ||
+          findMappingColon(nextTrimmed) !== -1
+        ) {
+          break;
+        }
+        combined = `${combined} ${nextTrimmed}`;
+        cursor += 1;
+      }
+    }
+
+    return {
+      key,
+      valueNode: parseFlowValue(combined, lineNumber),
+      nextIndex: cursor,
+    };
+  }
+
+  function parseMapping(startIndex, mapIndent) {
+    const map = new Map();
+    let cursor = startIndex;
+
+    while (cursor < lines.length) {
+      cursor = nextNonEmpty(cursor);
+      if (cursor >= lines.length) {
+        break;
+      }
+      const lineIndent = indentOf(cursor);
+      if (lineIndent !== mapIndent) {
+        break;
+      }
+      const content = lines[cursor].text.slice(lineIndent);
+      if (content === "-" || content.startsWith("- ") || findMappingColon(content) === -1) {
+        break;
+      }
+      const entry = parseMappingEntry(cursor, content, mapIndent);
+      map.set(entry.key, entry.valueNode);
+      cursor = entry.nextIndex;
+    }
+
+    return {
+      node: { kind: "map", value: map, line: lines[startIndex].lineNumber },
+      nextIndex: cursor,
+    };
+  }
+
+  return parseNode(0, 0).node;
+}
+
+// --- Shell tokenization & Docker/Podman extraction ---------------------------
+
 function splitShellCommands(command) {
   const commands = [];
   let tokens = [];
@@ -223,75 +800,198 @@ function splitShellCommands(command) {
   return commands;
 }
 
-function isPinnedDigest(imageReference) {
-  return PINNED_DIGEST_PATTERN.test(imageReference);
-}
+function inspectShellRunScript(runNode, inheritedEnv, filePath, problems) {
+  const vars = new Map(inheritedEnv);
 
-function isDynamicReference(value) {
-  return value.includes("${{") || value.includes("$");
-}
-
-function isLocalDockerActionImage(imageReference) {
-  if (imageReference.startsWith("docker://")) {
-    return false;
+  // Build logical shell lines with accurate line numbers.
+  const logicalLines = [];
+  if (runNode.folded && Array.isArray(runNode.lines)) {
+    logicalLines.push({
+      text: runNode.value,
+      lineNumber: runNode.line,
+      sourceLines: runNode.lines,
+    });
+  } else if (Array.isArray(runNode.lines)) {
+    for (let index = 0; index < runNode.lines.length; index += 1) {
+      const entry = runNode.lines[index];
+      const trimmed = entry.text.trim();
+      if (trimmed.length === 0 || trimmed.startsWith("#")) {
+        continue;
+      }
+      const startLine = entry.lineNumber;
+      let combined = trimmed;
+      while (combined.endsWith("\\") && index + 1 < runNode.lines.length) {
+        combined = `${combined.slice(0, -1)} ${runNode.lines[index + 1].text.trim()}`;
+        index += 1;
+      }
+      logicalLines.push({ text: combined, lineNumber: startLine, sourceLines: null });
+    }
+  } else {
+    const rawLines = String(runNode.value).split(/\r?\n/u);
+    for (let index = 0; index < rawLines.length; index += 1) {
+      const trimmed = rawLines[index].trim();
+      if (trimmed.length === 0 || trimmed.startsWith("#")) {
+        continue;
+      }
+      let combined = trimmed;
+      while (combined.endsWith("\\") && index + 1 < rawLines.length) {
+        combined = `${combined.slice(0, -1)} ${rawLines[index + 1].trim()}`;
+        index += 1;
+      }
+      logicalLines.push({ text: combined, lineNumber: runNode.line + index, sourceLines: null });
+    }
   }
-  return (
-    imageReference.startsWith("./") ||
-    imageReference.startsWith("../") ||
-    CONTAINER_FILENAME_PATTERN.test(path.basename(imageReference))
-  );
-}
 
-function extractDockerCommandImages(command) {
-  const images = [];
+  for (const { text, lineNumber, sourceLines } of logicalLines) {
+    for (const tokens of splitShellCommands(text)) {
+      if (tokens.length === 0 || tokens[0].startsWith("#")) {
+        continue;
+      }
 
-  for (const tokens of splitShellCommands(command)) {
-    let cursor = 0;
-    while (
-      cursor < tokens.length &&
-      (tokens[cursor] === "sudo" ||
-        tokens[cursor] === "env" ||
-        ENV_PREFIX_ASSIGNMENT_PATTERN.test(tokens[cursor]))
-    ) {
-      cursor += 1;
-    }
+      // Pure variable assignment (`image=rust:1.96-alpine` or `export IMAGE=node:24`).
+      const assignStart = tokens[0] === "export" ? 1 : 0;
+      if (
+        assignStart < tokens.length &&
+        tokens.slice(assignStart).every((token) => ENV_PREFIX_ASSIGNMENT_PATTERN.test(token))
+      ) {
+        for (const token of tokens.slice(assignStart)) {
+          const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+          if (match) {
+            vars.set(match.groups.name, {
+              value: resolveVars(match.groups.value, vars),
+              line: lineNumber,
+            });
+          }
+        }
+        continue;
+      }
 
-    const cli = tokens[cursor];
-    if (cli !== "docker" && cli !== "podman") {
-      continue;
-    }
-
-    const subcommand = tokens[cursor + 1];
-    if (subcommand !== "pull" && subcommand !== "run") {
-      continue;
-    }
-
-    const valueFlags = subcommand === "pull" ? DOCKER_PULL_VALUE_FLAGS : DOCKER_RUN_VALUE_FLAGS;
-
-    for (let index = cursor + 2; index < tokens.length; index += 1) {
-      const token = tokens[index];
-      if (token === "--") {
-        if (tokens[index + 1]) {
-          images.push(tokens[index + 1]);
+      const commandVars = new Map(vars);
+      let cursor = 0;
+      while (cursor < tokens.length) {
+        const token = tokens[cursor];
+        if (token === "sudo" || token === "env") {
+          cursor += 1;
+          continue;
+        }
+        const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+        if (prefixAssign) {
+          commandVars.set(prefixAssign.groups.name, {
+            value: resolveVars(prefixAssign.groups.value, commandVars),
+            line: lineNumber,
+          });
+          cursor += 1;
+          continue;
         }
         break;
       }
-      if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
+
+      const cli = tokens[cursor];
+      if (cli !== "docker" && cli !== "podman") {
         continue;
       }
-      if (token.startsWith("-")) {
-        if (!token.includes("=") && valueFlags.has(token)) {
-          index += 1;
+
+      const subcommand = tokens[cursor + 1];
+      if (subcommand !== "pull" && subcommand !== "run") {
+        continue;
+      }
+
+      const valueFlags = subcommand === "pull" ? DOCKER_PULL_VALUE_FLAGS : DOCKER_RUN_VALUE_FLAGS;
+      let imageToken = null;
+
+      for (let index = cursor + 2; index < tokens.length; index += 1) {
+        const token = tokens[index];
+        if (token === "--") {
+          imageToken = tokens[index + 1] ?? null;
+          break;
         }
+        if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
+          continue;
+        }
+        if (token.startsWith("-")) {
+          if (!token.includes("=") && valueFlags.has(token)) {
+            index += 1;
+          }
+          continue;
+        }
+        imageToken = token;
+        break;
+      }
+
+      if (!imageToken) {
         continue;
       }
-      images.push(token);
-      break;
+
+      const resolved = resolveVars(imageToken, commandVars);
+      if (isDynamicReference(resolved)) {
+        continue;
+      }
+
+      if (!isPinnedDigest(resolved)) {
+        let reportLine = lineNumber;
+        const singleVar =
+          /^\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))$/u.exec(
+            imageToken,
+          );
+        if (singleVar) {
+          const name = singleVar.groups.braced ?? singleVar.groups.bare;
+          reportLine = commandVars.get(name)?.line ?? lineNumber;
+        } else if (sourceLines) {
+          reportLine =
+            sourceLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? lineNumber;
+        }
+        problems.push(`${filePath}:${reportLine}: ${resolved} is not pinned to a sha256 digest`);
+      }
     }
   }
-
-  return images;
 }
+
+function extractEnvMap(envNode, baseEnv) {
+  const merged = new Map(baseEnv);
+  if (envNode?.kind !== "map") {
+    return merged;
+  }
+  for (const [key, valueNode] of envNode.value) {
+    if (valueNode?.kind === "scalar") {
+      merged.set(key, { value: String(valueNode.value), line: valueNode.line });
+    }
+  }
+  return merged;
+}
+
+function checkImageField(node, filePath, problems, { allowLocalDockerAction = false } = {}) {
+  if (node?.kind !== "scalar") {
+    return;
+  }
+  const imageRef = String(node.value).trim();
+  if (!imageRef || isDynamicReference(imageRef)) {
+    return;
+  }
+  if (allowLocalDockerAction && isLocalDockerActionImage(imageRef)) {
+    return;
+  }
+  if (!isPinnedDigest(imageRef)) {
+    problems.push(`${filePath}:${node.line}: ${imageRef} is not pinned to a sha256 digest`);
+  }
+}
+
+function checkStepsList(stepsNode, baseEnv, filePath, problems) {
+  if (stepsNode?.kind !== "seq") {
+    return;
+  }
+  for (const stepNode of stepsNode.value) {
+    if (stepNode?.kind !== "map") {
+      continue;
+    }
+    const stepEnv = extractEnvMap(stepNode.value.get("env"), baseEnv);
+    const runNode = stepNode.value.get("run");
+    if (runNode?.kind === "scalar") {
+      inspectShellRunScript(runNode, stepEnv, filePath, problems);
+    }
+  }
+}
+
+// --- Public discovery and validation functions -------------------------------
 
 export function collectWorkflowFiles(directory) {
   const entries = [];
@@ -410,142 +1110,127 @@ export function unpinnedActionReferences(source, filePath = "<memory>") {
 
 export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>") {
   const problems = [];
-  const lines = source.split(/\r?\n/u);
-  const stepVariables = new Map();
-  const yamlContext = [];
+  const doc = parseYaml(source);
+  if (!doc) {
+    return problems;
+  }
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const trimmed = line.trim();
+  if (doc.kind === "seq") {
+    checkStepsList(doc, new Map(), filePath, problems);
+    return problems;
+  }
 
-    if (/^\s*-\s+(?:name|id|uses|run):/u.test(line)) {
-      stepVariables.clear();
+  if (doc.kind !== "map") {
+    return problems;
+  }
+
+  const workflowEnv = extractEnvMap(doc.value.get("env"), new Map());
+
+  // Support snippet inputs containing top-level `container`, `image`, `services`, or `steps`.
+  const checkContainerNode = (containerNode) => {
+    if (!containerNode) {
+      return;
     }
-
-    if (trimmed.length === 0 || trimmed.startsWith("#")) {
-      continue;
+    if (containerNode.kind === "scalar") {
+      checkImageField(containerNode, filePath, problems);
+    } else if (containerNode.kind === "map") {
+      checkImageField(containerNode.value.get("image"), filePath, problems);
     }
+  };
 
-    const indent = line.length - line.trimStart().length;
-    while (yamlContext.length > 0 && yamlContext.at(-1).indent >= indent) {
-      yamlContext.pop();
+  const checkServicesNode = (servicesNode) => {
+    if (servicesNode?.kind !== "map") {
+      return;
     }
+    for (const serviceNode of servicesNode.value.values()) {
+      checkContainerNode(serviceNode);
+    }
+  };
 
-    const containerShorthand = YAML_CONTAINER_SHORTHAND_PATTERN.exec(line);
-    if (containerShorthand) {
-      const imageRef = stripQuotes(containerShorthand.groups.value);
-      if (!isDynamicReference(imageRef) && !isPinnedDigest(imageRef)) {
-        problems.push(`${filePath}:${index + 1}: ${imageRef} is not pinned to a sha256 digest`);
+  checkContainerNode(doc.value.get("container"));
+  checkServicesNode(doc.value.get("services"));
+  checkImageField(doc.value.get("image"), filePath, problems);
+  checkStepsList(doc.value.get("steps"), workflowEnv, filePath, problems);
+
+  const runsNode = doc.value.get("runs");
+  if (runsNode?.kind === "map") {
+    checkImageField(runsNode.value.get("image"), filePath, problems, {
+      allowLocalDockerAction: true,
+    });
+    checkStepsList(runsNode.value.get("steps"), workflowEnv, filePath, problems);
+  }
+
+  const jobsNode = doc.value.get("jobs");
+  if (jobsNode?.kind === "map") {
+    for (const jobNode of jobsNode.value.values()) {
+      if (jobNode?.kind !== "map") {
+        continue;
       }
-      continue;
-    }
-
-    const yamlImage = YAML_IMAGE_PATTERN.exec(line);
-    if (yamlImage) {
-      const imageRef = stripQuotes(yamlImage.groups.value);
-      const inRunsSection = yamlContext.some((entry) => entry.key === "runs");
-      if (
-        (!inRunsSection || !isLocalDockerActionImage(imageRef)) &&
-        !isDynamicReference(imageRef) &&
-        !isPinnedDigest(imageRef)
-      ) {
-        problems.push(`${filePath}:${index + 1}: ${imageRef} is not pinned to a sha256 digest`);
-      }
-      continue;
-    }
-
-    // YAML folded scalar `run: >` joins indented lines with spaces without
-    // trailing backslashes and may contain one or more docker/podman commands.
-    const foldedRunMatch = /^(?<indent>\s*)(?:-\s+)?run:\s*>[+-]?\s*$/u.exec(line);
-    if (foldedRunMatch) {
-      const baseIndent = foldedRunMatch.groups.indent.length;
-      const bodyLines = [];
-      let cursor = index + 1;
-      while (cursor < lines.length) {
-        const nextLine = lines[cursor];
-        const nextTrimmed = nextLine.trim();
-        const nextIndent = nextLine.length - nextLine.trimStart().length;
-        if (nextTrimmed.length > 0 && nextIndent <= baseIndent) {
-          break;
-        }
-        bodyLines.push({ text: nextTrimmed, lineNumber: cursor + 1 });
-        cursor += 1;
-      }
-      const joined = bodyLines.map((entry) => entry.text).join(" ");
-      for (const imageToken of extractDockerCommandImages(joined)) {
-        const matchingLine =
-          bodyLines.find((entry) => entry.text.includes(imageToken))?.lineNumber ?? index + 1;
-        checkDockerImageToken(imageToken, matchingLine, stepVariables, filePath, problems);
-      }
-      index = cursor - 1;
-      continue;
-    }
-
-    const keyMatch = YAML_KEY_PATTERN.exec(line);
-    if (keyMatch && keyMatch.groups.rest.trim() === "") {
-      yamlContext.push({ indent: keyMatch.groups.indent.length, key: keyMatch.groups.key });
-    }
-
-    const assignment = SHELL_ASSIGNMENT_PATTERN.exec(line);
-    if (assignment && !trimmed.startsWith("run:") && !trimmed.includes(": ")) {
-      const rawValue = assignment.groups.raw.replace(/\s+#.*$/u, "").trim();
-      stepVariables.set(assignment.groups.name, {
-        value: stripQuotes(rawValue),
-        lineNumber: index + 1,
-      });
-      continue;
-    }
-
-    if (/\b(?:docker|podman)\s+(?:pull|run)\b/u.test(trimmed)) {
-      const startLine = index + 1;
-      let combined = trimmed;
-      while (combined.endsWith("\\") && index + 1 < lines.length) {
-        combined = `${combined.slice(0, -1)} ${lines[index + 1].trim()}`;
-        index += 1;
-      }
-      const commandText = combined.replace(/^(?:-\s+)?run:\s*/u, "");
-      for (const imageToken of extractDockerCommandImages(commandText)) {
-        checkDockerImageToken(imageToken, startLine, stepVariables, filePath, problems);
-      }
+      const jobEnv = extractEnvMap(jobNode.value.get("env"), workflowEnv);
+      checkContainerNode(jobNode.value.get("container"));
+      checkServicesNode(jobNode.value.get("services"));
+      checkStepsList(jobNode.value.get("steps"), jobEnv, filePath, problems);
     }
   }
 
   return problems;
 }
 
-function checkDockerImageToken(imageToken, lineNumber, stepVariables, filePath, problems) {
-  const varMatch = SHELL_VAR_REFERENCE_PATTERN.exec(imageToken);
-  if (varMatch) {
-    const varName = varMatch.groups.braced ?? varMatch.groups.bare;
-    const assigned = stepVariables.get(varName);
-    if (assigned && !isDynamicReference(assigned.value) && !isPinnedDigest(assigned.value)) {
-      problems.push(
-        `${filePath}:${assigned.lineNumber}: ${assigned.value} is not pinned to a sha256 digest`,
-      );
+function resolveBuildArgs(token, buildArgs) {
+  return token.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
+    const name = groups.braced ?? groups.bare;
+    return buildArgs.has(name) ? buildArgs.get(name) : match;
+  });
+}
+
+function extractRunMountSources(runText) {
+  const sources = [];
+  const rest = runText.replace(/^RUN\s+/iu, "");
+  // Parse leading `--mount=...` (and any other `--flag` options) before the command.
+  const tokens = splitShellCommands(rest)[0] ?? [];
+  for (const token of tokens) {
+    if (!token.startsWith("--")) {
+      break;
     }
-    return;
+    if (!token.toLowerCase().startsWith("--mount=")) {
+      continue;
+    }
+    const spec = token.slice("--mount=".length);
+    for (const part of spec.split(",")) {
+      const match = /^from=(?<source>.+)$/iu.exec(part.trim());
+      if (match) {
+        sources.push(stripQuotes(match.groups.source));
+      }
+    }
   }
-
-  if (isDynamicReference(imageToken)) {
-    return;
-  }
-
-  if (!isPinnedDigest(imageToken)) {
-    problems.push(`${filePath}:${lineNumber}: ${imageToken} is not pinned to a sha256 digest`);
-  }
+  return sources;
 }
 
 export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
   const problems = [];
   const rawLines = source.split(/\r?\n/u);
   const logicalLines = [];
+  let inHeaderDirectives = true;
 
   for (let index = 0; index < rawLines.length; index += 1) {
     const line = rawLines[index];
     const trimmed = line.trim();
-    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+    if (trimmed.length === 0) {
       continue;
     }
+    if (trimmed.startsWith("#")) {
+      if (inHeaderDirectives) {
+        const syntaxMatch = /^#\s*syntax\s*=\s*(?<image>\S+)/iu.exec(trimmed);
+        if (syntaxMatch) {
+          const frontend = stripQuotes(syntaxMatch.groups.image);
+          if (!isDynamicReference(frontend) && !isPinnedDigest(frontend)) {
+            problems.push(`${filePath}:${index + 1}: ${frontend} is not pinned to a sha256 digest`);
+          }
+        }
+      }
+      continue;
+    }
+    inHeaderDirectives = false;
     const startLine = index + 1;
     let combined = trimmed;
     while (combined.endsWith("\\") && index + 1 < rawLines.length) {
@@ -627,17 +1312,28 @@ export function unpinnedContainerfileReferences(source, filePath = "<memory>") {
       if (!isPinnedDigest(sourceRef)) {
         problems.push(`${filePath}:${lineNumber}: ${sourceRef} is not pinned to a sha256 digest`);
       }
+      continue;
+    }
+
+    if (/^RUN\s+/iu.test(text)) {
+      const mergedArgs = new Map([...globalArgs, ...stageArgs]);
+      for (const rawSource of extractRunMountSources(text)) {
+        const sourceRef = resolveBuildArgs(rawSource, mergedArgs);
+        if (
+          /^\d+$/u.test(sourceRef) ||
+          stages.has(sourceRef.toLowerCase()) ||
+          isDynamicReference(sourceRef)
+        ) {
+          continue;
+        }
+        if (!isPinnedDigest(sourceRef)) {
+          problems.push(`${filePath}:${lineNumber}: ${sourceRef} is not pinned to a sha256 digest`);
+        }
+      }
     }
   }
 
   return problems;
-}
-
-function resolveBuildArgs(token, buildArgs) {
-  return token.replace(EMBEDDED_VAR_PATTERN, (match, _p1, _p2, _offset, _str, groups) => {
-    const name = groups.braced ?? groups.bare;
-    return buildArgs.has(name) ? buildArgs.get(name) : match;
-  });
 }
 
 export function checkWorkflowPins(root = process.cwd()) {
