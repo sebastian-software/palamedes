@@ -11,5 +11,24 @@
       ],
       "datasourceTemplate": "docker"
     }
+  ],
+  "packageRules": [
+    {
+      "description": "Keep musl action Docker image tags aligned with Cargo.toml rust-version and Node 24 by disabling independent tag upgrades",
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": [".github/actions/verify-musl-native/action.yml"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major", "minor", "patch", "replacement"],
+      "enabled": false
+    },
+    {
+      "description": "Allow digest refreshes for shell-invoked musl verification Docker images",
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": [".github/actions/verify-musl-native/action.yml"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["digest"],
+      "enabled": true,
+      "pinDigests": true
+    }
   ]
 }

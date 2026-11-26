@@ -7,12 +7,30 @@ import path from "node:path";
 // full commit SHA with a version comment, and every static container image
 // reference in workflows, composite actions, and Containerfiles/Dockerfiles is
 // pinned to an immutable `@sha256:` digest.
-const USES_PATTERN = /^\s*(?:-\s+)?uses:\s*(?<value>\S+)(?<rest>.*)$/u;
 const PINNED_ACTION_PATTERN = /^[^\s@]+@[0-9a-f]{40}$/u;
 const PINNED_DIGEST_PATTERN = /@sha256:[0-9a-f]{64}$/u;
 const EMBEDDED_VAR_PATTERN =
   /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu;
 const ENV_PREFIX_ASSIGNMENT_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$/u;
+const SHELL_COMMAND_PREFIXES = new Set([
+  "if",
+  "elif",
+  "else",
+  "then",
+  "do",
+  "while",
+  "until",
+  "!",
+  "time",
+  "exec",
+  "command",
+  "builtin",
+  "nohup",
+  "sudo",
+  "env",
+  "{",
+  "(",
+]);
 const CONTAINER_FILENAME_PATTERN =
   /^(?:Containerfile|Dockerfile)(?:\..+)?$|\.(?:Containerfile|Dockerfile)$/u;
 const IGNORED_DIRECTORIES = new Set([
@@ -395,23 +413,33 @@ function parseFlowValue(raw, line) {
 
 function parseYaml(source) {
   const rawLines = source.split(/\r?\n/u);
+  const isDocumentMarker = (trimmed) =>
+    trimmed === "---" || trimmed === "..." || /^%(?:YAML|TAG)\b/u.test(trimmed);
+
   // Dedent snippet inputs (like indented fragments in unit tests) while keeping
   // original 1-based line numbers intact.
   let minIndent = Number.POSITIVE_INFINITY;
   for (const line of rawLines) {
-    if (line.trim().length === 0 || line.trimStart().startsWith("#")) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || trimmed.startsWith("#") || isDocumentMarker(trimmed)) {
       continue;
     }
     minIndent = Math.min(minIndent, line.length - line.trimStart().length);
   }
   if (!Number.isFinite(minIndent)) {
-    return null;
+    return { doc: null, error: null };
   }
 
-  const lines = rawLines.map((line, index) => ({
-    lineNumber: index + 1,
-    text: line.length >= minIndent ? line.slice(minIndent) : line.trimStart(),
-  }));
+  const lines = rawLines.map((line, index) => {
+    const trimmed = line.trim();
+    if (isDocumentMarker(trimmed)) {
+      return { lineNumber: index + 1, text: trimmed };
+    }
+    return {
+      lineNumber: index + 1,
+      text: line.length >= minIndent ? line.slice(minIndent) : line.trimStart(),
+    };
+  });
 
   function nextNonEmpty(start) {
     let cursor = start;
@@ -720,7 +748,37 @@ function parseYaml(source) {
     };
   }
 
-  return parseNode(0, 0).node;
+  let startIndex = nextNonEmpty(0);
+  while (startIndex < lines.length) {
+    const trimmed = lines[startIndex].text.trim();
+    if (trimmed === "---" || /^%(?:YAML|TAG)\b/u.test(trimmed)) {
+      startIndex = nextNonEmpty(startIndex + 1);
+      continue;
+    }
+    break;
+  }
+
+  if (startIndex >= lines.length || lines[startIndex].text.trim() === "...") {
+    return { doc: null, error: null };
+  }
+
+  const parsed = parseNode(startIndex, 0);
+  let trailing = nextNonEmpty(parsed.nextIndex);
+  while (trailing < lines.length && lines[trailing].text.trim() === "...") {
+    trailing = nextNonEmpty(trailing + 1);
+  }
+
+  if (trailing < lines.length) {
+    return {
+      doc: parsed.node,
+      error: {
+        line: lines[trailing].lineNumber,
+        message: "unexpected trailing YAML content; refusing to skip pin checks",
+      },
+    };
+  }
+
+  return { doc: parsed.node, error: null };
 }
 
 // --- Shell tokenization & Docker/Podman extraction ---------------------------
@@ -775,7 +833,27 @@ function splitShellCommands(command) {
       continue;
     }
 
+    // POSIX shell comments start with an unquoted `#` at a token boundary.
+    if (ch === "#" && current.length === 0) {
+      flushCommand();
+      while (index < command.length && command[index] !== "\n") {
+        index += 1;
+      }
+      continue;
+    }
+
     if (ch === "\n" || ch === ";") {
+      flushCommand();
+      continue;
+    }
+
+    if (ch === "(" && (current.length === 0 || current === "$")) {
+      current = "";
+      flushCommand();
+      continue;
+    }
+
+    if (ch === ")" && current.length === 0) {
       flushCommand();
       continue;
     }
@@ -870,7 +948,7 @@ function inspectShellRunScript(runNode, inheritedEnv, filePath, problems) {
       let cursor = 0;
       while (cursor < tokens.length) {
         const token = tokens[cursor];
-        if (token === "sudo" || token === "env") {
+        if (SHELL_COMMAND_PREFIXES.has(token)) {
           cursor += 1;
           continue;
         }
@@ -1071,46 +1149,142 @@ export function collectContainerFiles(root) {
   return collectContainerFilesFromFilesystem(root);
 }
 
-export function unpinnedActionReferences(source, filePath = "<memory>") {
-  const problems = [];
+function hasUnquotedComment(line) {
+  let quote = null;
+  let escaping = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const ch = line[index];
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (ch === "\\" && quote === '"') {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        if (quote === "'" && line[index + 1] === "'") {
+          index += 1;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "#" && (index === 0 || /\s/u.test(line[index - 1]))) {
+      return true;
+    }
+  }
+  return false;
+}
 
-  source.split(/\r?\n/u).forEach((line, index) => {
-    const match = USES_PATTERN.exec(line);
+function collectUsesNodes(doc) {
+  const usesNodes = [];
+  if (!doc) {
+    return usesNodes;
+  }
 
-    if (!match) {
+  const collectFromSteps = (stepsNode) => {
+    if (stepsNode?.kind !== "seq") {
       return;
     }
+    for (const stepNode of stepsNode.value) {
+      if (stepNode?.kind !== "map") {
+        continue;
+      }
+      const usesNode = stepNode.value.get("uses");
+      if (usesNode?.kind === "scalar") {
+        usesNodes.push(usesNode);
+      }
+    }
+  };
 
-    const { value, rest } = match.groups;
-    const location = `${filePath}:${index + 1}`;
+  if (doc.kind === "seq") {
+    collectFromSteps(doc);
+    return usesNodes;
+  }
 
-    if (value.startsWith("./")) {
-      return;
+  if (doc.kind !== "map") {
+    return usesNodes;
+  }
+
+  const topUses = doc.value.get("uses");
+  if (topUses?.kind === "scalar") {
+    usesNodes.push(topUses);
+  }
+  collectFromSteps(doc.value.get("steps"));
+
+  const runsNode = doc.value.get("runs");
+  if (runsNode?.kind === "map") {
+    collectFromSteps(runsNode.value.get("steps"));
+  }
+
+  const jobsNode = doc.value.get("jobs");
+  if (jobsNode?.kind === "map") {
+    for (const jobNode of jobsNode.value.values()) {
+      if (jobNode?.kind !== "map") {
+        continue;
+      }
+      const jobUses = jobNode.value.get("uses");
+      if (jobUses?.kind === "scalar") {
+        usesNodes.push(jobUses);
+      }
+      collectFromSteps(jobNode.value.get("steps"));
+    }
+  }
+
+  return usesNodes;
+}
+
+export function unpinnedActionReferences(source, filePath = "<memory>") {
+  const problems = [];
+  const rawLines = source.split(/\r?\n/u);
+  const { doc, error } = parseYaml(source);
+
+  if (error) {
+    problems.push(`${filePath}:${error.line}: ${error.message}`);
+  }
+
+  for (const usesNode of collectUsesNodes(doc)) {
+    const value = String(usesNode.value).trim();
+    const location = `${filePath}:${usesNode.line}`;
+
+    if (!value || value.startsWith("./")) {
+      continue;
     }
 
     if (value.startsWith("docker://")) {
       if (!isPinnedDigest(value)) {
         problems.push(`${location}: ${value} is not pinned to a sha256 digest`);
       }
-      return;
+      continue;
     }
 
     if (!PINNED_ACTION_PATTERN.test(value)) {
       problems.push(`${location}: ${value} is not pinned to a full commit SHA`);
-      return;
+      continue;
     }
 
-    if (!rest.includes("#")) {
+    const sourceLine = rawLines[usesNode.line - 1] ?? "";
+    if (!hasUnquotedComment(sourceLine)) {
       problems.push(`${location}: ${value} has no version comment`);
     }
-  });
+  }
 
   return problems;
 }
 
 export function unpinnedWorkflowContainerReferences(source, filePath = "<memory>") {
   const problems = [];
-  const doc = parseYaml(source);
+  const { doc, error } = parseYaml(source);
+  if (error) {
+    problems.push(`${filePath}:${error.line}: ${error.message}`);
+  }
   if (!doc) {
     return problems;
   }

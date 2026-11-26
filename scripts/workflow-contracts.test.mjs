@@ -1230,8 +1230,17 @@ describe("workflow contracts", () => {
     );
     expect(unpinnedActionReferences("      - uses: actions/checkout@v7\n")).toHaveLength(1);
     expect(unpinnedActionReferences("      - uses: docker://alpine:3.20\n")).toHaveLength(1);
+    expect(unpinnedActionReferences("      - { uses: docker://alpine:3.20 }\n")).toEqual([
+      "<memory>:1: docker://alpine:3.20 is not pinned to a sha256 digest",
+    ]);
     const digest = `sha256:${"a".repeat(64)}`;
     expect(unpinnedActionReferences(`      - uses: docker://alpine:3.20@${digest}\n`)).toEqual([]);
+    expect(unpinnedActionReferences(`      - uses: "docker://alpine:3.20@${digest}"\n`)).toEqual(
+      [],
+    );
+    expect(
+      unpinnedActionReferences(`      - { uses: "docker://alpine:3.20@${digest}" }\n`),
+    ).toEqual([]);
 
     const uncommented = `actions/checkout@${"a".repeat(40)}`;
     expect(unpinnedActionReferences(`      - uses: ${uncommented}\n`)).toEqual([
@@ -1278,12 +1287,25 @@ describe("workflow contracts", () => {
     ).toEqual([]);
     expect(
       unpinnedWorkflowContainerReferences(
-        '      - name: Pull\n        run: |\n          image=rust:1.96-alpine\n          docker pull "$image"\n',
+        '      - name: Pull\n        run: |\n          image=rust:1.96-alpine # pin rust\n          docker pull "$image"\n',
       ),
     ).toEqual(["<memory>:3: rust:1.96-alpine is not pinned to a sha256 digest"]);
     expect(
       unpinnedWorkflowContainerReferences(
-        `      - name: Pull\n        run: |\n          image=rust:1.96-alpine@${digest}\n          docker pull "$image"\n`,
+        `      - name: Pull\n        run: |\n          image=rust:1.96-alpine@${digest} # pin rust\n          docker pull "$image"\n`,
+      ),
+    ).toEqual([]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        "---\nname: Doc Marker\non: workflow_dispatch\njobs:\n  test:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: |\n          if ! docker pull node:24; then exit 1; fi\n          until docker pull alpine:3.20; do sleep 1; done\n",
+      ),
+    ).toEqual([
+      "<memory>:9: node:24 is not pinned to a sha256 digest",
+      "<memory>:10: alpine:3.20 is not pinned to a sha256 digest",
+    ]);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        `---\nname: Doc Marker Pinned\non: workflow_dispatch\njobs:\n  test:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: |\n          if ! docker pull node:24@${digest}; then exit 1; fi\n`,
       ),
     ).toEqual([]);
     expect(
@@ -1348,6 +1370,19 @@ describe("workflow contracts", () => {
       { depName: "node", currentValue: "24-alpine", hasDigest: true },
       { depName: "node", currentValue: "24-alpine", hasDigest: true },
     ]);
+    const muslRules = (renovateConfig.packageRules ?? []).filter((rule) =>
+      rule.matchFileNames?.includes(".github/actions/verify-musl-native/action.yml"),
+    );
+    expect(
+      muslRules.some(
+        (rule) =>
+          rule.enabled === false &&
+          ["major", "minor", "patch"].every((type) => rule.matchUpdateTypes?.includes(type)),
+      ),
+    ).toBe(true);
+    expect(
+      muslRules.some((rule) => rule.enabled === true && rule.matchUpdateTypes?.includes("digest")),
+    ).toBe(true);
   });
 
   it("runs the dependency policy and the pin check in CI", async () => {
