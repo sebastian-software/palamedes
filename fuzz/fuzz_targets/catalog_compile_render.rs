@@ -63,11 +63,22 @@ fuzz_target!(|data: &[u8]| {
     let _ = palamedes::parse_catalog_for_compile(fcl_options);
 
     // SDK PO parse + compile + runtime compilation + JS module rendering pipeline.
-    if let Ok(parsed) = palamedes::sdk::parse_catalog(first, "de", "en")
-        && let Ok(compiled) = palamedes::sdk::compile_catalog(&[&parsed], "de", "en", &[])
-    {
-        let _ = palamedes::compile_runtime_catalog_messages(&compiled.messages);
-        let _ = palamedes::render_catalog_module(&compiled.messages, "de", "locales/de.po");
+    if let Ok(source_catalog) = palamedes::sdk::parse_catalog(first, "en", "en") {
+        if let Ok(compiled) = palamedes::sdk::compile_catalog(&[&source_catalog], "en", "en", &[]) {
+            let _ = palamedes::compile_runtime_catalog_messages(&compiled.messages);
+            let _ = palamedes::render_catalog_module(&compiled.messages, "en", "locales/en.po");
+        }
+        if let Ok(target_catalog) = palamedes::sdk::parse_catalog(second, "de", "en")
+            && let Ok(compiled) = palamedes::sdk::compile_catalog(
+                &[&source_catalog, &target_catalog],
+                "de",
+                "en",
+                &[],
+            )
+        {
+            let _ = palamedes::compile_runtime_catalog_messages(&compiled.messages);
+            let _ = palamedes::render_catalog_module(&compiled.messages, "de", "locales/de.po");
+        }
     }
 
     // Format conversion between PO and FCL.

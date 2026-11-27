@@ -1,6 +1,10 @@
 0
-locales: [en, de, es, fr]
+locales: [en, de, de-AT, pseudo]
 source-locale: en
+pseudo-locale: pseudo
+fallback-locales:
+  de-AT: [de, en]
 catalogs:
   - path: src/locales/{locale}
+    format: po
     include: [src]

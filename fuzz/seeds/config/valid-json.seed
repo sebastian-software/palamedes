@@ -1,8 +1,8 @@
 1
 {
-  "locales": ["en", "de", "fr"],
-  "sourceLocale": "en",
-  "fallbackLocales": { "de-AT": ["de", "en"] },
+  "locales": ["en", "de", "de-AT", "fr"],
+  "source-locale": "en",
+  "fallback-locales": { "de-AT": ["de", "en"] },
   "catalogs": [
     {
       "path": "src/locales/{locale}",
