@@ -501,5 +501,17 @@ describe("TanStack server catalog adapter", () => {
       expect(rendered).not.toContain("\u2028");
       expect(rendered).not.toContain("\u2029");
     });
+
+    it("forwards synchronous bootstrap transform errors through the response stream", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {
+        throw new Error("warn sink failed");
+      });
+      const response = await deliverDocument(
+        '<html><head></head><body><script type="module" src="/assets/main-abc.js"></script></body></html>',
+        false,
+      );
+
+      await expect(response.text()).rejects.toThrow("warn sink failed");
+    });
   });
 });

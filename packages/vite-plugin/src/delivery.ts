@@ -113,13 +113,35 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
         `Palamedes Vite catalog delivery has no generated import map for locale ${JSON.stringify(locale)} in ${path.join(clientDirectory, manifestName)}.`,
       );
     }
-    const mapName = current.importMaps[locale];
+    const mapName = Object.hasOwn(current.importMaps, locale)
+      ? current.importMaps[locale]
+      : undefined;
     if (!mapName) {
       throw new Error(
         `Palamedes Vite catalog delivery manifest ${path.join(clientDirectory, manifestName)} is missing the import map for locale ${JSON.stringify(locale)}.`,
       );
     }
+    if (
+      path.isAbsolute(mapName) ||
+      path.win32.isAbsolute(mapName) ||
+      mapName.split(/[\\/]/u).some((part) => part === ".." || part === ".")
+    ) {
+      throw new Error(
+        `Palamedes Vite catalog delivery manifest ${path.join(clientDirectory, manifestName)} has an invalid import-map path for locale ${JSON.stringify(locale)}.`,
+      );
+    }
     const mapPath = path.resolve(clientDirectory, mapName);
+    const relativeMapPath = path.relative(clientDirectory, mapPath);
+    if (
+      relativeMapPath === "" ||
+      relativeMapPath === ".." ||
+      relativeMapPath.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeMapPath)
+    ) {
+      throw new Error(
+        `Palamedes Vite catalog delivery manifest ${path.join(clientDirectory, manifestName)} has an invalid import-map path for locale ${JSON.stringify(locale)}.`,
+      );
+    }
     let importMapJson: string;
     try {
       importMapJson = readFileSync(mapPath, "utf8");
@@ -163,62 +185,79 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
     let injected = false;
     return new Transform({
       transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
-        const text = Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
-        if (injected) {
-          callback(null, text);
+        let output: string | undefined;
+        try {
+          const text = Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
+          if (injected) {
+            output = text;
+          } else {
+            buffered += text;
+            const headEnd = buffered.indexOf("</head>");
+            if (headEnd !== -1) {
+              const head = buffered.slice(0, headEnd);
+              const tail = buffered.slice(headEnd);
+              // A recovery link must start a new document and module graph, even
+              // when a mounted client router still owns delegated click handling.
+              const errorHtml =
+                transformOptions.errorHtml ??
+                '<main role="alert" data-palamedes-catalog-error><h1>This page is temporarily unavailable.</h1><p>Reload the page to try again.</p><a href="" target="_self">Reload page</a> <a href="/" target="_self">Go home</a></main>';
+              const preloads = binding ? modulePreloads(head, binding) : [];
+              // React Router imports initial routes before executing entry.client.
+              // This independent module observes the same dependency promises and can
+              // show ordinary host error markup even when that entry never executes.
+              // Development sidecars report their own catalog failures. General
+              // runtime errors and unrelated imports remain the host's responsibility.
+              const probe = binding
+                ? `<script${nonce}>globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")]=Promise.all(${escapeScriptData(JSON.stringify(preloads))}.map(url=>import(url)));globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(()=>{globalThis[Symbol.for("palamedes.document-catalogs-ready")]=true}).catch(async()=>{if(!document.body)await new Promise(resolve=>document.addEventListener("DOMContentLoaded",resolve,{once:true}));const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));});</script>`
+                : `<script${nonce}>const showPalamedesDevCatalogError=()=>{const render=()=>{if(globalThis[Symbol.for("palamedes.dev-catalog-error-rendered")])return;if(!document.body){document.addEventListener("DOMContentLoaded",render,{once:true});return;}globalThis[Symbol.for("palamedes.dev-catalog-error-rendered")]=true;const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));};render();};const handlePalamedesDevCatalogError=()=>{if(globalThis.__reactRouterContext)globalThis.__reactRouterContext.isSpaMode=true;showPalamedesDevCatalogError();};globalThis.addEventListener("palamedes:catalogError",handlePalamedesDevCatalogError);</script>`;
+              const links = preloads
+                .map((href) => `<link rel="modulepreload" href="${escapeAttribute(href)}">`)
+                .join("");
+              // The SSR framework may echo Vite's bare catalog preload hints before
+              // the locale import map exists. They resolve as `/#pmds/...` and make
+              // the browser request HTML as a JavaScript module. Replace them with
+              // the locale-bound asset preloads generated above.
+              let sanitizedHead = head.replace(
+                /<link\b[^>]*\brel=["']modulepreload["'][^>]*\bhref=["'][^"']*#pmds\/[^"]+["'][^>]*>\s*/giu,
+                "",
+              );
+              const htmlAttributes = {
+                ...transformOptions.htmlAttributes,
+                ...(transformOptions.lang === undefined ? {} : { lang: transformOptions.lang }),
+              };
+              if (Object.keys(htmlAttributes).length > 0) {
+                sanitizedHead = setHtmlAttributes(sanitizedHead, htmlAttributes);
+              }
+              output = `${sanitizedHead.replace(/<head\b[^>]*>/iu, (tag) => `${tag}${importMap}`)}${probe}${links}${tail}`;
+              injected = true;
+              buffered = "";
+            }
+          }
+        } catch (error) {
+          callback(error instanceof Error ? error : new Error(String(error)));
           return;
         }
-        buffered += text;
-        const headEnd = buffered.indexOf("</head>");
-        if (headEnd === -1) {
+        if (output !== undefined) {
+          callback(null, output);
+        } else {
           callback();
-          return;
         }
-        injected = true;
-        const head = buffered.slice(0, headEnd);
-        const tail = buffered.slice(headEnd);
-        // A recovery link must start a new document and module graph, even
-        // when a mounted client router still owns delegated click handling.
-        const errorHtml =
-          transformOptions.errorHtml ??
-          '<main role="alert" data-palamedes-catalog-error><h1>This page is temporarily unavailable.</h1><p>Reload the page to try again.</p><a href="" target="_self">Reload page</a> <a href="/" target="_self">Go home</a></main>';
-        const preloads = binding ? modulePreloads(head, binding) : [];
-        // React Router imports initial routes before executing entry.client.
-        // This independent module observes the same dependency promises and can
-        // show ordinary host error markup even when that entry never executes.
-        // Development sidecars report their own catalog failures. General
-        // runtime errors and unrelated imports remain the host's responsibility.
-        const probe = binding
-          ? `<script${nonce}>globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")]=Promise.all(${escapeScriptData(JSON.stringify(preloads))}.map(url=>import(url)));globalThis[Symbol.for("palamedes.document-catalogs-ready-promise")].then(()=>{globalThis[Symbol.for("palamedes.document-catalogs-ready")]=true}).catch(async()=>{if(!document.body)await new Promise(resolve=>document.addEventListener("DOMContentLoaded",resolve,{once:true}));const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));});</script>`
-          : `<script${nonce}>const showPalamedesDevCatalogError=()=>{const render=()=>{if(globalThis[Symbol.for("palamedes.dev-catalog-error-rendered")])return;if(!document.body){document.addEventListener("DOMContentLoaded",render,{once:true});return;}globalThis[Symbol.for("palamedes.dev-catalog-error-rendered")]=true;const template=document.createElement("template");template.innerHTML=${escapeScriptData(JSON.stringify(errorHtml))};document.body.replaceChildren(template.content.cloneNode(true));};render();};const handlePalamedesDevCatalogError=()=>{if(globalThis.__reactRouterContext)globalThis.__reactRouterContext.isSpaMode=true;showPalamedesDevCatalogError();};globalThis.addEventListener("palamedes:catalogError",handlePalamedesDevCatalogError);</script>`;
-        const links = preloads
-          .map((href) => `<link rel="modulepreload" href="${escapeAttribute(href)}">`)
-          .join("");
-        // The SSR framework may echo Vite's bare catalog preload hints before
-        // the locale import map exists. They resolve as `/#pmds/...` and make
-        // the browser request HTML as a JavaScript module. Replace them with
-        // the locale-bound asset preloads generated above.
-        let sanitizedHead = head.replace(
-          /<link\b[^>]*\brel=["']modulepreload["'][^>]*\bhref=["'][^"']*#pmds\/[^"]+["'][^>]*>\s*/giu,
-          "",
-        );
-        const htmlAttributes = {
-          ...transformOptions.htmlAttributes,
-          ...(transformOptions.lang === undefined ? {} : { lang: transformOptions.lang }),
-        };
-        if (Object.keys(htmlAttributes).length > 0) {
-          sanitizedHead = setHtmlAttributes(sanitizedHead, htmlAttributes);
-        }
-        callback(
-          null,
-          `${sanitizedHead.replace(/<head\b[^>]*>/iu, (tag) => `${tag}${importMap}`)}${probe}${links}${tail}`,
-        );
-        buffered = "";
       },
       flush(callback) {
-        buffered += decoder.end();
-        if (buffered) this.push(buffered);
-        callback();
+        let output = "";
+        try {
+          buffered += decoder.end();
+          output = buffered;
+          buffered = "";
+        } catch (error) {
+          callback(error instanceof Error ? error : new Error(String(error)));
+          return;
+        }
+        if (output) {
+          callback(null, output);
+        } else {
+          callback();
+        }
       },
     });
   }
@@ -316,8 +355,9 @@ function modulePreloads(head: string, binding: ViteCatalogBinding): string[] {
       tag.match(/\bhref=["']([^"']+)["']/iu)?.[1] ?? tag.match(/\bsrc=["']([^"']+)["']/iu)?.[1];
     if (!href) continue;
     const key = assetKey(href);
+    if (!Object.hasOwn(binding.chunkImports, key)) continue;
     for (const bare of binding.chunkImports[key] ?? []) {
-      const asset = binding.imports[bare];
+      const asset = Object.hasOwn(binding.imports, bare) ? binding.imports[bare] : undefined;
       if (asset) preloads.add(asset);
     }
   }
@@ -499,10 +539,13 @@ function transformStaticViteDocument(
   const maps: Record<string, { imports: Readonly<Record<string, string>> }> = Object.create(null);
   const probes: Record<string, string[]> = Object.create(null);
   for (const locale of manifest.locales) {
-    const mapName = manifest.importMaps[locale];
+    const mapName = Object.hasOwn(manifest.importMaps, locale)
+      ? manifest.importMaps[locale]
+      : undefined;
     if (
       !mapName ||
       path.isAbsolute(mapName) ||
+      path.win32.isAbsolute(mapName) ||
       mapName.split(/[\\/]/u).some((part) => part === ".." || part === ".")
     ) {
       throw new Error("Static catalog manifest has an invalid import-map path.");

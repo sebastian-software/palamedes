@@ -184,13 +184,26 @@ function createTanStackBootstrapGateTransform(options: {
 
   return new Transform({
     transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
-      buffered += Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
-      callback(null, flushMarkup(false));
+      let output: string;
+      try {
+        buffered += Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
+        output = flushMarkup(false);
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
+      callback(null, output);
     },
     flush(callback) {
-      buffered += decoder.end();
-      const output = flushMarkup(true);
-      if (gatedEntries === 0 && unmatchedAssetScripts > 0) reportBootstrapDrift();
+      let output: string;
+      try {
+        buffered += decoder.end();
+        output = flushMarkup(true);
+        if (gatedEntries === 0 && unmatchedAssetScripts > 0) reportBootstrapDrift();
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
       callback(null, output);
     },
   });

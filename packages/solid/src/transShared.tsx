@@ -103,7 +103,7 @@ export function createSolidMessageRuntime(
         return [value];
       },
       tag(name: string, children: Element[]) {
-        const component = components[name];
+        const component = Object.hasOwn(components, name) ? components[name] : undefined;
         if (component !== undefined) {
           return [
             createComponent(component, {

@@ -103,6 +103,22 @@ describe("@palamedes/solid", () => {
     expect(withoutHydrationMarkers(html)).toBe("Hallo Ada, <strong>willkommen</strong>");
   });
 
+  it("ignores Object.prototype tag names instead of invoking prototype methods", () => {
+    const protoTags: CompiledMessage = (_values, runtime) =>
+      runtime.join(
+        runtime.tag("toString", runtime.join("safe")),
+        "-",
+        runtime.tag("constructor", runtime.join("text")),
+      );
+    const i18n = createI18n({ locale: "en" });
+    i18n.load("en", defineCompiledCatalog({ protoTags }));
+    setServerI18nGetter(() => i18n);
+
+    const html = renderToString(() => <Trans id="protoTags" components={{}} />);
+
+    expect(withoutHydrationMarkers(html)).toBe("safe-text");
+  });
+
   it("renders generated messages through the parser-free production entry", () => {
     const greeting: ParserFreeMessage = (values, runtime) =>
       runtime.join("Hallo ", runtime.value(values, "name"));

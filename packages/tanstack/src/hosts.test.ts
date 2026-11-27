@@ -307,6 +307,31 @@ describe("catalog-backed request middleware", () => {
     ]);
   });
 
+  it("retries catalog delivery initialization after a transient startup failure", async () => {
+    const { createTanStackCatalogResponseDelivery } = await import("./server");
+    const failure = new Error("transient manifest read failure");
+    vi.mocked(createTanStackCatalogResponseDelivery).mockImplementationOnce(() => {
+      throw failure;
+    });
+    const run = handler(createTanStackServerI18nRequestMiddleware({ resolveLocale: () => "de" }));
+    const request = new Request("https://example.test/retry");
+
+    await expect(
+      run({ handlerType: "router", request, next: async () => new Response("ok") }),
+    ).rejects.toBe(failure);
+
+    const response = (await run({
+      handlerType: "router",
+      request,
+      next: async () => new Response("ok"),
+    })) as Response;
+    expect(await response.text()).toBe("ok");
+    expect(createTanStackCatalogResponseDelivery).toHaveBeenCalledTimes(2);
+    expect(serverModule.delivered).toEqual([
+      { locale: "de", url: "https://example.test/retry", context: undefined },
+    ]);
+  });
+
   it("rejects the v1 positional arguments and resolveOptions with migration errors", () => {
     expect(() =>
       // @ts-expect-error JavaScript callers of the v1 positional form get the migration error.
