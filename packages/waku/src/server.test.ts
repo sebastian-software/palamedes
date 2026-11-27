@@ -318,4 +318,16 @@ throw err;
       ),
     ).toBe(input);
   });
+
+  it("forwards synchronous bootstrap transform errors through the response stream", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("waku warn sink failed");
+    });
+    const response = await driftHarness(
+      '<script id="_R_">startWaku("/assets/main-abc.js")</script>',
+      false,
+    );
+
+    await expect(response.text()).rejects.toThrow("waku warn sink failed");
+  });
 });

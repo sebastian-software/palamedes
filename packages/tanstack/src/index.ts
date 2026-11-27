@@ -100,9 +100,14 @@ export function createTanStackServerI18nRequestMiddleware(
 
   const getDelivery = () => {
     if (catalogDelivery === false) return;
-    deliveryPromise ??= import("./server").then(({ createTanStackCatalogResponseDelivery }) =>
-      createTanStackCatalogResponseDelivery(catalogDelivery),
-    );
+    deliveryPromise ??= import("./server")
+      .then(({ createTanStackCatalogResponseDelivery }) =>
+        createTanStackCatalogResponseDelivery(catalogDelivery),
+      )
+      .catch((error: unknown) => {
+        deliveryPromise = undefined;
+        throw error;
+      });
     return deliveryPromise;
   };
 

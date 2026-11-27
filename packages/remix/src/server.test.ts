@@ -834,6 +834,16 @@ describe("createRemixI18nServer", () => {
           new Request("https://example.test/assets/__palamedes/catalog/fr.js"),
         )?.status,
       ).toBe(404);
+      expect(
+        remixI18n.serveClientCatalogAsset(
+          new Request("https://example.test/assets/__palamedes/catalog/%E0%A4%A.js"),
+        )?.status,
+      ).toBe(400);
+      expect(
+        remixI18n.serveClientCatalogAsset(
+          new Request("https://example.test/assets/__palamedes/catalog/%ZZ.js"),
+        )?.status,
+      ).toBe(400);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }

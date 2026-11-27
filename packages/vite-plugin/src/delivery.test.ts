@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Transform } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import { runInNewContext } from "node:vm";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -275,6 +276,89 @@ describe("Vite catalog delivery", () => {
     await expect(collect(transform, "<html><head></head><body>prod</body></html>")).resolves.toBe(
       "<html><head></head><body>prod</body></html>",
     );
+  });
+
+  it("ignores Object.prototype keys in chunkImports and imports during module preload extraction", async () => {
+    const clientDirectory = await createFixture();
+    await writeFile(
+      path.join(clientDirectory, "palamedes-split-manifest.json"),
+      JSON.stringify({
+        locales: ["de"],
+        importMaps: { de: "palamedes-importmap.de.json" },
+        chunkImports: { "assets/route.js": ["#pmds/route", "toString", "constructor"] },
+      }),
+    );
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const binding = delivery.getLocaleBinding("de");
+    const html = await collect(
+      delivery.createDocumentTransform(binding),
+      '<html><head><link rel="modulepreload" href="/constructor"><script type="module" src="/toString"></script><script type="module" src="/assets/route.js"></script></head><body>app</body></html>',
+    );
+
+    expect(html).toContain('Promise.all(["/app/assets/route.de.js"].map(url=>import(url)))');
+    expect(html).toContain('<link rel="modulepreload" href="/app/assets/route.de.js">');
+  });
+
+  it.each([
+    "../outside.json",
+    "assets/../../outside.json",
+    "..\\outside.json",
+    "./palamedes-importmap.de.json",
+    "/etc/passwd",
+    "C:\\outside.json",
+  ])("rejects manifest import-map path outside clientDirectory: %s", async (maliciousPath) => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), "palamedes-vite-delivery-contain-"));
+    fixtureDirectories.push(parent);
+    const clientDirectory = path.join(parent, "client");
+    await mkdir(clientDirectory, { recursive: true });
+    await writeFile(
+      path.join(parent, "outside.json"),
+      JSON.stringify({ imports: { "#pmds/leak": "/assets/leak.js" } }),
+    );
+    await writeFile(
+      path.join(clientDirectory, "palamedes-split-manifest.json"),
+      JSON.stringify({
+        locales: ["de"],
+        importMaps: { de: maliciousPath },
+        chunkImports: {},
+      }),
+    );
+
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    expect(() => delivery.getLocaleBinding("de")).toThrow(/invalid import-map path/u);
+  });
+
+  it("forwards synchronous errors in document transform and flush through stream error events", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const brokenBinding = {
+      locale: "de",
+      importMapJson: '{"imports":{}}',
+      imports: {},
+      get chunkImports(): Readonly<Record<string, readonly string[]>> {
+        throw new Error("chunkImports getter exploded");
+      },
+    };
+    const transform = delivery.createDocumentTransform(brokenBinding);
+
+    await expect(
+      collect(
+        transform,
+        '<html><head><script type="module" src="/assets/route.js"></script></head><body>app</body></html>',
+      ),
+    ).rejects.toThrow("chunkImports getter exploded");
+
+    const endSpy = vi.spyOn(StringDecoder.prototype, "end").mockImplementationOnce(() => {
+      throw new Error("decoder end exploded");
+    });
+    try {
+      const flushTransform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));
+      await expect(collect(flushTransform, "<html><body>no head")).rejects.toThrow(
+        "decoder end exploded",
+      );
+    } finally {
+      endSpy.mockRestore();
+    }
   });
 });
 

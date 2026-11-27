@@ -374,6 +374,8 @@ function renderDocument({
   return new Promise((resolve, reject) => {
     let statusCode = responseStatusCode;
     let shellRendered = false;
+    let streamFinished = false;
+    let abortedOnClose = false;
     const userAgent = request.headers.get("user-agent");
     // Bots and SPA Mode renders wait for all content before responding.
     const readyOption: keyof RenderToPipeableStreamOptions =
@@ -383,6 +385,10 @@ function renderDocument({
       () => abort(),
       streamTimeout + 1000,
     );
+    const clearStreamTimeout = () => {
+      clearTimeout(timeoutId);
+      timeoutId = undefined;
+    };
 
     const { pipe, abort } = renderToPipeableStream(
       // `useDocumentLocale()` and `useCatalogAvailable()` read the document
@@ -402,26 +408,37 @@ function renderDocument({
           shellRendered = true;
           const body = new PassThrough({
             final(callback) {
-              clearTimeout(timeoutId);
-              timeoutId = undefined;
+              streamFinished = true;
+              clearStreamTimeout();
               callback();
             },
           });
+          body.once("close", () => {
+            clearStreamTimeout();
+            if (!streamFinished) {
+              abortedOnClose = true;
+              if (!documentTransform.destroyed) documentTransform.destroy();
+              abort();
+            }
+          });
           const stream = createReadableStreamFromReadable(body);
           responseHeaders.set("Content-Type", "text/html");
+          documentTransform.on("error", (error) => {
+            body.destroy(error);
+          });
           documentTransform.pipe(body);
           pipe(documentTransform);
           resolve(new Response(stream, { headers: responseHeaders, status: statusCode }));
         },
         onShellError(error: unknown) {
-          clearTimeout(timeoutId);
+          clearStreamTimeout();
           reject(error);
         },
         onError(error: unknown) {
           statusCode = 500;
           // Shell errors reject and React Router logs them; log streaming
           // errors from inside the shell here.
-          if (shellRendered) console.error(error);
+          if (shellRendered && !abortedOnClose) console.error(error);
         },
       },
     );
