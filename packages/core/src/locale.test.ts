@@ -972,6 +972,7 @@ describe("security hardening", () => {
       ["/\\/evil.example", "/evil.example"],
       ["  //evil.example", "/evil.example"],
       ["/ about", "/ about"],
+      [" team", "/ team"],
       ["@evil.example", "/@evil.example"],
       ["/@evil.example", "/@evil.example"],
       [":8080/evil", "/:8080/evil"],
@@ -1168,6 +1169,17 @@ describe("security hardening", () => {
       const overlongExtendedGerman = `de-DE-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")}`;
       expect(regional.preferredLocale(overlongExtendedGerman)).toBe("de-DE");
       expect(parseAcceptLanguage(overlongExtendedGerman)).toStrictEqual(["de-de", "de"]);
+
+      const overlongVariantGerman = `de-DE-${Array.from({ length: 21 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
+      expect(regional.preferredLocale(overlongVariantGerman)).toBe("de-DE");
+      expect(regional.preferredLocale(`${overlongVariantGerman};q=0, de-DE`)).toBe("de-DE");
+      expect(parseAcceptLanguage(overlongVariantGerman)).toStrictEqual(["de-de", "de"]);
+
+      const regionalWithVariant = defineLocaleControls({
+        locales: ["en", "fr", "de-DE", "de-DE-1996"] as const,
+        defaultLocale: "en",
+      });
+      expect(regionalWithVariant.preferredLocale(`${overlongVariantGerman}, fr`)).toBe("fr");
 
       const ambiguousRegional = defineLocaleControls({
         locales: ["en", "fr", "de-DE", "de-DE-u-co-phonebk"] as const,

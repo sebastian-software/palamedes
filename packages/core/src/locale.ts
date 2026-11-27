@@ -203,7 +203,16 @@ function isValidTransformedLanguageId(
   );
 }
 
-function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number): string | null {
+type ReducedUnicodeTag = {
+  tag: string;
+  matchMode: "canonical" | "compatible";
+};
+
+function extractWellFormedUnicodeBaseTag(
+  lowerTag: string,
+  maxTagLength: number,
+  allowCompatibleFallback: boolean,
+): ReducedUnicodeTag | null {
   const subtags = lowerTag.split("-");
   const parsedBase = parseUnicodeLanguageId(subtags, 0);
   if (parsedBase === null) {
@@ -313,8 +322,19 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number)
 
   const baseTag = subtags.slice(0, parsedBase.endIndex).join("-");
   const reducedTag = hasPosixVariant ? `${baseTag}-u-va-posix` : baseTag;
-  return reducedTag.length <= maxTagLength && languageTag(reducedTag, maxTagLength)
-    ? reducedTag
+  if (reducedTag.length <= maxTagLength) {
+    return languageTag(reducedTag, maxTagLength)
+      ? { tag: reducedTag, matchMode: "canonical" }
+      : null;
+  }
+
+  if (!allowCompatibleFallback) {
+    return null;
+  }
+
+  const prefixTag = subtags.slice(0, parsedBase.variantsStart).join("-");
+  return prefixTag.length <= maxTagLength && languageTag(prefixTag, maxTagLength)
+    ? { tag: prefixTag, matchMode: "compatible" }
     : null;
 }
 
@@ -326,7 +346,11 @@ function languagePreferences(
     return [];
   }
 
-  const preferences: Array<{ quality: number; tag: string; reduced: boolean }> = [];
+  const preferences: Array<{
+    quality: number;
+    tag: string;
+    matchMode: "full" | "canonical" | "compatible";
+  }> = [];
   let entryCount = 0;
   let start = 0;
 
@@ -367,12 +391,12 @@ function languagePreferences(
 
     const lowerTag = rawTag.toLowerCase();
     if (rawTag.length > maxTagLength) {
-      // Preserve well-formed over-budget tags by their canonical base tag so
-      // both positive preferences and q=0 exclusions keep matching without
-      // passing overlong strings to Intl.Locale.
-      const baseTag = extractWellFormedUnicodeBaseTag(lowerTag, maxTagLength);
-      if (baseTag) {
-        preferences.push({ quality, tag: baseTag, reduced: true });
+      // Preserve well-formed over-budget tags by their canonical base tag (or
+      // bounded language/script/region fallback for positive preferences with
+      // many variants) without passing overlong strings to Intl.Locale.
+      const reduced = extractWellFormedUnicodeBaseTag(lowerTag, maxTagLength, quality > 0);
+      if (reduced) {
+        preferences.push({ quality, tag: reduced.tag, matchMode: reduced.matchMode });
       }
       continue;
     }
@@ -380,7 +404,7 @@ function languagePreferences(
     preferences.push({
       quality,
       tag: lowerTag,
-      reduced: false,
+      matchMode: "full",
     });
   }
 
@@ -592,8 +616,8 @@ function normalizeCanonicalPath(pathname: string): string {
     throw new TypeError("defineLocaleControls: pathname must not contain control characters.");
   }
 
-  const trimmed = pathname.trimStart().replace(/^[/\\]+/, "");
-  return `/${trimmed}`;
+  const normalized = pathname.replace(/^\s*[/\\]+/, "");
+  return `/${normalized}`;
 }
 
 function normalizeSearch(search: string | null | undefined): string {
@@ -956,14 +980,17 @@ export function defineLocaleControls<TLocale extends string>(
     const unique = (matches: typeof languageLocales): TLocale | undefined =>
       matches.length === 1 ? matches[0]?.locale : undefined;
 
-    for (const { tag, quality, reduced } of preferences) {
+    for (const { tag, quality, matchMode } of preferences) {
       if (quality <= 0) continue;
       const parsed = languageTag(tag, maxRequestTagLength);
       const canonicalTag = parsed?.baseName.toLowerCase() ?? tag;
       const canonicalSpecificity = canonicalTag.split("-").length;
       const available = languageLocales.filter(({ lower, maximized: supported }) => {
         const specificity =
-          lower === canonicalTag || lower.startsWith(`${canonicalTag}-`) ? canonicalSpecificity : 0;
+          matchMode !== "compatible" &&
+          (lower === canonicalTag || lower.startsWith(`${canonicalTag}-`))
+            ? canonicalSpecificity
+            : 0;
         return exclusions.every(
           ({ tag: excludedTag, specificity: excludedSpecificity, maximized: excluded }) => {
             // A specific accepted range overrides a broader rejection, including
@@ -977,15 +1004,17 @@ export function defineLocaleControls<TLocale extends string>(
           },
         );
       });
-      const exact = reduced
-        ? undefined
-        : unique(available.filter(({ locale }) => locale.toLowerCase() === tag));
+      const exact =
+        matchMode === "full"
+          ? unique(available.filter(({ locale }) => locale.toLowerCase() === tag))
+          : undefined;
       if (exact) return exact;
 
       if (!parsed) continue;
-      const canonical = unique(
-        available.filter((candidate) => candidate.parsed?.baseName === parsed.baseName),
-      );
+      const canonical =
+        matchMode !== "compatible"
+          ? unique(available.filter((candidate) => candidate.parsed?.baseName === parsed.baseName))
+          : undefined;
       if (canonical) return canonical;
 
       // Likely subtags supply missing fields, but never replace an explicit
