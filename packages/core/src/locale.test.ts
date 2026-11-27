@@ -972,6 +972,7 @@ describe("security hardening", () => {
       ["/\\/evil.example", "/evil.example"],
       ["  //evil.example", "/evil.example"],
       ["/ about", "/ about"],
+      [" /docs", "/ /docs"],
       [" team", "/ team"],
       ["@evil.example", "/@evil.example"],
       ["/@evil.example", "/@evil.example"],
@@ -1180,6 +1181,14 @@ describe("security hardening", () => {
         defaultLocale: "en",
       });
       expect(regionalWithVariant.preferredLocale(`${overlongVariantGerman}, fr`)).toBe("fr");
+
+      const armenian = defineLocaleControls({
+        locales: ["en", "hy", "hyw"] as const,
+        defaultLocale: "en",
+      });
+      const overlongWesternArmenian = `hy-arevmda-${Array.from({ length: 21 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
+      expect(armenian.preferredLocale(overlongWesternArmenian)).toBe("hyw");
+      expect(armenian.preferredLocale(`${overlongWesternArmenian};q=0, hyw`)).toBe("hyw");
 
       const ambiguousRegional = defineLocaleControls({
         locales: ["en", "fr", "de-DE", "de-DE-u-co-phonebk"] as const,

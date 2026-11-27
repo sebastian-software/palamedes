@@ -208,6 +208,46 @@ type ReducedUnicodeTag = {
   matchMode: "canonical" | "compatible";
 };
 
+function canonicalizeOverBudgetPrefix(
+  subtags: readonly string[],
+  parsed: ParsedUnicodeLanguageId,
+  maxTagLength: number,
+): string | null {
+  const initialPrefix = subtags.slice(0, parsed.variantsStart).join("-");
+  let current = languageTag(initialPrefix, maxTagLength);
+  if (!current) {
+    return null;
+  }
+
+  let currentPrefix = [current.language, current.script, current.region].filter(Boolean).join("-");
+  const sortedVariants = subtags.slice(parsed.variantsStart, parsed.endIndex).sort();
+  let index = 0;
+  while (index < sortedVariants.length) {
+    let chunk = currentPrefix;
+    let added = 0;
+    while (index < sortedVariants.length) {
+      const next = `${chunk}-${sortedVariants[index]!}`;
+      if (next.length > maxTagLength) {
+        break;
+      }
+      chunk = next;
+      index += 1;
+      added += 1;
+    }
+    if (added === 0) {
+      return null;
+    }
+    const parsedChunk = languageTag(chunk, maxTagLength);
+    if (!parsedChunk) {
+      return null;
+    }
+    current = parsedChunk;
+    currentPrefix = [current.language, current.script, current.region].filter(Boolean).join("-");
+  }
+
+  return currentPrefix.toLowerCase();
+}
+
 function extractWellFormedUnicodeBaseTag(
   lowerTag: string,
   maxTagLength: number,
@@ -332,10 +372,8 @@ function extractWellFormedUnicodeBaseTag(
     return null;
   }
 
-  const prefixTag = subtags.slice(0, parsedBase.variantsStart).join("-");
-  return prefixTag.length <= maxTagLength && languageTag(prefixTag, maxTagLength)
-    ? { tag: prefixTag, matchMode: "compatible" }
-    : null;
+  const prefixTag = canonicalizeOverBudgetPrefix(subtags, parsedBase, maxTagLength);
+  return prefixTag ? { tag: prefixTag, matchMode: "compatible" } : null;
 }
 
 function languagePreferences(
@@ -616,7 +654,9 @@ function normalizeCanonicalPath(pathname: string): string {
     throw new TypeError("defineLocaleControls: pathname must not contain control characters.");
   }
 
-  const normalized = pathname.replace(/^\s*[/\\]+/, "");
+  const normalized = /^\s*(?:[/\\]{2,}|\\)/.test(pathname)
+    ? pathname.replace(/^\s*[/\\]+/, "")
+    : pathname.replace(/^[/\\]+/, "");
   return `/${normalized}`;
 }
 
