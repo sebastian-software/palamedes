@@ -108,7 +108,6 @@ const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const COOKIE_VALUE_PATTERN = /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/;
 const HTTP_PROTOCOL_PATTERN = /^https?:?$/i;
 const DNS_LABEL_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
-const BCP47_STRUCTURE_PATTERN = /^(?:[A-Za-z]{2,3}|[A-Za-z]{5,8})(?:-[A-Za-z0-9]{1,8})*$/;
 const MAX_ACCEPT_LANGUAGE_LENGTH = 2048;
 const MAX_ACCEPT_LANGUAGE_ENTRIES = 32;
 const MAX_LANGUAGE_TAG_LENGTH = 64;
@@ -137,6 +136,76 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   }
 
   return null;
+}
+
+function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
+  const subtags = lowerTag.split("-");
+  const language = subtags[0];
+  if (!language || !/^(?:[a-z]{2,3}|[a-z]{5,8})$/.test(language)) {
+    return false;
+  }
+
+  let index = 1;
+
+  if (index < subtags.length && /^[a-z]{4}$/.test(subtags[index]!)) {
+    index += 1;
+  }
+
+  if (index < subtags.length && /^(?:[a-z]{2}|[0-9]{3})$/.test(subtags[index]!)) {
+    index += 1;
+  }
+
+  const seenVariants = new Set<string>();
+  while (index < subtags.length && /^(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3})$/.test(subtags[index]!)) {
+    const variant = subtags[index]!;
+    if (seenVariants.has(variant)) {
+      return false;
+    }
+    seenVariants.add(variant);
+    index += 1;
+  }
+
+  const seenSingletons = new Set<string>();
+  while (index < subtags.length && /^[0-9a-wy-z]$/.test(subtags[index]!)) {
+    const singleton = subtags[index]!;
+    if (seenSingletons.has(singleton)) {
+      return false;
+    }
+    seenSingletons.add(singleton);
+    index += 1;
+
+    let extCount = 0;
+    while (index < subtags.length) {
+      const part = subtags[index]!;
+      if (part.length === 1) {
+        break;
+      }
+      if (!/^[a-z0-9]{2,8}$/.test(part)) {
+        return false;
+      }
+      extCount += 1;
+      index += 1;
+    }
+
+    if (extCount === 0) {
+      return false;
+    }
+  }
+
+  if (index < subtags.length && subtags[index] === "x") {
+    index += 1;
+    if (index >= subtags.length) {
+      return false;
+    }
+    while (index < subtags.length) {
+      if (!/^[a-z0-9]{1,8}$/.test(subtags[index]!)) {
+        return false;
+      }
+      index += 1;
+    }
+  }
+
+  return index === subtags.length;
 }
 
 function languagePreferences(
@@ -186,10 +255,11 @@ function languagePreferences(
       }
     }
 
+    const lowerTag = rawTag.toLowerCase();
     if (rawTag.length > maxTagLength) {
       // Structurally invalid tags can never match a configured locale; only fail
-      // closed when an over-budget q=0 exclusion could plausibly be a valid tag.
-      if (quality === 0 && BCP47_STRUCTURE_PATTERN.test(rawTag)) {
+      // closed when an over-budget q=0 exclusion is a well-formed locale tag.
+      if (quality === 0 && isWellFormedUnicodeLocaleTag(lowerTag)) {
         return [];
       }
       continue;
@@ -197,7 +267,7 @@ function languagePreferences(
 
     preferences.push({
       quality,
-      tag: rawTag.toLowerCase(),
+      tag: lowerTag,
     });
   }
 
@@ -295,11 +365,48 @@ type ParsedRequestHost = {
   hostname: string;
   trailingDot: boolean;
   port: string | null;
+  isDns: boolean;
 };
+
+function parseRequestPort(rawPort: string | undefined): string | null | undefined {
+  if (rawPort === undefined) {
+    return null;
+  }
+
+  const portNumber = Number(rawPort);
+  if (portNumber < 1 || portNumber > 65_535) {
+    return undefined;
+  }
+
+  return String(portNumber);
+}
 
 function parseRequestHost(host: string | null | undefined): ParsedRequestHost | null {
   if (typeof host !== "string") {
     return null;
+  }
+
+  if (host.startsWith("[")) {
+    const ipv6Match = /^(\[[0-9A-Fa-f:.]+\])(?::([0-9]{1,5}))?$/.exec(host);
+    if (!ipv6Match) {
+      return null;
+    }
+
+    const bracketedHost = ipv6Match[1];
+    const ipv6Port = parseRequestPort(ipv6Match[2]);
+    if (!bracketedHost || ipv6Port === undefined) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(`http://${bracketedHost}/`);
+      if (!parsed.hostname.startsWith("[") || !parsed.hostname.endsWith("]")) {
+        return null;
+      }
+      return { hostname: parsed.hostname, trailingDot: false, port: ipv6Port, isDns: false };
+    } catch {
+      return null;
+    }
   }
 
   const match = /^([^:]+)(?::([0-9]{1,5}))?$/.exec(host);
@@ -308,8 +415,8 @@ function parseRequestHost(host: string | null | undefined): ParsedRequestHost | 
   }
 
   const rawHostname = match[1];
-  const rawPort = match[2];
-  if (!rawHostname) {
+  const port = parseRequestPort(match[2]);
+  if (!rawHostname || port === undefined) {
     return null;
   }
 
@@ -319,15 +426,7 @@ function parseRequestHost(host: string | null | undefined): ParsedRequestHost | 
     return null;
   }
 
-  if (rawPort !== undefined) {
-    const portNumber = Number(rawPort);
-    if (portNumber < 1 || portNumber > 65_535) {
-      return null;
-    }
-    return { hostname, trailingDot, port: String(portNumber) };
-  }
-
-  return { hostname, trailingDot, port: null };
+  return { hostname, trailingDot, port, isDns: true };
 }
 
 function stripPort(host: string | null | undefined): string | null {
@@ -808,7 +907,10 @@ export function defineLocaleControls<TLocale extends string>(
   /** The leftmost DNS label of the host, if it is a supported locale. */
   const extractSubdomainLocale = (requestHost: string | null | undefined): TLocale | null => {
     const parsedHost = parseRequestHost(requestHost);
-    const firstLabel = parsedHost?.hostname.split(".")[0]?.toLowerCase();
+    if (!parsedHost?.isDns) {
+      return null;
+    }
+    const firstLabel = parsedHost.hostname.split(".")[0]?.toLowerCase();
     return isLocale(firstLabel) ? (firstLabel as TLocale) : null;
   };
 
@@ -822,7 +924,7 @@ export function defineLocaleControls<TLocale extends string>(
     locale: TLocale,
   ): string | null => {
     const parsedHost = parseRequestHost(requestHost);
-    if (!parsedHost) {
+    if (!parsedHost?.isDns) {
       return null;
     }
 
@@ -848,8 +950,11 @@ export function defineLocaleControls<TLocale extends string>(
    */
   const extractTldLocale = (requestHost: string | null | undefined): TLocale | null => {
     const parsedHost = parseRequestHost(requestHost);
-    const parts = parsedHost?.hostname.split(".");
-    if (!parts || parts.length < 2) {
+    if (!parsedHost?.isDns) {
+      return null;
+    }
+    const parts = parsedHost.hostname.split(".");
+    if (parts.length < 2) {
       return null;
     }
 
@@ -882,7 +987,7 @@ export function defineLocaleControls<TLocale extends string>(
    */
   const swapTldLabel = (requestHost: string | null | undefined, locale: TLocale): string | null => {
     const parsedHost = parseRequestHost(requestHost);
-    if (!parsedHost) {
+    if (!parsedHost?.isDns) {
       return null;
     }
 
@@ -1069,7 +1174,7 @@ export function defineLocaleControls<TLocale extends string>(
     }
 
     const hostWithPort =
-      requestPort && !canonicalHost.includes(":")
+      requestPort && !/:\d+$/.test(canonicalHost)
         ? `${canonicalHost}:${requestPort}`
         : canonicalHost;
 

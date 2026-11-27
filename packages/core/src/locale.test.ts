@@ -715,7 +715,12 @@ describe("security hardening", () => {
       "de.example.test:99999",
       "de.example.test:abc",
       "de.example.test:",
-      "[::1]:3000",
+      "[::1::2]:3000",
+      "[::1]/evil",
+      "[::1]@evil",
+      "[::1]:0",
+      "[::1]:65536",
+      "[invalid]",
     ];
 
     it.each(malformedHosts)(
@@ -820,6 +825,48 @@ describe("security hardening", () => {
           requestHost: "localhost:3000",
         }),
       ).toBe("//de.localhost:3000/docs");
+    });
+
+    it("preserves valid IPv6 request hosts in map mode while keeping subdomain and tld modes DNS-only", () => {
+      expect(
+        mappedWithDefault.canonicalUrl({
+          locale: "en",
+          pathname: "/docs",
+          requestHost: "[::1]",
+        }),
+      ).toBe("//[::1]/en/docs");
+
+      expect(
+        mappedWithDefault.canonicalUrl({
+          locale: "en",
+          pathname: "/docs",
+          requestHost: "[::1]:3000",
+        }),
+      ).toBe("//[::1]:3000/en/docs");
+
+      expect(
+        mappedWithDefault.canonicalUrl({
+          locale: "de",
+          pathname: "/docs",
+          requestHost: "[::1]:3000",
+        }),
+      ).toBe("//de.example.test:3000/de/docs");
+
+      expect(
+        subdomained.canonicalUrl({
+          locale: "de",
+          pathname: "/checkout",
+          requestHost: "[::1]:3000",
+        }),
+      ).toBe("/checkout");
+
+      expect(
+        tlded.canonicalUrl({
+          locale: "fr",
+          pathname: "/checkout",
+          requestHost: "[::1]:3000",
+        }),
+      ).toBe("/checkout");
     });
 
     it("preserves fully qualified DNS hosts with a single trailing root dot and leading-zero ports", () => {
@@ -1010,6 +1057,13 @@ describe("security hardening", () => {
       const numericPrimaryOverBudgetExclusion = `de-AT,123-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(numericPrimaryOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(numericPrimaryOverBudgetExclusion)).toStrictEqual(["de-at", "de"]);
+
+      const duplicateVariantOverBudgetExclusion = `de-AT,de-${Array.from({ length: 24 }, () => "abcde").join("-")};q=0`;
+      expect(controls.preferredLocale(duplicateVariantOverBudgetExclusion)).toBe("de");
+      expect(parseAcceptLanguage(duplicateVariantOverBudgetExclusion)).toStrictEqual([
+        "de-at",
+        "de",
+      ]);
     });
 
     it("keeps exact, canonical, and extension-insensitive matching working for short and long configured locales", () => {
