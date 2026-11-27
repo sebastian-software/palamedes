@@ -96,8 +96,9 @@ The plugin answers with exactly one manifest event:
 }
 ```
 
-Namespaces and commands must be lowercase kebab-case. The six built-in feature
-commands are `extract`, `lint`, `audit`, `report`, `catalog`, and `version`.
+Namespaces and commands must be lowercase kebab-case. The seven built-in feature
+commands are `extract`, `lint`, `audit`, `report`, `catalog`, `version`, and
+`telemetry`.
 Plugin namespaces cannot use those tokens, Clap's `help` subcommand, or any
 visible or hidden alias of a root command; they also cannot collide with another
 configured plugin.

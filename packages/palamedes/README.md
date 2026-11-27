@@ -45,7 +45,7 @@ host framework.
 
 For the real starting path, use:
 
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [First working translation](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 
 The reserved `palamedes` binary does not run extraction or another command yet.
 Its non-zero exit status prevents `npx palamedes extract` from reporting a

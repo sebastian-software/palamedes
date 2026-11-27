@@ -200,7 +200,7 @@ application code; author messages with `@palamedes/solid/macro` and
 
 ## Related Docs
 
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [First working translation](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 - [Example matrix](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)
 - [Proof and benchmarks](https://github.com/sebastian-software/palamedes/blob/main/docs/proof-and-benchmarks.md)
 

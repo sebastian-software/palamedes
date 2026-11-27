@@ -132,7 +132,7 @@ An entry that needs its own render code can use the lower-level functions:
 
 ## Documentation
 
-See the [React Router Framework Mode guide](../../docs/api/react-router.md) and
+See the [React Router Framework Mode guide](https://github.com/sebastian-software/palamedes/blob/main/docs/api/react-router.md) and
 the four `examples/react-router-*` applications.
 
 <!-- ferramenta-family:start -->

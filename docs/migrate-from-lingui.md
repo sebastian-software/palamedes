@@ -374,6 +374,6 @@ familiar, but the stack under it gets easier to understand and easier to trust.
 ## Next Steps
 
 - [Set up or migrate with an agent skill](./agent-skill.md)
-- [First working translation in 5 minutes](./first-working-translation.md)
+- [First working translation](./first-working-translation.md)
 - [Palamedes vs. Lingui](./comparison-with-lingui.md)
 - [Proof, benchmarks, and current maturity](./proof-and-benchmarks.md)

@@ -194,8 +194,8 @@ Fix:
 - Check [Platform support](./platform-support.md) for the published native
   targets, unsupported Node processes, and the matching recovery path.
 - If running in Alpine or another musl Linux environment, confirm the package
-  manager kept the `linux-x64-musl` optional dependency instead of pruning
-  optional packages.
+  manager kept the matching `linux-x64-musl` or `linux-arm64-musl` optional
+  dependency instead of pruning optional packages.
 
 ## Translation Exists But Source Text Renders
 

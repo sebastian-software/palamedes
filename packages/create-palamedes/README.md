@@ -37,7 +37,7 @@ host framework.
 
 For the actual setup flow today, use:
 
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [First working translation](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 
 ## Current Status
 

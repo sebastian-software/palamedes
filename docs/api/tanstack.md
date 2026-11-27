@@ -19,7 +19,7 @@ catalog delivery; application-owned catalog imports or loader maps are unnecessa
 ## Verified React baseline and representative coverage
 
 The React fixtures pin `@tanstack/react-start@1.169.4` and
-`@tanstack/react-router@1.170.46`, with Seroval 1.6.9.
+`@tanstack/react-router@1.170.46`, with Seroval 1.6.11.
 
 Palamedes v2 verifies TanStack Start through React and Solid through the
 separate Solid 2 Start Mode/Nitro stack. The four `tanstack-*` and four

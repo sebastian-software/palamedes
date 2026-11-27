@@ -67,7 +67,7 @@ Native packages include external UI catalogs in `bin/pmds-locales/`. When copyin
 the executable into another image or installation, copy that directory beside it
 as well. English is external too. `PALAMEDES_UI_CATALOG_DIR` can select another
 catalog directory; missing or incompatible catalogs fail explicitly. See the
-[output-language reference](../../docs/cli.md#output-language).
+[output-language reference](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md#output-language).
 
 ## Usage
 

@@ -11,7 +11,7 @@ Platform-specific native bindings for `@palamedes/core-node` on Linux arm64 with
 
 You usually should not install this package directly.
 
-`@palamedes/core-node` selects and loads the right native package for the current platform. This package exists so the Linux arm64 musl binary can be published and versioned independently from the JavaScript wrapper.
+`@palamedes/core-node` selects and loads the matching native package for the current platform as an optional dependency. This package ships the Linux arm64 musl binary in lockstep with `@palamedes/core-node`.
 
 ## Installation
 
@@ -25,6 +25,7 @@ pnpm add @palamedes/core-node
 
 - contains the `.node` binary for `linux-arm64-musl`
 - is loaded internally by `@palamedes/core-node`
+- is versioned in lockstep with `@palamedes/core-node`
 - is not intended for direct application-level usage
 
 ## Related Packages

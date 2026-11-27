@@ -10,6 +10,9 @@
  * 2. Solid pins. Solid 2 is still published only as prereleases, so an
  *    unpinned `solid-js` resolves to Solid 1. Every install command that names
  *    a Solid package must pin the version from examples/solid-cookie.
+ * 3. Published npm README links. Files outside a package directory are absent
+ *    from its published npm tarball, so published package READMEs under
+ *    `packages/` must not contain parent-relative (`../`) Markdown links.
  *
  *   node scripts/check-docs-drift.mjs
  */
@@ -199,6 +202,98 @@ export function findUnpinnedSolidInstalls(text, pins) {
   return findings;
 }
 
+function stripInlineCodeSpans(line) {
+  let result = "";
+  let cursor = 0;
+  while (cursor < line.length) {
+    if (line[cursor] !== "`") {
+      result += line[cursor];
+      cursor += 1;
+      continue;
+    }
+    let backslashes = 0;
+    for (let index = cursor - 1; index >= 0 && line[index] === "\\"; index -= 1) {
+      backslashes += 1;
+    }
+    if (backslashes % 2 === 1) {
+      result += line[cursor];
+      cursor += 1;
+      continue;
+    }
+    let openerEnd = cursor;
+    while (line[openerEnd] === "`") openerEnd += 1;
+    const delimiterLength = openerEnd - cursor;
+    let closingStart = -1;
+    let search = openerEnd;
+    while (search < line.length) {
+      if (line[search] !== "`") {
+        search += 1;
+        continue;
+      }
+      let runEnd = search;
+      while (line[runEnd] === "`") runEnd += 1;
+      if (runEnd - search === delimiterLength) {
+        closingStart = search;
+        break;
+      }
+      search = runEnd;
+    }
+    if (closingStart === -1) {
+      result += line.slice(cursor, openerEnd);
+      cursor = openerEnd;
+      continue;
+    }
+    cursor = closingStart + delimiterLength;
+  }
+  return result;
+}
+
+export function findParentRelativeLinks(text) {
+  const findings = [];
+  let openFence = null;
+  for (const [index, line] of text.split(/\r?\n/u).entries()) {
+    if (openFence) {
+      const closing = /^ {0,3}(`+|~+)[ \t]*$/u.exec(line);
+      if (closing && closing[1][0] === openFence.marker && closing[1].length >= openFence.length) {
+        openFence = null;
+      }
+      continue;
+    }
+    const opener = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+    if (opener && (opener[1][0] !== "`" || !opener[2].includes("`"))) {
+      openFence = { marker: opener[1][0], length: opener[1].length };
+      continue;
+    }
+    const prose = stripInlineCodeSpans(line);
+    for (const match of prose.matchAll(
+      /\]\(\s*(?:<(\.\.(?:\/[^>\r\n]*)?)>|(\.\.(?:\/[^)\s]*)?))(?:\s+["'(][^)\r\n]*)?\)/gu,
+    )) {
+      findings.push({ line: index + 1, target: match[1] ?? match[2] });
+    }
+    const refMatch =
+      /^\s{0,3}\[[^\]]+\]:\s*(?:<(\.\.(?:\/[^>\r\n]*)?)>|(\.\.(?:\/[^\s]*)?))(?:\s|$)/u.exec(prose);
+    if (refMatch) {
+      findings.push({ line: index + 1, target: refMatch[1] ?? refMatch[2] });
+    }
+  }
+  return findings;
+}
+
+export function isPublishedPackageReadme(
+  file,
+  read = (pathName) => readFileSync(path.join(root, pathName), "utf8"),
+) {
+  const match = /^packages\/([^/]+)\/README\.md$/u.exec(file);
+  if (!match) return false;
+  try {
+    const manifest = JSON.parse(read(`packages/${match[1]}/package.json`));
+    return !manifest.private;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 export function isDocsSurface(file) {
   return (
     /(?:^|\/)README\.md$/u.test(file) ||
@@ -233,6 +328,13 @@ export function checkDocsDrift({ files, read } = {}) {
         `${file}:${line} installs \`${found}\`; pin \`${expected}\` like ${SOLID_PIN_SOURCE}.`,
       );
     }
+    if (isPublishedPackageReadme(file, readFile)) {
+      for (const { line, target } of findParentRelativeLinks(text)) {
+        problems.push(
+          `${file}:${line} uses parent-relative link \`${target}\`, which breaks on npmjs.com. Use a canonical https://github.com/sebastian-software/palamedes/blob/main/... or https://palamedes.dev/... URL instead.`,
+        );
+      }
+    }
   }
   return problems;
 }
@@ -244,7 +346,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       for (const problem of problems) console.error(`check-docs-drift: ${problem}`);
       process.exitCode = 1;
     } else {
-      console.log("Docs use no removed options, and every Solid install is pinned.");
+      console.log(
+        "Docs use no removed options, every Solid install is pinned, and published package READMEs use no parent-relative links.",
+      );
     }
   } catch (error) {
     console.error(`check-docs-drift: ${error.message}`);
