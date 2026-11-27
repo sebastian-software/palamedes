@@ -53,14 +53,17 @@ export const BUDGETS = [
     label: "core-node addon (release)",
     crate: "palamedes-node",
     artifact: { name: "palamedes_node", kind: "cdylib" },
-    // The published Linux x64 GNU v1.17.3 addon is 7,057,176 B. A 7.8 MB
-    // ceiling leaves 742,824 B (10.5 %) for normal linker/toolchain movement
-    // while still rejecting the megabyte-class growth this gate targets.
+    // The published Linux x64 GNU v1.17.3 addon is 7,057,176 B. Hardening
+    // catalog path containment (#1538: handle-pinned contained_fs + Unicode
+    // NFD filename-equivalence folding via unicode-normalization) measured
+    // 7,997,656 B on Linux x64 / Rust 1.96 (+197,656 B over the older 7.8 MB
+    // cap). An 8.8 MB ceiling restores ~800 KB (~10 %) of headroom for normal
+    // linker/toolchain movement while still rejecting megabyte-class bloat.
     baseline: {
       label: "@palamedes/core-node-linux-x64-gnu@1.17.3",
       bytes: 7_057_176,
     },
-    maxBytes: 7_800_000,
+    maxBytes: 8_800_000,
   },
 ];
 

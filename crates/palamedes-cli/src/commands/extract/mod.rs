@@ -1289,7 +1289,8 @@ fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirFilenameEquivalenc
                 DirFilenameEquivalence::CaseInsensitiveNtfs => {
                     ntfs_casefold(text.trim_end_matches(['.', ' ']))
                 }
-                DirFilenameEquivalence::CaseInsensitiveVfat => {
+                DirFilenameEquivalence::CaseInsensitiveVfat
+                | DirFilenameEquivalence::CaseInsensitiveExfat => {
                     ntfs_casefold(text.trim_end_matches('.'))
                 }
                 DirFilenameEquivalence::CaseInsensitiveUnicodeNfd => {
@@ -1369,29 +1370,26 @@ fn segment_pair_collides_on_dir(
         equivalence,
         DirFilenameEquivalence::CaseInsensitiveNtfs
             | DirFilenameEquivalence::CaseInsensitiveVfat
+            | DirFilenameEquivalence::CaseInsensitiveExfat
             | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
             | DirFilenameEquivalence::CaseInsensitiveHfsPlus
             | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
     );
+    // Keep trailing-dot / trailing-space trimming in `fold_os_segment` so
+    // candidate aliases land in the same lookup bucket, but only take the
+    // immediate ASCII case-insensitive fast path when the raw names match
+    // without trimming: our Windows contained writer uses `NtCreateFile`
+    // (which can create distinct `assets` and `assets.` entries), and Linux
+    // exFAT supports `keep_last_dots`. Pairs matching only after trimming fall
+    // through to the live filesystem probe below.
     if equivalence_confirmed
         && is_ascii_ci
         && let (Some(l_str), Some(r_str)) = (left.to_str(), right.to_str())
         && l_str.is_ascii()
         && r_str.is_ascii()
+        && l_str.eq_ignore_ascii_case(r_str)
     {
-        let ascii_equiv = match equivalence {
-            DirFilenameEquivalence::CaseInsensitiveNtfs => l_str
-                .trim_end_matches(['.', ' '])
-                .eq_ignore_ascii_case(r_str.trim_end_matches(['.', ' '])),
-            // VFAT and exFAT are always ASCII case-insensitive, but Linux exFAT
-            // supports the `keep_last_dots` mount option where trailing dots are
-            // distinct. Keep trailing-dot folding in the lookup bucket, and let
-            // collisions that rely on trimming dots fall through to probing.
-            _ => l_str.eq_ignore_ascii_case(r_str),
-        };
-        if ascii_equiv {
-            return true;
-        }
+        return true;
     }
     // When equivalence is unconfirmed (for example, a read-only share or
     // search-only directory where filesystem metadata queries are unsupported)
@@ -3257,8 +3255,14 @@ catalogs:
         let ntfs = DirFilenameEquivalence::CaseInsensitiveNtfs;
         assert_eq!(
             super::fold_os_segment(OsStr::new("\u{03c3}.po"), ntfs),
+            super::fold_os_segment(OsStr::new("\u{03a3}.po"), ntfs),
+            "NTFS uppercase folding must equate Greek lowercase sigma and capital sigma"
+        );
+        #[cfg(not(windows))]
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("\u{03c3}.po"), ntfs),
             super::fold_os_segment(OsStr::new("\u{03c2}.po"), ntfs),
-            "NTFS uppercase folding must equate Greek sigma and final sigma"
+            "non-Windows NTFS uppercase fallback must conservatively equate Greek sigma and final sigma"
         );
         assert_ne!(
             super::fold_os_segment(OsStr::new("stra\u{00df}e.po"), ntfs),
@@ -3914,6 +3918,97 @@ catalogs:
         .expect(
             "live probe disproving nonumtail must allow distinct messages-long.po and MESSAGES.PO",
         );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn confirmed_exfat_skips_8dot3_collision_checks_in_read_only_mode() {
+        use palamedes::DirFilenameEquivalence;
+
+        let root = temp_dir("extract-exfat-no-8dot3");
+        let exfat = Some((DirFilenameEquivalence::CaseInsensitiveExfat, true));
+
+        // exFAT never generates DOS 8.3 short names (neither `~1` nor tail-less),
+        // so read-only `--check` on a clean checkout must allow missing long/short
+        // pairs without false collision errors.
+        let long_and_short = [
+            ("messages-long", root.join("messages-long.po")),
+            ("messages", root.join("messages.po")),
+            ("short-tilde", root.join("MESSAG~1.PO")),
+        ];
+        super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &long_and_short,
+            &[],
+            false,
+            exfat,
+            false,
+        )
+        .expect("confirmed exFAT must not report 8.3 collisions in read-only mode");
+
+        // Pure case collisions on exFAT must still be rejected.
+        let case_collision = [
+            ("Messages", root.join("Messages.po")),
+            ("messages", root.join("messages.po")),
+        ];
+        let err = super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &case_collision,
+            &[],
+            false,
+            exfat,
+            false,
+        )
+        .expect_err("case collision on confirmed exFAT must fail");
+        assert!(matches!(
+            err,
+            CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
+        ));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn confirmed_ntfs_probes_trailing_dot_and_space_variants_instead_of_rejecting_unconditionally()
+    {
+        use palamedes::DirFilenameEquivalence;
+
+        let root = temp_dir("extract-ntfs-trailing-dot-probe");
+        let ntfs = Some((DirFilenameEquivalence::CaseInsensitiveNtfs, true));
+
+        // When probing is allowed on a filesystem that preserves trailing dots/spaces
+        // (matching `NtCreateFile` on Windows and POSIX filesystems on Unix),
+        // `assets/{locale}` and `assets./{locale}` (and `assets /{locale}`) are
+        // allowed once the live probe disproves aliasing.
+        let trailing_dot = [
+            ("assets/{locale}", root.join("assets/en.po")),
+            ("assets./{locale}", root.join("assets./en.po")),
+        ];
+        super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &trailing_dot,
+            &[],
+            true,
+            ntfs,
+            false,
+        )
+        .expect("live probe disproving NTFS trailing-dot alias must allow both targets");
+
+        // When probing is disallowed (`--check`), fail closed on potential trailing-dot alias.
+        let err = super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &trailing_dot,
+            &[],
+            false,
+            ntfs,
+            false,
+        )
+        .expect_err("read-only mode without probe must fail closed on NTFS trailing-dot alias");
+        assert!(matches!(
+            err,
+            CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
+        ));
 
         let _ = fs::remove_dir_all(&root);
     }

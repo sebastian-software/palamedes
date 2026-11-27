@@ -392,9 +392,18 @@ fn load_registry_with_binary_hasher(
         }
         // Release the pinned executable descriptor once discovery/describe
         // finishes so loading many configured plugins keeps open descriptors
-        // O(1). `dispatch` re-pins and verifies the single selected plugin
-        // against `verified_stamp` / `expected_metadata` before spawning it.
-        resolved.pinned_binary = None;
+        // O(1) — provided dispatch can re-verify the binary by content digest
+        // (`verified_stamp`) or kernel file identity (`unix_identity` on Unix,
+        // 128-bit `FileIdInfo` on Windows). When neither is available (for
+        // example, an execute-only binary on a volume without file IDs),
+        // retain the discovery handle so dispatch cannot run a replacement.
+        let can_reverify_without_handle = verified_stamp.is_some()
+            || expected_metadata
+                .as_ref()
+                .is_some_and(PluginBinaryMetadata::has_kernel_identity);
+        if can_reverify_without_handle {
+            resolved.pinned_binary = None;
+        }
         registry.plugins.insert(
             namespace,
             LoadedPlugin {
@@ -696,6 +705,7 @@ fn plugin_binary_metadata(metadata: &fs::Metadata) -> PluginBinaryMetadata {
         length: metadata.len(),
         modified_ns,
         unix_identity: unix_plugin_binary_identity(metadata),
+        windows_identity: None,
     }
 }
 
@@ -1765,6 +1775,8 @@ struct PinnedPluginBinary {
     #[cfg(windows)]
     pinned_handle: std::os::windows::io::OwnedHandle,
     #[cfg(windows)]
+    windows_identity: Option<WindowsPluginBinaryIdentity>,
+    #[cfg(windows)]
     readable: bool,
 }
 
@@ -1797,7 +1809,18 @@ impl ResolvedPlugin {
                 fs::File::from_raw_handle(pinned.pinned_handle.as_raw_handle())
             });
             let fd_meta = pinned_file.metadata().ok()?;
-            return Some(plugin_binary_metadata(&fd_meta));
+            let mut metadata = plugin_binary_metadata(&fd_meta);
+            if let Some(expected_id) = pinned.windows_identity {
+                let current_id = windows_pinned_plugin::pinned_handle_identity(
+                    pinned.pinned_handle.as_raw_handle(),
+                )
+                .ok()?;
+                if current_id != expected_id {
+                    return None;
+                }
+                metadata.windows_identity = Some(current_id);
+            }
+            return Some(metadata);
         }
         None
     }
@@ -1831,7 +1854,11 @@ impl ResolvedPlugin {
                 && fd_meta.ctime() == path_meta.ctime()
                 && fd_meta.ctime_nsec() == path_meta.ctime_nsec();
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        if let Some(ref pinned) = self.pinned_binary {
+            return windows_pinned_plugin::pinned_matches_path(pinned, binary_path, metadata);
+        }
+        #[cfg(not(any(unix, windows)))]
         let _ = (binary_path, metadata);
         true
     }
@@ -2651,8 +2678,9 @@ mod windows_pinned_plugin {
     use std::sync::Arc;
 
     use super::{
-        PackageManifest, PinnedPluginBinary, PluginFailure, is_blocked_script_extension,
-        script_plugin_failure, validate_plugin_binary_relative_path, windows_parent_wide_path,
+        PackageManifest, PinnedPluginBinary, PluginBinaryMetadata, PluginFailure,
+        WindowsPluginBinaryIdentity, is_blocked_script_extension, script_plugin_failure,
+        validate_plugin_binary_relative_path, windows_parent_wide_path,
     };
 
     const FILE_READ_DATA: u32 = 0x0000_0001;
@@ -2681,6 +2709,7 @@ mod windows_pinned_plugin {
         file_id: [u8; 16],
     }
 
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     #[repr(C)]
     struct FileTime {
         low_date_time: u32,
@@ -2811,6 +2840,62 @@ mod windows_pinned_plugin {
             current = parent_units;
         }
         Ok(false)
+    }
+
+    pub(super) fn pinned_handle_identity(
+        handle: *mut c_void,
+    ) -> io::Result<WindowsPluginBinaryIdentity> {
+        let id = handle_identity(handle)?;
+        Ok(WindowsPluginBinaryIdentity {
+            volume_serial: id.volume_serial,
+            file_id: id.file_id,
+        })
+    }
+
+    pub(super) fn pinned_matches_path(
+        pinned: &PinnedPluginBinary,
+        binary_path: &Path,
+        metadata: &PluginBinaryMetadata,
+    ) -> bool {
+        let Some(pinned_id) = pinned.windows_identity else {
+            return false;
+        };
+        if let Some(expected_id) = metadata.windows_identity
+            && expected_id != pinned_id
+        {
+            return false;
+        }
+        let Ok(live_id) = pinned_handle_identity(pinned.pinned_handle.as_raw_handle()) else {
+            return false;
+        };
+        if live_id != pinned_id {
+            return false;
+        }
+        let Ok(fd_info) = handle_info(pinned.pinned_handle.as_raw_handle()) else {
+            return false;
+        };
+        let Ok(path_file) = OpenOptions::new()
+            .access_mode(FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .open(binary_path)
+        else {
+            return false;
+        };
+        let Ok(path_id) = pinned_handle_identity(path_file.as_raw_handle()) else {
+            return false;
+        };
+        if path_id != pinned_id {
+            return false;
+        }
+        let Ok(path_info) = handle_info(path_file.as_raw_handle()) else {
+            return false;
+        };
+        let fd_len = (u64::from(fd_info.file_size_high) << 32) | u64::from(fd_info.file_size_low);
+        let path_len =
+            (u64::from(path_info.file_size_high) << 32) | u64::from(path_info.file_size_low);
+        fd_len == metadata.length
+            && path_len == metadata.length
+            && fd_info.last_write_time == path_info.last_write_time
     }
 
     pub(super) fn live_pinned_binary_path(pinned: &PinnedPluginBinary) -> Option<PathBuf> {
@@ -3047,11 +3132,13 @@ mod windows_pinned_plugin {
             if is_blocked_script_extension(&canonical_binary) {
                 return Err(script_plugin_failure(specifier, &canonical_binary));
             }
+            let windows_identity = pinned_handle_identity(bin_file.as_raw_handle()).ok();
             Ok((
                 canonical_binary,
                 invocation_path,
                 Arc::new(PinnedPluginBinary {
                     pinned_handle: OwnedHandle::from(bin_file),
+                    windows_identity,
                     readable,
                 }),
             ))
@@ -4282,6 +4369,8 @@ struct PluginBinaryMetadata {
     modified_ns: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     unix_identity: Option<UnixPluginBinaryIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    windows_identity: Option<WindowsPluginBinaryIdentity>,
 }
 
 impl PluginBinaryMetadata {
@@ -4290,6 +4379,21 @@ impl PluginBinaryMetadata {
         // it to the same file object; length and nanosecond mtime cover its
         // visible content metadata. Without every Unix field, rehash instead.
         self == current && current.modified_ns.is_some() && current.unix_identity.is_some()
+    }
+
+    fn has_kernel_identity(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.unix_identity.is_some()
+        }
+        #[cfg(windows)]
+        {
+            self.windows_identity.is_some()
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            false
+        }
     }
 }
 
@@ -4302,6 +4406,13 @@ struct UnixPluginBinaryIdentity {
     modified_nanoseconds: i64,
     changed_seconds: i64,
     changed_nanoseconds: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowsPluginBinaryIdentity {
+    volume_serial: u64,
+    file_id: [u8; 16],
 }
 
 #[derive(Debug)]
@@ -4359,19 +4470,19 @@ fn prepare_selected_plugin_for_run(
             return Err(changed_failure("executable digest mismatch"));
         }
     } else if let Some(ref expected_metadata) = plugin.expected_metadata {
+        if !expected_metadata.has_kernel_identity() {
+            return Err(changed_failure("executable file identity is unavailable"));
+        }
         let actual_metadata = repinned
             .pinned_binary_metadata()
-            .or_else(|| {
-                fs::metadata(&repinned_canonical)
-                    .ok()
-                    .map(|meta| plugin_binary_metadata(&meta))
-            })
             .ok_or_else(|| changed_failure("executable metadata could not be verified"))?;
         if &actual_metadata != expected_metadata
             || !repinned.pinned_matches_path(&repinned_canonical, expected_metadata)
         {
             return Err(changed_failure("executable metadata mismatch"));
         }
+    } else {
+        return Err(changed_failure("no verified executable identity recorded"));
     }
     Ok(repinned)
 }
@@ -6385,6 +6496,56 @@ catalogs:
             .expect("chmod tampered");
         let err = super::prepare_selected_plugin_for_run(selected, &config.config_path)
             .expect_err("swapped plugin executable must be rejected before dispatch");
+        assert_eq!(err.code, "PLUGIN_BINARY_CHANGED");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn repin_rejects_metadata_fallback_without_kernel_file_identity() {
+        let root = temp_dir("plugin-repin-requires-kernel-id");
+        let config_path = root.join("palamedes.yaml");
+        let plugin_bin = root.join("node_modules/@acme/pmds-no-id/bin/plugin");
+        fs::create_dir_all(plugin_bin.parent().expect("bin dir")).expect("create bin dir");
+        fs::write(
+            root.join("node_modules/@acme/pmds-no-id/package.json"),
+            r#"{"name":"@acme/pmds-no-id","palamedes":{"pluginBinary":"bin/plugin"}}"#,
+        )
+        .expect("write package.json");
+        fs::write(&plugin_bin, "#!/bin/sh\necho ok\n").expect("write plugin");
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&plugin_bin, fs::Permissions::from_mode(0o755)).expect("chmod");
+        let meta = fs::metadata(&plugin_bin).expect("metadata");
+        let canonical = fs::canonicalize(&plugin_bin).expect("canonical");
+
+        let bare_metadata = super::PluginBinaryMetadata {
+            length: meta.len(),
+            modified_ns: meta.modified().ok().and_then(|t| {
+                u64::try_from(t.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos()).ok()
+            }),
+            unix_identity: None,
+            windows_identity: None,
+        };
+        assert!(!bare_metadata.has_kernel_identity());
+
+        let loaded = super::LoadedPlugin {
+            resolved: super::ResolvedPlugin {
+                specifier: "@acme/pmds-no-id".to_owned(),
+                binary_path: canonical.clone(),
+                invocation_path: plugin_bin,
+                pinned_binary: None,
+            },
+            manifest: super::PluginManifest {
+                name: "no-id".to_owned(),
+                protocol_version: 1,
+                commands: std::collections::BTreeMap::new(),
+            },
+            options: serde_json::Value::Null,
+            canonical_binary_path: Some(canonical),
+            verified_stamp: None,
+            expected_metadata: Some(bare_metadata),
+        };
+        let err = super::prepare_selected_plugin_for_run(&loaded, &config_path)
+            .expect_err("re-pin without digest or kernel file identity must fail closed");
         assert_eq!(err.code, "PLUGIN_BINARY_CHANGED");
     }
 }

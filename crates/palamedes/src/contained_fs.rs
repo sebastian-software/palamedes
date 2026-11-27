@@ -150,9 +150,14 @@ pub enum DirFilenameEquivalence {
     /// Case-insensitive 1-to-1 uppercase without Unicode normalization
     /// (Windows NTFS, SMB/CIFS).
     CaseInsensitiveNtfs,
-    /// Case-insensitive 1-to-1 uppercase with trailing-dot stripping
-    /// (Linux VFAT/FAT and exFAT mounts where `locales.` aliases `locales`).
+    /// Case-insensitive 1-to-1 uppercase with trailing-dot stripping and DOS
+    /// 8.3 short-name generation (Linux VFAT/FAT mounts).
     CaseInsensitiveVfat,
+    /// Case-insensitive 1-to-1 uppercase without DOS 8.3 short-name generation
+    /// (Linux exFAT mounts, which fold via an `$UpCase` table and may strip or
+    /// preserve trailing dots depending on mount options, but never synthesize
+    /// 8.3 short aliases).
+    CaseInsensitiveExfat,
     /// Case-insensitive full Unicode casefold + NFD preserving default-ignorable
     /// code points (default macOS/iOS APFS).
     CaseInsensitiveUnicodeNfd,
@@ -1094,6 +1099,7 @@ mod platform {
                     eq,
                     DirFilenameEquivalence::CaseInsensitiveNtfs
                         | DirFilenameEquivalence::CaseInsensitiveVfat
+                        | DirFilenameEquivalence::CaseInsensitiveExfat
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
                         | DirFilenameEquivalence::CaseInsensitiveHfsPlus
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
@@ -1807,17 +1813,32 @@ mod platform {
                             self.fd.as_raw_fd(),
                             &c_target,
                         ) {
-                            Ok(true) => {
+                            Ok(PublishNoReplaceOutcome::Published) => {
                                 temp_guard.disarm();
                                 Ok(StageOutcome::Published)
                             }
-                            Ok(false) => Err(ContainedFsError::Io(io::Error::new(
-                                io::ErrorKind::AlreadyExists,
-                                format!(
-                                    "destination \"{}\" was created concurrently before publication",
-                                    file_name.to_string_lossy()
-                                ),
-                            ))),
+                            Ok(PublishNoReplaceOutcome::PublishedCleanupFailed(error)) => {
+                                // Keep `temp_guard` armed so dropping it makes one
+                                // final attempt to remove the staging hard link, and
+                                // report the already-committed write rather than
+                                // retrying publication.
+                                Err(ContainedFsError::Io(io::Error::new(
+                                    error.kind(),
+                                    format!(
+                                        "destination \"{}\" was already committed via hard link, but removing staging link failed: {error}",
+                                        file_name.to_string_lossy()
+                                    ),
+                                )))
+                            }
+                            Ok(PublishNoReplaceOutcome::AlreadyExists) => {
+                                Err(ContainedFsError::Io(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    format!(
+                                        "destination \"{}\" was created concurrently before publication",
+                                        file_name.to_string_lossy()
+                                    ),
+                                )))
+                            }
                             Err(error) => Err(ContainedFsError::Io(error)),
                         }
                     })();
@@ -3815,7 +3836,7 @@ mod platform {
                 dir.fd.as_raw_fd(),
                 target_name,
             ) {
-                Ok(true) => {
+                Ok(PublishNoReplaceOutcome::Published) => {
                     temp_guard.disarm();
                     let published_matches = matches!(
                         fstatat_nofollow(dir.fd.as_raw_fd(), target_name),
@@ -3827,7 +3848,20 @@ mod platform {
                         Ok(LockPublishResult::AlreadyExists)
                     }
                 }
-                Ok(false) => {
+                Ok(PublishNoReplaceOutcome::PublishedCleanupFailed(error)) => {
+                    // Keep `temp_guard` armed so dropping it makes one final
+                    // attempt to unlink the staging hard link, and report the
+                    // already-committed lock publication rather than retrying.
+                    drop(temp_guard);
+                    drop(temp_fd);
+                    Err(ContainedFsError::Io(io::Error::new(
+                        error.kind(),
+                        format!(
+                            "catalog lock was already committed via hard link, but removing staging link failed: {error}"
+                        ),
+                    )))
+                }
+                Ok(PublishNoReplaceOutcome::AlreadyExists) => {
                     drop(temp_guard);
                     drop(temp_fd);
                     Ok(LockPublishResult::AlreadyExists)
@@ -4341,18 +4375,45 @@ mod platform {
         }
     }
 
+    pub(super) enum PublishNoReplaceOutcome {
+        /// Target was published and the staging link was moved or removed.
+        Published,
+        /// Target was published via `linkat`, but removing the staging hard
+        /// link failed. The caller must keep its staging cleanup guard armed
+        /// and report the already-committed write rather than retrying
+        /// publication.
+        PublishedCleanupFailed(io::Error),
+        /// Target already existed (`EEXIST`); nothing was published.
+        AlreadyExists,
+    }
+
+    pub(super) fn finalize_linkat_publish_with<F>(unlink_stage: F) -> PublishNoReplaceOutcome
+    where
+        F: FnOnce() -> io::Result<()>,
+    {
+        match unlink_stage() {
+            Ok(()) => PublishNoReplaceOutcome::Published,
+            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
+                PublishNoReplaceOutcome::Published
+            }
+            Err(error) => PublishNoReplaceOutcome::PublishedCleanupFailed(error),
+        }
+    }
+
     /// Publishes `temp_name` from `stage_fd` into `target_dir_fd` as `c_target`
     /// without overwriting an existing destination.
     ///
-    /// Returns `Ok(true)` when published, `Ok(false)` when `c_target` already
-    /// exists (caller should retry through the existing-target replacement
-    /// path), or `Err` on unexpected OS failures.
+    /// Returns [`PublishNoReplaceOutcome::Published`] when published cleanly,
+    /// [`PublishNoReplaceOutcome::PublishedCleanupFailed`] when `linkat`
+    /// published the destination but unlinking the staging name failed,
+    /// [`PublishNoReplaceOutcome::AlreadyExists`] when `c_target` already
+    /// exists, or `Err` on unexpected OS failures before publication.
     fn publish_file_noreplace(
         stage_fd: std::os::fd::RawFd,
         temp_name: &CString,
         target_dir_fd: std::os::fd::RawFd,
         c_target: &std::ffi::CStr,
-    ) -> io::Result<bool> {
+    ) -> io::Result<PublishNoReplaceOutcome> {
         #[cfg(target_os = "linux")]
         {
             const RENAME_NOREPLACE: libc::c_uint = 1;
@@ -4368,11 +4429,11 @@ mod platform {
                 )
             };
             if rc == 0 {
-                return Ok(true);
+                return Ok(PublishNoReplaceOutcome::Published);
             }
             let error = io::Error::last_os_error();
             if error.raw_os_error() == Some(libc::EEXIST) {
-                return Ok(false);
+                return Ok(PublishNoReplaceOutcome::AlreadyExists);
             }
             if !matches!(
                 error.raw_os_error(),
@@ -4394,11 +4455,11 @@ mod platform {
                 )
             };
             if rc == 0 {
-                return Ok(true);
+                return Ok(PublishNoReplaceOutcome::Published);
             }
             let error = io::Error::last_os_error();
             if error.raw_os_error() == Some(libc::EEXIST) {
-                return Ok(false);
+                return Ok(PublishNoReplaceOutcome::AlreadyExists);
             }
             if !matches!(
                 error.raw_os_error(),
@@ -4421,13 +4482,18 @@ mod platform {
         if rc != 0 {
             let error = io::Error::last_os_error();
             if error.raw_os_error() == Some(libc::EEXIST) {
-                return Ok(false);
+                return Ok(PublishNoReplaceOutcome::AlreadyExists);
             }
             return Err(error);
         }
-        // SAFETY: `stage_fd` is an open directory descriptor and `temp_name` is valid.
-        let _ = unsafe { libc::unlinkat(stage_fd, temp_name.as_ptr(), 0) };
-        Ok(true)
+        Ok(finalize_linkat_publish_with(|| {
+            // SAFETY: `stage_fd` is an open directory descriptor and `temp_name` is valid.
+            if unsafe { libc::unlinkat(stage_fd, temp_name.as_ptr(), 0) } == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }))
     }
 
     fn is_symlink_open_error(raw_os_error: Option<i32>) -> bool {
@@ -6629,8 +6695,11 @@ const fn classify_linux_fs_magic(
     const TMPFS_MAGIC: u32 = 0x0102_1994;
     const BTRFS_SUPER_MAGIC: u32 = 0x9123_683e;
     const F2FS_SUPER_MAGIC: u32 = 0xf2f5_2010;
-    if matches!(f_type, MSDOS_SUPER_MAGIC | EXFAT_SUPER_MAGIC) {
+    if f_type == MSDOS_SUPER_MAGIC {
         return Some(DirFilenameEquivalence::CaseInsensitiveVfat);
+    }
+    if f_type == EXFAT_SUPER_MAGIC {
+        return Some(DirFilenameEquivalence::CaseInsensitiveExfat);
     }
     if f_type == BTRFS_SUPER_MAGIC
         || (checked_casefold_flag
@@ -11880,7 +11949,7 @@ mod cross_platform_tests {
             );
             assert_eq!(
                 classify_linux_fs_magic(0x2011_bab0, false),
-                Some(DirFilenameEquivalence::CaseInsensitiveVfat)
+                Some(DirFilenameEquivalence::CaseInsensitiveExfat)
             );
         }
     }
@@ -12054,6 +12123,32 @@ mod cross_platform_tests {
         assert!(
             stale_temp.exists(),
             "entry in group-writable directory must be left untouched"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn finalize_linkat_publish_distinguishes_enoent_from_persistent_unlink_failure() {
+        use super::platform::{PublishNoReplaceOutcome, finalize_linkat_publish_with};
+        use std::io;
+
+        assert!(matches!(
+            finalize_linkat_publish_with(|| Ok(())),
+            PublishNoReplaceOutcome::Published
+        ));
+        assert!(matches!(
+            finalize_linkat_publish_with(|| Err(io::Error::from_raw_os_error(libc::ENOENT))),
+            PublishNoReplaceOutcome::Published
+        ));
+        let outcome =
+            finalize_linkat_publish_with(|| Err(io::Error::from_raw_os_error(libc::EACCES)));
+        assert!(
+            matches!(
+                outcome,
+                PublishNoReplaceOutcome::PublishedCleanupFailed(ref err)
+                    if err.raw_os_error() == Some(libc::EACCES)
+            ),
+            "persistent unlink failure after linkat must report PublishedCleanupFailed"
         );
     }
 }
