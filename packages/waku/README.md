@@ -57,30 +57,53 @@ export function getRequestNonce(): string | undefined {
 
 ```ts
 // src/waku.server.ts
+import { fsRouter } from "waku";
+import adapter from "waku/adapters/default";
 import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
 import { getRequestNonce, runWithRequestNonce } from "./lib/csp.server";
 
-middlewareFns: [
-  () => async (context, next) =>
-    runWithRequestNonce(async () => {
-      await next();
-      const nonce = getRequestNonce();
-      if (nonce && context.res.headers.get("content-type")?.startsWith("text/html")) {
-        // Add any other directives your application needs.
-        context.header(
-          "content-security-policy",
-          `script-src 'self' 'nonce-${nonce}'; object-src 'none'; base-uri 'none'`,
-        );
-        // Nonce-bearing HTML must never be replayed across visitors by a shared cache.
-        context.header("cache-control", "private, no-store");
-      }
-    }),
-  () =>
-    createWakuCatalogDeliveryMiddleware({
-      resolveLocale: (request) => resolveApplicationLocale(request),
-      nonce: () => getRequestNonce(),
-    }),
-];
+const modules = Object.fromEntries(
+  Object.entries(import.meta.glob("/src/pages/**/*.{tsx,ts}")).map(([key, value]) => [
+    key.slice("/src/".length),
+    value,
+  ]),
+);
+
+function buildAppCsp(nonce: string): string {
+  // Include all of your application's directives (style-src, img-src, connect-src, etc.) here
+  // instead of splitting them across separate headers.
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}'`,
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+export default adapter(fsRouter(modules), {
+  middlewareFns: [
+    () => async (context, next) =>
+      runWithRequestNonce(async () => {
+        await next();
+        const nonce = getRequestNonce();
+        if (nonce && context.res.headers.get("content-type")?.startsWith("text/html")) {
+          // Preserve a response's own Content-Security-Policy (such as a separate fallback policy);
+          // otherwise attach the application's nonce-based policy.
+          if (!context.res.headers.has("content-security-policy")) {
+            context.header("content-security-policy", buildAppCsp(nonce));
+          }
+          // Nonce-bearing HTML must never be replayed across visitors by a shared cache.
+          context.header("cache-control", "private, no-store");
+        }
+      }),
+    () =>
+      createWakuCatalogDeliveryMiddleware({
+        resolveLocale: (request) => resolveApplicationLocale(request),
+        nonce: () => getRequestNonce(),
+      }),
+  ],
+});
 ```
 
 ```ts
