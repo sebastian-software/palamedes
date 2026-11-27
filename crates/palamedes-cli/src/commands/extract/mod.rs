@@ -1405,11 +1405,280 @@ fn segments_collide_on_dir(
         })
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NtfsShortNameCandidate {
+    prefix: String,
+    hash_prefix: Option<String>,
+    digits_len: usize,
+    ext: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NtfsLongNameDerived {
+    base: String,
+    ext: String,
+    has_non_ascii: bool,
+}
+
+const fn is_valid_8dot3_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric()
+        || matches!(
+            ch,
+            '!' | '#'
+                | '$'
+                | '%'
+                | '&'
+                | '\''
+                | '('
+                | ')'
+                | '-'
+                | '@'
+                | '^'
+                | '_'
+                | '`'
+                | '{'
+                | '}'
+                | '~'
+        )
+}
+
+fn is_valid_8dot3_name(name: &str) -> bool {
+    if name.is_empty() || name.starts_with(['.', ' ']) || name.ends_with(['.', ' ']) {
+        return false;
+    }
+    let mut parts = name.split('.');
+    let Some(stem) = parts.next() else {
+        return false;
+    };
+    let ext = parts.next().unwrap_or("");
+    if parts.next().is_some() {
+        return false;
+    }
+    if stem.is_empty() || stem.len() > 8 || ext.len() > 3 {
+        return false;
+    }
+    stem.chars().all(is_valid_8dot3_char) && ext.chars().all(is_valid_8dot3_char)
+}
+
+fn parse_ntfs_short_name(segment: &OsStr) -> Option<NtfsShortNameCandidate> {
+    let text = segment.to_str()?;
+    if !is_valid_8dot3_name(text) {
+        return None;
+    }
+    let (stem_raw, ext_raw) = text.split_once('.').unwrap_or((text, ""));
+    let (prefix_raw, digits) = stem_raw.rsplit_once('~')?;
+    if prefix_raw.is_empty()
+        || digits.is_empty()
+        || !digits.bytes().all(|byte| byte.is_ascii_digit())
+        || !digits.bytes().any(|byte| byte != b'0')
+    {
+        return None;
+    }
+    let prefix = prefix_raw.to_ascii_uppercase();
+    let ext = ext_raw.to_ascii_uppercase();
+    let hash_prefix = if prefix.len() >= 5
+        && prefix[prefix.len() - 4..]
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        Some(prefix[..prefix.len() - 4].to_owned())
+    } else {
+        None
+    };
+    Some(NtfsShortNameCandidate {
+        prefix,
+        hash_prefix,
+        digits_len: digits.len(),
+        ext,
+    })
+}
+
+fn sanitize_8dot3_component(input: &str, max_len: usize) -> (String, bool) {
+    let mut out = String::new();
+    let mut has_non_ascii = false;
+    for ch in input.chars() {
+        if out.len() >= max_len {
+            break;
+        }
+        if ch == ' ' || ch == '.' {
+            continue;
+        }
+        if !ch.is_ascii() {
+            has_non_ascii = true;
+            out.push('_');
+        } else if is_valid_8dot3_char(ch) {
+            out.push(ch.to_ascii_uppercase());
+        } else {
+            out.push('_');
+        }
+    }
+    (out, has_non_ascii)
+}
+
+fn parse_ntfs_long_name(segment: &OsStr) -> Option<NtfsLongNameDerived> {
+    let Some(text) = segment.to_str() else {
+        return Some(NtfsLongNameDerived {
+            base: String::new(),
+            ext: String::new(),
+            has_non_ascii: true,
+        });
+    };
+    if is_valid_8dot3_name(text) {
+        return None;
+    }
+    let trimmed = text.trim_start_matches(['.', ' ']);
+    let (stem_raw, ext_raw) = trimmed.rsplit_once('.').unwrap_or((trimmed, ""));
+    let (base, base_non_ascii) = sanitize_8dot3_component(stem_raw, 6);
+    let (ext, ext_non_ascii) = sanitize_8dot3_component(ext_raw, 3);
+    Some(NtfsLongNameDerived {
+        base,
+        ext,
+        has_non_ascii: base_non_ascii || ext_non_ascii || !text.is_ascii(),
+    })
+}
+
+fn ntfs_long_matches_short(long: &NtfsLongNameDerived, short: &NtfsShortNameCandidate) -> bool {
+    if long.has_non_ascii {
+        return long.ext == short.ext || long.ext.contains('_');
+    }
+    if long.ext != short.ext {
+        return false;
+    }
+    let max_prefix = 8usize.saturating_sub(1 + short.digits_len);
+    let expected = &long.base[..long.base.len().min(max_prefix)];
+    if !expected.is_empty() && short.prefix == expected {
+        return true;
+    }
+    if let Some(ref hash_prefix) = short.hash_prefix
+        && long.base.starts_with(hash_prefix.as_str())
+    {
+        return true;
+    }
+    false
+}
+
+const fn can_have_ntfs_short_names(
+    equivalence: DirFilenameEquivalence,
+    equivalence_confirmed: bool,
+) -> bool {
+    matches!(equivalence, DirFilenameEquivalence::CaseInsensitiveNtfs) || !equivalence_confirmed
+}
+
+fn dir_generates_ntfs_short_names(
+    dir: &ContainedDir,
+    identity: Option<FileIdentity>,
+    allow_mutating_probe: bool,
+    cache: &mut HashMap<FileIdentity, bool>,
+) -> bool {
+    if let Some(id) = identity
+        && let Some(&cached) = cache.get(&id)
+    {
+        return cached;
+    }
+    let generates = if allow_mutating_probe {
+        // Probe whether this volume actually synthesizes 8.3 short aliases
+        // inside a private staging directory. `Some(false)` proves 8.3 names
+        // are disabled; `Some(true)` or `None` fails closed.
+        dir.probe_names_equivalent(
+            OsStr::new("palamedes-83-probe.txt"),
+            OsStr::new("PALAME~1.TXT"),
+        ) != Some(false)
+    } else {
+        true
+    };
+    if let Some(id) = identity {
+        cache.insert(id, generates);
+    }
+    generates
+}
+
 #[derive(Default)]
 struct TargetPrefixNode<'a> {
     file_scope: Option<&'a str>,
     dir_scope: Option<&'a str>,
     children: HashMap<OsString, Vec<(OsString, Self)>>,
+    // Linear-time indexes for detecting potential NTFS 8.3 short-name aliases
+    // between sibling segments that land in distinct folded trie buckets.
+    ntfs_long_prefixes: HashMap<(String, String, usize), &'a str>,
+    ntfs_long_hash_prefixes: HashMap<(String, String), &'a str>,
+    ntfs_non_ascii_long_by_ext: HashMap<String, &'a str>,
+    ntfs_any_non_ascii_ext_long: Option<&'a str>,
+    ntfs_short_by_ext: HashMap<String, Vec<(NtfsShortNameCandidate, &'a str)>>,
+}
+
+impl<'a> TargetPrefixNode<'a> {
+    fn check_and_record_ntfs_short_name(&mut self, raw: &OsStr, scope: &'a str) -> Option<&'a str> {
+        if let Some(short) = parse_ntfs_short_name(raw) {
+            if let Some(&first_scope) = self.ntfs_long_prefixes.get(&(
+                short.ext.clone(),
+                short.prefix.clone(),
+                short.digits_len,
+            )) {
+                return Some(first_scope);
+            }
+            if let Some(ref hash_prefix) = short.hash_prefix
+                && let Some(&first_scope) = self
+                    .ntfs_long_hash_prefixes
+                    .get(&(short.ext.clone(), hash_prefix.clone()))
+            {
+                return Some(first_scope);
+            }
+            if let Some(&first_scope) = self.ntfs_non_ascii_long_by_ext.get(&short.ext) {
+                return Some(first_scope);
+            }
+            if let Some(first_scope) = self.ntfs_any_non_ascii_ext_long {
+                return Some(first_scope);
+            }
+            self.ntfs_short_by_ext
+                .entry(short.ext.clone())
+                .or_default()
+                .push((short, scope));
+            return None;
+        }
+
+        if let Some(long) = parse_ntfs_long_name(raw) {
+            if long.has_non_ascii && long.ext.contains('_') {
+                for entries in self.ntfs_short_by_ext.values() {
+                    if let Some((_, first_scope)) = entries.first() {
+                        return Some(*first_scope);
+                    }
+                }
+                self.ntfs_any_non_ascii_ext_long.get_or_insert(scope);
+            } else if let Some(entries) = self.ntfs_short_by_ext.get(&long.ext) {
+                for (short, first_scope) in entries {
+                    if ntfs_long_matches_short(&long, short) {
+                        return Some(*first_scope);
+                    }
+                }
+            }
+
+            if long.has_non_ascii {
+                self.ntfs_non_ascii_long_by_ext
+                    .entry(long.ext)
+                    .or_insert(scope);
+            } else {
+                for digits_len in 1..=6 {
+                    let prefix_len = long.base.len().min(7 - digits_len);
+                    if prefix_len > 0 {
+                        self.ntfs_long_prefixes
+                            .entry((
+                                long.ext.clone(),
+                                long.base[..prefix_len].to_owned(),
+                                digits_len,
+                            ))
+                            .or_insert(scope);
+                    }
+                }
+                let max_hash = long.base.len().min(2);
+                for len in 1..=max_hash {
+                    self.ntfs_long_hash_prefixes
+                        .entry((long.ext.clone(), long.base[..len].to_owned()))
+                        .or_insert(scope);
+                }
+            }
+        }
+        None
+    }
 }
 
 fn reject_colliding_extract_targets(
@@ -1438,6 +1707,7 @@ pub(crate) fn reject_colliding_catalog_targets(
         return Ok(());
     }
     let mut dir_eq_cache: HashMap<FileIdentity, (DirFilenameEquivalence, bool)> = HashMap::new();
+    let mut short_name_cache: HashMap<FileIdentity, bool> = HashMap::new();
     let mut anchor_tries: HashMap<ExtractTargetAnchor, TargetPrefixNode<'_>> = HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
     let mut needed_existing_dirs: HashMap<FileIdentity, &str> = HashMap::new();
@@ -1529,6 +1799,25 @@ pub(crate) fn reject_colliding_catalog_targets(
             let is_leaf = idx + 1 == total_segments;
             let folded = &folded_segments[idx];
             let raw = &raw_segments[idx];
+            if can_have_ntfs_short_names(current_eq, current_eq_confirmed)
+                && let Some(first_scope) = node.check_and_record_ntfs_short_name(raw, scope)
+                && dir_generates_ntfs_short_names(
+                    &current,
+                    current_id,
+                    allow_mutating_probe,
+                    &mut short_name_cache,
+                )
+            {
+                return Err(CliError::Io {
+                    path: catalog_path.clone(),
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        format!(
+                            "multiple catalog scopes ({first_scope:?} and {scope:?}) may collide via 8.3 short-name aliasing",
+                        ),
+                    ),
+                });
+            }
             let bucket = node.children.entry(folded.clone()).or_default();
             let next_idx = if let Some(existing_idx) =
                 bucket.iter().position(|(existing_raw, _)| {
@@ -2802,5 +3091,73 @@ catalogs:
             "no .pmds-lock directory should be created"
         );
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn ntfs_short_name_matching_catches_standard_and_hash_aliases() {
+        use std::ffi::OsStr;
+
+        let check_pair = |long: &str, short: &str| {
+            let mut node = super::TargetPrefixNode::default();
+            assert!(
+                node.check_and_record_ntfs_short_name(OsStr::new(long), "scope_long")
+                    .is_none()
+            );
+            let long_first =
+                node.check_and_record_ntfs_short_name(OsStr::new(short), "scope_short");
+
+            let mut rev_node = super::TargetPrefixNode::default();
+            assert!(
+                rev_node
+                    .check_and_record_ntfs_short_name(OsStr::new(short), "scope_short")
+                    .is_none()
+            );
+            let short_first =
+                rev_node.check_and_record_ntfs_short_name(OsStr::new(long), "scope_long");
+
+            (long_first, short_first)
+        };
+
+        for (long, short) in [
+            ("longfilename.po", "LONGFI~1.po"),
+            ("longfilename.po", "LONGF~10.PO"),
+            ("my-long-file.po", "MY1A2B~1.po"),
+            ("a.b.c.po", "ABC~1.PO"),
+            (".hiddenlong", "HIDDEN~1"),
+            ("caf\u{00e9}.po", "CAF_~1.po"),
+            ("longdirectory.v2", "LONGDI~1.V2"),
+        ] {
+            let (lf, sf) = check_pair(long, short);
+            assert_eq!(
+                lf,
+                Some("scope_long"),
+                "expected long-then-short collision for ({long:?}, {short:?})"
+            );
+            assert_eq!(
+                sf,
+                Some("scope_short"),
+                "expected short-then-long collision for ({long:?}, {short:?})"
+            );
+        }
+
+        for (left, right) in [
+            ("en.po", "de.po"),
+            ("longfilename.po", "OTHER~1.po"),
+            ("longfilename.po", "LO~1.po"),
+            ("longfilename.po", "LONGFI~1.fcl"),
+            ("longfilename.po", "otherlongfilename.po"),
+            ("short.po", "SHORT~1.po"),
+            ("longdir.v2", "LONGDI~1.V2"),
+        ] {
+            let (lf, sf) = check_pair(left, right);
+            assert_eq!(
+                lf, None,
+                "did not expect false collision for ({left:?}, {right:?})"
+            );
+            assert_eq!(
+                sf, None,
+                "did not expect false reverse collision for ({left:?}, {right:?})"
+            );
+        }
     }
 }

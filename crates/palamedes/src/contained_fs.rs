@@ -1239,15 +1239,23 @@ mod platform {
         }
 
         /// Writes `bytes` to `file_name` through this verified directory
-        /// handle without following symlinks, overwriting hard-linked files,
-        /// or mutating an existing inode in place.
+        /// handle without following symlinks or overwriting hard-linked files.
         ///
-        /// Rejects reserved lock filenames, symlinks, and existing hard-linked
-        /// targets (`st_nlink > 1`), then publishes a replacement file
-        /// atomically so a concurrent hard link created against the previous
-        /// inode cannot have its contents truncated or overwritten while
-        /// preserving umask/ACL inheritance on creation and existing metadata
-        /// on replacement.
+        /// When `file_name` already exists as a single-link regular file
+        /// (`st_nlink == 1`), updates the existing inode in place under the
+        /// directory target lock after verifying its handle identity against
+        /// `fstatat(AT_SYMLINK_NOFOLLOW)` and stripping `S_ISUID | S_ISGID`.
+        /// Updating the existing inode preserves all inode-bound and
+        /// kernel-hidden metadata (including Linux `trusted.*` xattrs that
+        /// `flistxattr` hides from callers without `CAP_SYS_ADMIN`, IMA/EVM
+        /// metadata, and unreadable macOS/BSD attributes), matching
+        /// `std::fs::write` semantics without following symlinks or mutating
+        /// hard links.
+        ///
+        /// When `file_name` does not exist yet, creates it atomically via
+        /// [`Self::write_file_atomically`] with
+        /// [`ContainedNewFileMode::RespectUmask`] so umask and directory ACL
+        /// inheritance are respected without following symlinks.
         ///
         /// # Errors
         ///
@@ -1260,14 +1268,102 @@ mod platform {
             bytes: &[u8],
         ) -> Result<(), ContainedFsError> {
             super::validate_writable_file_name(file_name)?;
-            self.reject_symlink_or_hard_link(file_name)?;
-            self.write_file_atomically(
-                file_name,
-                bytes,
-                ContainedNewFileMode::RespectUmask,
-                ContainedWriteDurability::Rename,
-            )
-            .map(|_| ())
+            let _target_lock = self.lock_target(file_name)?;
+            let c_target = os_str_to_cstring(file_name)?;
+
+            for _ in 0..8 {
+                // SAFETY: `self.fd` is an open directory descriptor and `c_target` is valid.
+                let raw = unsafe {
+                    libc::openat(
+                        self.fd.as_raw_fd(),
+                        c_target.as_ptr(),
+                        libc::O_WRONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                    )
+                };
+                if raw < 0 {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() == Some(libc::ENOENT) {
+                        match self.write_file_atomically(
+                            file_name,
+                            bytes,
+                            ContainedNewFileMode::RespectUmask,
+                            ContainedWriteDurability::Rename,
+                        ) {
+                            Ok(_) => return Ok(()),
+                            Err(ContainedFsError::Io(io_err))
+                                if io_err.kind() == io::ErrorKind::AlreadyExists =>
+                            {
+                                continue;
+                            }
+                            Err(err) => return Err(err),
+                        }
+                    }
+                    if is_symlink_open_error(error.raw_os_error()) {
+                        return Err(ContainedFsError::Containment(format!(
+                            "refusing to write through symlink \"{}\"",
+                            file_name.to_string_lossy()
+                        )));
+                    }
+                    return Err(ContainedFsError::Io(error));
+                }
+                // SAFETY: `raw` is a newly opened valid file descriptor.
+                let mut file = File::from(unsafe { OwnedFd::from_raw_fd(raw) });
+                let stat = fstat_fd(file.as_raw_fd())?;
+                if (stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "refusing to write non-regular file \"{}\"",
+                            file_name.to_string_lossy()
+                        ),
+                    )));
+                }
+                if stat.st_nlink > 1 {
+                    return Err(ContainedFsError::Containment(format!(
+                        "refusing to overwrite hard-linked file \"{}\"",
+                        file_name.to_string_lossy()
+                    )));
+                }
+                let live_stat = match fstatat_nofollow(self.fd.as_raw_fd(), &c_target) {
+                    Ok(live) => live,
+                    Err(error) if error.raw_os_error() == Some(libc::ENOENT) => continue,
+                    Err(error) => return Err(ContainedFsError::Io(error)),
+                };
+                if stat_identity(&live_stat) != stat_identity(&stat) {
+                    continue;
+                }
+                // Clear `O_NONBLOCK` now that `S_ISREG` is verified.
+                // SAFETY: `file` is an open regular file descriptor.
+                let fl = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) };
+                if fl >= 0 && (fl & libc::O_NONBLOCK) != 0 {
+                    // SAFETY: `file` is an open regular file descriptor.
+                    let _ = unsafe {
+                        libc::fcntl(file.as_raw_fd(), libc::F_SETFL, fl & !libc::O_NONBLOCK)
+                    };
+                }
+                // SAFETY: `file` is an open writable regular file descriptor.
+                if unsafe { libc::ftruncate(file.as_raw_fd(), 0) } != 0 {
+                    return Err(ContainedFsError::Io(io::Error::last_os_error()));
+                }
+                file.write_all(bytes)?;
+                file.flush()?;
+                // Ensure `S_ISUID` and `S_ISGID` are cleared even on kernels
+                // that keep them when the file owner writes in place.
+                let after_stat = fstat_fd(file.as_raw_fd())?;
+                let after_mode = after_stat.st_mode & 0o7777;
+                let stripped_mode = after_mode & !(libc::S_ISUID | libc::S_ISGID);
+                if stripped_mode != after_mode {
+                    // SAFETY: `file` is an open regular file descriptor.
+                    if unsafe { libc::fchmod(file.as_raw_fd(), stripped_mode) } != 0 {
+                        return Err(ContainedFsError::Io(io::Error::last_os_error()));
+                    }
+                }
+                return Ok(());
+            }
+            Err(ContainedFsError::Io(io::Error::other(format!(
+                "target \"{}\" changed repeatedly during in-place write",
+                file_name.to_string_lossy()
+            ))))
         }
 
         /// Writes `bytes` to a fresh temporary file and atomically publishes
@@ -1278,10 +1374,18 @@ mod platform {
         /// staged inside a private `0700` temporary directory (with inherited
         /// ACLs stripped and `setgid` preserved) so no other principal can
         /// observe the temporary file while its content, ownership/group, mode
-        /// bits, and extended ACLs are applied and synced before the single
-        /// atomic `renameat` into place. If the original principals or ACLs
-        /// cannot be preserved safely, replacement fails without modifying the
+        /// bits, caller-visible extended attributes, and extended ACLs are
+        /// applied and synced before the single atomic `renameat` into place.
+        /// If any visible principals, flags, xattrs, or ACLs cannot be
+        /// preserved safely, replacement fails without modifying the
         /// destination.
+        ///
+        /// Note on Linux `trusted.*` attributes: the Linux kernel omits
+        /// `trusted.*` extended attributes from `flistxattr` for callers
+        /// without `CAP_SYS_ADMIN`, so unprivileged atomic rename cannot detect
+        /// or copy hidden `trusted.*` attributes across a new inode. Callers
+        /// that require inode-preserving updates on existing files (such as
+        /// recompiling `.mjs` outputs) should use [`Self::write_file_in_place`].
         ///
         /// When creating a new file, Linux first uses an unnamed `O_TMPFILE`
         /// handle published via `/proc/self/fd` (handle-based, no-replace, with
@@ -3240,20 +3344,18 @@ mod platform {
     fn is_smb_share(dir_fd: std::os::fd::RawFd) -> bool {
         #[cfg(target_os = "linux")]
         {
-            const SMB_SUPER_MAGIC: u64 = 0x517b;
-            const CIFS_SUPER_MAGIC: u64 = 0xff53_4d42;
-            const SMB2_SUPER_MAGIC: u64 = 0xfe53_4d42;
             let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
             // SAFETY: `dir_fd` is open and `fs_stat` is writable.
             if unsafe { libc::fstatfs(dir_fd, fs_stat.as_mut_ptr()) } == 0 {
                 // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
                 let fs_stat = unsafe { fs_stat.assume_init() };
-                #[allow(clippy::unnecessary_cast)]
-                let f_type = fs_stat.f_type as u64;
-                return matches!(
-                    f_type,
-                    SMB_SUPER_MAGIC | CIFS_SUPER_MAGIC | SMB2_SUPER_MAGIC
-                );
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    clippy::unnecessary_cast
+                )]
+                let f_type = fs_stat.f_type as u32;
+                return super::is_linux_smb_magic(f_type);
             }
             false
         }
@@ -3698,22 +3800,16 @@ mod platform {
             if unsafe { libc::fstatfs(readable.as_raw_fd(), fs_stat.as_mut_ptr()) } == 0 {
                 // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
                 let fs_stat = unsafe { fs_stat.assume_init() };
-                #[allow(clippy::unnecessary_cast)]
-                let f_type = fs_stat.f_type as u64;
-                const MSDOS_SUPER_MAGIC: u64 = 0x4d44;
-                const EXFAT_SUPER_MAGIC: u64 = 0x2011_bab0;
-                const EXT4_SUPER_MAGIC: u64 = 0xef53;
-                const TMPFS_MAGIC: u64 = 0x0102_1994;
-                const BTRFS_SUPER_MAGIC: u64 = 0x9123_683e;
-                const F2FS_SUPER_MAGIC: u64 = 0xf2f5_2010;
-                if matches!(f_type, MSDOS_SUPER_MAGIC | EXFAT_SUPER_MAGIC) {
-                    return Some(DirFilenameEquivalence::CaseInsensitiveNtfs);
-                }
-                if f_type == BTRFS_SUPER_MAGIC
-                    || (checked_casefold_flag
-                        && matches!(f_type, EXT4_SUPER_MAGIC | TMPFS_MAGIC | F2FS_SUPER_MAGIC))
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    clippy::unnecessary_cast
+                )]
+                let f_type = fs_stat.f_type as u32;
+                if let Some(equivalence) =
+                    super::classify_linux_fs_magic(f_type, checked_casefold_flag)
                 {
-                    return Some(DirFilenameEquivalence::Exact);
+                    return Some(equivalence);
                 }
             }
             // Keep `filename_equivalence` strictly read-only: return `None`
@@ -5933,6 +6029,40 @@ mod platform {
             ContainedFsError::Containment("path component contains an interior NUL byte".to_owned())
         })
     }
+}
+
+#[cfg(any(target_os = "linux", test))]
+const fn is_linux_smb_magic(f_type: u32) -> bool {
+    const SMB_SUPER_MAGIC: u32 = 0x517b;
+    const CIFS_SUPER_MAGIC: u32 = 0xff53_4d42;
+    const SMB2_SUPER_MAGIC: u32 = 0xfe53_4d42;
+    matches!(
+        f_type,
+        SMB_SUPER_MAGIC | CIFS_SUPER_MAGIC | SMB2_SUPER_MAGIC
+    )
+}
+
+#[cfg(any(target_os = "linux", test))]
+const fn classify_linux_fs_magic(
+    f_type: u32,
+    checked_casefold_flag: bool,
+) -> Option<DirFilenameEquivalence> {
+    const MSDOS_SUPER_MAGIC: u32 = 0x4d44;
+    const EXFAT_SUPER_MAGIC: u32 = 0x2011_bab0;
+    const EXT4_SUPER_MAGIC: u32 = 0xef53;
+    const TMPFS_MAGIC: u32 = 0x0102_1994;
+    const BTRFS_SUPER_MAGIC: u32 = 0x9123_683e;
+    const F2FS_SUPER_MAGIC: u32 = 0xf2f5_2010;
+    if matches!(f_type, MSDOS_SUPER_MAGIC | EXFAT_SUPER_MAGIC) {
+        return Some(DirFilenameEquivalence::CaseInsensitiveNtfs);
+    }
+    if f_type == BTRFS_SUPER_MAGIC
+        || (checked_casefold_flag
+            && matches!(f_type, EXT4_SUPER_MAGIC | TMPFS_MAGIC | F2FS_SUPER_MAGIC))
+    {
+        return Some(DirFilenameEquivalence::Exact);
+    }
+    None
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -10293,6 +10423,7 @@ mod tests {
     fn macos_replacement_aborts_when_extended_attributes_are_unreadable() {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::MetadataExt;
         use std::process::Command;
 
         let root = tempfile::tempdir().expect("temp dir");
@@ -10326,8 +10457,13 @@ mod tests {
 
         let dir = ContainedDir::open_root(root.path()).expect("open root");
         let err = dir
-            .write_file_in_place(OsStr::new("en.mjs"), b"export default { v: 2 };\n")
-            .expect_err("replacement must fail closed when xattrs cannot be read");
+            .write_file_atomically(
+                OsStr::new("en.mjs"),
+                b"export default { v: 2 };\n",
+                ContainedNewFileMode::RespectUmask,
+                ContainedWriteDurability::Rename,
+            )
+            .expect_err("atomic replacement must fail closed when xattrs cannot be read");
         assert!(
             matches!(
                 &err,
@@ -10335,15 +10471,22 @@ mod tests {
             ),
             "expected PermissionDenied when readextattr is denied, got {err:?}"
         );
-        // Remove the deny ACE so we can confirm both the original file content
-        // and its extended attribute remained untouched.
+        // Meanwhile, `write_file_in_place` updates the existing inode in place,
+        // preserving unreadable extended attributes automatically.
+        let before_ino = fs::metadata(&file_path).expect("stat before").ino();
+        dir.write_file_in_place(OsStr::new("en.mjs"), b"export default { v: 2 };\n")
+            .expect("in-place write must preserve existing inode and unreadable xattrs");
+        let after_ino = fs::metadata(&file_path).expect("stat after").ino();
+        assert_eq!(after_ino, before_ino, "write_file_in_place must keep inode");
+        // Remove the deny ACE so we can confirm both the updated content and
+        // its original extended attribute remained intact.
         let _ = Command::new("/bin/chmod")
             .args(["-a", "everyone deny readextattr"])
             .arg(&file_path)
             .status();
         assert_eq!(
-            fs::read_to_string(&file_path).expect("read untouched module"),
-            "export default { v: 1 };\n"
+            fs::read_to_string(&file_path).expect("read updated module"),
+            "export default { v: 2 };\n"
         );
         let mut buf = [0u8; 32];
         // SAFETY: `c_path`, `attr_name`, and `buf` are valid.
@@ -10596,23 +10739,48 @@ mod tests {
         }
 
         let dir = ContainedDir::open_root(root.path()).expect("open root");
-        dir.write_file_in_place(OsStr::new("en.mjs"), b"export default { v: 2 };\n")
-            .expect("replace module");
-        let after_mode = fs::metadata(&file_path)
-            .expect("stat replaced")
+        dir.write_file_atomically(
+            OsStr::new("en.mjs"),
+            b"export default { v: 2 };\n",
+            ContainedNewFileMode::RespectUmask,
+            ContainedWriteDurability::Rename,
+        )
+        .expect("atomically replace module");
+        let after_atomic_mode = fs::metadata(&file_path)
+            .expect("stat atomically replaced")
             .permissions()
             .mode()
             & 0o7777;
         assert_eq!(
-            after_mode & 0o6000,
+            after_atomic_mode & 0o6000,
             0,
-            "S_ISUID and S_ISGID must be cleared when replacing file contents, got 0o{after_mode:04o}"
+            "S_ISUID and S_ISGID must be cleared on atomic replacement, got 0o{after_atomic_mode:04o}"
         );
         assert_eq!(
-            after_mode & 0o0777,
+            after_atomic_mode & 0o0777,
             0o0755,
-            "ordinary permission bits must still be preserved"
+            "ordinary permission bits must still be preserved on atomic replacement"
         );
+
+        if fs::set_permissions(&file_path, fs::Permissions::from_mode(0o4755)).is_ok() {
+            dir.write_file_in_place(OsStr::new("en.mjs"), b"export default { v: 3 };\n")
+                .expect("in-place replace module");
+            let after_mode = fs::metadata(&file_path)
+                .expect("stat in-place replaced")
+                .permissions()
+                .mode()
+                & 0o7777;
+            assert_eq!(
+                after_mode & 0o6000,
+                0,
+                "S_ISUID and S_ISGID must be cleared when replacing file in place, got 0o{after_mode:04o}"
+            );
+            assert_eq!(
+                after_mode & 0o0777,
+                0o0755,
+                "ordinary permission bits must still be preserved in place"
+            );
+        }
     }
 
     #[test]
@@ -10849,5 +11017,35 @@ mod cross_platform_tests {
         assert_eq!(next_extsize, 65_536);
         assert_eq!(next_projid, 42);
         assert_eq!(next_cowextsize, 131_072);
+    }
+
+    #[test]
+    fn linux_fs_magic_classification_handles_signed_32bit_statfs_values() {
+        use super::{DirFilenameEquivalence, classify_linux_fs_magic, is_linux_smb_magic};
+
+        // Simulate 32-bit glibc Linux where `statfs.f_type` is signed `i32` and
+        // high-bit filesystem magic constants are negative before truncating to `u32`.
+        let cifs_i32 = 0xff53_4d42_u32 as i32;
+        let smb2_i32 = 0xfe53_4d42_u32 as i32;
+        let btrfs_i32 = 0x9123_683e_u32 as i32;
+        let f2fs_i32 = 0xf2f5_2010_u32 as i32;
+
+        #[allow(clippy::cast_sign_loss)]
+        {
+            assert!(is_linux_smb_magic(cifs_i32 as u32));
+            assert!(is_linux_smb_magic(smb2_i32 as u32));
+            assert!(is_linux_smb_magic(0x517b));
+            assert!(!is_linux_smb_magic(btrfs_i32 as u32));
+
+            assert_eq!(
+                classify_linux_fs_magic(btrfs_i32 as u32, false),
+                Some(DirFilenameEquivalence::Exact)
+            );
+            assert_eq!(
+                classify_linux_fs_magic(f2fs_i32 as u32, true),
+                Some(DirFilenameEquivalence::Exact)
+            );
+            assert_eq!(classify_linux_fs_magic(f2fs_i32 as u32, false), None);
+        }
     }
 }
