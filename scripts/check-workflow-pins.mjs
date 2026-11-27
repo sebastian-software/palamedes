@@ -13476,9 +13476,7 @@ function extractDockerfileHeredocDelimiters(instructionText) {
           cursor += 1;
         }
       } else {
-        const bareMatch = /^(?<bare>[A-Za-z_][A-Za-z0-9_.-]*)(?=$|[\s;&|<>()])/u.exec(
-          rest.slice(cursor),
-        );
+        const bareMatch = /^(?<bare>[A-Za-z0-9_.-]+)(?=$|[\s;&|<>()])/u.exec(rest.slice(cursor));
         if (bareMatch) {
           delimiter = bareMatch.groups.bare;
           cursor += delimiter.length;
@@ -13792,8 +13790,15 @@ export function unpinnedContainerfileReferences(
     }
     inHeaderDirectives = false;
     const startLine = index + 1 + startLineOffset;
+    const hasUnescapedTrailingEscape = (value) => {
+      let trailingCount = 0;
+      for (let i = value.length - 1; i >= 0 && value[i] === escapeChar; i -= 1) {
+        trailingCount += 1;
+      }
+      return trailingCount % 2 === 1;
+    };
     let combined = line.trimStart().trimEnd();
-    while (combined.endsWith(escapeChar) && index + 1 < rawLines.length) {
+    while (hasUnescapedTrailingEscape(combined) && index + 1 < rawLines.length) {
       index += 1;
       const nextLine = rawLines[index].trimEnd();
       const nextTrimmed = nextLine.trimStart();
@@ -13802,12 +13807,84 @@ export function unpinnedContainerfileReferences(
       }
       combined = `${combined.slice(0, -1)}${nextLine}`;
     }
-    if (combined.endsWith(escapeChar)) {
+    if (hasUnescapedTrailingEscape(combined)) {
       combined = combined.slice(0, -1).trimEnd();
     }
     pendingHeredocs.push(...extractDockerfileHeredocDelimiters(combined));
     logicalLines.push({ lineNumber: startLine, text: combined });
   }
+
+  const parseDockerfileWords = (rest) => {
+    const words = [];
+    let idx = 0;
+    while (idx < rest.length) {
+      while (idx < rest.length && /\s/u.test(rest[idx])) {
+        idx += 1;
+      }
+      if (idx >= rest.length) {
+        break;
+      }
+      let word = "";
+      let quote = null;
+      let sawSingleQuote = false;
+      let sawUnquotedOrDoubleQuote = false;
+      while (idx < rest.length) {
+        const ch = rest[idx];
+        if (quote === "'") {
+          if (ch === "'") {
+            quote = null;
+          } else {
+            word += ch;
+          }
+          idx += 1;
+          continue;
+        }
+        if (quote === '"') {
+          if (ch === escapeChar && idx + 1 < rest.length) {
+            const next = rest[idx + 1];
+            if (next === '"' || next === escapeChar) {
+              word += next;
+              idx += 2;
+              continue;
+            }
+          }
+          if (ch === '"') {
+            quote = null;
+          } else {
+            word += ch;
+          }
+          idx += 1;
+          continue;
+        }
+        if (/\s/u.test(ch)) {
+          break;
+        }
+        if (ch === "'") {
+          quote = "'";
+          sawSingleQuote = true;
+          idx += 1;
+          continue;
+        }
+        if (ch === '"') {
+          quote = '"';
+          sawUnquotedOrDoubleQuote = true;
+          idx += 1;
+          continue;
+        }
+        if (ch === escapeChar && idx + 1 < rest.length) {
+          sawUnquotedOrDoubleQuote = true;
+          word += rest[idx + 1];
+          idx += 2;
+          continue;
+        }
+        sawUnquotedOrDoubleQuote = true;
+        word += ch;
+        idx += 1;
+      }
+      words.push({ text: word, singleQuoted: sawSingleQuote && !sawUnquotedOrDoubleQuote });
+    }
+    return words;
+  };
 
   if (argOverrides?.has("BUILDKIT_SYNTAX")) {
     const syntaxProblems = [];
@@ -13828,13 +13905,17 @@ export function unpinnedContainerfileReferences(
     if (!fromMatch) {
       continue;
     }
-    const tokens = fromMatch.groups.rest.trim().split(/\s+/u);
+    const words = parseDockerfileWords(fromMatch.groups.rest.trim());
     let cursor = 0;
-    while (cursor < tokens.length && tokens[cursor].startsWith("--")) {
+    while (cursor < words.length && words[cursor].text.startsWith("--")) {
       cursor += 1;
     }
-    if (tokens[cursor + 1] && tokens[cursor + 1].toLowerCase() === "as" && tokens[cursor + 2]) {
-      allStages.add(tokens[cursor + 2].toLowerCase());
+    if (
+      words[cursor + 1] &&
+      words[cursor + 1].text.toLowerCase() === "as" &&
+      words[cursor + 2]?.text
+    ) {
+      allStages.add(words[cursor + 2].text.toLowerCase());
     }
   }
 
@@ -14003,19 +14084,22 @@ export function unpinnedContainerfileReferences(
         seenFrom = true;
         stageArgs = new Map();
         stageAutomaticDynamicArgs = new Set();
-        const tokens = fromMatch.groups.rest.trim().split(/\s+/u);
+        const words = parseDockerfileWords(fromMatch.groups.rest.trim());
         let cursor = 0;
-        while (cursor < tokens.length && tokens[cursor].startsWith("--")) {
+        while (cursor < words.length && words[cursor].text.startsWith("--")) {
           cursor += 1;
         }
-        const imageToken = tokens[cursor];
+        const imageWord = words[cursor];
+        const imageToken = imageWord?.text;
         if (!imageToken) {
           continue;
         }
 
         const stageAlias =
-          tokens[cursor + 1] && tokens[cursor + 1].toLowerCase() === "as" && tokens[cursor + 2]
-            ? tokens[cursor + 2].toLowerCase()
+          words[cursor + 1] &&
+          words[cursor + 1].text.toLowerCase() === "as" &&
+          words[cursor + 2]?.text
+            ? words[cursor + 2].text.toLowerCase()
             : null;
 
         // Resolve against global ARGs (including any workflow `--build-arg`
@@ -14041,8 +14125,12 @@ export function unpinnedContainerfileReferences(
           return false;
         };
         const fromDynamicArgs = new Set([...dynamicOverriddenArgs, ...globalAutomaticDynamicArgs]);
-        const expandedFrom = resolveBuildArgValues(imageToken, globalArgs, fromDynamicArgs);
-        const dynamicOverrideName = referencesDynamicOverride(imageToken);
+        const expandedFrom = imageWord.singleQuoted
+          ? { values: [imageToken], truncated: false }
+          : resolveBuildArgValues(imageToken, globalArgs, fromDynamicArgs);
+        const dynamicOverrideName = imageWord.singleQuoted
+          ? null
+          : referencesDynamicOverride(imageToken);
         const allPinnedDespiteDynamic =
           expandedFrom.values.length > 0 &&
           expandedFrom.values.every((resolved) => isPinnedDigest(resolved));

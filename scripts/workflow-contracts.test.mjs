@@ -4549,6 +4549,24 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r59Fixture, { recursive: true, force: true });
     }
+    // Dockerfile lines ending in an escaped backslash (`\\`) are not treated
+    // as continuations, quoted `FROM "${BASE}"` honors Dockerfile quoting, and
+    // numeric heredoc delimiters (`COPY <<123`) keep payload lines out of
+    // instruction validation.
+    expect(
+      unpinnedContainerfileReferences(
+        [
+          `ARG BASE=node:24@${digest}`,
+          'FROM "${BASE}" AS build',
+          "RUN echo literal\\\\",
+          "FROM alpine:3.20 AS second",
+          "COPY <<123 /sample.txt",
+          "FROM example:test",
+          "123",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:4: alpine:3.20 is not pinned to a sha256 digest"]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
