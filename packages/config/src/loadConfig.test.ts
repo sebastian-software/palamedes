@@ -1,8 +1,9 @@
+import fs from "node:fs";
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   catalogMatchesSource,
@@ -118,6 +119,54 @@ describe("loadPalamedesConfig", () => {
       digestConfig({ configPath, configDependencies: [configPath] }),
     );
     expect(digestConfig(withDependencies)).toBe(digestConfig(sortedDependencies));
+  });
+
+  it("reuses stat-validated config digests for settled files and invalidates on edits", async () => {
+    const fixtureDir = await createTempDir();
+    const configPath = path.join(fixtureDir, "palamedes.yaml");
+    const dependencyPath = path.join(fixtureDir, "settings.ts");
+    await writeFile(configPath, "locales: [en]\n");
+    await writeFile(dependencyPath, 'export const locale = "de";\n');
+
+    const baseNow = Date.now();
+    const nowSpy = vi.spyOn(Date, "now");
+    const readSpy = vi.spyOn(fs, "readFileSync");
+    try {
+      // Simulate files settled outside the racy mtime window.
+      nowSpy.mockReturnValue(baseNow + 5000);
+
+      const singleFirst = digestConfig({ configPath });
+      expect(readSpy).toHaveBeenCalledTimes(1);
+
+      readSpy.mockClear();
+      expect(digestConfig({ configPath })).toBe(singleFirst);
+      expect(readSpy).not.toHaveBeenCalled();
+
+      const multiConfig = { configPath, configDependencies: [dependencyPath, configPath] };
+      const multiFirst = digestConfig(multiConfig);
+      expect(readSpy).toHaveBeenCalledTimes(2);
+
+      readSpy.mockClear();
+      expect(digestConfig(multiConfig)).toBe(multiFirst);
+      expect(readSpy).not.toHaveBeenCalled();
+
+      // Editing a dependency changes its stat fingerprint and invalidates immediately.
+      nowSpy.mockRestore();
+      await writeFile(dependencyPath, 'export const locale = "fr-FR";\n');
+      const multiUpdated = digestConfig(multiConfig);
+      expect(multiUpdated).not.toBe(multiFirst);
+      expect(readSpy).toHaveBeenCalledTimes(2);
+
+      // Inside the racy mtime window, a same-byte-length overwrite still re-reads and invalidates.
+      readSpy.mockClear();
+      await writeFile(dependencyPath, 'export const locale = "de-DE";\n');
+      const multiSameSize = digestConfig(multiConfig);
+      expect(multiSameSize).not.toBe(multiUpdated);
+      expect(readSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      nowSpy.mockRestore();
+      readSpy.mockRestore();
+    }
   });
 
   it.skipIf(process.platform !== "win32")(
