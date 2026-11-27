@@ -138,10 +138,13 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   return null;
 }
 
-function parseUnicodeLanguageId(subtags: readonly string[], startIndex: number): number {
+function parseUnicodeLanguageId(
+  subtags: readonly string[],
+  startIndex: number,
+): { endIndex: number; variantCount: number } | null {
   const language = subtags[startIndex];
   if (!language || !/^(?:[a-z]{2,3}|[a-z]{5,8})$/.test(language)) {
-    return -1;
+    return null;
   }
 
   let index = startIndex + 1;
@@ -158,23 +161,23 @@ function parseUnicodeLanguageId(subtags: readonly string[], startIndex: number):
   while (index < subtags.length && /^(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3})$/.test(subtags[index]!)) {
     const variant = subtags[index]!;
     if (seenVariants.has(variant)) {
-      return -1;
+      return null;
     }
     seenVariants.add(variant);
     index += 1;
   }
 
-  return index;
+  return { endIndex: index, variantCount: seenVariants.size };
 }
 
 function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number): string | null {
   const subtags = lowerTag.split("-");
-  const baseEndIndex = parseUnicodeLanguageId(subtags, 0);
-  if (baseEndIndex === -1) {
+  const parsedBase = parseUnicodeLanguageId(subtags, 0);
+  if (parsedBase === null) {
     return null;
   }
 
-  let index = baseEndIndex;
+  let index = parsedBase.endIndex;
   let hasPosixVariant = false;
   const seenSingletons = new Set<string>();
   while (index < subtags.length && /^[0-9a-wy-z]$/.test(subtags[index]!)) {
@@ -212,21 +215,22 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number)
     if (singleton === "t") {
       let hasLangOrField = false;
       if (index < subtags.length && !/^[a-z][0-9]$/.test(subtags[index]!)) {
-        const tLangStart = index;
-        const nextIndex = parseUnicodeLanguageId(subtags, index);
-        if (nextIndex === -1) {
+        const parsedTransformed = parseUnicodeLanguageId(subtags, index);
+        if (parsedTransformed === null) {
           return null;
         }
-        const tLang = subtags.slice(tLangStart, nextIndex).join("-");
-        const syntheticTransformedTag = `und-t-${tLang}`;
+        // ICU rejects a transformed language ID whose sole variant is `posix`
+        // (canonicalization would turn it into `-u-va-posix`, which is invalid
+        // inside `-t-`). Validate structurally without passing discarded
+        // subtags to Intl.Locale.
         if (
-          syntheticTransformedTag.length <= maxTagLength &&
-          !languageTag(syntheticTransformedTag, maxTagLength)
+          parsedTransformed.variantCount === 1 &&
+          subtags[parsedTransformed.endIndex - 1] === "posix"
         ) {
           return null;
         }
         hasLangOrField = true;
-        index = nextIndex;
+        index = parsedTransformed.endIndex;
       }
       while (index < subtags.length && /^[a-z][0-9]$/.test(subtags[index]!)) {
         index += 1;
@@ -281,7 +285,7 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number)
     return null;
   }
 
-  const baseTag = subtags.slice(0, baseEndIndex).join("-");
+  const baseTag = subtags.slice(0, parsedBase.endIndex).join("-");
   const reducedTag = hasPosixVariant ? `${baseTag}-u-va-posix` : baseTag;
   return reducedTag.length <= maxTagLength && languageTag(reducedTag, maxTagLength)
     ? reducedTag
@@ -512,6 +516,20 @@ function parseRequestHost(host: string | null | undefined): ParsedRequestHost | 
   const hostname = trailingDot ? rawHostname.slice(0, -1) : rawHostname;
   if (!hostname || hostname.length > 253 || !hostname.split(".").every(isDnsLabel)) {
     return null;
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(`http://${rawHostname}/`);
+  } catch {
+    return null;
+  }
+
+  if (/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(parsedUrl.hostname)) {
+    if (trailingDot || parsedUrl.hostname !== hostname) {
+      return null;
+    }
+    return { hostname: parsedUrl.hostname, trailingDot: false, port, isDns: false };
   }
 
   return { hostname, trailingDot, port, isDns: true };

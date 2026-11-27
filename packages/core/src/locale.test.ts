@@ -721,6 +721,12 @@ describe("security hardening", () => {
       "[::1]:0",
       "[::1]:65536",
       "[invalid]",
+      "shop.example.123",
+      "shop.example.123.",
+      "127.0.0.999",
+      "123",
+      "0x7f.1",
+      "127.0.0.1.",
     ];
 
     it.each(malformedHosts)(
@@ -843,6 +849,30 @@ describe("security hardening", () => {
           requestHost: "[::1]:3000",
         }),
       ).toBe("//[::1]:3000/en/docs");
+
+      expect(
+        mappedWithDefault.canonicalUrl({
+          locale: "en",
+          pathname: "/docs",
+          requestHost: "127.0.0.1:3000",
+        }),
+      ).toBe("//127.0.0.1:3000/en/docs");
+
+      expect(
+        subdomained.canonicalUrl({
+          locale: "de",
+          pathname: "/checkout",
+          requestHost: "127.0.0.1:3000",
+        }),
+      ).toBe("/checkout");
+
+      expect(
+        tlded.canonicalUrl({
+          locale: "de",
+          pathname: "/checkout",
+          requestHost: "127.0.0.1:3000",
+        }),
+      ).toBe("/checkout");
 
       expect(
         mappedWithDefault.canonicalUrl({
