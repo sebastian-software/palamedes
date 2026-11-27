@@ -3199,18 +3199,14 @@ fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements()
             ),
             "{filename}: unexpected transform error: {transform_err:?}"
         );
-
-        let extract_err = extract_messages(source, filename)
-            .expect_err("nested macro in value expression must fail extraction cleanly");
-        assert!(
-            matches!(
-                &extract_err,
-                PalamedesError::UnsupportedMacroSyntax { macro_name, detail, .. }
-                    if macro_name == expected_outer && detail.contains("nested `t` macro")
-            ),
-            "{filename}: unexpected extract error: {extract_err:?}"
-        );
     }
+
+    // Valid for unbundled Node runtime macros: extraction still collects both calls in
+    // manifest-compatible descriptor value expressions even when the compiler transform rejects them.
+    let unbundled = "import { t } from \"@palamedes/core/macro\";\nexport function f(value?: string) { return t({ message: \"a {status}\" }, { status: value ?? t`Unknown` }); }\n";
+    let extracted = extract_messages(unbundled, "unbundled.ts")
+        .expect("manifest-compatible nested macro in descriptor value should remain extractable");
+    assert_eq!(extracted.len(), 2);
 
     // Valid: a single `t` macro inside a `<Trans>` component attribute still transforms cleanly.
     let valid_attr = "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f() { return <Trans>Click <Button title={t`Tooltip`} /> now</Trans>; }\n";
@@ -3231,19 +3227,17 @@ fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements()
         .expect("shadowed t inside descriptor value should transform");
     assert!(transformed.code.contains("(t: any) => t`local`"));
 
-    // Valid: discarded choice list `key` attributes do not trigger nested-macro rejection.
-    let keyed_plural = "import { t } from \"@palamedes/core/macro\";\nimport { Plural } from \"@palamedes/react/macro\";\nexport function f(count: number) { return <Plural key={t`Files`} value={count} one=\"# file\" other=\"# files\" />; }\n";
-    let extracted = extract_messages(keyed_plural, "keyed-plural.tsx")
-        .expect("choice JSX macro with discarded key attribute should extract");
-    assert_eq!(extracted.len(), 2);
+    // Valid: discarded choice list `key` and overwritten duplicate `value` attributes/props
+    // do not trigger nested-macro rejection.
+    let keyed_plural = "import { t } from \"@palamedes/core/macro\";\nimport { Plural } from \"@palamedes/react/macro\";\nexport function f(count: number) { return [<Plural key={t`Files`} value={count} one=\"# file\" other=\"# files\" />, <Plural value={count} value={t`Ignored`} one=\"# file\" other=\"# files\" />]; }\n";
     let transformed = transform_macros_raw(keyed_plural, "keyed-plural.tsx", None)
-        .expect("choice JSX macro with discarded key attribute should transform");
+        .expect("choice JSX macro with discarded key/value attributes should transform");
     assert_eq!(transformed.compiled_ids.len(), 1);
 
-    let keyed_lowered_plural = "import { t } from \"@palamedes/core/macro\";\nimport { Plural } from \"@palamedes/react/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nexport function f(count) { return [render(Plural, { key: t`Files`, value: count, one: \"# file\", other: \"# files\" }), render(Plural, { value: count, one: \"# file\", other: \"# files\" }, t`Files`)]; }\n";
+    let keyed_lowered_plural = "import { t } from \"@palamedes/core/macro\";\nimport { Plural, Select } from \"@palamedes/react/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nexport function f(count, status) { return [render(Plural, { key: t`Files`, value: count, one: \"# file\", other: \"# files\" }), render(Plural, { value: count, one: \"# file\", other: \"# files\" }, t`Files`), render(Select, { value: t`Unknown`, value: status, other: \"Not ready\" })]; }\n";
     let transformed = transform_macros_raw(keyed_lowered_plural, "keyed-lowered.js", None)
-        .expect("lowered choice macro with discarded key prop should transform");
-    assert_eq!(transformed.compiled_ids.len(), 1);
+        .expect("lowered choice macro with discarded key/overwritten value prop should transform");
+    assert_eq!(transformed.compiled_ids.len(), 2);
 
     // Valid: direct runtime calls inside macro value expressions remain extractable and preserved.
     for (filename, source) in [

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use oxc_ast::ast::{
-    Argument, CallExpression, Expression, JSXAttributeItem, JSXChild, JSXElement,
-    JSXOpeningElement, ObjectPropertyKind, TaggedTemplateExpression,
+    Argument, CallExpression, Expression, JSXAttributeItem, JSXAttributeValue, JSXChild,
+    JSXElement, JSXOpeningElement, ObjectPropertyKind, TaggedTemplateExpression,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_semantic::Semantic;
@@ -723,6 +723,13 @@ fn nested_macro_use_in_lowered_choice_call<'a>(
         imports,
         nested: None,
     };
+    // Lowering selects the last `value` property via `descriptor_property_value`.
+    if let Some(value) = crate::descriptor::descriptor_property_value(props, "value") {
+        finder.visit_expression(value);
+        if finder.nested.is_some() {
+            return finder.nested;
+        }
+    }
     for property in &props.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
             continue;
@@ -730,7 +737,7 @@ fn nested_macro_use_in_lowered_choice_call<'a>(
         if let Some(key) = property.key.static_name()
             && matches!(
                 key.as_ref(),
-                "id" | "message" | "comment" | "context" | "children" | "key" | "offset"
+                "id" | "message" | "comment" | "context" | "value" | "children" | "key" | "offset"
             )
         {
             continue;
@@ -751,14 +758,30 @@ fn nested_macro_use_in_choice_jsx_attributes<'a>(
         imports,
         nested: None,
     };
+    // Lowering selects the first `value` attribute whose value is an expression container.
+    let mut checked_value = false;
     for attribute in attributes {
-        if let Some(attr) = attribute.as_attribute()
-            && matches!(
-                attr.name.get_identifier().name.as_str(),
+        if let Some(attr) = attribute.as_attribute() {
+            let name = attr.name.get_identifier().name.as_str();
+            if name == "value" {
+                if !checked_value
+                    && let Some(JSXAttributeValue::ExpressionContainer(container)) =
+                        attr.value.as_ref()
+                {
+                    checked_value = true;
+                    finder.visit_jsx_expression_container(container);
+                    if finder.nested.is_some() {
+                        break;
+                    }
+                }
+                continue;
+            }
+            if matches!(
+                name,
                 "id" | "message" | "comment" | "context" | "key" | "offset"
-            )
-        {
-            continue;
+            ) {
+                continue;
+            }
         }
         finder.visit_jsx_attribute_item(attribute);
         if finder.nested.is_some() {

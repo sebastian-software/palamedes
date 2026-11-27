@@ -2847,21 +2847,11 @@ fn validate_plural_variable(
     };
     let plural_wrapped = format!("{{{variable}, {formatter}, other {{#}}}}");
     let plural_parsed = ferrocat_icu::parse_icu(&plural_wrapped)?;
-    if !matches!(
-        plural_parsed.nodes.as_slice(),
+    match plural_parsed.nodes.as_slice() {
         [IcuNode::Plural { name, options, .. }]
             if name == variable
-                && matches!(options.as_slice(), [option] if option.selector == "other")
-    ) {
-        return Err(ferrocat_icu::IcuParseError::syntax(
-            "plural variable must be a valid ICU argument identifier",
-            variable,
-            0,
-        ));
-    }
-    let runtime_parsed = parse_runtime_icu(&plural_wrapped)?;
-    match runtime_parsed.nodes.as_slice() {
-        [IcuNode::Plural { options, .. }] if matches!(options.as_slice(), [option] if option.selector == "other") => {
+                && matches!(options.as_slice(), [option] if option.selector == "other") =>
+        {
             Ok(())
         }
         _ => Err(ferrocat_icu::IcuParseError::syntax(
@@ -2882,22 +2872,15 @@ fn parse_plural_branch(
         TranslationPluralKind::Cardinal => "plural",
         TranslationPluralKind::Ordinal => "selectordinal",
     };
-    let wrapped = format!("{{count, {formatter}, other {{{value}}}}}");
+    let wrapped = format!("{{{variable}, {formatter}, other {{{value}}}}}");
     let parsed = parse_runtime_icu(&wrapped)?;
-    let [IcuNode::Plural { name, options, .. }] = parsed.nodes.as_slice() else {
+    let [IcuNode::Plural { options, .. }] = parsed.nodes.as_slice() else {
         return Err(ferrocat_icu::IcuParseError::syntax(
             "a plural branch value must not escape its plural block",
             value,
             0,
         ));
     };
-    if name != "count" {
-        return Err(ferrocat_icu::IcuParseError::syntax(
-            "a plural branch value must not escape its plural block",
-            value,
-            0,
-        ));
-    }
     /*
      * A value such as `# Datei} one {# Dateien` closes the wrapper's own branch
      * and opens another one, which is valid ICU. Keeping the first option would
@@ -4704,7 +4687,6 @@ mod tests {
             "a{b",
             "a}b",
             "a,b",
-            "file'#count",
         ] {
             assert!(
                 parse_plural_branch(bad_var, TranslationPluralKind::Cardinal, "# files").is_err(),
@@ -4721,6 +4703,20 @@ mod tests {
                 "expected render_translation_value to reject variable {bad_var:?}"
             );
         }
+
+        // Runtime apostrophe validation happens against the actual branch:
+        // an unclosed `'#` fails with `# files` but succeeds when paired inside the branch.
+        assert!(
+            parse_plural_branch("file'#count", TranslationPluralKind::Cardinal, "# files").is_err()
+        );
+        assert!(
+            parse_plural_branch(
+                "file'#count",
+                TranslationPluralKind::Cardinal,
+                "# ({file'#count, number}) files"
+            )
+            .is_ok()
+        );
 
         // Valid ICU argument names accepted by Ferrocat in plural context (including `#` and
         // apostrophes) must remain accepted and round-trip cleanly.
