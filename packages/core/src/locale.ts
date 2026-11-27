@@ -219,7 +219,9 @@ function canonicalizeOverBudgetPrefix(
     return null;
   }
 
-  let currentPrefix = [current.language, current.script, current.region].filter(Boolean).join("-");
+  let currentPrefix = [current.language ?? "und", current.script, current.region]
+    .filter(Boolean)
+    .join("-");
   const sortedVariants = subtags.slice(parsed.variantsStart, parsed.endIndex).sort();
   let index = 0;
   while (index < sortedVariants.length) {
@@ -242,7 +244,9 @@ function canonicalizeOverBudgetPrefix(
       return null;
     }
     current = parsedChunk;
-    currentPrefix = [current.language, current.script, current.region].filter(Boolean).join("-");
+    currentPrefix = [current.language ?? "und", current.script, current.region]
+      .filter(Boolean)
+      .join("-");
   }
 
   return currentPrefix.toLowerCase();

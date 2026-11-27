@@ -1190,6 +1190,13 @@ describe("security hardening", () => {
       expect(armenian.preferredLocale(overlongWesternArmenian)).toBe("hyw");
       expect(armenian.preferredLocale(`${overlongWesternArmenian};q=0, hyw`)).toBe("hyw");
 
+      const cyrillic = defineLocaleControls({
+        locales: ["en", "ru"] as const,
+        defaultLocale: "en",
+      });
+      const overlongUndCyrillic = `und-Cyrl-${Array.from({ length: 21 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
+      expect(cyrillic.preferredLocale(overlongUndCyrillic)).toBe("ru");
+
       const ambiguousRegional = defineLocaleControls({
         locales: ["en", "fr", "de-DE", "de-DE-u-co-phonebk"] as const,
         defaultLocale: "en",
