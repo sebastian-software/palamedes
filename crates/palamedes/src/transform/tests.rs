@@ -3231,6 +3231,20 @@ fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements()
         .expect("shadowed t inside descriptor value should transform");
     assert!(transformed.code.contains("(t: any) => t`local`"));
 
+    // Valid: discarded choice list `key` attributes do not trigger nested-macro rejection.
+    let keyed_plural = "import { t } from \"@palamedes/core/macro\";\nimport { Plural } from \"@palamedes/react/macro\";\nexport function f(count: number) { return <Plural key={t`Files`} value={count} one=\"# file\" other=\"# files\" />; }\n";
+    let extracted = extract_messages(keyed_plural, "keyed-plural.tsx")
+        .expect("choice JSX macro with discarded key attribute should extract");
+    assert_eq!(extracted.len(), 2);
+    let transformed = transform_macros_raw(keyed_plural, "keyed-plural.tsx", None)
+        .expect("choice JSX macro with discarded key attribute should transform");
+    assert_eq!(transformed.compiled_ids.len(), 1);
+
+    let keyed_lowered_plural = "import { t } from \"@palamedes/core/macro\";\nimport { Plural } from \"@palamedes/react/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nexport function f(count) { return [render(Plural, { key: t`Files`, value: count, one: \"# file\", other: \"# files\" }), render(Plural, { value: count, one: \"# file\", other: \"# files\" }, t`Files`)]; }\n";
+    let transformed = transform_macros_raw(keyed_lowered_plural, "keyed-lowered.js", None)
+        .expect("lowered choice macro with discarded key prop should transform");
+    assert_eq!(transformed.compiled_ids.len(), 1);
+
     // Valid: direct runtime calls inside macro value expressions remain extractable and preserved.
     for (filename, source) in [
         (

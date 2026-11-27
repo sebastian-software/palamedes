@@ -2847,11 +2847,21 @@ fn validate_plural_variable(
     };
     let plural_wrapped = format!("{{{variable}, {formatter}, other {{#}}}}");
     let plural_parsed = ferrocat_icu::parse_icu(&plural_wrapped)?;
-    match plural_parsed.nodes.as_slice() {
+    if !matches!(
+        plural_parsed.nodes.as_slice(),
         [IcuNode::Plural { name, options, .. }]
             if name == variable
-                && matches!(options.as_slice(), [option] if option.selector == "other") =>
-        {
+                && matches!(options.as_slice(), [option] if option.selector == "other")
+    ) {
+        return Err(ferrocat_icu::IcuParseError::syntax(
+            "plural variable must be a valid ICU argument identifier",
+            variable,
+            0,
+        ));
+    }
+    let runtime_parsed = parse_runtime_icu(&plural_wrapped)?;
+    match runtime_parsed.nodes.as_slice() {
+        [IcuNode::Plural { options, .. }] if matches!(options.as_slice(), [option] if option.selector == "other") => {
             Ok(())
         }
         _ => Err(ferrocat_icu::IcuParseError::syntax(
@@ -4694,6 +4704,7 @@ mod tests {
             "a{b",
             "a}b",
             "a,b",
+            "file'#count",
         ] {
             assert!(
                 parse_plural_branch(bad_var, TranslationPluralKind::Cardinal, "# files").is_err(),

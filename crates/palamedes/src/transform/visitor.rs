@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use oxc_ast::ast::{
     Argument, CallExpression, Expression, JSXAttributeItem, JSXChild, JSXElement,
-    JSXOpeningElement, TaggedTemplateExpression,
+    JSXOpeningElement, ObjectPropertyKind, TaggedTemplateExpression,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_semantic::Semantic;
@@ -285,13 +285,12 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         match replacement {
             Ok(Some((text, compiled_id))) => {
                 let nested = if macro_info.imported_name == "Trans" {
-                    nested_macro_use_in_jsx_attributes(&it.opening_element.attributes, self.imports)
-                        .or_else(|| {
-                            nested_macro_use_in_trans_expressions(&it.children, self.imports)
-                        })
+                    nested_macro_use_in_trans_expressions(&it.children, self.imports)
                 } else {
-                    nested_macro_use_in_jsx_attributes(&it.opening_element.attributes, self.imports)
-                        .or_else(|| nested_macro_use_in_jsx_children(&it.children, self.imports))
+                    nested_macro_use_in_choice_jsx_attributes(
+                        &it.opening_element.attributes,
+                        self.imports,
+                    )
                 };
                 if let Some((nested_macro, nested_start)) = nested {
                     self.fail_nested_macro_in_value(
@@ -477,7 +476,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 ) {
                     Ok(Some((text, compiled_id))) => {
                         if let Some((nested_macro, nested_start)) =
-                            nested_macro_use_in_arguments(&it.arguments, self.imports)
+                            nested_macro_use_in_descriptor_call(it, self.imports)
                         {
                             self.fail_nested_macro_in_value(
                                 &macro_info.imported_name,
@@ -521,7 +520,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 ) {
                     Ok(Some((text, compiled_id))) => {
                         if let Some((nested_macro, nested_start)) =
-                            nested_macro_use_in_arguments(&it.arguments, self.imports)
+                            nested_macro_use_in_choice_call(it, self.imports)
                         {
                             self.fail_nested_macro_in_value(
                                 &macro_info.imported_name,
@@ -611,7 +610,7 @@ impl TransformVisitor<'_> {
             Ok(Some((text, compiled_id))) => {
                 if macro_info.imported_name != "Trans"
                     && let Some((nested_macro, nested_start)) =
-                        nested_macro_use_in_arguments(&call.arguments[1..], self.imports)
+                        nested_macro_use_in_lowered_choice_call(call, self.imports)
                 {
                     self.fail_nested_macro_in_value(
                         &macro_info.imported_name,
@@ -671,15 +670,40 @@ fn nested_macro_use_in_expressions<'a>(
     finder.nested
 }
 
-fn nested_macro_use_in_arguments<'a>(
-    arguments: &[Argument<'a>],
+fn nested_macro_use_in_descriptor_call<'a>(
+    call: &CallExpression<'a>,
     imports: &ImportCollector,
 ) -> Option<(String, usize)> {
     let mut finder = NestedMacroUseFinder {
         imports,
         nested: None,
     };
-    for argument in arguments {
+    if let Some(Argument::ObjectExpression(descriptor)) = call.arguments.first()
+        && let Some(message) = crate::descriptor::descriptor_property_value(descriptor, "message")
+        && let Expression::TemplateLiteral(template) = message.without_parentheses()
+    {
+        for expression in &template.expressions {
+            finder.visit_expression(expression);
+            if finder.nested.is_some() {
+                return finder.nested;
+            }
+        }
+    }
+    if let Some(values) = call.arguments.get(1) {
+        finder.visit_argument(values);
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_choice_call<'a>(
+    call: &CallExpression<'a>,
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    for argument in call.arguments.iter().take(2) {
         finder.visit_argument(argument);
         if finder.nested.is_some() {
             break;
@@ -688,7 +712,38 @@ fn nested_macro_use_in_arguments<'a>(
     finder.nested
 }
 
-fn nested_macro_use_in_jsx_attributes<'a>(
+fn nested_macro_use_in_lowered_choice_call<'a>(
+    call: &CallExpression<'a>,
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let Some(Argument::ObjectExpression(props)) = call.arguments.get(1) else {
+        return None;
+    };
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    for property in &props.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            continue;
+        };
+        if let Some(key) = property.key.static_name()
+            && matches!(
+                key.as_ref(),
+                "id" | "message" | "comment" | "context" | "children" | "key" | "offset"
+            )
+        {
+            continue;
+        }
+        finder.visit_expression(&property.value);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_choice_jsx_attributes<'a>(
     attributes: &[JSXAttributeItem<'a>],
     imports: &ImportCollector,
 ) -> Option<(String, usize)> {
@@ -697,24 +752,15 @@ fn nested_macro_use_in_jsx_attributes<'a>(
         nested: None,
     };
     for attribute in attributes {
-        finder.visit_jsx_attribute_item(attribute);
-        if finder.nested.is_some() {
-            break;
+        if let Some(attr) = attribute.as_attribute()
+            && matches!(
+                attr.name.get_identifier().name.as_str(),
+                "id" | "message" | "comment" | "context" | "key" | "offset"
+            )
+        {
+            continue;
         }
-    }
-    finder.nested
-}
-
-fn nested_macro_use_in_jsx_children<'a>(
-    children: &[JSXChild<'a>],
-    imports: &ImportCollector,
-) -> Option<(String, usize)> {
-    let mut finder = NestedMacroUseFinder {
-        imports,
-        nested: None,
-    };
-    for child in children {
-        finder.visit_jsx_child(child);
+        finder.visit_jsx_attribute_item(attribute);
         if finder.nested.is_some() {
             break;
         }
