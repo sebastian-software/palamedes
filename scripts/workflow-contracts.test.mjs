@@ -5113,6 +5113,53 @@ describe("workflow contracts", () => {
       "<memory>:16: docker stack deploy target definitions cannot be verified statically for container image digests",
       "<memory>:23: container tool invocation in non-shell run step cannot be verified statically",
     ]);
+    // Renamed `child_process` / Python `subprocess` imports & destructuring are
+    // tracked under their local bindings, while known image-free Docker/Podman
+    // diagnostics (e.g. `docker version`, `docker info`) are allowed and
+    // image-consuming or dynamic-arg invocations still fail closed.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r73:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - shell: node {0}",
+          "        run: |",
+          '          import { execFileSync as run, exec as shExec } from "node:child_process";',
+          '          run("docker", ["version"]);',
+          '          shExec("docker info");',
+          "      - shell: node {0}",
+          "        run: |",
+          '          import { execFileSync as run } from "node:child_process";',
+          '          run("docker", ["pull", "node:24"]);',
+          "      - shell: node {0}",
+          "        run: |",
+          '          const { execFileSync: run } = require("node:child_process");',
+          '          run("docker", ["pull", "alpine:3.20"]);',
+          "      - shell: node {0}",
+          "        run: |",
+          '          const { execFileSync } = require("node:child_process");',
+          "          const args = getArgs();",
+          '          execFileSync("docker", args);',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess as sp",
+          '          sp.run(["docker", "info"], check=True)',
+          "      - shell: python",
+          "        run: |",
+          "          from subprocess import run as py_run",
+          '          py_run(["docker", "pull", "debian:12"])',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:13: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:17: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:21: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:30: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

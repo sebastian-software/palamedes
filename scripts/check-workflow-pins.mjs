@@ -3144,6 +3144,7 @@ function inspectNonShellScript(
 
   const unquoteSimpleLiteral = (expr) => {
     const trimmed = expr.trim();
+    const hasInterpolationPrefix = /^[rRuUbB]*[fF][rRuUbB]*(?=['"])/u.test(trimmed);
     const prefixTrimmed = trimmed.replace(/^[rRuUfFbB]{1,2}(?=['"])/u, "");
     if (
       prefixTrimmed.length >= 2 &&
@@ -3151,7 +3152,24 @@ function inspectNonShellScript(
         (prefixTrimmed.startsWith("'") && prefixTrimmed.endsWith("'")) ||
         (prefixTrimmed.startsWith("`") && prefixTrimmed.endsWith("`")))
     ) {
-      return prefixTrimmed.slice(1, -1);
+      const quote = prefixTrimmed[0];
+      for (let i = 1; i < prefixTrimmed.length - 1; i += 1) {
+        if (prefixTrimmed[i] === "\\") {
+          i += 1;
+          continue;
+        }
+        if (prefixTrimmed[i] === quote) {
+          return null;
+        }
+      }
+      const inner = prefixTrimmed.slice(1, -1);
+      if (quote === "`" && /\$\{/u.test(inner)) {
+        return null;
+      }
+      if (hasInterpolationPrefix && /(?<!\{)\{(?!\{)/u.test(inner)) {
+        return null;
+      }
+      return inner;
     }
     return null;
   };
@@ -3164,6 +3182,349 @@ function inspectNonShellScript(
     return (
       SHELL_INTERPRETERS.has(base) || base === "pwsh" || base === "powershell" || base === "cmd"
     );
+  };
+
+  const DOCKER_GLOBAL_BOOL_FLAGS = new Set(["-D", "--debug", "--tls", "--tlsverify"]);
+  const PODMAN_GLOBAL_BOOL_FLAGS = new Set([
+    ...DOCKER_GLOBAL_BOOL_FLAGS,
+    "--noout",
+    "-r",
+    "--remote",
+    "--syslog",
+    "--transient-store",
+  ]);
+  const BUILDAH_GLOBAL_BOOL_FLAGS = new Set(["--debug"]);
+  const COMPOSE_GLOBAL_VALUE_FLAGS = new Set([
+    "-f",
+    "--file",
+    "-p",
+    "--project-name",
+    "--profile",
+    "--project-directory",
+    "--env-file",
+    "--ansi",
+    "--progress",
+    "--parallel",
+    "-H",
+    "--host",
+    "-c",
+    "--context",
+    "--log-level",
+  ]);
+  const COMPOSE_GLOBAL_BOOL_FLAGS = new Set([
+    "--compatibility",
+    "--dry-run",
+    "--verbose",
+    "--no-ansi",
+    "--tls",
+    "--tlsverify",
+    "-D",
+    "--debug",
+  ]);
+  const IMMEDIATE_HELP_OR_VERSION_FLAGS = new Set(["-v", "--version", "-h", "--help"]);
+  const DOCKER_IMAGE_FREE_SUBCOMMANDS = new Set([
+    "version",
+    "info",
+    "ps",
+    "images",
+    "inspect",
+    "logs",
+    "stats",
+    "top",
+    "port",
+    "diff",
+    "history",
+    "events",
+    "login",
+    "logout",
+    "tag",
+    "push",
+    "rm",
+    "rmi",
+    "stop",
+    "kill",
+    "pause",
+    "unpause",
+    "wait",
+    "exec",
+    "cp",
+    "save",
+    "search",
+    "help",
+  ]);
+  const DOCKER_MANAGEMENT_IMAGE_FREE = {
+    image: new Set([
+      "ls",
+      "list",
+      "inspect",
+      "history",
+      "rm",
+      "remove",
+      "prune",
+      "tag",
+      "push",
+      "save",
+      "help",
+    ]),
+    container: new Set([
+      "ls",
+      "list",
+      "ps",
+      "inspect",
+      "logs",
+      "top",
+      "stats",
+      "port",
+      "diff",
+      "rm",
+      "remove",
+      "prune",
+      "stop",
+      "kill",
+      "pause",
+      "unpause",
+      "wait",
+      "exec",
+      "cp",
+      "rename",
+      "restart",
+      "start",
+      "attach",
+      "help",
+    ]),
+    network: new Set([
+      "ls",
+      "list",
+      "inspect",
+      "rm",
+      "remove",
+      "prune",
+      "create",
+      "connect",
+      "disconnect",
+      "help",
+    ]),
+    volume: new Set(["ls", "list", "inspect", "rm", "remove", "prune", "create", "help"]),
+    context: new Set([
+      "ls",
+      "list",
+      "inspect",
+      "show",
+      "use",
+      "rm",
+      "remove",
+      "create",
+      "update",
+      "export",
+      "import",
+      "help",
+    ]),
+    system: new Set(["info", "df", "events", "prune", "help"]),
+    buildx: new Set(["version", "ls", "inspect", "rm", "stop", "use", "prune", "du", "help"]),
+    builder: new Set(["version", "ls", "inspect", "rm", "stop", "use", "prune", "help"]),
+    compose: new Set([
+      "version",
+      "ls",
+      "ps",
+      "logs",
+      "down",
+      "stop",
+      "kill",
+      "rm",
+      "pause",
+      "unpause",
+      "port",
+      "top",
+      "events",
+      "images",
+      "config",
+      "exec",
+      "cp",
+      "wait",
+      "help",
+    ]),
+    service: new Set([
+      "ls",
+      "list",
+      "ps",
+      "inspect",
+      "logs",
+      "rm",
+      "remove",
+      "scale",
+      "rollback",
+      "help",
+    ]),
+    stack: new Set(["ls", "list", "ps", "services", "rm", "remove", "down", "help"]),
+  };
+  const BUILDAH_IMAGE_FREE_SUBCOMMANDS = new Set([
+    "version",
+    "info",
+    "containers",
+    "images",
+    "inspect",
+    "ps",
+    "rm",
+    "rmi",
+    "umount",
+    "unmount",
+    "mount",
+    "login",
+    "logout",
+    "tag",
+    "push",
+    "help",
+  ]);
+
+  const skipKnownFlags = (args, startIdx, valueFlags, boolFlags, helpVersionFlags) => {
+    let idx = startIdx;
+    while (idx < args.length) {
+      const tok = args[idx];
+      if (tok === null) {
+        return { kind: "dynamic", idx };
+      }
+      if (helpVersionFlags.has(tok)) {
+        return { kind: "help_or_version", idx };
+      }
+      if (!tok.startsWith("-") || tok === "-") {
+        return { kind: "subcommand", idx };
+      }
+      if (valueFlags.has(tok)) {
+        idx += 2;
+        continue;
+      }
+      const eqIdx = tok.indexOf("=");
+      if (eqIdx > 0 && valueFlags.has(tok.slice(0, eqIdx))) {
+        idx += 1;
+        continue;
+      }
+      if (boolFlags.has(tok)) {
+        idx += 1;
+        continue;
+      }
+      return { kind: "unknown_flag", idx };
+    }
+    return { kind: "eof", idx };
+  };
+
+  const isImmediateSubcommandHelp = (args, subIdx, allowShortH) => {
+    const next = args[subIdx + 1];
+    return next === "--help" || (allowShortH && next === "-h");
+  };
+
+  const isKnownImageFreeContainerInvocation = (cliName, rawArgs) => {
+    const normCli = normalizeExecutableName(cliName.trim());
+    if (normCli === "docker-compose" || normCli === "podman-compose") {
+      const scan = skipKnownFlags(
+        rawArgs,
+        0,
+        COMPOSE_GLOBAL_VALUE_FLAGS,
+        COMPOSE_GLOBAL_BOOL_FLAGS,
+        IMMEDIATE_HELP_OR_VERSION_FLAGS,
+      );
+      if (scan.kind === "help_or_version") {
+        return true;
+      }
+      if (scan.kind !== "subcommand") {
+        return false;
+      }
+      const sub = rawArgs[scan.idx];
+      if (DOCKER_MANAGEMENT_IMAGE_FREE.compose.has(sub)) {
+        return true;
+      }
+      return isImmediateSubcommandHelp(rawArgs, scan.idx, true);
+    }
+    if (normCli === "buildah") {
+      const scan = skipKnownFlags(
+        rawArgs,
+        0,
+        BUILDAH_GLOBAL_VALUE_FLAGS,
+        BUILDAH_GLOBAL_BOOL_FLAGS,
+        IMMEDIATE_HELP_OR_VERSION_FLAGS,
+      );
+      if (scan.kind === "help_or_version") {
+        return true;
+      }
+      if (scan.kind !== "subcommand") {
+        return false;
+      }
+      const sub = rawArgs[scan.idx];
+      if (BUILDAH_IMAGE_FREE_SUBCOMMANDS.has(sub)) {
+        return true;
+      }
+      return isImmediateSubcommandHelp(rawArgs, scan.idx, true);
+    }
+    if (normCli === "docker" || normCli === "podman") {
+      const globalValueFlags =
+        normCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
+      const globalBoolFlags =
+        normCli === "podman" ? PODMAN_GLOBAL_BOOL_FLAGS : DOCKER_GLOBAL_BOOL_FLAGS;
+      const scan = skipKnownFlags(
+        rawArgs,
+        0,
+        globalValueFlags,
+        globalBoolFlags,
+        IMMEDIATE_HELP_OR_VERSION_FLAGS,
+      );
+      if (scan.kind === "help_or_version") {
+        return true;
+      }
+      if (scan.kind !== "subcommand") {
+        return false;
+      }
+      const sub = rawArgs[scan.idx];
+      if (DOCKER_IMAGE_FREE_SUBCOMMANDS.has(sub)) {
+        return true;
+      }
+      if (Object.hasOwn(DOCKER_MANAGEMENT_IMAGE_FREE, sub)) {
+        const subValueFlags =
+          sub === "buildx"
+            ? DOCKER_BUILDX_GLOBAL_VALUE_FLAGS
+            : sub === "compose"
+              ? COMPOSE_GLOBAL_VALUE_FLAGS
+              : new Set();
+        const subBoolFlags =
+          sub === "compose"
+            ? COMPOSE_GLOBAL_BOOL_FLAGS
+            : sub === "buildx"
+              ? DOCKER_GLOBAL_BOOL_FLAGS
+              : new Set();
+        const subHelpFlags =
+          sub === "compose" || sub === "buildx"
+            ? IMMEDIATE_HELP_OR_VERSION_FLAGS
+            : new Set(["-h", "--help"]);
+        const nested = skipKnownFlags(
+          rawArgs,
+          scan.idx + 1,
+          subValueFlags,
+          subBoolFlags,
+          subHelpFlags,
+        );
+        if (nested.kind === "help_or_version") {
+          return true;
+        }
+        if (nested.kind !== "subcommand") {
+          return false;
+        }
+        const nestedSub = rawArgs[nested.idx];
+        if (DOCKER_MANAGEMENT_IMAGE_FREE[sub].has(nestedSub)) {
+          return true;
+        }
+        const allowShortH = !(
+          sub === "container" &&
+          (nestedSub === "run" || nestedSub === "create")
+        );
+        return isImmediateSubcommandHelp(rawArgs, nested.idx, allowShortH);
+      }
+      const allowShortH = sub !== "run" && sub !== "create";
+      return isImmediateSubcommandHelp(rawArgs, scan.idx, allowShortH);
+    }
+    return false;
+  };
+
+  const containerArgvNeedsVerification = (cliName, argExprs) => {
+    const rawArgs = argExprs.map((expr) => unquoteSimpleLiteral(expr));
+    return !isKnownImageFreeContainerInvocation(cliName, rawArgs);
   };
 
   const literalShellCommandInvokesContainer = (shellCmd, depth = 0) => {
@@ -3244,7 +3605,33 @@ function inspectNonShellScript(
           continue;
         }
         if (CONTAINER_CLI_BASENAMES.has(norm)) {
-          return true;
+          const cliArgs = [];
+          let argCursor = cur + 1;
+          while (argCursor < evTokens.length) {
+            const argRedirSkip = consumeShellRedirection(
+              evTokens,
+              argCursor,
+              null,
+              ev.tokenQuoted,
+              ev.tokenOffsets,
+            );
+            if (argRedirSkip > 0) {
+              argCursor += argRedirSkip;
+              continue;
+            }
+            const rawArg = evTokens[argCursor];
+            const isSingleQuoted = Boolean(ev.tokenSingleQuoted?.[argCursor]);
+            if (!isSingleQuoted && (rawArg.includes("$") || rawArg.includes("`"))) {
+              cliArgs.push(null);
+            } else {
+              cliArgs.push(rawArg);
+            }
+            argCursor += 1;
+          }
+          if (!isKnownImageFreeContainerInvocation(norm, cliArgs)) {
+            return true;
+          }
+          break;
         }
         if (isShellExecutableName(tok)) {
           const dashC = extractShellDashCScriptInfo(
@@ -3313,7 +3700,7 @@ function inspectNonShellScript(
         continue;
       }
       if (isContainerExecutableName(lit)) {
-        return true;
+        return containerArgvNeedsVerification(lit, elements.slice(idx + 1));
       }
       if (isShellExecutableName(lit)) {
         for (let sIdx = idx + 1; sIdx < elements.length; sIdx += 1) {
@@ -3336,6 +3723,17 @@ function inspectNonShellScript(
   // Track variables assigned a container CLI executable/argv or shell command
   // string (never filenames like `files = [".github/workflows/docker.yml"]`).
   const containerVarNames = new Set();
+  const isMutatedContainerVar = (varName, firstElem) => {
+    const firstLit = firstElem ? unquoteSimpleLiteral(firstElem) : null;
+    if (firstLit === null || !isContainerExecutableName(firstLit)) {
+      return false;
+    }
+    const mutPattern = new RegExp(
+      `\\b${varName}\\s*(?:\\.\\s*(?:push|append|extend|unshift|splice|insert)\\s*\\(|\\[|\\+=)`,
+      "u",
+    );
+    return mutPattern.test(codeWithoutStrings);
+  };
   const assignPattern =
     /(?:^|[;\n])\s*(?:(?:const|let|var|my|local)\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\+?=\s*/gu;
   for (const match of codeWithoutStrings.matchAll(assignPattern)) {
@@ -3343,12 +3741,20 @@ function inspectNonShellScript(
     const firstCh = codeOnly[rhsStart];
     if (firstCh === "[") {
       const inner = extractBalancedSlice(codeOnly, rhsStart, "[", "]");
-      if (argvListInvokesContainer(splitTopLevelComma(inner), containerVarNames)) {
+      const elements = splitTopLevelComma(inner);
+      if (
+        argvListInvokesContainer(elements, containerVarNames) ||
+        isMutatedContainerVar(match.groups.name, elements[0])
+      ) {
         containerVarNames.add(match.groups.name);
       }
     } else if (firstCh === "(") {
       const inner = extractBalancedSlice(codeOnly, rhsStart, "(", ")");
-      if (argvListInvokesContainer(splitTopLevelComma(inner), containerVarNames)) {
+      const elements = splitTopLevelComma(inner);
+      if (
+        argvListInvokesContainer(elements, containerVarNames) ||
+        isMutatedContainerVar(match.groups.name, elements[0])
+      ) {
         containerVarNames.add(match.groups.name);
       }
     } else {
@@ -3391,10 +3797,11 @@ function inspectNonShellScript(
   ]);
 
   const callInvokesContainerCli = (callee, argText) => {
-    const args = splitTopLevelComma(argText);
-    if (args.length === 0) {
+    const rawArgs = splitTopLevelComma(argText);
+    if (rawArgs.length === 0) {
       return false;
     }
+    const args = callee.startsWith("os.spawn") && rawArgs.length >= 2 ? rawArgs.slice(1) : rawArgs;
     const usesShellMode =
       SHELL_STRING_CALLEES.has(callee) ||
       /\bshell\s*(?:=|:)\s*(?:True|true|['"])/u.test(argText) ||
@@ -3404,7 +3811,8 @@ function inspectNonShellScript(
     }
 
     // Argument-vector execution API: inspect the executable (first arg or
-    // element 0 of the argv list) rather than trailing filenames/arguments.
+    // element 0 of the argv list) and check whether the invocation is a known
+    // image-free diagnostic subcommand (e.g. `docker version`, `docker info`).
     const firstArg = args[0].trim();
     if (firstArg.startsWith("[") && firstArg.endsWith("]")) {
       return argvListInvokesContainer(splitTopLevelComma(firstArg.slice(1, -1)), containerVarNames);
@@ -3415,7 +3823,56 @@ function inspectNonShellScript(
     const firstLit = unquoteSimpleLiteral(firstArg);
     if (firstLit !== null) {
       if (isContainerExecutableName(firstLit)) {
-        return true;
+        if (args.length === 1) {
+          return true;
+        }
+        const secondArg = args[1].trim();
+        if (
+          (secondArg.startsWith("[") && secondArg.endsWith("]")) ||
+          (secondArg.startsWith("(") && secondArg.endsWith(")"))
+        ) {
+          const listElems = splitTopLevelComma(secondArg.slice(1, -1));
+          const argvElems =
+            callee.startsWith("os.") &&
+            listElems.length > 0 &&
+            (() => {
+              const firstElemLit = unquoteSimpleLiteral(listElems[0]);
+              return firstElemLit !== null && isContainerExecutableName(firstElemLit);
+            })()
+              ? listElems.slice(1)
+              : listElems;
+          return containerArgvNeedsVerification(firstLit, argvElems);
+        }
+        if (secondArg.startsWith("{") && secondArg.endsWith("}")) {
+          const argsPropMatch = /\bargs\s*:\s*\[/u.exec(secondArg);
+          if (argsPropMatch) {
+            const bracketIdx = argsPropMatch.index + argsPropMatch[0].length - 1;
+            const inner = extractBalancedSlice(secondArg, bracketIdx, "[", "]");
+            return containerArgvNeedsVerification(firstLit, splitTopLevelComma(inner));
+          }
+          return true;
+        }
+        const varArgs = [];
+        for (let aIdx = 1; aIdx < args.length; aIdx += 1) {
+          const part = args[aIdx].trim();
+          if (
+            (part.startsWith("{") && part.endsWith("}")) ||
+            /^[A-Za-z_][A-Za-z0-9_]*\s*=/u.test(part)
+          ) {
+            break;
+          }
+          varArgs.push(part);
+        }
+        const argvElems =
+          callee.startsWith("os.") &&
+          varArgs.length > 0 &&
+          (() => {
+            const firstElemLit = unquoteSimpleLiteral(varArgs[0]);
+            return firstElemLit !== null && isContainerExecutableName(firstElemLit);
+          })()
+            ? varArgs.slice(1)
+            : varArgs;
+        return containerArgvNeedsVerification(firstLit, argvElems);
       }
       if (isShellExecutableName(firstLit) && args.length > 1) {
         return args.slice(1).some((arg) => shellStringInvokesContainer(arg));
@@ -3435,35 +3892,6 @@ function inspectNonShellScript(
     return referencesContainerVar(firstArg, containerVarNames);
   };
 
-  const childProcessAliases = new Set(["child_process"]);
-  let importsChildProcess = false;
-  for (const reqMatch of codeWithoutStrings.matchAll(
-    /(?:(?:const|let|var)\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*)?\brequire\s*\(/gu,
-  )) {
-    const openIdx = reqMatch.index + reqMatch[0].length - 1;
-    const reqArg = extractBalancedSlice(codeOnly, openIdx, "(", ")");
-    const reqLit = unquoteSimpleLiteral(reqArg);
-    if (reqLit === "child_process" || reqLit === "node:child_process") {
-      importsChildProcess = true;
-      if (reqMatch.groups?.alias) {
-        childProcessAliases.add(reqMatch.groups.alias);
-      }
-    }
-  }
-  for (const impMatch of codeWithoutStrings.matchAll(
-    /\bimport\s+(?:(?:\*\s+as\s+)?(?<alias>[A-Za-z_][A-Za-z0-9_]*)|\{[^}]*\})\s+from\s+(?=['"])/gu,
-  )) {
-    const afterFrom = codeOnly.slice(
-      impMatch.index + impMatch[0].length,
-      impMatch.index + impMatch[0].length + 40,
-    );
-    if (/^['"](?:node:)?child_process['"]/u.test(afterFrom)) {
-      importsChildProcess = true;
-      if (impMatch.groups?.alias) {
-        childProcessAliases.add(impMatch.groups.alias);
-      }
-    }
-  }
   const NODE_CP_METHODS = new Set([
     "exec",
     "execSync",
@@ -3473,6 +3901,169 @@ function inspectNonShellScript(
     "spawnSync",
   ]);
   const NODE_CP_SHELL_METHODS = new Set(["exec", "execSync"]);
+  const PYTHON_SUBPROCESS_METHODS = new Set([
+    "run",
+    "Popen",
+    "call",
+    "check_call",
+    "check_output",
+    "getoutput",
+    "getstatusoutput",
+  ]);
+  const childProcessAliases = new Set(["child_process"]);
+  const subprocessAliases = new Set(["subprocess"]);
+  const osAliases = new Set(["os"]);
+  const localExecAliases = new Map();
+  let importsChildProcess = false;
+
+  const mapNodeCpMethod = (methodName) =>
+    NODE_CP_SHELL_METHODS.has(methodName) ? `child_process.${methodName}` : methodName;
+
+  const recordJsDestructuredBindings = (braceBody, isEsImport) => {
+    for (const rawItem of braceBody.split(",")) {
+      const item = rawItem.trim();
+      if (!item) {
+        continue;
+      }
+      const bindMatch = isEsImport
+        ? /^(?:type\s+)?(?<orig>[A-Za-z_$][A-Za-z0-9_$]*)(?:\s+as\s+(?<local>[A-Za-z_$][A-Za-z0-9_$]*))?$/u.exec(
+            item,
+          )
+        : /^(?<orig>[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*(?<local>[A-Za-z_$][A-Za-z0-9_$]*))?(?:\s*=.*)?$/u.exec(
+            item,
+          );
+      if (!bindMatch) {
+        continue;
+      }
+      const orig = bindMatch.groups.orig;
+      const local = bindMatch.groups.local ?? orig;
+      if (NODE_CP_METHODS.has(orig)) {
+        localExecAliases.set(local, mapNodeCpMethod(orig));
+      }
+    }
+  };
+
+  for (const reqMatch of codeWithoutStrings.matchAll(
+    /(?:(?:const|let|var)\s+(?:(?<alias>[A-Za-z_$][A-Za-z0-9_$]*)|\{(?<destructured>[^}]*)\})\s*=\s*(?:await\s+)?)?\b(?:require|import)\s*\(/gu,
+  )) {
+    const openIdx = reqMatch.index + reqMatch[0].length - 1;
+    const reqArg = extractBalancedSlice(codeOnly, openIdx, "(", ")");
+    const reqLit = unquoteSimpleLiteral(reqArg);
+    if (reqLit === "child_process" || reqLit === "node:child_process") {
+      importsChildProcess = true;
+      const afterCloseIdx = openIdx + 1 + reqArg.length + 1;
+      const memberAccess = /^\s*\.\s*(?<prop>[A-Za-z_$][A-Za-z0-9_$]*)/u.exec(
+        codeWithoutStrings.slice(afterCloseIdx, afterCloseIdx + 40),
+      );
+      if (reqMatch.groups?.destructured) {
+        recordJsDestructuredBindings(reqMatch.groups.destructured, false);
+      } else if (reqMatch.groups?.alias) {
+        if (memberAccess && NODE_CP_METHODS.has(memberAccess.groups.prop)) {
+          localExecAliases.set(reqMatch.groups.alias, mapNodeCpMethod(memberAccess.groups.prop));
+        } else {
+          childProcessAliases.add(reqMatch.groups.alias);
+        }
+      }
+    }
+  }
+  for (const impMatch of codeWithoutStrings.matchAll(
+    /\bimport\s+(?:(?:\*\s+as\s+(?<ns>[A-Za-z_$][A-Za-z0-9_$]*))|(?:(?<def>[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*,\s*\{(?<defNamed>[^}]*)\})?)|(?:\{(?<named>[^}]*)\}))\s+from\s+(?=['"])/gu,
+  )) {
+    const afterFrom = codeOnly.slice(
+      impMatch.index + impMatch[0].length,
+      impMatch.index + impMatch[0].length + 40,
+    );
+    if (/^['"](?:node:)?child_process['"]/u.test(afterFrom)) {
+      importsChildProcess = true;
+      if (impMatch.groups?.ns) {
+        childProcessAliases.add(impMatch.groups.ns);
+      }
+      if (impMatch.groups?.def) {
+        childProcessAliases.add(impMatch.groups.def);
+      }
+      if (impMatch.groups?.defNamed) {
+        recordJsDestructuredBindings(impMatch.groups.defNamed, true);
+      }
+      if (impMatch.groups?.named) {
+        recordJsDestructuredBindings(impMatch.groups.named, true);
+      }
+    }
+  }
+  if (importsChildProcess) {
+    for (const rebindMatch of codeWithoutStrings.matchAll(
+      /\b(?:const|let|var)\s+(?:(?<alias>[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?<src1>[A-Za-z_$][A-Za-z0-9_$]*)\s*\.\s*(?<prop>[A-Za-z_$][A-Za-z0-9_$]*)|\{(?<destructured>[^}]*)\}\s*=\s*(?<src2>[A-Za-z_$][A-Za-z0-9_$]*))/gu,
+    )) {
+      if (
+        rebindMatch.groups?.src1 &&
+        childProcessAliases.has(rebindMatch.groups.src1) &&
+        NODE_CP_METHODS.has(rebindMatch.groups.prop)
+      ) {
+        localExecAliases.set(rebindMatch.groups.alias, mapNodeCpMethod(rebindMatch.groups.prop));
+      } else if (rebindMatch.groups?.src2 && childProcessAliases.has(rebindMatch.groups.src2)) {
+        recordJsDestructuredBindings(rebindMatch.groups.destructured, false);
+      }
+    }
+  }
+  for (const pyImpMatch of codeWithoutStrings.matchAll(
+    /(?:^|[;\n])\s*import\s+(?<list>[^\n;]+)/gu,
+  )) {
+    for (const rawItem of pyImpMatch.groups.list.split(",")) {
+      const itemMatch =
+        /^(?<mod>subprocess|os)(?:\s+as\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*))?$/u.exec(
+          rawItem.trim(),
+        );
+      if (!itemMatch?.groups?.alias) {
+        continue;
+      }
+      if (itemMatch.groups.mod === "subprocess") {
+        subprocessAliases.add(itemMatch.groups.alias);
+      } else if (itemMatch.groups.mod === "os") {
+        osAliases.add(itemMatch.groups.alias);
+      }
+    }
+  }
+  for (const pyFromMatch of codeWithoutStrings.matchAll(
+    /\bfrom\s+(?<mod>subprocess|os)\s+import\s+(?:\((?<parenList>[^)]*)\)|(?<lineList>[^\n;]+))/gu,
+  )) {
+    const mod = pyFromMatch.groups.mod;
+    const rawList = pyFromMatch.groups.parenList ?? pyFromMatch.groups.lineList ?? "";
+    for (const rawItem of rawList.split(",")) {
+      const trimmedItem = rawItem.trim();
+      if (trimmedItem === "*") {
+        if (mod === "subprocess") {
+          for (const method of PYTHON_SUBPROCESS_METHODS) {
+            localExecAliases.set(method, `subprocess.${method}`);
+          }
+        } else {
+          localExecAliases.set("system", "os.system");
+          localExecAliases.set("popen", "os.popen");
+        }
+        continue;
+      }
+      const itemMatch =
+        /^(?<orig>[A-Za-z_][A-Za-z0-9_]*)(?:\s+as\s+(?<local>[A-Za-z_][A-Za-z0-9_]*))?$/u.exec(
+          trimmedItem,
+        );
+      if (!itemMatch) {
+        continue;
+      }
+      const orig = itemMatch.groups.orig;
+      const local = itemMatch.groups.local ?? orig;
+      if (mod === "subprocess" && PYTHON_SUBPROCESS_METHODS.has(orig)) {
+        localExecAliases.set(local, `subprocess.${orig}`);
+      } else if (mod === "os" && /^(?:system|popen|spawn\w*|exec\w*)$/u.test(orig)) {
+        localExecAliases.set(local, `os.${orig}`);
+      }
+    }
+  }
+
+  const findPrevNonSpaceIndex = (src, fromIdx) => {
+    let k = fromIdx;
+    while (k >= 0 && /\s/u.test(src[k])) {
+      k -= 1;
+    }
+    return k;
+  };
 
   let invokesContainerTool = hasContainerSdkImport;
   if (!invokesContainerTool) {
@@ -3481,13 +4072,7 @@ function inspectNonShellScript(
     for (const match of codeWithoutStrings.matchAll(execCallPattern)) {
       const receiver = match.groups.receiver ?? null;
       const callee = match.groups.callee;
-      const prevNonSpaceIdx = (() => {
-        let k = match.index - 1;
-        while (k >= 0 && /\s/u.test(codeWithoutStrings[k])) {
-          k -= 1;
-        }
-        return k;
-      })();
+      const prevNonSpaceIdx = findPrevNonSpaceIndex(codeWithoutStrings, match.index - 1);
       const hasDotBeforeMatch = prevNonSpaceIdx >= 0 && codeWithoutStrings[prevNonSpaceIdx] === ".";
       let effectiveCallee = callee;
       if (NODE_CP_METHODS.has(callee)) {
@@ -3495,7 +4080,7 @@ function inspectNonShellScript(
           if (!childProcessAliases.has(receiver)) {
             continue;
           }
-          effectiveCallee = NODE_CP_SHELL_METHODS.has(callee) ? `child_process.${callee}` : callee;
+          effectiveCallee = mapNodeCpMethod(callee);
         } else if (hasDotBeforeMatch) {
           // Chained call like `require("node:child_process").execSync(...)` vs
           // unrelated method call like `/version/.exec("docker version")`.
@@ -3503,7 +4088,7 @@ function inspectNonShellScript(
           if (!/require\s*\(\s*['"](?:node:)?child_process['"]\s*\)\s*$/u.test(beforeDot)) {
             continue;
           }
-          effectiveCallee = NODE_CP_SHELL_METHODS.has(callee) ? `child_process.${callee}` : callee;
+          effectiveCallee = mapNodeCpMethod(callee);
         } else if (callee === "exec" && !importsChildProcess) {
           continue;
         }
@@ -3511,6 +4096,53 @@ function inspectNonShellScript(
         (callee === "system" || callee === "popen") &&
         (receiver !== null || hasDotBeforeMatch)
       ) {
+        continue;
+      }
+      const openParenIdx = match.index + match[0].length - 1;
+      const argText = extractBalancedSlice(codeOnly, openParenIdx, "(", ")");
+      if (callInvokesContainerCli(effectiveCallee, argText)) {
+        invokesContainerTool = true;
+        break;
+      }
+    }
+  }
+  if (!invokesContainerTool && (subprocessAliases.size > 1 || osAliases.size > 1)) {
+    const aliasModuleCallPattern =
+      /\b(?<receiver>[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?<method>[A-Za-z_][A-Za-z0-9_]*)\s*\(/gu;
+    for (const match of codeWithoutStrings.matchAll(aliasModuleCallPattern)) {
+      const receiver = match.groups.receiver;
+      const method = match.groups.method;
+      let effectiveCallee = null;
+      if (subprocessAliases.has(receiver) && PYTHON_SUBPROCESS_METHODS.has(method)) {
+        effectiveCallee = `subprocess.${method}`;
+      } else if (osAliases.has(receiver) && /^(?:system|popen|spawn\w*|exec\w*)$/u.test(method)) {
+        effectiveCallee = `os.${method}`;
+      }
+      if (!effectiveCallee) {
+        continue;
+      }
+      const openParenIdx = match.index + match[0].length - 1;
+      const argText = extractBalancedSlice(codeOnly, openParenIdx, "(", ")");
+      if (callInvokesContainerCli(effectiveCallee, argText)) {
+        invokesContainerTool = true;
+        break;
+      }
+    }
+  }
+  if (!invokesContainerTool && localExecAliases.size > 0) {
+    const bareCallPattern = /\b(?<callee>[A-Za-z_$][A-Za-z0-9_$]*)\s*\(/gu;
+    for (const match of codeWithoutStrings.matchAll(bareCallPattern)) {
+      const calleeName = match.groups.callee;
+      const effectiveCallee = localExecAliases.get(calleeName);
+      if (!effectiveCallee) {
+        continue;
+      }
+      const prevNonSpaceIdx = findPrevNonSpaceIndex(codeWithoutStrings, match.index - 1);
+      if (prevNonSpaceIdx >= 0 && codeWithoutStrings[prevNonSpaceIdx] === ".") {
+        continue;
+      }
+      const beforeMatch = codeWithoutStrings.slice(Math.max(0, match.index - 24), match.index);
+      if (/\b(?:function|def|class)\s+$/u.test(beforeMatch)) {
         continue;
       }
       const openParenIdx = match.index + match[0].length - 1;
@@ -3545,6 +4177,7 @@ function inspectNonShellScript(
           ? (codeOnly.slice(openIdx + 1).split(closeCh)[0] ?? "")
           : extractBalancedSlice(codeOnly, openIdx, openCh, closeCh);
       if (
+        (/#\{/u.test(bodyText) && CONTAINER_SHELL_CMD_PATTERN.test(bodyText)) ||
         literalShellCommandInvokesContainer(bodyText) ||
         referencesContainerVar(bodyText, containerVarNames)
       ) {
