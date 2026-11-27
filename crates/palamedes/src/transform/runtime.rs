@@ -497,7 +497,11 @@ fn render_value_bindings(values: &[ValueBinding]) -> String {
     values
         .iter()
         .map(|binding| {
-            if binding.name == binding.expression {
+            if binding.name == "__proto__" {
+                format!("[\"__proto__\"]: {}", binding.expression)
+            } else if binding.name == binding.expression
+                && !oxc_syntax::keyword::is_reserved_keyword(&binding.name)
+            {
                 binding.name.clone()
             } else {
                 format!("{}: {}", binding.name, binding.expression)

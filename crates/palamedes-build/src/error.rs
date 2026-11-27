@@ -55,6 +55,16 @@ pub enum Error {
         /// The rejected path.
         path: String,
     },
+    /// The configured catalog directory path contains a line break, which is
+    /// unsafe for Cargo build-script directives.
+    #[error(
+        "catalog directory path must not contain line breaks: {}",
+        path.display()
+    )]
+    InvalidDirectoryPath {
+        /// The rejected directory path.
+        path: PathBuf,
+    },
     /// No output locale was selected, or one was selected twice.
     #[error("output locales must be nonempty and unique")]
     InvalidLocales,

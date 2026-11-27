@@ -419,3 +419,49 @@ fn translations_cannot_add_numeric_requirements_to_display_arguments() {
         "{error}"
     );
 }
+
+#[test]
+fn module_path_is_reconstructed_from_normalized_identifiers() {
+    let directory = catalogs("Es ist {name}");
+    let output = tempfile::tempdir().unwrap();
+    let compiled = CatalogBuilder::new(directory.path(), "en")
+        .locales(&["en", "de"])
+        .module_path("crate :: i18n /* generated definitions */ :: r#try")
+        .compile_to(output.path())
+        .unwrap();
+    let generated = fs::read_to_string(compiled.rust_module).unwrap();
+    assert!(
+        generated.contains("$crate::i18n::r#try::__palamedes_translate_signature"),
+        "{generated}"
+    );
+    assert!(!generated.contains(" :: "), "{generated}");
+    assert!(!generated.contains("generated definitions"), "{generated}");
+}
+
+#[cfg(unix)]
+#[test]
+fn non_cargo_compilation_allows_directory_paths_with_line_breaks() {
+    let parent = tempfile::tempdir().unwrap();
+    let directory = parent.path().join("locales\ncopy");
+    fs::create_dir(&directory).unwrap();
+    for (locale, value) in [("en", "It's {name}"), ("de", "Es ist {name}")] {
+        fs::write(
+            directory.join(format!("{locale}.po")),
+            format!("msgid \"It's {{name}}\"\nmsgstr {value:?}\n"),
+        )
+        .unwrap();
+    }
+
+    let output = tempfile::tempdir().unwrap();
+    let compiled = CatalogBuilder::new(&directory, "en")
+        .locales(&["en", "de"])
+        .compile_to(output.path())
+        .unwrap();
+    let contract = palamedes_build::CatalogContract::load(compiled.schema_file).unwrap();
+    let update_output = tempfile::tempdir().unwrap();
+    let update = CatalogBuilder::new(&directory, "en")
+        .locales(&["de"])
+        .compile_updates(&contract, update_output.path())
+        .unwrap();
+    assert_eq!(update.catalogs.len(), 1);
+}

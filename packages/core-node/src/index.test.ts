@@ -2925,12 +2925,34 @@ msgstr "${lineSeparators}"
 
     expect(messageIds).toStrictEqual([...messageIds].sort());
     expect(JSON.stringify(artifact.messages)).toContain(lineSeparators);
+    expect(module.code).not.toContain("\u2028");
+    expect(module.code).not.toContain("\u2029");
+    expect(module.code).toContain("\\u2028");
+    expect(module.code).toContain("\\u2029");
+    const escapeJsString = (value: string): string =>
+      JSON.stringify(value)
+        .replaceAll("<", "\\u003c")
+        .replaceAll(">", "\\u003e")
+        .replaceAll("\u2028", "\\u2028")
+        .replaceAll("\u2029", "\\u2029");
     const entries = Object.entries(artifact.messages)
-      .map(([id, message]) => `[${JSON.stringify(id)}]:${JSON.stringify(message)}`)
+      .map(([id, message]) => `[${escapeJsString(id)}]:${escapeJsString(message)}`)
       .join(",");
     expect(module.code).toBe(
       `import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";export const messages=__palamedesDefineCompiledCatalog({${entries}});export default { messages };`,
     );
+    const decoded = runInNewContext(
+      module.code
+        .replace(
+          'import{defineCompiledCatalog as __palamedesDefineCompiledCatalog}from"@palamedes/core/compiled";',
+          "",
+        )
+        .replace("export const messages=", "const messages=")
+        .replace("export default { messages };", "messages;"),
+      { __palamedesDefineCompiledCatalog: (value: unknown) => value },
+    ) as Record<string, string>;
+    expect(Object.keys(decoded)).toStrictEqual(messageIds);
+    expect({ ...decoded }).toStrictEqual(artifact.messages);
   });
 });
 
