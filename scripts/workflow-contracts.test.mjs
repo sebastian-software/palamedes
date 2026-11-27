@@ -2100,9 +2100,9 @@ describe("workflow contracts", () => {
         ]),
       }),
     ).toEqual(["<memory>:1: docker/dockerfile:1 is not pinned to a sha256 digest"]);
-    // `ONBUILD` triggers check external images, permit numeric stage indices or
-    // known named contexts, and report ambiguous bare names whose downstream
-    // consumer is unknown.
+    // `ONBUILD` triggers check external images, permit numeric stage indices,
+    // and report bare names as unverifiable even when a producer named context
+    // shares the name (producer contexts do not travel to downstream builds).
     expect(
       unpinnedContainerfileReferences(
         [
@@ -2119,6 +2119,7 @@ describe("workflow contracts", () => {
         { namedContexts: new Set(["knownctx"]) },
       ),
     ).toEqual([
+      "<memory>:3: ONBUILD source knownctx cannot be verified statically",
       "<memory>:4: ONBUILD source busybox cannot be verified statically",
       "<memory>:6: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:7: golang:1.24 is not pinned to a sha256 digest",
@@ -5628,6 +5629,30 @@ describe("workflow contracts", () => {
       "<memory>:4: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:5: busybox:1.36 is not pinned to a sha256 digest",
       "<memory>:6: debian:12 is not pinned to a sha256 digest",
+    ]);
+    // `docker compose scale` fails closed (while `--dry-run` / `--help` pass),
+    // and a later unconditional `core.exportVariable` overwrites an earlier
+    // unpinned write in the same `actions/github-script` step.
+    const sha = "a".repeat(40);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          "  - run: |",
+          "      docker compose scale --help",
+          "      docker compose --dry-run scale web=2",
+          "      docker compose scale web=2",
+          `  - uses: actions/github-script@${sha}`,
+          "    with:",
+          "      script: |",
+          '        core.exportVariable("OVERWRITTEN_IMG", "alpine:3.20");',
+          `        core.exportVariable("OVERWRITTEN_IMG", "node:24@${digest}");`,
+          '  - run: docker pull "$OVERWRITTEN_IMG"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:5: docker compose scale target definitions cannot be verified statically for container image digests",
     ]);
 
     const r83Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r83-"));

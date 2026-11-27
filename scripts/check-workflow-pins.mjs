@@ -5193,7 +5193,6 @@ function inspectNonShellScript(
 
   const recordActionsCoreWrites = (methodName, targetMap, wildcardKey) => {
     const pattern = new RegExp(`\\bcore\\s*\\.\\s*${methodName}\\s*\\(`, "gu");
-    const seenKeys = new Set();
     for (const match of codeWithoutStrings.matchAll(pattern)) {
       const openIdx = match.index + match[0].length - 1;
       const callArgs = splitTopLevelComma(extractBalancedSlice(codeOnly, openIdx, "(", ")"));
@@ -5205,8 +5204,7 @@ function inspectNonShellScript(
       if (keyLit !== null && keyLit.length > 0) {
         const valLit = callArgs.length >= 2 ? unquoteSimpleLiteral(callArgs[1]) : null;
         const entries = valLit !== null ? [{ value: valLit, line: startLine }] : opaqueEntries;
-        recordGithubEnvWrite(targetMap, keyLit, entries, conditional || seenKeys.has(keyLit));
-        seenKeys.add(keyLit);
+        recordGithubEnvWrite(targetMap, keyLit, entries, conditional);
       } else {
         recordGithubEnvWrite(targetMap, wildcardKey, opaqueEntries, conditional);
       }
@@ -5997,7 +5995,15 @@ const COMPOSE_GLOBAL_VALUE_FLAGS = new Set([
   "--log-level",
 ]);
 
-const COMPOSE_IMAGE_SUBCOMMANDS = new Set(["up", "run", "create", "pull", "build", "watch"]);
+const COMPOSE_IMAGE_SUBCOMMANDS = new Set([
+  "up",
+  "run",
+  "create",
+  "pull",
+  "build",
+  "watch",
+  "scale",
+]);
 
 function parseComposeCommand(tokens, normalizedCli, argIndex, stdinRedirectTargets = null) {
   let cursor = argIndex;
@@ -19385,7 +19391,6 @@ export function unpinnedContainerfileReferences(
           rawRef.length === 0 ||
           /^\d+$/u.test(rawRef) ||
           rawRef.toLowerCase() === "scratch" ||
-          namedContexts?.has(rawRef.toLowerCase()) ||
           isPinnedDigest(rawRef)
         ) {
           return;
