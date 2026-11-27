@@ -1270,6 +1270,293 @@ fn selected_catalog_cache_reuses_parses_and_index_across_sidecars() {
 }
 
 #[test]
+fn selected_catalog_cache_metadata_fast_path_skips_file_reads_for_aged_catalogs() {
+    let fixture = create_fixture_dir("selected-catalog-cache-metadata-fast-path");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_numbered_catalog(&locale_dir, "en", "", 16);
+    write_numbered_catalog(&locale_dir, "de", "DE ", 16);
+    let aged_mtime = SystemTime::now() - Duration::from_secs(10);
+    restore_mtime(&locale_dir.join("en.po"), aged_mtime);
+    restore_mtime(&locale_dir.join("de.po"), aged_mtime);
+    // Allow both `mtime` and `ctime` to age past the 1-second racy window.
+    thread::sleep(Duration::from_millis(1050));
+    let cache = CatalogCompilationCache::new(8);
+
+    for index in 0..16 {
+        let message = format!("Message {index}");
+        let request = selected_request(&fixture, &locale_dir, &message);
+        let result = compile_catalog_artifact_selected_cached(&cache, &request)
+            .expect("selected catalog artifact");
+        let expected = format!("DE {message}");
+        assert_eq!(
+            result
+                .messages
+                .get(&compiled_key(&message, None))
+                .map(String::as_str),
+            Some(expected.as_str())
+        );
+    }
+
+    assert_eq!(
+        cache.file_reads(),
+        2,
+        "aged warm hits must validate metadata without re-reading catalog files"
+    );
+    assert_eq!(cache.metadata_hits(), 15);
+    assert_eq!(
+        cache.statistics(),
+        super::cache::CacheStatistics {
+            parses: 2,
+            index_builds: 1,
+        }
+    );
+
+    // Touching mtime without changing content falls back to content hash once,
+    // reuses the parsed catalog without reparsing, and refreshes metadata once
+    // `ctime` ages past the racy window so subsequent lookups hit the fast path.
+    let touched_mtime = SystemTime::now() - Duration::from_secs(5);
+    restore_mtime(&locale_dir.join("de.po"), touched_mtime);
+    thread::sleep(Duration::from_millis(1050));
+    let request = selected_request(&fixture, &locale_dir, "Message 0");
+    compile_catalog_artifact_selected_cached(&cache, &request).expect("compile after touch");
+    assert_eq!(cache.file_reads(), 4);
+    assert_eq!(
+        cache.statistics(),
+        super::cache::CacheStatistics {
+            parses: 2,
+            index_builds: 1,
+        }
+    );
+    compile_catalog_artifact_selected_cached(&cache, &request)
+        .expect("metadata hit after touch refresh");
+    assert_eq!(cache.file_reads(), 4);
+    assert_eq!(cache.metadata_hits(), 16);
+
+    // In-place overwrite with identical byte length and restored mtime updates
+    // `ctime` and must invalidate the warm metadata cache immediately.
+    let original_de = fs::read_to_string(locale_dir.join("de.po")).expect("read de.po");
+    let inplace_de = original_de.replace("DE Message 0", "CH Message 0");
+    assert_eq!(original_de.len(), inplace_de.len());
+    fs::write(locale_dir.join("de.po"), &inplace_de).expect("in-place write");
+    restore_mtime(&locale_dir.join("de.po"), touched_mtime);
+    let after_inplace = compile_catalog_artifact_selected_cached(&cache, &request)
+        .expect("compile after in-place equal-mtime overwrite");
+    assert_eq!(
+        after_inplace
+            .messages
+            .get(&compiled_key("Message 0", None))
+            .map(String::as_str),
+        Some("CH Message 0")
+    );
+
+    // Atomic rename replacement with identical byte length and restored mtime
+    // changes the file identity (inode/dev) and must invalidate immediately.
+    let replaced_de = inplace_de.replace("CH Message 0", "AT Message 0");
+    assert_eq!(inplace_de.len(), replaced_de.len());
+    let temp_de = locale_dir.join("de.po.next");
+    fs::write(&temp_de, replaced_de).expect("write replacement");
+    restore_mtime(&temp_de, touched_mtime);
+    fs::rename(&temp_de, locale_dir.join("de.po")).expect("atomic rename replacement");
+
+    let after_rename = compile_catalog_artifact_selected_cached(&cache, &request)
+        .expect("compile after atomic rename");
+    assert_eq!(
+        after_rename
+            .messages
+            .get(&compiled_key("Message 0", None))
+            .map(String::as_str),
+        Some("AT Message 0")
+    );
+    assert_eq!(cache.ready_len(), 1);
+    let _ = fs::remove_dir_all(&fixture);
+}
+
+#[cfg(unix)]
+#[test]
+fn selected_catalog_cache_metadata_fast_path_enforces_revoked_read_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = create_fixture_dir("selected-catalog-cache-revoked-read-perms");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", "")]);
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Hallo")]);
+    let aged_mtime = SystemTime::now() - Duration::from_secs(10);
+    restore_mtime(&locale_dir.join("en.po"), aged_mtime);
+    restore_mtime(&locale_dir.join("de.po"), aged_mtime);
+    thread::sleep(Duration::from_millis(1050));
+
+    let request = selected_request(&fixture, &locale_dir, "Hello");
+    let cache = CatalogCompilationCache::new(8);
+    compile_catalog_artifact_selected_cached(&cache, &request).expect("warm cache");
+    compile_catalog_artifact_selected_cached(&cache, &request).expect("metadata hit");
+    assert_eq!(cache.metadata_hits(), 1);
+
+    let de_path = locale_dir.join("de.po");
+    fs::set_permissions(&de_path, fs::Permissions::from_mode(0o000)).expect("revoke read perms");
+    let result = compile_catalog_artifact_selected_cached(&cache, &request);
+    fs::set_permissions(&de_path, fs::Permissions::from_mode(0o600)).expect("restore read perms");
+
+    // Root users bypass mode-bit checks; non-root callers must observe ReadFile(PermissionDenied).
+    if unsafe { libc::geteuid() } != 0 {
+        assert!(
+            matches!(
+                result,
+                Err(crate::PalamedesError::ReadFile { ref source, .. })
+                    if source.kind() == std::io::ErrorKind::PermissionDenied
+            ),
+            "warm cache must enforce revoked read permissions, got: {result:?}"
+        );
+    }
+    let _ = fs::remove_dir_all(&fixture);
+}
+
+#[test]
+fn selected_catalog_cache_racy_window_invalidates_rapid_same_size_writes() {
+    let fixture = create_fixture_dir("selected-catalog-cache-racy-window");
+    let locale_dir = fixture.join("src/locales");
+    fs::create_dir_all(&locale_dir).expect("locale dir");
+    write_test_catalog(&locale_dir, "en", &[("Hello", "")]);
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Hallo")]);
+    let request = selected_request(&fixture, &locale_dir, "Hello");
+    let cache = CatalogCompilationCache::new(8);
+
+    let first = compile_catalog_artifact_selected_cached(&cache, &request).expect("first compile");
+    assert_eq!(
+        first
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Hallo")
+    );
+    assert_eq!(cache.metadata_hits(), 0);
+
+    // Overwrite in place with exact same byte length and restored mtime while
+    // still inside the 1-second racy window.
+    let de_path = locale_dir.join("de.po");
+    let original_mtime = fs::metadata(&de_path)
+        .expect("de metadata")
+        .modified()
+        .expect("de mtime");
+    write_test_catalog(&locale_dir, "de", &[("Hello", "Salut")]);
+    restore_mtime(&de_path, original_mtime);
+
+    let second = compile_catalog_artifact_selected_cached(&cache, &request)
+        .expect("second compile after rapid write");
+    assert_eq!(
+        second
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Salut")
+    );
+    assert_eq!(cache.metadata_hits(), 0);
+    let _ = fs::remove_dir_all(&fixture);
+}
+
+#[test]
+fn selected_catalog_cache_metadata_fast_path_handles_multi_catalog_and_missing_transitions() {
+    let fixture = create_fixture_dir("selected-catalog-cache-multi-and-missing");
+    let app_dir = fixture.join("locales/app");
+    let admin_dir = fixture.join("locales/admin");
+    fs::create_dir_all(&app_dir).expect("app dir");
+    fs::create_dir_all(&admin_dir).expect("admin dir");
+    write_test_catalog(&app_dir, "en", &[("Hello", "")]);
+    write_test_catalog(&app_dir, "de", &[("Hello", "Hallo")]);
+    write_test_catalog(&admin_dir, "en", &[("Admin", "")]);
+    write_test_catalog(&admin_dir, "de", &[("Admin", "Verwaltung")]);
+    let aged_mtime = SystemTime::now() - Duration::from_secs(10);
+    for path in [
+        app_dir.join("en.po"),
+        app_dir.join("de.po"),
+        admin_dir.join("en.po"),
+        admin_dir.join("de.po"),
+    ] {
+        restore_mtime(&path, aged_mtime);
+    }
+    thread::sleep(Duration::from_millis(1050));
+
+    let make_config = || CatalogArtifactConfig {
+        root_dir: fixture.to_string_lossy().into_owned(),
+        locales: vec!["en".to_owned(), "de".to_owned()],
+        source_locale: "en".to_owned(),
+        fallback_locales: None,
+        pseudo_locale: None,
+        catalogs: vec![
+            CatalogConfig {
+                path: "locales/app/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            },
+            CatalogConfig {
+                path: "locales/admin/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            },
+        ],
+    };
+    let app_req = CatalogArtifactSelectedRequest {
+        config: make_config(),
+        resource_path: app_dir.join("de.po").to_string_lossy().into_owned(),
+        compiled_ids: vec![compiled_key("Hello", None)],
+    };
+    let admin_req = CatalogArtifactSelectedRequest {
+        config: make_config(),
+        resource_path: admin_dir.join("de.po").to_string_lossy().into_owned(),
+        compiled_ids: vec![compiled_key("Admin", None)],
+    };
+    let cache = CatalogCompilationCache::new(8);
+
+    // Cold compiles for both catalogs.
+    let app_first = compile_catalog_artifact_selected_cached(&cache, &app_req).expect("app first");
+    assert_eq!(
+        app_first
+            .messages
+            .get(&compiled_key("Hello", None))
+            .map(String::as_str),
+        Some("Hallo")
+    );
+    let admin_first =
+        compile_catalog_artifact_selected_cached(&cache, &admin_req).expect("admin first");
+    assert_eq!(
+        admin_first
+            .messages
+            .get(&compiled_key("Admin", None))
+            .map(String::as_str),
+        Some("Verwaltung")
+    );
+    assert_eq!(cache.file_reads(), 4);
+
+    // Interleaved warm hits for both catalogs must not collide in metadata index.
+    for _ in 0..2 {
+        compile_catalog_artifact_selected_cached(&cache, &app_req).expect("app warm");
+        compile_catalog_artifact_selected_cached(&cache, &admin_req).expect("admin warm");
+    }
+    assert_eq!(cache.file_reads(), 4);
+    assert_eq!(cache.metadata_hits(), 4);
+
+    // Deleting the fallback (`app/en.po`) must invalidate instead of serving stale data.
+    fs::remove_file(app_dir.join("en.po")).expect("remove en");
+    assert!(
+        compile_catalog_artifact_selected_cached(&cache, &app_req).is_err(),
+        "deleting a fallback catalog must invalidate the metadata fast path"
+    );
+
+    // Restoring `app/en.po` and deleting the primary (`app/de.po`) must report missing.
+    write_test_catalog(&app_dir, "en", &[("Hello", "")]);
+    restore_mtime(&app_dir.join("en.po"), aged_mtime);
+    fs::remove_file(app_dir.join("de.po")).expect("remove de");
+    assert!(
+        matches!(
+            compile_catalog_artifact_selected_cached(&cache, &app_req),
+            Err(crate::PalamedesError::CatalogFileNotFound { .. })
+        ),
+        "deleting the primary catalog must return CatalogFileNotFound"
+    );
+
+    let _ = fs::remove_dir_all(&fixture);
+}
+
+#[test]
 fn selected_catalog_cache_invalidates_equal_mtime_content_replacement() {
     let fixture = create_fixture_dir("selected-catalog-cache-content-replacement");
     let locale_dir = fixture.join("src/locales");
