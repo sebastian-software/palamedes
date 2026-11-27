@@ -32,6 +32,7 @@ mod extract;
 mod extract_cache;
 mod icu_compatibility;
 mod icu_text;
+mod js_string;
 mod jsx_entities;
 mod jsx_message;
 mod mdx;

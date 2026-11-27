@@ -232,11 +232,13 @@ impl RuntimeModuleRenderer {
 }
 
 fn render_javascript_string(value: &str, locale: &str, resource_path: &str) -> Result<String> {
-    serde_json::to_string(value).map_err(|error| {
-        render_error(format!(
-            "Failed to render catalog module for locale {locale} at {resource_path}: {error}"
-        ))
-    })
+    serde_json::to_string(value)
+        .map(crate::js_string::escape_json_for_js)
+        .map_err(|error| {
+            render_error(format!(
+                "Failed to render catalog module for locale {locale} at {resource_path}: {error}"
+            ))
+        })
 }
 
 fn unsupported_runtime_formatter_style(nodes: &[RuntimeMessageNode]) -> Option<(String, String)> {
@@ -303,4 +305,59 @@ fn runtime_formatter_name(format: &RuntimeMessageFormat) -> &'static str {
 
 fn render_error(message: String) -> PalamedesError {
     PalamedesError::RenderCatalogModule { message }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use oxc_allocator::Allocator;
+    use oxc_parser::Parser;
+    use oxc_span::SourceType;
+
+    use super::render_catalog_module;
+
+    #[test]
+    fn escapes_html_script_delimiters_and_unicode_line_separators() {
+        let messages = BTreeMap::from([
+            (
+                "key</script><!-- -->\u{2028}\u{2029}".to_owned(),
+                "Plain <!-- comment --> a < b > c\u{2028}\u{2029}!".to_owned(),
+            ),
+            (
+                "icu".to_owned(),
+                "Prefix <!-- --> {name} < b > c\u{2028}\u{2029}".to_owned(),
+            ),
+            (
+                "choice".to_owned(),
+                "{kind, select, other {Value <!-- --> and a < b > c\u{2028}}}".to_owned(),
+            ),
+            (
+                "__proto__".to_owned(),
+                "Prototype <!-- safe --> value".to_owned(),
+            ),
+        ]);
+
+        let code = render_catalog_module(&messages, "en", "en.po")
+            .expect("catalog module should render safely");
+
+        assert!(!code.contains("</script>"), "{code}");
+        assert!(!code.contains("<!--"), "{code}");
+        assert!(!code.contains("-->"), "{code}");
+        assert!(!code.contains('\u{2028}'), "{code}");
+        assert!(!code.contains('\u{2029}'), "{code}");
+        assert!(code.contains("\\u003c/script\\u003e"), "{code}");
+        assert!(code.contains("\\u003c!-- comment --\\u003e"), "{code}");
+        assert!(code.contains("\\u003c b \\u003e c"), "{code}");
+        assert!(code.contains("\\u2028\\u2029"), "{code}");
+        assert!(code.contains("[\"__proto__\"]:"), "{code}");
+
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, &code, SourceType::mjs()).parse();
+        assert!(
+            parsed.diagnostics.is_empty(),
+            "rendered catalog module must be valid JS: {:?}\n{code}",
+            parsed.diagnostics
+        );
+    }
 }

@@ -138,24 +138,70 @@ fn strict_builds_report_the_first_missing_translation() {
 #[test]
 fn builder_options_are_validated_before_reading_catalogs() {
     let output = tempfile::tempdir().unwrap();
-    let error = CatalogBuilder::new("does-not-exist", "en")
-        .locales(&["en"])
-        .macro_name("not an ident")
-        .compile_to(output.path())
-        .err()
-        .unwrap();
-    assert!(matches!(error, Error::InvalidMacroName { .. }), "{error:?}");
+    for bad_macro in [
+        "not an ident",
+        "r#match",
+        "r#type",
+        "r#translate",
+        "match",
+        "/* comment */ translate",
+        " translate ",
+        "translate\n",
+    ] {
+        let error = CatalogBuilder::new("does-not-exist", "en")
+            .locales(&["en"])
+            .macro_name(bad_macro)
+            .compile_to(output.path())
+            .err()
+            .unwrap_or_else(|| panic!("expected InvalidMacroName for {bad_macro:?}"));
+        assert!(
+            matches!(error, Error::InvalidMacroName { .. }),
+            "macro_name={bad_macro:?}: {error:?}"
+        );
+    }
 
-    let error = CatalogBuilder::new("does-not-exist", "en")
-        .locales(&["en"])
-        .module_path("other::messages")
-        .compile_to(output.path())
-        .err()
-        .unwrap();
-    assert!(
-        matches!(error, Error::InvalidModulePath { .. }),
-        "{error:?}"
-    );
+    for bad_module_path in [
+        "other::messages",
+        "::crate::messages",
+        "crate::<u8>",
+        "crate::foo::<{ panic!() }>",
+        "crate::foo::<u32>::bar",
+        "crate::foo(u32) -> u32",
+        "crate::super",
+        "crate::self",
+        "crate::crate",
+        "crate::Self",
+        "crate::try",
+        "crate :: try",
+    ] {
+        let error = CatalogBuilder::new("does-not-exist", "en")
+            .locales(&["en"])
+            .module_path(bad_module_path)
+            .compile_to(output.path())
+            .err()
+            .unwrap_or_else(|| panic!("expected InvalidModulePath for {bad_module_path:?}"));
+        assert!(
+            matches!(error, Error::InvalidModulePath { .. }),
+            "module_path={bad_module_path:?}: {error:?}"
+        );
+    }
+
+    for bad_directory in [
+        "locales\ncargo:rustc-cfg=injected",
+        "locales\rcargo:rustc-cfg=injected",
+    ] {
+        let build_error = CatalogBuilder::new(bad_directory, "en")
+            .locales(&["en"])
+            .build()
+            .err()
+            .unwrap_or_else(|| {
+                panic!("expected build() InvalidDirectoryPath for {bad_directory:?}")
+            });
+        assert!(
+            matches!(build_error, Error::InvalidDirectoryPath { .. }),
+            "build directory={bad_directory:?}: {build_error:?}"
+        );
+    }
 
     let error = CatalogBuilder::new("does-not-exist", "en")
         .locales(&["en", "en"])

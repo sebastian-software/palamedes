@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use string_wizard::{Hires, MagicString, SourceMapOptions};
 
 use crate::error::{PalamedesError, PalamedesResult};
+use crate::js_string::render_js_string_literal;
 use crate::source::{display_filename, format_parser_diagnostics};
 use crate::translation_scope::{source_location, validate_translation_macro_scopes};
 
@@ -141,6 +142,7 @@ pub fn transform_macros(
     options: Option<NativeTransformOptions>,
 ) -> PalamedesResult<NativeTransformResult> {
     let options = options.unwrap_or_default();
+    validate_transform_options(&options)?;
 
     if crate::component::is_component(filename) {
         let scripts = crate::component::script_blocks(source, filename)?;
@@ -199,16 +201,6 @@ fn transform_javascript(
     script: &crate::component::ScriptBlock,
     mut reserved_names: Option<&mut std::collections::HashSet<String>>,
 ) -> PalamedesResult<NativeTransformResult> {
-    if let Some(server_functions) = &options.server_functions
-        && (server_functions.initializer_module.is_empty()
-            || !oxc_syntax::identifier::is_identifier_name(&server_functions.initializer_export))
-    {
-        return Err(PalamedesError::InvalidServerFunctionInitializer {
-            initializer_module: server_functions.initializer_module.clone(),
-            initializer_export: server_functions.initializer_export.clone(),
-        });
-    }
-
     let runtime_module = options
         .runtime_module
         .clone()
@@ -352,15 +344,16 @@ fn transform_javascript(
     let needs_runtime_import = !collector.has_reusable_runtime_import
         || effective_runtime_import_name != runtime_import_name;
     if visitor.needs_runtime_import && needs_runtime_import {
+        let runtime_module_literal = render_js_string_literal(&runtime_module);
         if effective_runtime_import_name == runtime_import_name {
             let _ = writeln!(
                 prefix,
-                "import {{ {runtime_import_name} }} from \"{runtime_module}\";"
+                "import {{ {runtime_import_name} }} from {runtime_module_literal};"
             );
         } else {
             let _ = writeln!(
                 prefix,
-                "import {{ {runtime_import_name} as {effective_runtime_import_name} }} from \"{runtime_module}\";"
+                "import {{ {runtime_import_name} as {effective_runtime_import_name} }} from {runtime_module_literal};"
             );
         }
     }
@@ -369,12 +362,13 @@ fn transform_javascript(
     trans_imports.sort();
     for (module, local_name) in trans_imports {
         if local_name != "Trans" || !visitor.reused_trans_imports.contains(&module) {
+            let module_literal = render_js_string_literal(&module);
             if local_name == "Trans" {
-                let _ = writeln!(prefix, "import {{ Trans }} from \"{module}\";");
+                let _ = writeln!(prefix, "import {{ Trans }} from {module_literal};");
             } else {
                 let _ = writeln!(
                     prefix,
-                    "import {{ Trans as {local_name} }} from \"{module}\";"
+                    "import {{ Trans as {local_name} }} from {module_literal};"
                 );
             }
         }
@@ -520,4 +514,36 @@ fn unchanged_result(source: &str) -> NativeTransformResult {
         map: None,
         prepend_text: None,
     }
+}
+
+fn validate_transform_options(options: &NativeTransformOptions) -> PalamedesResult<()> {
+    if let Some(server_functions) = &options.server_functions
+        && (server_functions.initializer_module.is_empty()
+            || !oxc_syntax::identifier::is_identifier_name(&server_functions.initializer_export))
+    {
+        return Err(PalamedesError::InvalidServerFunctionInitializer {
+            initializer_module: server_functions.initializer_module.clone(),
+            initializer_export: server_functions.initializer_export.clone(),
+        });
+    }
+
+    let runtime_module = options
+        .runtime_module
+        .as_deref()
+        .unwrap_or("@palamedes/runtime");
+    let runtime_import_name = options.runtime_import_name.as_deref().unwrap_or("getI18n");
+    if runtime_module.is_empty() || !is_valid_runtime_import_name(runtime_import_name) {
+        return Err(PalamedesError::InvalidRuntimeImport {
+            runtime_module: runtime_module.to_string(),
+            runtime_import_name: runtime_import_name.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn is_valid_runtime_import_name(name: &str) -> bool {
+    oxc_syntax::identifier::is_identifier_name(name)
+        && !oxc_syntax::keyword::is_reserved_keyword(name)
+        && !matches!(name, "eval" | "arguments")
 }
