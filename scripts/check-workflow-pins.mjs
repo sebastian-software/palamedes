@@ -2852,9 +2852,13 @@ function inspectNonShellScript(
   emittedGithubEnv = null,
   emittedGithubOutput = null,
 ) {
-  // Strip line/block comments outside quoted strings so comments mentioning
-  // Docker or GitHub files do not trigger false failures.
+  // Strip line/block comments outside quoted strings into `codeOnly`, and build
+  // a parallel same-length `codeWithoutStrings` where string literal interiors
+  // are blanked out so prose like `print("Example: import docker")` is never
+  // matched as an import, assignment, or call while string arguments remain
+  // readable from `codeOnly` at identical offsets.
   let codeOnly = "";
+  let codeWithoutStrings = "";
   let q = null;
   let triple = false;
   for (let i = 0; i < scriptText.length; i += 1) {
@@ -2863,18 +2867,25 @@ function inspectNonShellScript(
       codeOnly += ch;
       if (ch === "\\" && i + 1 < scriptText.length) {
         codeOnly += scriptText[i + 1];
+        codeWithoutStrings += "  ";
         i += 1;
         continue;
       }
       if (triple) {
         if (scriptText.slice(i, i + 3) === q.repeat(3)) {
           codeOnly += q.repeat(2);
+          codeWithoutStrings += q.repeat(3);
           i += 2;
           q = null;
           triple = false;
+        } else {
+          codeWithoutStrings += ch === "\n" ? "\n" : " ";
         }
       } else if (ch === q) {
+        codeWithoutStrings += ch;
         q = null;
+      } else {
+        codeWithoutStrings += ch === "\n" ? "\n" : " ";
       }
       continue;
     }
@@ -2883,6 +2894,7 @@ function inspectNonShellScript(
         i += 1;
       }
       codeOnly += "\n";
+      codeWithoutStrings += "\n";
       continue;
     }
     if (ch === "/" && scriptText[i + 1] === "/") {
@@ -2890,6 +2902,7 @@ function inspectNonShellScript(
         i += 1;
       }
       codeOnly += "\n";
+      codeWithoutStrings += "\n";
       continue;
     }
     if (ch === "/" && scriptText[i + 1] === "*") {
@@ -2897,26 +2910,30 @@ function inspectNonShellScript(
       while (i < scriptText.length && !(scriptText[i] === "*" && scriptText[i + 1] === "/")) {
         if (scriptText[i] === "\n") {
           codeOnly += "\n";
+          codeWithoutStrings += "\n";
         }
         i += 1;
       }
       i += 1;
       continue;
     }
-    if (ch === "'" || ch === '"') {
-      if (scriptText.slice(i, i + 3) === ch.repeat(3)) {
+    if (ch === "'" || ch === '"' || ch === "`") {
+      if (ch !== "`" && scriptText.slice(i, i + 3) === ch.repeat(3)) {
         q = ch;
         triple = true;
         codeOnly += ch.repeat(3);
+        codeWithoutStrings += ch.repeat(3);
         i += 2;
         continue;
       }
       q = ch;
       triple = false;
       codeOnly += ch;
+      codeWithoutStrings += ch;
       continue;
     }
     codeOnly += ch;
+    codeWithoutStrings += ch;
   }
 
   const CONTAINER_CLI_BASENAMES = new Set([
@@ -2928,10 +2945,29 @@ function inspectNonShellScript(
   ]);
   const CONTAINER_SHELL_CMD_PATTERN =
     /(?:^|[;&|(\s`'"])(?:(?:[A-Za-z]:)?(?:[\\/][\w.@-]+)*[\\/])?(?:docker|podman|buildah|docker-compose|podman-compose)(?:\.exe)?(?=$|[\s;&|)'"`])/iu;
-  const hasContainerSdkImport =
-    /\b(?:import\s+(?:docker|podman|python_on_whales)\b|from\s+(?:docker|podman|python_on_whales)\b|require\s*\(\s*['"](?:dockerode|podman)['"]\s*\)|from\s+['"](?:dockerode|podman)['"])/u.test(
-      codeOnly,
+  let hasContainerSdkImport =
+    /\b(?:import\s+(?:docker|podman|python_on_whales)\b|from\s+(?:docker|podman|python_on_whales)\b)/u.test(
+      codeWithoutStrings,
     );
+  if (!hasContainerSdkImport) {
+    for (const reqMatch of codeWithoutStrings.matchAll(/\brequire\s*\(/gu)) {
+      const openIdx = reqMatch.index + reqMatch[0].length - 1;
+      const argSlice = codeOnly.slice(openIdx + 1, openIdx + 40);
+      if (/^\s*['"](?:dockerode|podman)['"]\s*\)/u.test(argSlice)) {
+        hasContainerSdkImport = true;
+        break;
+      }
+    }
+  }
+  if (!hasContainerSdkImport) {
+    for (const fromMatch of codeWithoutStrings.matchAll(/\bfrom\s+(?=['"])/gu)) {
+      const afterFrom = codeOnly.slice(fromMatch.index + fromMatch[0].length, fromMatch.index + 40);
+      if (/^['"](?:dockerode|podman)['"]/u.test(afterFrom)) {
+        hasContainerSdkImport = true;
+        break;
+      }
+    }
+  }
 
   const extractBalancedSlice = (src, openIndex, openChar, closeChar) => {
     let depth = 0;
@@ -3238,7 +3274,7 @@ function inspectNonShellScript(
   const containerVarNames = new Set();
   const assignPattern =
     /(?:^|[;\n])\s*(?:(?:const|let|var|my|local)\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\+?=\s*/gu;
-  for (const match of codeOnly.matchAll(assignPattern)) {
+  for (const match of codeWithoutStrings.matchAll(assignPattern)) {
     const rhsStart = match.index + match[0].length;
     const firstCh = codeOnly[rhsStart];
     if (firstCh === "[") {
@@ -3339,7 +3375,7 @@ function inspectNonShellScript(
   if (!invokesContainerTool) {
     const execCallPattern =
       /\b(?<callee>subprocess\.(?:run|Popen|call|check_call|check_output|getoutput|getstatusoutput)|os\.(?:system|popen|spawn\w*|exec\w*)|pty\.spawn|asyncio\.create_subprocess\w*|(?:child_process\.)?(?:execSync|execFileSync|spawnSync|execFile|spawn|exec)|Bun\.spawn\w*|Deno\.(?:Command|run)|Open3\.\w+|system|popen|shell_exec|proc_open|passthru)\s*\(/gu;
-    for (const match of codeOnly.matchAll(execCallPattern)) {
+    for (const match of codeWithoutStrings.matchAll(execCallPattern)) {
       const openParenIdx = match.index + match[0].length - 1;
       const argText = extractBalancedSlice(codeOnly, openParenIdx, "(", ")");
       if (callInvokesContainerCli(match.groups.callee, argText)) {
@@ -3349,23 +3385,32 @@ function inspectNonShellScript(
     }
   }
   if (!invokesContainerTool) {
-    for (const match of codeOnly.matchAll(/\bBun\.\$`(?<body>[^`]*)`/gu)) {
-      if (shellStringInvokesContainer(match.groups.body)) {
+    for (const match of codeWithoutStrings.matchAll(/\bBun\.\$`/gu)) {
+      const tickStart = match.index + match[0].length;
+      const tickEnd = codeOnly.indexOf("`", tickStart);
+      const body = tickEnd === -1 ? codeOnly.slice(tickStart) : codeOnly.slice(tickStart, tickEnd);
+      if (
+        literalShellCommandInvokesContainer(body) ||
+        referencesContainerVar(body, containerVarNames)
+      ) {
         invokesContainerTool = true;
         break;
       }
     }
   }
   if (!invokesContainerTool) {
-    for (const match of codeOnly.matchAll(/(?:%x|qx)\s*(?<open>[[({/])(?<body>[^\n]*)/gu)) {
+    for (const match of codeWithoutStrings.matchAll(/(?:%x|qx)\s*(?<open>[[({/])/gu)) {
       const openCh = match.groups.open;
       const closeCh = openCh === "[" ? "]" : openCh === "(" ? ")" : openCh === "{" ? "}" : openCh;
       const openIdx = match.index + match[0].indexOf(openCh);
       const bodyText =
         openCh === closeCh
-          ? (match.groups.body.split(closeCh)[0] ?? "")
+          ? (codeOnly.slice(openIdx + 1).split(closeCh)[0] ?? "")
           : extractBalancedSlice(codeOnly, openIdx, openCh, closeCh);
-      if (shellStringInvokesContainer(bodyText)) {
+      if (
+        literalShellCommandInvokesContainer(bodyText) ||
+        referencesContainerVar(bodyText, containerVarNames)
+      ) {
         invokesContainerTool = true;
         break;
       }
@@ -8476,7 +8521,7 @@ function inspectShellText(
         ? event.tokenSingleQuoted.slice(peeledCount)
         : [];
       let peeledQuoted = event.tokenQuoted ? event.tokenQuoted.slice(peeledCount) : [];
-      const peeledEscapedDollarOffsets = event.tokenEscapedDollarOffsets
+      let peeledEscapedDollarOffsets = event.tokenEscapedDollarOffsets
         ? event.tokenEscapedDollarOffsets.slice(peeledCount)
         : [];
       if (tokens.length === 0 || tokens[0].startsWith("#")) {
@@ -9795,7 +9840,117 @@ function inspectShellText(
         continue;
       }
 
-      const normalizedCli = normalizeExecutableName(cli);
+      const cliMayExpand =
+        !peeledSingleQuoted[cursor] &&
+        (cli.includes("$") ||
+          cli.includes("${{") ||
+          (shellMode === "cmd" && CMD_VAR_PATTERN.test(cli)));
+      CMD_VAR_PATTERN.lastIndex = 0;
+      if (cliMayExpand) {
+        const cliExpanded = resolveImageTokenCandidates(
+          cli,
+          stepEnv,
+          frame.vars,
+          lineNumber,
+          shellMode,
+        );
+        const cliVariants = [];
+        const seenCliVariants = new Set();
+        for (const varCand of cliExpanded.candidates) {
+          for (const cand of expandMatrixReferences(varCand.text, matrixRows, varCand.line)) {
+            const trimmed = cand.text.trim();
+            if (!trimmed || isDynamicReference(trimmed, shellMode)) {
+              continue;
+            }
+            const parts =
+              !peeledQuoted[cursor] && shellMode === "posix" ? trimmed.split(/\s+/u) : [trimmed];
+            const execNorm = normalizeExecutableName(parts[0]);
+            if (
+              execNorm === "docker" ||
+              execNorm === "podman" ||
+              execNorm === "buildah" ||
+              execNorm === "docker-compose" ||
+              execNorm === "podman-compose" ||
+              SHELL_INTERPRETERS.has(execNorm) ||
+              NON_SHELL_SCRIPT_INTERPRETERS.has(execNorm)
+            ) {
+              const key = parts.join("\0");
+              if (!seenCliVariants.has(key)) {
+                seenCliVariants.add(key);
+                cliVariants.push(parts);
+              }
+            }
+          }
+        }
+        if (cliVariants.length === 1) {
+          const parts = cliVariants[0];
+          tokens = [...tokens.slice(0, cursor), ...parts, ...tokens.slice(cursor + 1)];
+          peeledTokenOffsets = [
+            ...peeledTokenOffsets.slice(0, cursor),
+            ...parts.map(() => peeledTokenOffsets[cursor]),
+            ...peeledTokenOffsets.slice(cursor + 1),
+          ];
+          peeledSingleQuoted = [
+            ...peeledSingleQuoted.slice(0, cursor),
+            ...parts.map(() => false),
+            ...peeledSingleQuoted.slice(cursor + 1),
+          ];
+          peeledQuoted = [
+            ...peeledQuoted.slice(0, cursor),
+            ...parts.map(() => false),
+            ...peeledQuoted.slice(cursor + 1),
+          ];
+          peeledEscapedDollarOffsets = [
+            ...peeledEscapedDollarOffsets.slice(0, cursor),
+            ...parts.map(() => []),
+            ...peeledEscapedDollarOffsets.slice(cursor + 1),
+          ];
+        } else if (cliVariants.length > 1) {
+          const beforeCount = problems.length;
+          for (const parts of cliVariants) {
+            const synEvent = {
+              ...event,
+              tokens: [...tokens.slice(0, cursor), ...parts, ...tokens.slice(cursor + 1)],
+              tokenOffsets: [
+                ...peeledTokenOffsets.slice(0, cursor),
+                ...parts.map(() => peeledTokenOffsets[cursor]),
+                ...peeledTokenOffsets.slice(cursor + 1),
+              ],
+              tokenSingleQuoted: [
+                ...peeledSingleQuoted.slice(0, cursor),
+                ...parts.map(() => false),
+                ...peeledSingleQuoted.slice(cursor + 1),
+              ],
+              tokenQuoted: [
+                ...peeledQuoted.slice(0, cursor),
+                ...parts.map(() => false),
+                ...peeledQuoted.slice(cursor + 1),
+              ],
+              tokenEscapedDollarOffsets: [
+                ...peeledEscapedDollarOffsets.slice(0, cursor),
+                ...parts.map(() => []),
+                ...peeledEscapedDollarOffsets.slice(cursor + 1),
+              ],
+              substitutions: [],
+            };
+            processEvents([synEvent], fnContext);
+          }
+          if (problems.length > beforeCount + 1) {
+            const seen = new Set();
+            const deduped = [];
+            for (let i = beforeCount; i < problems.length; i += 1) {
+              if (!seen.has(problems[i])) {
+                seen.add(problems[i]);
+                deduped.push(problems[i]);
+              }
+            }
+            problems.splice(beforeCount, problems.length - beforeCount, ...deduped);
+          }
+          continue;
+        }
+      }
+
+      const normalizedCli = normalizeExecutableName(tokens[cursor]);
       if (
         buildFileContext &&
         (normalizedCli === "popd" || (shellMode === "pwsh" && normalizedCli === "pop-location"))

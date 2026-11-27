@@ -5034,6 +5034,44 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r70Fixture, { recursive: true, force: true });
     }
+    // Variable-selected container CLIs (`"$ENGINE" pull ...`) resolve before
+    // dispatching to the container checker, and SDK imports/calls inside quoted
+    // Python/Node string literals (`print("Example: import docker")`) do not
+    // trigger false non-shell failures.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r71:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: |",
+          "          ENGINE=docker",
+          `          "$ENGINE" pull node:24@${digest}`,
+          '          "$ENGINE" pull alpine:3.20',
+          '          if [ "$USE_PODMAN" = 1 ]; then',
+          "            CLI=podman",
+          "          else",
+          "            CLI=docker",
+          "          fi",
+          '          "$CLI" run --rm busybox:1.36 echo bad',
+          "      - shell: python",
+          "        run: |",
+          '          print("Example: import docker")',
+          "          print(\"Use subprocess.run(['docker', 'pull', 'node:24'])\")",
+          "      - shell: python",
+          "        run: |",
+          "          import docker",
+          '          docker.from_env().images.pull("debian:12")',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:9: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:15: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:22: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
