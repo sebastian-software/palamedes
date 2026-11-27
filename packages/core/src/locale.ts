@@ -383,6 +383,7 @@ function extractWellFormedUnicodeBaseTag(
 function languagePreferences(
   header: string | null | undefined,
   maxTagLength = DEFAULT_MAX_REQUEST_LANGUAGE_TAG_LENGTH,
+  exactOnlyTags?: ReadonlySet<string>,
 ) {
   if (!header || header.length > MAX_ACCEPT_LANGUAGE_LENGTH) {
     return [];
@@ -433,6 +434,10 @@ function languagePreferences(
 
     const lowerTag = rawTag.toLowerCase();
     if (rawTag.length > maxTagLength) {
+      if (exactOnlyTags?.has(lowerTag)) {
+        preferences.push({ quality, tag: lowerTag, matchMode: "full" });
+        continue;
+      }
       // Preserve well-formed over-budget tags by their canonical base tag (or
       // bounded language/script/region fallback for positive preferences with
       // many variants) without passing overlong strings to Intl.Locale.
@@ -1000,8 +1005,13 @@ export function defineLocaleControls<TLocale extends string>(
     };
   });
   const configuredTagMax = languageLocales.reduce(
-    (max, entry) => Math.max(max, entry.locale.length, entry.lower.length),
+    (max, entry) => (entry.parsed ? Math.max(max, entry.locale.length, entry.lower.length) : max),
     0,
+  );
+  const customLocaleIds = new Set(
+    languageLocales
+      .filter((entry) => entry.parsed === null)
+      .map((entry) => entry.locale.toLowerCase()),
   );
   const maxRequestTagLength = Math.min(
     MAX_ACCEPT_LANGUAGE_LENGTH,
@@ -1009,7 +1019,7 @@ export function defineLocaleControls<TLocale extends string>(
   );
 
   const preferredLocale = (header: string | null | undefined): TLocale => {
-    const preferences = languagePreferences(header, maxRequestTagLength);
+    const preferences = languagePreferences(header, maxRequestTagLength, customLocaleIds);
     const exclusions = preferences
       .filter(({ quality }) => quality === 0)
       .map(({ tag }) => {

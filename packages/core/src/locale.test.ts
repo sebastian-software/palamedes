@@ -1197,6 +1197,19 @@ describe("security hardening", () => {
       const overlongUndCyrillic = `und-Cyrl-${Array.from({ length: 21 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
       expect(cyrillic.preferredLocale(overlongUndCyrillic)).toBe("ru");
 
+      const longCustomCatalogId = `custom_${"x".repeat(300)}`;
+      const withLongCustomCatalog = defineLocaleControls({
+        locales: ["en", "de-DE", longCustomCatalogId] as const,
+        defaultLocale: "en",
+        labels: { [longCustomCatalogId]: "Custom" },
+      });
+      const veryLongVariantGerman = `de-DE-${Array.from({ length: 40 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
+      expect(withLongCustomCatalog.preferredLocale(veryLongVariantGerman)).toBe("de-DE");
+      expect(withLongCustomCatalog.preferredLocale(longCustomCatalogId)).toBe(longCustomCatalogId);
+      expect(
+        withLongCustomCatalog.preferredLocale(`${longCustomCatalogId};q=0, ${longCustomCatalogId}`),
+      ).toBe("en");
+
       const ambiguousRegional = defineLocaleControls({
         locales: ["en", "fr", "de-DE", "de-DE-u-co-phonebk"] as const,
         defaultLocale: "en",
