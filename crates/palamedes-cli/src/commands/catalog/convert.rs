@@ -93,6 +93,8 @@ impl Command for ConvertOptions {
                     scope: &'a str,
                     locale: &'a str,
                     input: PathBuf,
+                    input_parent: PathBuf,
+                    input_file: std::ffi::OsString,
                     output: PathBuf,
                 }
 
@@ -108,6 +110,33 @@ impl Command for ConvertOptions {
                             locale,
                             catalog.format,
                         )?;
+                        let (input_parent, input_file) =
+                            split_relative_catalog_path(&config.root_dir, &input).map_err(
+                                |error| CliError::Io {
+                                    path: input.clone(),
+                                    source: error.into_io_error(),
+                                },
+                            )?;
+                        let Some(input_dir) =
+                            ContainedDir::open_subpath(&config.root_dir, &input_parent, false)
+                                .map_err(|error| CliError::Io {
+                                    path: input.clone(),
+                                    source: error.into_io_error(),
+                                })?
+                        else {
+                            skipped += 1;
+                            continue;
+                        };
+                        if !input_dir
+                            .entry_exists(&input_file)
+                            .map_err(|error| CliError::Io {
+                                path: input.clone(),
+                                source: error.into_io_error(),
+                            })?
+                        {
+                            skipped += 1;
+                            continue;
+                        }
                         let output = config.resolve_contained_catalog_path(
                             &catalog.path,
                             locale,
@@ -120,6 +149,8 @@ impl Command for ConvertOptions {
                             scope: catalog.path.as_str(),
                             locale: locale.as_str(),
                             input,
+                            input_parent,
+                            input_file,
                             output,
                         });
                     }
@@ -135,15 +166,8 @@ impl Command for ConvertOptions {
                 )?;
 
                 for job in planned {
-                    let (input_parent, input_file) =
-                        split_relative_catalog_path(&config.root_dir, &job.input).map_err(
-                            |error| CliError::Io {
-                                path: job.input.clone(),
-                                source: error.into_io_error(),
-                            },
-                        )?;
                     let Some(input_dir) =
-                        ContainedDir::open_subpath(&config.root_dir, &input_parent, false)
+                        ContainedDir::open_subpath(&config.root_dir, &job.input_parent, false)
                             .map_err(|error| CliError::Io {
                                 path: job.input.clone(),
                                 source: error.into_io_error(),
@@ -152,13 +176,12 @@ impl Command for ConvertOptions {
                         skipped += 1;
                         continue;
                     };
-                    if input_dir
-                        .file_identity(&input_file)
+                    if !input_dir
+                        .entry_exists(&job.input_file)
                         .map_err(|error| CliError::Io {
                             path: job.input.clone(),
                             source: error.into_io_error(),
                         })?
-                        .is_none()
                     {
                         skipped += 1;
                         continue;
@@ -170,7 +193,7 @@ impl Command for ConvertOptions {
                                 source: error.into_io_error(),
                             },
                         )?;
-                    let (output_dir, _locks) = if input_parent == output_parent {
+                    let (output_dir, _locks) = if job.input_parent == output_parent {
                         let lock =
                             input_dir
                                 .lock_target(&output_file)
@@ -187,12 +210,13 @@ impl Command for ConvertOptions {
                                     source: error.into_io_error(),
                                 })?
                                 .expect("create_missing always opens destination directory");
-                        let in_key = input_dir.target_lock_key(&input_file).map_err(|error| {
-                            CliError::Io {
-                                path: job.input.clone(),
-                                source: error.into_io_error(),
-                            }
-                        })?;
+                        let in_key =
+                            input_dir
+                                .target_lock_key(&job.input_file)
+                                .map_err(|error| CliError::Io {
+                                    path: job.input.clone(),
+                                    source: error.into_io_error(),
+                                })?;
                         let out_key = out_dir.target_lock_key(&output_file).map_err(|error| {
                             CliError::Io {
                                 path: job.output.clone(),
@@ -208,7 +232,7 @@ impl Command for ConvertOptions {
                             })?]
                         } else if in_key < out_key {
                             vec![
-                                input_dir.lock_target(&input_file).map_err(|error| {
+                                input_dir.lock_target(&job.input_file).map_err(|error| {
                                     CliError::Io {
                                         path: job.input.clone(),
                                         source: error.into_io_error(),
@@ -229,7 +253,7 @@ impl Command for ConvertOptions {
                                         source: error.into_io_error(),
                                     }
                                 })?,
-                                input_dir.lock_target(&input_file).map_err(|error| {
+                                input_dir.lock_target(&job.input_file).map_err(|error| {
                                     CliError::Io {
                                         path: job.input.clone(),
                                         source: error.into_io_error(),
@@ -241,19 +265,19 @@ impl Command for ConvertOptions {
                     };
                     let output_dir_ref = output_dir.as_ref().unwrap_or(&input_dir);
                     let Some(source) =
-                        input_dir.read_optional_file(&input_file).map_err(|error| {
-                            CliError::Io {
+                        input_dir
+                            .read_optional_file(&job.input_file)
+                            .map_err(|error| CliError::Io {
                                 path: job.input.clone(),
                                 source: error.into_io_error(),
-                            }
-                        })?
+                            })?
                     else {
                         skipped += 1;
                         continue;
                     };
                     let input_identity =
                         input_dir
-                            .file_identity(&input_file)
+                            .file_identity(&job.input_file)
                             .map_err(|error| CliError::Io {
                                 path: job.input.clone(),
                                 source: error.into_io_error(),
@@ -726,6 +750,54 @@ catalogs:
             !catalog_dir.join("messages.fcl").exists(),
             "no FCL output should be written when configured destinations collide"
         );
+    }
+
+    #[test]
+    fn configured_conversion_skips_missing_inputs_without_false_destination_collision() {
+        let fixture = temp_dir("convert-missing-input-no-collision");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+  - path: locales/{locale}/messages.fcl
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        fs::write(
+            catalog_dir.join("messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Only\"\nmsgstr \"Only\"\n",
+        )
+        .expect("write existing catalog");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+
+        let report = options
+            .run(&Context::with_cwd(&fixture))
+            .expect("missing second PO input should be skipped rather than flagged as a collision");
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 1,
+                skipped: 1,
+                ..
+            }
+        ));
+        let fcl = fs::read_to_string(catalog_dir.join("messages.fcl")).expect("read fcl");
+        assert!(fcl.contains("Only"));
     }
 
     #[test]

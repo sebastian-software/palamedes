@@ -1127,6 +1127,18 @@ mod platform {
         /// Returns the on-disk identity of `file_name` inside this directory, or
         /// `None` if it does not exist.
         ///
+        /// Returns `true` if `file_name` exists in this directory (and is not a
+        /// symlink), or `false` if it does not exist.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid
+        /// or a symlink, or [`ContainedFsError::Io`] on OS errors.
+        pub fn entry_exists(&self, file_name: &OsStr) -> Result<bool, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            Ok(self.inspect_entry(file_name)?.is_some())
+        }
+
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Containment`] if `file_name` is a symlink.
@@ -3610,16 +3622,23 @@ mod platform {
                     AppleFsKind::Other
                 }
             } else {
-                AppleFsKind::Apfs
+                AppleFsKind::Other
             };
-            Some(match (case_insensitive, fs_kind) {
-                (true, AppleFsKind::Apfs) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfd,
-                (false, AppleFsKind::Apfs) => DirFilenameEquivalence::UnicodeNfd,
-                (true, AppleFsKind::HfsPlus) => DirFilenameEquivalence::CaseInsensitiveHfsPlus,
-                (false, AppleFsKind::HfsPlus) => DirFilenameEquivalence::UnicodeHfsPlus,
-                (true, AppleFsKind::Other) => DirFilenameEquivalence::CaseInsensitiveNtfs,
-                (false, AppleFsKind::Other) => DirFilenameEquivalence::Exact,
-            })
+            match (case_insensitive, fs_kind) {
+                (true, AppleFsKind::Apfs) => {
+                    Some(DirFilenameEquivalence::CaseInsensitiveUnicodeNfd)
+                }
+                (false, AppleFsKind::Apfs) => Some(DirFilenameEquivalence::UnicodeNfd),
+                (true, AppleFsKind::HfsPlus) => {
+                    Some(DirFilenameEquivalence::CaseInsensitiveHfsPlus)
+                }
+                (false, AppleFsKind::HfsPlus) => Some(DirFilenameEquivalence::UnicodeHfsPlus),
+                // Non-local / unrecognized macOS mounts (SMB, NFS, FUSE, etc.)
+                // can have server-defined normalization and case rules that
+                // `f_fstypename` does not capture; leave them unknown so
+                // callers probe the live mounted directory.
+                (_, AppleFsKind::Other) => None,
+            }
         }
         #[cfg(target_os = "linux")]
         {
@@ -5132,8 +5151,18 @@ mod platform {
 
         let mut xattrs = Vec::new();
         for raw_name in names_buf.split(|&byte| byte == 0) {
-            if !raw_name.starts_with(b"user.") {
-                continue;
+            match super::classify_linux_xattr_for_copy(raw_name) {
+                super::LinuxCopyableXattrKind::Ignore => continue,
+                super::LinuxCopyableXattrKind::UnpreservableTrusted => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        format!(
+                            "cannot safely preserve filesystem-internal trusted xattr {} across atomic replacement",
+                            String::from_utf8_lossy(raw_name)
+                        ),
+                    ));
+                }
+                super::LinuxCopyableXattrKind::Copyable => {}
             }
             let Ok(c_name) = CString::new(raw_name) else {
                 continue;
@@ -5642,6 +5671,39 @@ mod platform {
 
 #[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LinuxCopyableXattrKind {
+    Copyable,
+    UnpreservableTrusted,
+    Ignore,
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn classify_linux_xattr_for_copy(name: &[u8]) -> LinuxCopyableXattrKind {
+    if name.starts_with(b"user.") {
+        return LinuxCopyableXattrKind::Copyable;
+    }
+    if name.starts_with(b"trusted.") {
+        // Filesystem-internal `trusted.*` attributes (OverlayFS, GlusterFS,
+        // SGI/XFS) encode storage-layer structure bound to the original inode
+        // and must neither be copied blindly nor silently discarded.
+        if name.starts_with(b"trusted.overlay.")
+            || name.starts_with(b"trusted.glusterfs.")
+            || name.starts_with(b"trusted.afr.")
+            || name.starts_with(b"trusted.pgfid.")
+            || name.starts_with(b"trusted.ec.")
+            || name.starts_with(b"trusted.bit-rot.")
+            || name.starts_with(b"trusted.SGI_")
+            || name == b"trusted.gfid"
+        {
+            return LinuxCopyableXattrKind::UnpreservableTrusted;
+        }
+        return LinuxCopyableXattrKind::Copyable;
+    }
+    LinuxCopyableXattrKind::Ignore
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LinuxSecurityXattrKind {
     CopyableAccessLabel,
     UnpreservableIntegrityOrUnknown,
@@ -5795,6 +5857,7 @@ mod platform {
     const FILE_DISPOSITION_INFORMATION_CLASS: u32 = 13;
     const FILE_STREAM_INFORMATION_CLASS: u32 = 22;
     const OWNER_SECURITY_INFORMATION: u32 = 0x0000_0001;
+    const GROUP_SECURITY_INFORMATION: u32 = 0x0000_0002;
     const DACL_SECURITY_INFORMATION: u32 = 0x0000_0004;
     const SACL_SECURITY_INFORMATION: u32 = 0x0000_0008;
     const LABEL_SECURITY_INFORMATION: u32 = 0x0000_0010;
@@ -5842,6 +5905,7 @@ mod platform {
 
     struct ExistingWindowsSecurity {
         owner_sd: Option<Vec<usize>>,
+        group_sd: Option<Vec<usize>>,
         dacl_sd: Option<Vec<usize>>,
         label_sd: Option<Vec<usize>>,
         sacl_sd: Option<Vec<usize>>,
@@ -6093,6 +6157,11 @@ mod platform {
             security_descriptor: *mut c_void,
             owner: *mut *mut c_void,
             owner_defaulted: *mut i32,
+        ) -> i32;
+        fn GetSecurityDescriptorGroup(
+            security_descriptor: *mut c_void,
+            group: *mut *mut c_void,
+            group_defaulted: *mut i32,
         ) -> i32;
         fn GetSecurityDescriptorControl(
             security_descriptor: *mut c_void,
@@ -6761,6 +6830,18 @@ mod platform {
             Ok(())
         }
 
+        /// Returns `true` if `file_name` exists in this directory (and is not a
+        /// symlink/reparse point), or `false` if it does not exist.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid
+        /// or refers to a symlink/reparse point.
+        pub fn entry_exists(&self, file_name: &OsStr) -> Result<bool, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            Ok(self.inspect_entry(file_name, false)?.is_some())
+        }
+
         /// Returns the on-disk file identity of `file_name` in this directory,
         /// or `None` if it does not exist.
         ///
@@ -6844,6 +6925,7 @@ mod platform {
             {
                 let has_security_descriptors = existing_security.as_ref().is_some_and(|security| {
                     security.owner_sd.is_some()
+                        || security.group_sd.is_some()
                         || security.dacl_sd.is_some()
                         || security.label_sd.is_some()
                 });
@@ -6919,6 +7001,7 @@ mod platform {
                 let mut existing_security = existing_entry.and_then(|(_, security)| security);
                 let has_security_descriptors = existing_security.as_ref().is_some_and(|security| {
                     security.owner_sd.is_some()
+                        || security.group_sd.is_some()
                         || security.dacl_sd.is_some()
                         || security.label_sd.is_some()
                 });
@@ -7004,6 +7087,9 @@ mod platform {
                 if let Some(existing_security) = existing_security.as_mut() {
                     if let Some(owner_sd) = existing_security.owner_sd.as_mut() {
                         restore_windows_owner(temp_guard.file.as_raw_handle(), owner_sd)?;
+                    }
+                    if let Some(group_sd) = existing_security.group_sd.as_mut() {
+                        restore_windows_group(temp_guard.file.as_raw_handle(), group_sd)?;
                     }
                     if let Some(dacl_sd) = existing_security.dacl_sd.as_mut() {
                         restore_and_verify_windows_dacl(temp_guard.file.as_raw_handle(), dacl_sd)?;
@@ -7146,6 +7232,8 @@ mod platform {
                     has_windows_extended_attributes(handle.as_raw_handle())?;
                 let owner_sd =
                     read_security_descriptor(handle.as_raw_handle(), OWNER_SECURITY_INFORMATION)?;
+                let group_sd =
+                    read_security_descriptor(handle.as_raw_handle(), GROUP_SECURITY_INFORMATION)?;
                 let dacl_sd =
                     read_security_descriptor(handle.as_raw_handle(), DACL_SECURITY_INFORMATION)?;
                 let label_sd =
@@ -7180,6 +7268,7 @@ mod platform {
                 };
                 Some(ExistingWindowsSecurity {
                     owner_sd,
+                    group_sd,
                     dacl_sd,
                     label_sd,
                     sacl_sd,
@@ -7710,8 +7799,111 @@ mod platform {
                     format!("cannot preserve original Windows file owner on replacement: {error}"),
                 ));
             }
+            let mut verified_sd = read_security_descriptor(temp_handle, OWNER_SECURITY_INFORMATION)
+                .map_err(ContainedFsError::into_io_error)?;
+            if !windows_owner_matches(existing_sd, verified_sd.as_deref_mut())? {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "cannot verify original Windows file owner preservation on replacement",
+                ));
+            }
         }
         Ok(())
+    }
+
+    fn restore_windows_group(
+        temp_handle: *mut c_void,
+        existing_sd: &mut [usize],
+    ) -> io::Result<()> {
+        let mut existing_group: *mut c_void = std::ptr::null_mut();
+        let mut defaulted: i32 = 0;
+        // SAFETY: `existing_sd` is a valid security descriptor returned by `GetKernelObjectSecurity`.
+        if unsafe {
+            GetSecurityDescriptorGroup(
+                existing_sd.as_mut_ptr().cast::<c_void>(),
+                &mut existing_group,
+                &mut defaulted,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        if existing_group.is_null() {
+            return Ok(());
+        }
+        let mut temp_group_sd = read_security_descriptor(temp_handle, GROUP_SECURITY_INFORMATION)
+            .map_err(ContainedFsError::into_io_error)?;
+        if !windows_group_matches(existing_sd, temp_group_sd.as_deref_mut())? {
+            // SAFETY: `temp_handle` was opened with `WRITE_OWNER` and `existing_sd` contains the group SID.
+            if unsafe {
+                SetKernelObjectSecurity(
+                    temp_handle,
+                    GROUP_SECURITY_INFORMATION,
+                    existing_sd.as_mut_ptr().cast::<c_void>(),
+                )
+            } == 0
+            {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!(
+                        "cannot preserve original Windows primary group on replacement: {error}"
+                    ),
+                ));
+            }
+            let mut verified_sd = read_security_descriptor(temp_handle, GROUP_SECURITY_INFORMATION)
+                .map_err(ContainedFsError::into_io_error)?;
+            if !windows_group_matches(existing_sd, verified_sd.as_deref_mut())? {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "cannot verify original Windows primary group preservation on replacement",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn windows_group_matches(
+        expected_sd: &mut [usize],
+        actual_sd: Option<&mut [usize]>,
+    ) -> io::Result<bool> {
+        let mut expected_group: *mut c_void = std::ptr::null_mut();
+        let mut expected_defaulted: i32 = 0;
+        // SAFETY: `expected_sd` is a valid security descriptor.
+        if unsafe {
+            GetSecurityDescriptorGroup(
+                expected_sd.as_mut_ptr().cast::<c_void>(),
+                &mut expected_group,
+                &mut expected_defaulted,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let Some(actual_sd) = actual_sd else {
+            return Ok(expected_group.is_null());
+        };
+        let mut actual_group: *mut c_void = std::ptr::null_mut();
+        let mut actual_defaulted: i32 = 0;
+        // SAFETY: `actual_sd` is a valid security descriptor.
+        if unsafe {
+            GetSecurityDescriptorGroup(
+                actual_sd.as_mut_ptr().cast::<c_void>(),
+                &mut actual_group,
+                &mut actual_defaulted,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        if expected_group.is_null() && actual_group.is_null() {
+            return Ok(true);
+        }
+        if expected_group.is_null() || actual_group.is_null() {
+            return Ok(false);
+        }
+        // SAFETY: both SID pointers are non-null and owned by their respective descriptors.
+        Ok(unsafe { EqualSid(expected_group, actual_group) } != 0)
     }
 
     fn extract_windows_dacl(sd: &mut [usize]) -> io::Result<(bool, bool, Option<&[u8]>)> {
@@ -8182,6 +8374,15 @@ mod platform {
                 if !owners_equal {
                     return Ok(false);
                 }
+                let groups_equal = match (exp.group_sd.as_deref_mut(), act.group_sd.as_deref_mut())
+                {
+                    (None, None) => true,
+                    (Some(exp_group), act_group) => windows_group_matches(exp_group, act_group)?,
+                    (None, Some(_)) => false,
+                };
+                if !groups_equal {
+                    return Ok(false);
+                }
                 let dacl_equal = match (exp.dacl_sd.as_deref_mut(), act.dacl_sd.as_deref_mut()) {
                     (None, None) => true,
                     (Some(exp_dacl), act_dacl) => windows_dacl_matches(exp_dacl, act_dacl)?,
@@ -8477,6 +8678,24 @@ mod platform {
             file_name: &OsStr,
         ) -> Result<(), ContainedFsError> {
             self.reject_symlink(file_name)
+        }
+
+        /// Returns `true` if `file_name` exists in this directory (and is not a
+        /// symlink), or `false` if it does not exist.
+        pub fn entry_exists(&self, file_name: &OsStr) -> Result<bool, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            let path = self.dir.join(file_name);
+            match fs::symlink_metadata(&path) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    Err(ContainedFsError::Containment(format!(
+                        "refusing to write through symlink \"{}\"",
+                        file_name.to_string_lossy()
+                    )))
+                }
+                Ok(_) => Ok(true),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+                Err(error) => Err(ContainedFsError::Io(error)),
+            }
         }
 
         /// Unsupported file identity lookup fallback.
@@ -9931,7 +10150,10 @@ mod tests {
             "writer E must serialize at generation 1 instead of sneaking into generation 0"
         );
     }
+}
 
+#[cfg(test)]
+mod cross_platform_tests {
     #[test]
     fn windows_txf_open_status_classification_matches_sdk_codes() {
         use super::{WindowsTxfOpenDisposition, classify_windows_txf_open_status};
@@ -10020,6 +10242,48 @@ mod tests {
                 LinuxSecurityXattrKind::UnpreservableIntegrityOrUnknown,
                 "expected UnpreservableIntegrityOrUnknown for {}",
                 String::from_utf8_lossy(unpreservable)
+            );
+        }
+    }
+
+    #[test]
+    fn linux_copyable_xattr_classification_preserves_trusted_and_rejects_fs_internal() {
+        use super::{LinuxCopyableXattrKind, classify_linux_xattr_for_copy};
+
+        for copyable in [
+            b"user.palamedes.review".as_slice(),
+            b"trusted.palamedes.managed".as_slice(),
+            b"trusted.backup.tag".as_slice(),
+        ] {
+            assert_eq!(
+                classify_linux_xattr_for_copy(copyable),
+                LinuxCopyableXattrKind::Copyable,
+                "expected Copyable for {}",
+                String::from_utf8_lossy(copyable)
+            );
+        }
+        for internal in [
+            b"trusted.overlay.opaque".as_slice(),
+            b"trusted.overlay.metacopy".as_slice(),
+            b"trusted.glusterfs.dht".as_slice(),
+            b"trusted.afr.dirty".as_slice(),
+            b"trusted.gfid".as_slice(),
+            b"trusted.SGI_ACL_FILE".as_slice(),
+        ] {
+            assert_eq!(
+                classify_linux_xattr_for_copy(internal),
+                LinuxCopyableXattrKind::UnpreservableTrusted,
+                "expected UnpreservableTrusted for {}",
+                String::from_utf8_lossy(internal)
+            );
+        }
+        for ignored in [
+            b"system.posix_acl_access".as_slice(),
+            b"security.selinux".as_slice(),
+        ] {
+            assert_eq!(
+                classify_linux_xattr_for_copy(ignored),
+                LinuxCopyableXattrKind::Ignore
             );
         }
     }
