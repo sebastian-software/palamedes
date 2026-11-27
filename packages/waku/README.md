@@ -145,6 +145,9 @@ export default adapter(fsRouter(modules), {
           context.header("cache-control", "private, no-store");
         }
       }),
+    // If your app compresses HTML in middleware (for example, Hono `compress()`),
+    // register it here before `catalogDelivery`—not in `src/middleware/*`—or
+    // compress at the reverse proxy so HTML rewriting runs before compression.
     () => async (context, next) => {
       await next();
       // Transform only Waku-rendered SSR HTML so raw HTML `_api` handlers keep
