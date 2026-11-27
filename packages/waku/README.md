@@ -120,17 +120,24 @@ export default adapter(fsRouter(modules), {
 
 ```ts
 // src/pages/_interceptors/csp.server.ts
-import { unstable_setNonce, type HandlerInterceptor } from "waku/router/server";
+import {
+  unstable_getRscPath,
+  unstable_setNonce,
+  type HandlerInterceptor,
+} from "waku/router/server";
 import { getRequestNonce, markRequestNonceApplied } from "../../lib/csp.server";
 
 const cspInterceptor: HandlerInterceptor = async (next) => {
   const nonce = getRequestNonce();
   if (nonce) unstable_setNonce(nonce);
   const result = await next();
-  // Mark the nonce as applied only when the router actually returned an HTML
-  // Response (not null / "fallback", which triggers Waku's unnonced root fallback shell).
+  // Mark the nonce as applied only when Waku's page renderer produced an HTML
+  // Response: `_api` routes return without setting an RSC path (leaving raw
+  // HTML handlers in charge of their own CSP), and unmatched `/` returns null
+  // before Waku's unnonced root fallback shell runs.
   if (
     nonce &&
+    unstable_getRscPath() !== undefined &&
     result instanceof Response &&
     result.headers.get("content-type")?.startsWith("text/html")
   ) {
