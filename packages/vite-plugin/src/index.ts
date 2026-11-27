@@ -1180,6 +1180,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
         if (change.event === "create" || change.event === "delete") {
           canonicalPathCache.clear();
+        } else {
+          canonicalPathCache.delete(id);
+          canonicalPathCache.delete(cleanId);
         }
       },
 
@@ -1298,6 +1301,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     watchChange(id, change) {
       if (change?.event === "create" || change?.event === "delete") {
         canonicalPathCache.clear();
+      } else {
+        canonicalPathCache.delete(id);
+        canonicalPathCache.delete(stripQuery(id));
       }
       resetConfigOnChange(id);
     },
@@ -1308,6 +1314,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         if (!experimentalCatalogHmr) return;
         if (context.type === "create" || context.type === "delete") {
           canonicalPathCache.clear();
+        } else {
+          canonicalPathCache.delete(context.file);
+          canonicalPathCache.delete(stripQuery(context.file));
         }
         const file = cachedCanonicalPath(context.file);
         const reloadKey = `${file}:${context.timestamp}:${context.type}`;

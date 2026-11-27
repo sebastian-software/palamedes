@@ -57,6 +57,7 @@ export function scanMarkers(chunks: Iterable<[string, string]>): MarkerScan {
 }
 
 export const DEFAULT_IO_CONCURRENCY = 32;
+export const DEFAULT_LOCALE_CONCURRENCY = 4;
 
 export async function mapWithConcurrency<TInput, TOutput>(
   items: readonly TInput[],

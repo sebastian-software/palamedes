@@ -6,6 +6,7 @@ import { renderCatalogModule } from "@palamedes/core-node";
 
 import {
   DEFAULT_IO_CONCURRENCY,
+  DEFAULT_LOCALE_CONCURRENCY,
   createCatalogCompiler,
   mapWithConcurrency,
   readChunks,
@@ -104,43 +105,37 @@ export async function emitClientCatalogAssets(
     return [locale, mapName] as const;
   });
 
-  const compiledLocales = await mapWithConcurrency(
+  const emittedMaps = await mapWithConcurrency(
     mapNames,
-    DEFAULT_IO_CONCURRENCY,
-    async ([locale, mapName]) => ({
-      locale,
-      mapName,
-      compiled: await compiler.compileLocale(locale),
-    }),
-  );
-
-  const writes: Array<{ filePath: string; content: string }> = [];
-  // Locale to the file name of its map, for the build checks.
-  const maps: Record<string, string> = {};
-  for (const { locale, mapName, compiled } of compiledLocales) {
-    const assets: Record<string, string[]> = {};
-    for (const keys of groups) {
-      const selections = keys.map((key) => compiled.get(key)!);
-      const union = mergeSelections(selections);
-      const outputs: [string, Record<string, string>, string[]][] = union
-        ? [[groupName(keys), union, keys]]
-        : keys.map((key, index) => [key, selections[index]!, [key]]);
-      for (const [name, messages, members] of outputs) {
-        const asset = bareMessageAsset(renderCatalogModule(messages));
-        const hash = createHash("sha256").update(asset).digest("hex").slice(0, 8);
-        const fileName = `${name}.${locale}-${hash}.js`;
-        writes.push({ filePath: path.join(outputDir, fileName), content: asset });
-        assets[fileName] = members;
+    DEFAULT_LOCALE_CONCURRENCY,
+    async ([locale, mapName]) => {
+      const assets: Record<string, string[]> = {};
+      const compiled = await compiler.compileLocale(locale);
+      const writes: Array<{ filePath: string; content: string }> = [];
+      for (const keys of groups) {
+        const selections = keys.map((key) => compiled.get(key)!);
+        const union = mergeSelections(selections);
+        const outputs: [string, Record<string, string>, string[]][] = union
+          ? [[groupName(keys), union, keys]]
+          : keys.map((key, index) => [key, selections[index]!, [key]]);
+        for (const [name, messages, members] of outputs) {
+          const asset = bareMessageAsset(renderCatalogModule(messages));
+          const hash = createHash("sha256").update(asset).digest("hex").slice(0, 8);
+          const fileName = `${name}.${locale}-${hash}.js`;
+          writes.push({ filePath: path.join(outputDir, fileName), content: asset });
+          assets[fileName] = members;
+        }
       }
-    }
-    writes.push({
-      filePath: path.join(outputDir, mapName),
-      content: renderCatalogMap(locale, assets),
-    });
-    maps[locale] = mapName;
-  }
-  await mapWithConcurrency(writes, DEFAULT_IO_CONCURRENCY, ({ filePath, content }) =>
-    writeFile(filePath, content),
+      writes.push({
+        filePath: path.join(outputDir, mapName),
+        content: renderCatalogMap(locale, assets),
+      });
+      await mapWithConcurrency(writes, DEFAULT_IO_CONCURRENCY, ({ filePath, content }) =>
+        writeFile(filePath, content),
+      );
+      return [locale, mapName] as const;
+    },
   );
-  return maps;
+  // Locale to the file name of its map, for the build checks.
+  return Object.fromEntries(emittedMaps);
 }

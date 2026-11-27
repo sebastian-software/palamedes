@@ -9,6 +9,7 @@ import { renderCatalogModule } from "@palamedes/core-node";
 
 import {
   DEFAULT_IO_CONCURRENCY,
+  DEFAULT_LOCALE_CONCURRENCY,
   MARKER_PATTERN,
   createCatalogCompiler,
   mapWithConcurrency,
@@ -6516,27 +6517,29 @@ export async function emitClientCatalogPermutations(
   const variants: Record<string, string[]> = Object.fromEntries(
     [...affected].sort().map((key) => [key, []]),
   );
-  const compiledLocales = await mapWithConcurrency(
+  // Emit a bounded number of locales at a time so rendered variant bodies can
+  // be released as each locale finishes writing instead of buffering every
+  // locale's chunks in memory at once.
+  const perLocaleVariantPaths = await mapWithConcurrency(
     compiler.locales,
-    DEFAULT_IO_CONCURRENCY,
-    async (locale) => ({
-      locale,
-      compiled: await compiler.compileLocale(locale),
-    }),
+    DEFAULT_LOCALE_CONCURRENCY,
+    async (locale) => {
+      const compiled = await compiler.compileLocale(locale);
+      const expressions = new Map(
+        [...compiled].map(([key, messages]) => [key, inlineMessageExpression(messages)]),
+      );
+      const rendered = [...renderVariants(graph, affected, locale, expressions)];
+      await mapWithConcurrency(rendered, DEFAULT_IO_CONCURRENCY, ([, variant]) =>
+        writeFile(path.join(distDir, variant.path), variant.body),
+      );
+      return rendered.map(([key, variant]) => [key, variant.path] as const);
+    },
   );
-  const variantWrites: Array<{ filePath: string; body: string }> = [];
-  for (const { locale, compiled } of compiledLocales) {
-    const expressions = new Map(
-      [...compiled].map(([key, messages]) => [key, inlineMessageExpression(messages)]),
-    );
-    for (const [key, variant] of renderVariants(graph, affected, locale, expressions)) {
-      variantWrites.push({ filePath: path.join(distDir, variant.path), body: variant.body });
-      variants[key]!.push(variant.path);
+  for (const localeVariants of perLocaleVariantPaths) {
+    for (const [key, emittedPath] of localeVariants) {
+      variants[key]!.push(emittedPath);
     }
   }
-  await mapWithConcurrency(variantWrites, DEFAULT_IO_CONCURRENCY, ({ filePath, body }) =>
-    writeFile(filePath, body),
-  );
 
   const covered = new Set<string>();
   for (const key of affected) {
@@ -6574,83 +6577,82 @@ export async function emitClientCatalogPermutations(
     variants,
     { optionalRootLocale: true },
   );
-  const manifestSources = await mapWithConcurrency(
-    manifests,
-    DEFAULT_IO_CONCURRENCY,
-    async (file) => ({
-      file,
-      source: (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!,
-    }),
-  );
   const turbopackChunkCache: TurbopackChunkModuleCache = new Map();
   const inconclusiveOptionalLocaleRoutes: string[] = [];
-  const manifestWrites: Array<{ file: string; content: string }> = [];
-  for (const { file, source } of manifestSources) {
-    // Next may construct paths from shared prefixes, so inspect the evaluated
-    // arrays that the adapter actually replaces, not substrings in source.
-    // Evaluate coverage first so server-only routes without affected client
-    // chunks skip compiled route-tree inspection and avoid spurious warnings.
-    let manifestCoverage: unknown;
-    try {
-      manifestCoverage = vm.runInNewContext(
-        `globalThis.process = { env: {} };\n${source}${standardAdapter}`,
-        Object.create(null),
-        {
-          timeout: 1000,
-          contextCodeGeneration: { strings: false, wasm: false },
-          microtaskMode: "afterEvaluate",
-        },
-      );
-    } catch (error) {
-      throw new Error(
-        `Palamedes client catalog permutations: could not inspect manifest ${file}.`,
-        {
-          cause: error,
-        },
-      );
-    }
-    if (!Array.isArray(manifestCoverage)) {
-      throw new TypeError(
-        `Palamedes client catalog permutations: could not inspect manifest ${file}.`,
-      );
-    }
-    let referencesAffectedChunks = false;
-    for (const key of manifestCoverage) {
-      if (typeof key === "string") {
-        covered.add(key);
-        referencesAffectedChunks = true;
-      }
-    }
-
-    const manifestRelativePath = path.relative(serverAppDir, file).split(path.sep).join("/");
-    const hasOptionalLocaleSegment = manifestRelativePath
-      .split("/")
-      .slice(0, -1)
-      .includes("[[...locale]]");
-    // Rely strictly on the compiled route tree from this build; never read the
-    // mutable app/ source directory on disk to authorize header selection. Fail
-    // closed (`true`) when an optional `[[...locale]]` route with affected
-    // client chunks cannot be verified as having a compiled root layout above
-    // `[[...locale]]`, and surface the affected route at build time so
-    // header-driven layouts do not silently ship source-locale chunks.
-    let optionalRootLocale = false;
-    if (referencesAffectedChunks && hasOptionalLocaleSegment) {
-      const detected = compiledRouteHasOptionalRootLocale(distDir, file, turbopackChunkCache);
-      if (detected === undefined) {
-        inconclusiveOptionalLocaleRoutes.push(
-          `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`,
+  for (let offset = 0; offset < manifests.length; offset += DEFAULT_IO_CONCURRENCY) {
+    const batch = manifests.slice(offset, offset + DEFAULT_IO_CONCURRENCY);
+    const manifestSources = await Promise.all(
+      batch.map(async (file) => ({
+        file,
+        source: (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!,
+      })),
+    );
+    const manifestWrites: Array<{ file: string; content: string }> = [];
+    for (const { file, source } of manifestSources) {
+      // Next may construct paths from shared prefixes, so inspect the evaluated
+      // arrays that the adapter actually replaces, not substrings in source.
+      // Evaluate coverage first so server-only routes without affected client
+      // chunks skip compiled route-tree inspection and avoid spurious warnings.
+      let manifestCoverage: unknown;
+      try {
+        manifestCoverage = vm.runInNewContext(
+          `globalThis.process = { env: {} };\n${source}${standardAdapter}`,
+          Object.create(null),
+          {
+            timeout: 1000,
+            contextCodeGeneration: { strings: false, wasm: false },
+            microtaskMode: "afterEvaluate",
+          },
         );
-        optionalRootLocale = true;
-      } else {
-        optionalRootLocale = detected;
+      } catch (error) {
+        throw new Error(
+          `Palamedes client catalog permutations: could not inspect manifest ${file}.`,
+          {
+            cause: error,
+          },
+        );
       }
+      if (!Array.isArray(manifestCoverage)) {
+        throw new TypeError(
+          `Palamedes client catalog permutations: could not inspect manifest ${file}.`,
+        );
+      }
+      let referencesAffectedChunks = false;
+      for (const key of manifestCoverage) {
+        if (typeof key === "string") {
+          covered.add(key);
+          referencesAffectedChunks = true;
+        }
+      }
+
+      const manifestRelativePath = path.relative(serverAppDir, file).split(path.sep).join("/");
+      const hasOptionalLocaleSegment = manifestRelativePath
+        .split("/")
+        .slice(0, -1)
+        .includes("[[...locale]]");
+      // Rely strictly on the compiled route tree from this build; never read the
+      // mutable app/ source directory on disk to authorize header selection. Fail
+      // closed (`true`) when an optional `[[...locale]]` route with affected
+      // client chunks cannot be verified as having a compiled root layout above
+      // `[[...locale]]`, and surface the affected route at build time so
+      // header-driven layouts do not silently ship source-locale chunks.
+      let optionalRootLocale = false;
+      if (referencesAffectedChunks && hasOptionalLocaleSegment) {
+        const detected = compiledRouteHasOptionalRootLocale(distDir, file, turbopackChunkCache);
+        if (detected === undefined) {
+          inconclusiveOptionalLocaleRoutes.push(
+            `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`,
+          );
+          optionalRootLocale = true;
+        } else {
+          optionalRootLocale = detected;
+        }
+      }
+      const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
+      manifestWrites.push({ file, content: `${source}${adapter}` });
     }
-    const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
-    manifestWrites.push({ file, content: `${source}${adapter}` });
+    await Promise.all(manifestWrites.map(({ file, content }) => writeFile(file, content)));
   }
-  await mapWithConcurrency(manifestWrites, DEFAULT_IO_CONCURRENCY, ({ file, content }) =>
-    writeFile(file, content),
-  );
   assertChunkCoverage(affected, covered);
   if (inconclusiveOptionalLocaleRoutes.length > 0) {
     console.warn(

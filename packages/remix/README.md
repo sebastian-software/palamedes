@@ -136,7 +136,7 @@ const assetServer = createAssetServer({
   scripts: { loaders: [createPalamedesRemixAssetLoader({ catalogAssets })] },
 });
 // In the request listener, before assetServer.fetch(request):
-const fragment = catalogAssets.serve(request);
+const fragment = await catalogAssets.serve(request);
 if (fragment) return fragment;
 ```
 

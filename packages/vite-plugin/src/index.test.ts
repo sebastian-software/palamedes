@@ -2716,56 +2716,74 @@ describe("per-hook allocation optimizations", () => {
     }
   });
 
-  it("memoizes canonicalPath lookups and invalidates on watchChange delete", async () => {
-    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-vite-canonical-cache-"));
-    const targetA = path.join(rootDir, "src", "a.tsx");
-    const targetB = path.join(rootDir, "src", "b.tsx");
-    const linkPath = path.join(rootDir, "src", "current.tsx");
-    mkdirSync(path.join(rootDir, "src"), { recursive: true });
-    writeFileSync(targetA, "export const a = 1;");
-    writeFileSync(targetB, "export const b = 2;");
-    symlinkSync(targetA, linkPath);
-    try {
-      mocks.loadPalamedesConfig.mockResolvedValue({
-        configPath: path.join(rootDir, "palamedes.yaml"),
-        rootDir,
-        locales: ["en", "de"],
-        sourceLocale: "en",
-        catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
-      });
-      mocks.transformPalamedesMacros.mockReturnValue({
-        code: "transformed",
-        hasChanged: true,
-        compiledIds: ["greeting-id"],
-        map: null,
-      });
-      const plugin = palamedes({ mdx: false, projectRoot: rootDir }).find(
-        (candidate) => candidate.name === "palamedes:transform",
-      ) as any;
-      const transform = transformHandler(plugin.transform)!;
-      const source = 'import { t } from "@palamedes/core/macro"; export const msg = t`Hello`;';
+  it.skipIf(process.platform === "win32")(
+    "memoizes canonicalPath lookups and invalidates on watchChange update and delete",
+    async () => {
+      const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-vite-canonical-cache-"));
+      const targetA = path.join(rootDir, "src", "a.tsx");
+      const targetB = path.join(rootDir, "src", "b.tsx");
+      const targetC = path.join(rootDir, "src", "c.tsx");
+      const linkPath = path.join(rootDir, "src", "current.tsx");
+      try {
+        mkdirSync(path.join(rootDir, "src"), { recursive: true });
+        writeFileSync(targetA, "export const a = 1;");
+        writeFileSync(targetB, "export const b = 2;");
+        writeFileSync(targetC, "export const c = 3;");
+        symlinkSync(targetA, linkPath);
+        mocks.loadPalamedesConfig.mockResolvedValue({
+          configPath: path.join(rootDir, "palamedes.yaml"),
+          rootDir,
+          locales: ["en", "de"],
+          sourceLocale: "en",
+          catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
+        });
+        mocks.transformPalamedesMacros.mockReturnValue({
+          code: "transformed",
+          hasChanged: true,
+          compiledIds: ["greeting-id"],
+          map: null,
+        });
+        const plugin = palamedes({ mdx: false, projectRoot: rootDir }).find(
+          (candidate) => candidate.name === "palamedes:transform",
+        ) as any;
+        const transform = transformHandler(plugin.transform)!;
+        const source = 'import { t } from "@palamedes/core/macro"; export const msg = t`Hello`;';
 
-      const first = (await transform.call({ error: vi.fn() } as never, source, linkPath)) as {
-        code: string;
-      };
-      const second = (await transform.call({ error: vi.fn() } as never, source, linkPath)) as {
-        code: string;
-      };
-      expect(second.code).toBe(first.code);
+        const first = (await transform.call({ error: vi.fn() } as never, source, linkPath)) as {
+          code: string;
+        };
+        const second = (await transform.call({ error: vi.fn() } as never, source, linkPath)) as {
+          code: string;
+        };
+        expect(second.code).toBe(first.code);
 
-      // Retarget the symlink and notify via watchChange delete; cache must invalidate.
-      rmSync(linkPath);
-      symlinkSync(targetB, linkPath);
-      plugin.watchChange(linkPath, { event: "delete" });
+        // Atomic symlink replacement emits "update" rather than "delete"; cache must still evict.
+        rmSync(linkPath);
+        symlinkSync(targetB, linkPath);
+        plugin.watchChange(linkPath, { event: "update" });
 
-      const afterRetarget = (await transform.call(
-        { error: vi.fn() } as never,
-        source,
-        linkPath,
-      )) as { code: string };
-      expect(afterRetarget.code).not.toBe(first.code);
-    } finally {
-      rmSync(rootDir, { recursive: true, force: true });
-    }
-  });
+        const afterUpdate = (await transform.call(
+          { error: vi.fn() } as never,
+          source,
+          linkPath,
+        )) as { code: string };
+        expect(afterUpdate.code).not.toBe(first.code);
+
+        // Retarget again and notify via watchChange delete; cache must invalidate.
+        rmSync(linkPath);
+        symlinkSync(targetC, linkPath);
+        plugin.watchChange(linkPath, { event: "delete" });
+
+        const afterDelete = (await transform.call(
+          { error: vi.fn() } as never,
+          source,
+          linkPath,
+        )) as { code: string };
+        expect(afterDelete.code).not.toBe(first.code);
+        expect(afterDelete.code).not.toBe(afterUpdate.code);
+      } finally {
+        rmSync(rootDir, { recursive: true, force: true });
+      }
+    },
+  );
 });
