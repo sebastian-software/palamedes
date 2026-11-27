@@ -281,7 +281,7 @@ fn normalize_module_path(path: &str) -> BuildResult<String> {
             });
         }
         let ident = segment.ident.to_string();
-        if matches!(ident.as_str(), "crate" | "self" | "super" | "Self") {
+        if syn::parse_str::<syn::Ident>(&ident).is_err() {
             return Err(Error::InvalidModulePath {
                 path: path.to_owned(),
             });

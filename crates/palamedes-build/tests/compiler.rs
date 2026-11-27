@@ -426,12 +426,12 @@ fn module_path_is_reconstructed_from_normalized_identifiers() {
     let output = tempfile::tempdir().unwrap();
     let compiled = CatalogBuilder::new(directory.path(), "en")
         .locales(&["en", "de"])
-        .module_path("crate :: i18n /* generated definitions */ :: r#mod")
+        .module_path("crate :: i18n /* generated definitions */ :: r#try")
         .compile_to(output.path())
         .unwrap();
     let generated = fs::read_to_string(compiled.rust_module).unwrap();
     assert!(
-        generated.contains("$crate::i18n::r#mod::__palamedes_translate_signature"),
+        generated.contains("$crate::i18n::r#try::__palamedes_translate_signature"),
         "{generated}"
     );
     assert!(!generated.contains(" :: "), "{generated}");

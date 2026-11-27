@@ -171,6 +171,8 @@ fn builder_options_are_validated_before_reading_catalogs() {
         "crate::self",
         "crate::crate",
         "crate::Self",
+        "crate::try",
+        "crate :: try",
     ] {
         let error = CatalogBuilder::new("does-not-exist", "en")
             .locales(&["en"])
