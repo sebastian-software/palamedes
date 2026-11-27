@@ -518,11 +518,7 @@ fn unchanged_result(source: &str) -> NativeTransformResult {
 
 fn validate_transform_options(options: &NativeTransformOptions) -> PalamedesResult<()> {
     if let Some(server_functions) = &options.server_functions
-        && (server_functions.initializer_module.trim().is_empty()
-            || server_functions
-                .initializer_module
-                .chars()
-                .any(char::is_control)
+        && (server_functions.initializer_module.is_empty()
             || !oxc_syntax::identifier::is_identifier_name(&server_functions.initializer_export))
     {
         return Err(PalamedesError::InvalidServerFunctionInitializer {
@@ -536,10 +532,7 @@ fn validate_transform_options(options: &NativeTransformOptions) -> PalamedesResu
         .as_deref()
         .unwrap_or("@palamedes/runtime");
     let runtime_import_name = options.runtime_import_name.as_deref().unwrap_or("getI18n");
-    if runtime_module.trim().is_empty()
-        || runtime_module.chars().any(char::is_control)
-        || !is_valid_runtime_import_name(runtime_import_name)
-    {
+    if runtime_module.is_empty() || !is_valid_runtime_import_name(runtime_import_name) {
         return Err(PalamedesError::InvalidRuntimeImport {
             runtime_module: runtime_module.to_string(),
             runtime_import_name: runtime_import_name.to_string(),

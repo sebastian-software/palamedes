@@ -191,16 +191,6 @@ fn builder_options_are_validated_before_reading_catalogs() {
         "locales\ncargo:rustc-cfg=injected",
         "locales\rcargo:rustc-cfg=injected",
     ] {
-        let error = CatalogBuilder::new(bad_directory, "en")
-            .locales(&["en"])
-            .compile_to(output.path())
-            .err()
-            .unwrap_or_else(|| panic!("expected InvalidDirectoryPath for {bad_directory:?}"));
-        assert!(
-            matches!(error, Error::InvalidDirectoryPath { .. }),
-            "directory={bad_directory:?}: {error:?}"
-        );
-
         let build_error = CatalogBuilder::new(bad_directory, "en")
             .locales(&["en"])
             .build()

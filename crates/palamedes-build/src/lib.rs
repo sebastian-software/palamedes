@@ -183,7 +183,6 @@ impl CatalogBuilder {
 
     /// Generate application definitions, an update contract, and language data.
     pub fn compile_to(self, output: &Path) -> BuildResult<CompiledCatalogs> {
-        validate_directory(&self.directory)?;
         let macro_name = validate_macro_name(&self.macro_name)?;
         let module_path = normalize_module_path(&self.module_path)?;
         let prepared = catalogs::prepare(&self)?;
@@ -214,7 +213,6 @@ impl CatalogBuilder {
         contract: &CatalogContract,
         output: &Path,
     ) -> BuildResult<CatalogUpdate> {
-        validate_directory(&self.directory)?;
         contract.validate()?;
         let prepared = catalogs::prepare(&self)?;
         if prepared.contract != *contract {

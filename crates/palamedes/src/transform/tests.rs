@@ -2971,21 +2971,16 @@ fn rejects_invalid_runtime_import_options() {
     let source =
         "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t`Hi`; }\n";
 
-    for runtime_module in ["", "   ", "./bad\nmodule", "./bad\rmodule", "./bad\0module"] {
-        let error = transform_macros_raw(
-            source,
-            "sample.ts",
-            Some(NativeTransformOptions {
-                runtime_module: Some(runtime_module.to_string()),
-                ..NativeTransformOptions::default()
-            }),
-        )
-        .expect_err("invalid runtimeModule must be rejected");
-        assert!(
-            matches!(error, PalamedesError::InvalidRuntimeImport { .. }),
-            "runtime_module={runtime_module:?}: {error:?}"
-        );
-    }
+    let error = transform_macros_raw(
+        source,
+        "sample.ts",
+        Some(NativeTransformOptions {
+            runtime_module: Some(String::new()),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect_err("empty runtimeModule must be rejected");
+    assert!(matches!(error, PalamedesError::InvalidRuntimeImport { .. }));
 
     for runtime_import_name in [
         "",
@@ -3034,7 +3029,7 @@ fn rejects_invalid_runtime_import_options() {
 fn escapes_runtime_and_server_function_module_specifiers() {
     let source =
         "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t`Hi`; }\n";
-    let module = "./runtime\" ; evil() // </script>\u{2028}\u{2029}";
+    let module = "./runtime\" ; evil() // \n\r\0\u{0085}</script>\u{2028}\u{2029}";
     let result = transform_macros_raw(
         source,
         "sample.ts",
@@ -3044,10 +3039,10 @@ fn escapes_runtime_and_server_function_module_specifiers() {
             ..NativeTransformOptions::default()
         }),
     )
-    .expect("non-empty module specifier with quotes and tags should escape safely");
+    .expect("non-empty module specifier with quotes, control chars, and tags should escape safely");
 
     assert!(result.code.contains(
-        "import { customGetI18n } from \"./runtime\\\" ; evil() // \\u003c/script\\u003e\\u2028\\u2029\";"
+        "import { customGetI18n } from \"./runtime\\\" ; evil() // \\n\\r\\u0000\u{0085}\\u003c/script\\u003e\\u2028\\u2029\";"
     ));
     assert!(!result.code.contains("</script>"));
     assert!(!result.code.contains('\u{2028}'));
@@ -3062,29 +3057,12 @@ fn escapes_runtime_and_server_function_module_specifiers() {
         result.code
     );
 
-    let sf_error = transform_macros_raw(
-        r#"export async function save() { "use server"; }"#,
-        "action.ts",
-        Some(NativeTransformOptions {
-            server_functions: Some(ServerFunctionTransformOptions {
-                initializer_module: "./i18n\n;evil()".to_string(),
-                initializer_export: "init".to_string(),
-            }),
-            ..NativeTransformOptions::default()
-        }),
-    )
-    .expect_err("control characters in initializer_module must be rejected");
-    assert!(matches!(
-        sf_error,
-        PalamedesError::InvalidServerFunctionInitializer { .. }
-    ));
-
     let sf_result = transform_macros_raw(
         r#"export async function save() { "use server"; }"#,
         "action.ts",
         Some(NativeTransformOptions {
             server_functions: Some(ServerFunctionTransformOptions {
-                initializer_module: "./i18n</script>\u{2028}".to_string(),
+                initializer_module: "./i18n-\u{0085}\n</script>\u{2028}".to_string(),
                 initializer_export: "init".to_string(),
             }),
             ..NativeTransformOptions::default()
@@ -3095,7 +3073,14 @@ fn escapes_runtime_and_server_function_module_specifiers() {
     assert!(
         sf_result
             .code
-            .contains("./i18n\\u003c/script\\u003e\\u2028")
+            .contains("./i18n-\u{0085}\\n\\u003c/script\\u003e\\u2028")
+    );
+    let parsed_sf = Parser::new(&allocator, &sf_result.code, SourceType::ts()).parse();
+    assert!(
+        parsed_sf.diagnostics.is_empty(),
+        "escaped server function import must remain valid TypeScript: {:?}\n{}",
+        parsed_sf.diagnostics,
+        sf_result.code
     );
 }
 
