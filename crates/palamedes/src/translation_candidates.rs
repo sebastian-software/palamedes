@@ -2834,7 +2834,7 @@ fn validate_plural_variable(
     variable: &str,
     plural_kind: TranslationPluralKind,
 ) -> Result<(), ferrocat_icu::IcuParseError> {
-    if variable.is_empty() {
+    if variable.is_empty() || variable.contains(['{', '}', ',']) {
         return Err(ferrocat_icu::IcuParseError::syntax(
             "plural variable must be a valid ICU argument identifier",
             variable,
@@ -2846,7 +2846,7 @@ fn validate_plural_variable(
         TranslationPluralKind::Ordinal => "selectordinal",
     };
     let plural_wrapped = format!("{{{variable}, {formatter}, other {{#}}}}");
-    let plural_parsed = parse_runtime_icu(&plural_wrapped)?;
+    let plural_parsed = ferrocat_icu::parse_icu(&plural_wrapped)?;
     match plural_parsed.nodes.as_slice() {
         [IcuNode::Plural { name, options, .. }]
             if name == variable
@@ -2872,7 +2872,7 @@ fn parse_plural_branch(
         TranslationPluralKind::Cardinal => "plural",
         TranslationPluralKind::Ordinal => "selectordinal",
     };
-    let wrapped = format!("{{{variable}, {formatter}, other {{{value}}}}}");
+    let wrapped = format!("{{count, {formatter}, other {{{value}}}}}");
     let parsed = parse_runtime_icu(&wrapped)?;
     let [IcuNode::Plural { name, options, .. }] = parsed.nodes.as_slice() else {
         return Err(ferrocat_icu::IcuParseError::syntax(
@@ -2881,10 +2881,10 @@ fn parse_plural_branch(
             0,
         ));
     };
-    if name != variable {
+    if name != "count" {
         return Err(ferrocat_icu::IcuParseError::syntax(
-            "plural variable must be a valid ICU argument identifier",
-            variable,
+            "a plural branch value must not escape its plural block",
+            value,
             0,
         ));
     }
@@ -4712,8 +4712,15 @@ mod tests {
         }
 
         // Valid ICU argument names accepted by Ferrocat in plural context (including `#` and
-        // apostrophes around `#`) must remain accepted and round-trip cleanly.
-        for valid_var in ["count", "0", "file#count", "files'#'count"] {
+        // apostrophes) must remain accepted and round-trip cleanly.
+        for valid_var in [
+            "count",
+            "0",
+            "file#count",
+            "file'count",
+            "file''count",
+            "files'#'count",
+        ] {
             assert!(
                 parse_plural_branch(valid_var, TranslationPluralKind::Cardinal, "# files").is_ok(),
                 "expected parse_plural_branch to accept Ferrocat variable {valid_var:?}"
