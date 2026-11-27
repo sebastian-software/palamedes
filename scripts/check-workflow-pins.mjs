@@ -662,13 +662,77 @@ function normalizeShellMode(shellValue) {
     return "posix";
   }
   const trimmed = String(shellValue).trim();
-  if (/^(?:pwsh|powershell)(?:\.exe)?(?:\s|$)/iu.test(trimmed)) {
+  if (!trimmed) {
+    return "posix";
+  }
+  const shellTokens = [];
+  let cur = "";
+  let quote = null;
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const ch = trimmed[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        cur += ch;
+      }
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (/\s/u.test(ch)) {
+      if (cur) {
+        shellTokens.push(cur);
+        cur = "";
+      }
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur) {
+    shellTokens.push(cur);
+  }
+  let idx = 0;
+  if (shellTokens.length > 0 && normalizeExecutableName(shellTokens[0]) === "env") {
+    idx = 1;
+    while (idx < shellTokens.length) {
+      const tok = shellTokens[idx];
+      if (tok === "--") {
+        idx += 1;
+        break;
+      }
+      if (tok === "-u" || tok === "-C" || tok === "--unset" || tok === "--chdir") {
+        idx += 2;
+        continue;
+      }
+      if (tok.startsWith("-") || ENV_PREFIX_ASSIGNMENT_PATTERN.test(tok)) {
+        idx += 1;
+        continue;
+      }
+      break;
+    }
+  }
+  const execToken = shellTokens[idx];
+  if (!execToken) {
+    return "unsupported";
+  }
+  const norm = normalizeExecutableName(execToken);
+  if (norm === "pwsh" || norm === "powershell") {
     return "pwsh";
   }
-  if (/^cmd(?:\.exe)?(?:\s|$)/iu.test(trimmed)) {
+  if (norm === "cmd") {
     return "cmd";
   }
-  if (/^(?:(?:\/[\w./-]*\/)?(?:bash|sh|zsh|dash|ksh|ash))(?:\.exe)?(?:\s|$)/iu.test(trimmed)) {
+  if (
+    norm === "bash" ||
+    norm === "sh" ||
+    norm === "zsh" ||
+    norm === "dash" ||
+    norm === "ksh" ||
+    norm === "ash"
+  ) {
     return "posix";
   }
   return "unsupported";
@@ -3371,14 +3435,87 @@ function inspectNonShellScript(
     return referencesContainerVar(firstArg, containerVarNames);
   };
 
+  const childProcessAliases = new Set(["child_process"]);
+  let importsChildProcess = false;
+  for (const reqMatch of codeWithoutStrings.matchAll(
+    /(?:(?:const|let|var)\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*)?\brequire\s*\(/gu,
+  )) {
+    const openIdx = reqMatch.index + reqMatch[0].length - 1;
+    const reqArg = extractBalancedSlice(codeOnly, openIdx, "(", ")");
+    const reqLit = unquoteSimpleLiteral(reqArg);
+    if (reqLit === "child_process" || reqLit === "node:child_process") {
+      importsChildProcess = true;
+      if (reqMatch.groups?.alias) {
+        childProcessAliases.add(reqMatch.groups.alias);
+      }
+    }
+  }
+  for (const impMatch of codeWithoutStrings.matchAll(
+    /\bimport\s+(?:(?:\*\s+as\s+)?(?<alias>[A-Za-z_][A-Za-z0-9_]*)|\{[^}]*\})\s+from\s+(?=['"])/gu,
+  )) {
+    const afterFrom = codeOnly.slice(
+      impMatch.index + impMatch[0].length,
+      impMatch.index + impMatch[0].length + 40,
+    );
+    if (/^['"](?:node:)?child_process['"]/u.test(afterFrom)) {
+      importsChildProcess = true;
+      if (impMatch.groups?.alias) {
+        childProcessAliases.add(impMatch.groups.alias);
+      }
+    }
+  }
+  const NODE_CP_METHODS = new Set([
+    "exec",
+    "execSync",
+    "execFile",
+    "execFileSync",
+    "spawn",
+    "spawnSync",
+  ]);
+  const NODE_CP_SHELL_METHODS = new Set(["exec", "execSync"]);
+
   let invokesContainerTool = hasContainerSdkImport;
   if (!invokesContainerTool) {
     const execCallPattern =
-      /\b(?<callee>subprocess\.(?:run|Popen|call|check_call|check_output|getoutput|getstatusoutput)|os\.(?:system|popen|spawn\w*|exec\w*)|pty\.spawn|asyncio\.create_subprocess\w*|(?:child_process\.)?(?:execSync|execFileSync|spawnSync|execFile|spawn|exec)|Bun\.spawn\w*|Deno\.(?:Command|run)|Open3\.\w+|system|popen|shell_exec|proc_open|passthru)\s*\(/gu;
+      /(?:(?<receiver>[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*)?(?<callee>subprocess\.(?:run|Popen|call|check_call|check_output|getoutput|getstatusoutput)|os\.(?:system|popen|spawn\w*|exec\w*)|pty\.spawn|asyncio\.create_subprocess\w*|Bun\.spawn\w*|Deno\.(?:Command|run)|Open3\.\w+|execSync|execFileSync|spawnSync|execFile|spawn|exec|system|popen|shell_exec|proc_open|passthru)\s*\(/gu;
     for (const match of codeWithoutStrings.matchAll(execCallPattern)) {
+      const receiver = match.groups.receiver ?? null;
+      const callee = match.groups.callee;
+      const prevNonSpaceIdx = (() => {
+        let k = match.index - 1;
+        while (k >= 0 && /\s/u.test(codeWithoutStrings[k])) {
+          k -= 1;
+        }
+        return k;
+      })();
+      const hasDotBeforeMatch = prevNonSpaceIdx >= 0 && codeWithoutStrings[prevNonSpaceIdx] === ".";
+      let effectiveCallee = callee;
+      if (NODE_CP_METHODS.has(callee)) {
+        if (receiver) {
+          if (!childProcessAliases.has(receiver)) {
+            continue;
+          }
+          effectiveCallee = NODE_CP_SHELL_METHODS.has(callee) ? `child_process.${callee}` : callee;
+        } else if (hasDotBeforeMatch) {
+          // Chained call like `require("node:child_process").execSync(...)` vs
+          // unrelated method call like `/version/.exec("docker version")`.
+          const beforeDot = codeOnly.slice(Math.max(0, prevNonSpaceIdx - 60), prevNonSpaceIdx);
+          if (!/require\s*\(\s*['"](?:node:)?child_process['"]\s*\)\s*$/u.test(beforeDot)) {
+            continue;
+          }
+          effectiveCallee = NODE_CP_SHELL_METHODS.has(callee) ? `child_process.${callee}` : callee;
+        } else if (callee === "exec" && !importsChildProcess) {
+          continue;
+        }
+      } else if (
+        (callee === "system" || callee === "popen") &&
+        (receiver !== null || hasDotBeforeMatch)
+      ) {
+        continue;
+      }
       const openParenIdx = match.index + match[0].length - 1;
       const argText = extractBalancedSlice(codeOnly, openParenIdx, "(", ")");
-      if (callInvokesContainerCli(match.groups.callee, argText)) {
+      if (callInvokesContainerCli(effectiveCallee, argText)) {
         invokesContainerTool = true;
         break;
       }
@@ -11551,6 +11688,33 @@ function inspectShellText(
       ) {
         subcommand = "run";
         argIndex += 2;
+      } else if (
+        normalizedCli === "docker" &&
+        subcommand === "stack" &&
+        (tokens[argIndex + 1] === "deploy" || tokens[argIndex + 1] === "up")
+      ) {
+        const stackSub = tokens[argIndex + 1];
+        const stackArgs = tokens.slice(argIndex + 2);
+        const isHelpOnly = stackArgs.some((tok) => tok === "--help" || tok === "-h");
+        if (!isHelpOnly) {
+          problems.push(
+            `${filePath}:${lineNumber}: ${normalizedCli} stack ${stackSub} target definitions cannot be verified statically for container image digests`,
+          );
+        }
+        continue;
+      } else if (
+        normalizedCli === "podman" &&
+        ((subcommand === "play" && tokens[argIndex + 1] === "kube") ||
+          (subcommand === "kube" && tokens[argIndex + 1] === "play"))
+      ) {
+        const kubeArgs = tokens.slice(argIndex + 2);
+        const isHelpOnly = kubeArgs.some((tok) => tok === "--help" || tok === "-h");
+        if (!isHelpOnly) {
+          problems.push(
+            `${filePath}:${lineNumber}: ${normalizedCli} ${subcommand} ${tokens[argIndex + 1]} manifest definitions cannot be verified statically for container image digests`,
+          );
+        }
+        continue;
       } else if (
         normalizedCli === "docker" &&
         subcommand === "service" &&

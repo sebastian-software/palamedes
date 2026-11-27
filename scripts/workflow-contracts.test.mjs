@@ -5072,6 +5072,47 @@ describe("workflow contracts", () => {
       "<memory>:15: busybox:1.36 is not pinned to a sha256 digest",
       "<memory>:22: container tool invocation in non-shell run step cannot be verified statically",
     ]);
+    // Custom shell templates with `/usr/bin/env` wrappers or absolute paths
+    // (e.g. `/usr/bin/pwsh -File {0}`) resolve to their underlying shell,
+    // `docker stack deploy` fails closed (skipping `--help`), and JS method
+    // calls like `/version/.exec("docker version")` do not trigger false
+    // subprocess failures.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r72:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - shell: /usr/bin/env bash -e {0}",
+          "        run: |",
+          `          docker pull node:24@${digest}`,
+          "          docker pull alpine:3.20",
+          "      - shell: /usr/bin/pwsh -File {0}",
+          "        run: |",
+          '          $img = "busybox:1.36"',
+          '          docker pull "$img"',
+          "      - run: |",
+          "          docker stack deploy --help",
+          "          docker stack deploy -c compose.yml demo",
+          "      - shell: node {0}",
+          "        run: |",
+          '          const matches = /version/.exec("docker version");',
+          "          console.log(matches);",
+          "      - shell: node {0}",
+          "        run: |",
+          '          const cp = require("node:child_process");',
+          '          cp.exec("docker pull debian:12");',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:9: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:12: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:16: docker stack deploy target definitions cannot be verified statically for container image digests",
+      "<memory>:23: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
