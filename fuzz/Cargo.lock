@@ -828,6 +828,7 @@ dependencies = [
 name = "palamedes"
 version = "2.2.0"
 dependencies = [
+ "aho-corasick",
  "ferrocat",
  "ferrocat-icu",
  "ferrocat-po",

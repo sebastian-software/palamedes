@@ -23,7 +23,7 @@ use palamedes::{
     CatalogUpdateMessage, CatalogUpdateRequestRef, ContainedDir, ContainedFsError,
     ContainedNewFileMode, ContainedWriteDurability, DirFilenameEquivalence, ExtractCache,
     ExtractCatalogFileFailure, FileIdentity, SourceFileAnalysisRequest,
-    collect_runtime_macro_manifest, extract_catalog_messages_cached,
+    collect_runtime_macro_manifest_with_threads, extract_catalog_messages_cached,
     preview_catalog_update_from_content_ref, split_relative_catalog_path,
 };
 use serde::Serialize;
@@ -276,6 +276,15 @@ fn run_extraction_with_cache(
     options: &ExtractOptions,
     cache: &mut ExtractCache,
 ) -> Result<ExtractOutput, CliError> {
+    run_extraction_with_cache_and_files(config, options, cache, None).map(|(output, _)| output)
+}
+
+fn run_extraction_with_cache_and_files(
+    config: &LoadedConfig,
+    options: &ExtractOptions,
+    cache: &mut ExtractCache,
+    pre_discovered_files: Option<&[Vec<PathBuf>]>,
+) -> Result<(ExtractOutput, Vec<Vec<PathBuf>>), CliError> {
     let started_at = Instant::now();
     let mut total_glob_ms = 0;
     let mut total_extract_ms = 0;
@@ -285,8 +294,9 @@ fn run_extraction_with_cache(
     let mut unique_failures = BTreeMap::<String, String>::new();
     let mut results = Vec::with_capacity(config.catalogs.len());
 
-    for catalog in &config.catalogs {
-        let result = extract_from_catalog(catalog, config, options, cache)?;
+    for (index, catalog) in config.catalogs.iter().enumerate() {
+        let pre_discovered = pre_discovered_files.and_then(|lists| lists.get(index));
+        let result = extract_from_catalog(catalog, config, options, cache, pre_discovered)?;
         total_glob_ms += result.glob_ms;
         total_extract_ms += result.extract_ms;
         total_messages += result.messages.len();
@@ -363,14 +373,22 @@ fn run_extraction_with_cache(
     };
     let drift = process_catalogs(&write_jobs, config, options, operation)?;
     if let Some(manifest_path) = &options.runtime_manifest {
-        write_runtime_manifest(config, manifest_path, &unique_files, options.check)?;
+        write_runtime_manifest(
+            config,
+            manifest_path,
+            &unique_files,
+            options.threads.or(config.extract_threads),
+            options.check,
+        )?;
     }
     let total_write_ms = write_started_at.elapsed().as_millis();
 
     if options.check {
-        return Ok(ExtractOutput::Check(ExtractCheckReport::from_catalogs(
-            drift,
-        )));
+        let discovered_files = results.into_iter().map(|result| result.files).collect();
+        return Ok((
+            ExtractOutput::Check(ExtractCheckReport::from_catalogs(drift)),
+            discovered_files,
+        ));
     }
 
     let total_ms = started_at.elapsed().as_millis();
@@ -397,7 +415,8 @@ fn run_extraction_with_cache(
         println!("{TIMING_MARKER}{}", serde_json::to_string(&report)?);
     }
 
-    Ok(ExtractOutput::Completed)
+    let discovered_files = results.into_iter().map(|result| result.files).collect();
+    Ok((ExtractOutput::Completed, discovered_files))
 }
 
 /// Writes the runtime macro manifest (ADR-006), or verifies it under `--check`.
@@ -405,6 +424,7 @@ fn write_runtime_manifest(
     config: &LoadedConfig,
     manifest_path: &Path,
     files: &[&Path],
+    max_threads: Option<usize>,
     check: bool,
 ) -> Result<(), CliError> {
     let requests = files
@@ -418,7 +438,7 @@ fn write_runtime_manifest(
                 .replace('\\', "/"),
         })
         .collect::<Vec<_>>();
-    let manifest = collect_runtime_macro_manifest(&requests)?;
+    let manifest = collect_runtime_macro_manifest_with_threads(&requests, max_threads)?;
     let contents = format!("{}\n", serde_json::to_string_pretty(&manifest)?);
     let target = config.root_dir.join(manifest_path);
     let current = fs::read_to_string(&target).ok();
@@ -475,10 +495,14 @@ fn extract_from_catalog(
     config: &LoadedConfig,
     options: &ExtractOptions,
     cache: &mut ExtractCache,
+    pre_discovered_files: Option<&Vec<PathBuf>>,
 ) -> Result<CatalogExtractionResult, CliError> {
     let verbose = options.verbose;
     let glob_started_at = Instant::now();
-    let files = collect_source_files(catalog, config)?;
+    let files = match pre_discovered_files {
+        Some(cached) => cached.clone(),
+        None => collect_source_files(catalog, config)?,
+    };
     let glob_ms = glob_started_at.elapsed().as_millis();
 
     if verbose {
@@ -4071,7 +4095,7 @@ catalogs:
 
         let manifest_rel = std::path::Path::new(".palamedes/runtime-manifest.json");
         let manifest_abs = root.join(manifest_rel);
-        super::write_runtime_manifest(&config, manifest_rel, &[source_file.as_path()], false)
+        super::write_runtime_manifest(&config, manifest_rel, &[source_file.as_path()], None, false)
             .expect("initial manifest write");
         assert_eq!(
             fs::metadata(&manifest_abs)
@@ -4089,7 +4113,7 @@ catalogs:
             "import { t } from '@palamedes/core/macro';\nexport const msg = () => t`Updated`;\n",
         )
         .expect("update source");
-        super::write_runtime_manifest(&config, manifest_rel, &[source_file.as_path()], false)
+        super::write_runtime_manifest(&config, manifest_rel, &[source_file.as_path()], None, false)
             .expect("updated manifest write");
         assert_eq!(
             fs::metadata(&manifest_abs)
@@ -4108,7 +4132,7 @@ catalogs:
         let symlink_abs = root.join(symlink_rel);
         std::os::unix::fs::symlink(&shared_target, &symlink_abs).expect("create manifest symlink");
 
-        super::write_runtime_manifest(&config, symlink_rel, &[source_file.as_path()], false)
+        super::write_runtime_manifest(&config, symlink_rel, &[source_file.as_path()], None, false)
             .expect("manifest update through symlink");
         assert!(
             fs::symlink_metadata(&symlink_abs)
@@ -4130,8 +4154,14 @@ catalogs:
         std::os::unix::fs::symlink(root.join("missing/target.json"), &dangling_abs)
             .expect("create dangling symlink");
         assert!(
-            super::write_runtime_manifest(&config, dangling_rel, &[source_file.as_path()], false)
-                .is_err(),
+            super::write_runtime_manifest(
+                &config,
+                dangling_rel,
+                &[source_file.as_path()],
+                None,
+                false
+            )
+            .is_err(),
             "dangling symlink must return an error"
         );
         assert!(

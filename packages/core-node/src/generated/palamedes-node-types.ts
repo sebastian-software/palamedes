@@ -629,6 +629,8 @@ export interface NativeTransformOptions {
    */
   includeSourceMetadata?: boolean;
   serverFunctions?: NativeServerFunctionTransformOptions;
+  /** Generate a source map when the module changes. Defaults to `true`. */
+  sourceMap?: boolean;
 }
 export interface NativeTransformEdit {
   start: number;

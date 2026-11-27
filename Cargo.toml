@@ -37,6 +37,7 @@ workspace = true
 test-support = []
 
 [dependencies]
+aho-corasick = "1.1"
 # Published crates use caret requirements so downstream graphs can resolve a
 # newer compatible Ferrocat. Cargo.lock still pins the exact versions that the
 # npm packages, the CLI, and CI build and test.

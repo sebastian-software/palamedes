@@ -18,6 +18,8 @@ pub struct NativeTransformOptions {
     /// Defaults to `false`; the metadata never supplies runtime output.
     pub include_source_metadata: Option<bool>,
     pub server_functions: Option<NativeServerFunctionTransformOptions>,
+    /// Generate a source map when the module changes. Defaults to `true`.
+    pub source_map: Option<bool>,
 }
 
 #[napi(object)]
@@ -60,6 +62,7 @@ impl From<NativeTransformOptions> for palamedes::NativeTransformOptions {
                     initializer_export: options.initializer_export,
                 }
             }),
+            source_map: value.source_map,
         }
     }
 }

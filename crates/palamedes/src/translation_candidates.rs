@@ -1,4 +1,3 @@
-use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -292,8 +291,6 @@ struct LoadedCatalog {
     original: String,
     po: PoFile,
     po_item_indexes: HashMap<CatalogMessageKey, PoItemIndexes>,
-    messages: BTreeMap<CatalogMessageKey, usize>,
-    ambiguous_messages: BTreeSet<CatalogMessageKey>,
 }
 
 /// Positions of raw PO entries sharing one source-string-first identity.
@@ -372,49 +369,80 @@ pub fn list_translation_candidates(
 
     let mut candidates = Vec::new();
     let mut seen = BTreeSet::new();
-    for catalog in &request.config.catalogs {
-        for locale in &locales {
-            let loaded = match load_catalog(&request.config, catalog, locale) {
-                Ok(loaded) => loaded,
-                Err(PalamedesError::ReadFile { path, source })
-                    if default_locale_selection
-                        && source.kind() == std::io::ErrorKind::NotFound =>
-                {
-                    diagnostics.push(missing_catalog_diagnostic(locale, path));
+    if explicit {
+        let mut targets_by_scope_locale: HashMap<(&str, &str), Vec<&TranslationCandidateId>> =
+            HashMap::new();
+        for id in requested.keys() {
+            targets_by_scope_locale
+                .entry((id.catalog.as_str(), id.locale.as_str()))
+                .or_default()
+                .push(id);
+        }
+        for catalog in &request.config.catalogs {
+            for locale in &locales {
+                let Some(target_ids) =
+                    targets_by_scope_locale.get(&(catalog.path.as_str(), locale.as_str()))
+                else {
                     continue;
-                }
-                Err(error) => return Err(error),
-            };
-            for (key, item_index) in &loaded.messages {
-                let item = &loaded.po.items[*item_index];
-                let id = TranslationCandidateId {
-                    catalog: loaded.scope.clone(),
-                    locale: locale.clone(),
-                    message: key.msgid.clone(),
-                    context: key.msgctxt.clone(),
                 };
-                if loaded.ambiguous_messages.contains(key) {
-                    if !explicit || requested.contains_key(&id) {
-                        seen.insert(id.clone());
+                let loaded = load_catalog(&request.config, catalog, locale)?;
+                for id in target_ids {
+                    let key = CatalogMessageKey::new(id.message.clone(), id.context.clone());
+                    let Some(indexes) = loaded.po_item_indexes.get(&key) else {
+                        continue;
+                    };
+                    if !indexes.unique {
+                        seen.insert((*id).clone());
+                        diagnostics.push(workflow_diagnostic(
+                            "translation.ambiguous_message",
+                            "Catalog contains more than one definition for the selected message identity.",
+                            Some((*id).clone()),
+                        ));
+                        continue;
+                    }
+                    let item = &loaded.po.items[indexes.first];
+                    let candidate = build_candidate(&loaded, &key, item, request.max_origins)?;
+                    seen.insert((*id).clone());
+                    candidates.push(candidate);
+                }
+            }
+        }
+    } else {
+        for catalog in &request.config.catalogs {
+            for locale in &locales {
+                let loaded = match load_catalog(&request.config, catalog, locale) {
+                    Ok(loaded) => loaded,
+                    Err(PalamedesError::ReadFile { path, source })
+                        if default_locale_selection
+                            && source.kind() == std::io::ErrorKind::NotFound =>
+                    {
+                        diagnostics.push(missing_catalog_diagnostic(locale, path));
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
+                for (key, indexes) in &loaded.po_item_indexes {
+                    if !indexes.unique {
+                        let id = TranslationCandidateId {
+                            catalog: loaded.scope.clone(),
+                            locale: locale.clone(),
+                            message: key.msgid.clone(),
+                            context: key.msgctxt.clone(),
+                        };
                         diagnostics.push(workflow_diagnostic(
                             "translation.ambiguous_message",
                             "Catalog contains more than one definition for the selected message identity.",
                             Some(id),
                         ));
+                        continue;
                     }
-                    continue;
+                    let item = &loaded.po.items[indexes.first];
+                    if item.obsolete || po_item_is_translated(item) {
+                        continue;
+                    }
+                    let candidate = build_candidate(&loaded, key, item, request.max_origins)?;
+                    candidates.push(candidate);
                 }
-                let selected = if explicit {
-                    requested.contains_key(&id)
-                } else {
-                    !item.obsolete && !po_item_is_translated(item)
-                };
-                if !selected {
-                    continue;
-                }
-                let candidate = build_candidate(&loaded, key, item, request.max_origins)?;
-                seen.insert(id);
-                candidates.push(candidate);
             }
         }
     }
@@ -782,16 +810,7 @@ where
             }
             let patch = &request.patches[patch_index];
             let key = CatalogMessageKey::new(patch.id.message.clone(), patch.id.context.clone());
-            if loaded.ambiguous_messages.contains(&key) {
-                rejected.insert(patch_index);
-                diagnostics.push(workflow_diagnostic(
-                    "translation.ambiguous_message",
-                    "Catalog contains more than one definition for the patch identity.",
-                    Some(patch.id.clone()),
-                ));
-                continue;
-            }
-            let Some(item_index) = loaded.messages.get(&key) else {
+            let Some(indexes) = loaded.po_item_indexes.get(&key) else {
                 rejected.insert(patch_index);
                 diagnostics.push(workflow_diagnostic(
                     "translation.unknown_message",
@@ -800,8 +819,17 @@ where
                 ));
                 continue;
             };
+            if !indexes.unique {
+                rejected.insert(patch_index);
+                diagnostics.push(workflow_diagnostic(
+                    "translation.ambiguous_message",
+                    "Catalog contains more than one definition for the patch identity.",
+                    Some(patch.id.clone()),
+                ));
+                continue;
+            }
             let current =
-                build_candidate(&loaded, &key, &loaded.po.items[*item_index], usize::MAX)?;
+                build_candidate(&loaded, &key, &loaded.po.items[indexes.first], usize::MAX)?;
             if current.fingerprint != patch.fingerprint {
                 rejected.insert(patch_index);
                 diagnostics.push(workflow_diagnostic(
@@ -873,9 +901,8 @@ where
                     &request.patches[patch_index],
                 )?;
             }
-            let po = ferrocat::stringify_po(&loaded.po, &SerializeOptions::default());
-            let content = render_target_catalog(
-                &po,
+            let content = render_target_catalog_from_po(
+                &loaded.po,
                 &request.config.source_locale,
                 &batch.locale,
                 loaded.format,
@@ -1109,7 +1136,7 @@ where
                     let patch = &request.patches[patch_index];
                     let key =
                         CatalogMessageKey::new(patch.id.message.clone(), patch.id.context.clone());
-                    let item_index = reloaded.messages.get(&key).copied().ok_or_else(|| {
+                    let indexes = reloaded.po_item_indexes.get(&key).copied().ok_or_else(|| {
                         PalamedesError::WriteFile {
                             path: plan.path.clone(),
                             source: std::io::Error::new(
@@ -1118,7 +1145,7 @@ where
                             ),
                         }
                     })?;
-                    if reloaded.ambiguous_messages.contains(&key) {
+                    if !indexes.unique {
                         return Err(PalamedesError::WriteFile {
                             path: plan.path.clone(),
                             source: std::io::Error::new(
@@ -1130,7 +1157,7 @@ where
                     let current = build_candidate(
                         &reloaded,
                         &key,
-                        &reloaded.po.items[item_index],
+                        &reloaded.po.items[indexes.first],
                         usize::MAX,
                     )?;
                     if current.fingerprint != patch.fingerprint {
@@ -1150,9 +1177,8 @@ where
                         &request.patches[patch_index],
                     )?;
                 }
-                let po = ferrocat::stringify_po(&reloaded.po, &SerializeOptions::default());
-                let rendered = render_target_catalog(
-                    &po,
+                let rendered = render_target_catalog_from_po(
+                    &reloaded.po,
                     &request.config.source_locale,
                     &plan.locale,
                     reloaded.format,
@@ -2060,22 +2086,19 @@ fn build_loaded_catalog_from_content(
     original: String,
 ) -> PalamedesResult<LoadedCatalog> {
     let po = parse_catalog_as_po(&original, &config.source_locale, locale, catalog.format)?;
-    let mut messages = BTreeMap::new();
-    let mut ambiguous_messages = BTreeSet::new();
+    let mut po_item_indexes = HashMap::with_capacity(po.items.len());
     for (index, item) in po.items.iter().enumerate() {
         validate_icu_native_po_item(item)?;
         parse_machine_metadata(item)?;
         let key = CatalogMessageKey::new(item.msgid.clone(), item.msgctxt.clone());
-        match messages.entry(key) {
-            Entry::Vacant(entry) => {
-                entry.insert(index);
-            }
-            Entry::Occupied(entry) => {
-                ambiguous_messages.insert(entry.key().clone());
-            }
-        }
+        po_item_indexes
+            .entry(key)
+            .and_modify(|indexes: &mut PoItemIndexes| indexes.unique = false)
+            .or_insert(PoItemIndexes {
+                first: index,
+                unique: true,
+            });
     }
-    let po_item_indexes = po_item_indexes(&po);
     Ok(LoadedCatalog {
         scope: catalog.path.clone(),
         locale: locale.to_owned(),
@@ -2086,8 +2109,6 @@ fn build_loaded_catalog_from_content(
         original,
         po,
         po_item_indexes,
-        messages,
-        ambiguous_messages,
     })
 }
 
@@ -2502,17 +2523,14 @@ fn build_candidate(
     item: &PoItem,
     max_origins: usize,
 ) -> PalamedesResult<TranslationCandidate> {
-    let raw = find_po_item(&loaded.po, &loaded.po_item_indexes, key);
     let source = project_source(&item.msgid);
     let translation = project_po_translation(item, &source);
     let review = TranslationReviewState {
         translated: value_is_translated(&translation),
-        fuzzy: raw.is_some_and(|item| item.flags.iter().any(|flag| flag == "fuzzy")),
+        fuzzy: item.flags.iter().any(|flag| flag == "fuzzy"),
         obsolete: item.obsolete,
     };
-    let comments = raw.map_or_else(Vec::new, |item| {
-        item.extracted_comments.iter().cloned().collect()
-    });
+    let comments = item.extracted_comments.iter().cloned().collect();
     let mut all_origins = item
         .references
         .iter()
@@ -2904,16 +2922,63 @@ fn parse_plural_branch(
     Ok(option.value.clone())
 }
 
-fn render_target_catalog(
-    po_content: &str,
+fn validate_po_target_locale(
+    po: &PoFile,
+    source_locale: &str,
+    locale: &str,
+) -> PalamedesResult<()> {
+    if source_locale.trim().is_empty() {
+        return Err(ferrocat::ApiError::InvalidArguments(
+            "source_locale must not be empty".to_owned(),
+        )
+        .into());
+    }
+    if locale.trim().is_empty() {
+        return Err(
+            ferrocat::ApiError::InvalidArguments("locale must not be empty".to_owned()).into(),
+        );
+    }
+    if let Some(declared) = po
+        .headers
+        .iter()
+        .rev()
+        .find(|header| header.key == "Language")
+        .map(|header| header.value.as_str())
+    {
+        if declared.trim().is_empty() {
+            return Err(ferrocat::ApiError::InvalidArguments(
+                "locale must not be empty".to_owned(),
+            )
+            .into());
+        }
+        if declared != locale {
+            return Err(ferrocat::ApiError::InvalidArguments(format!(
+                "catalog locale {declared:?} did not match expected locale {locale:?}"
+            ))
+            .into());
+        }
+    }
+    Ok(())
+}
+
+fn render_target_catalog_from_po(
+    po: &PoFile,
     source_locale: &str,
     locale: &str,
     format: PalamedesCatalogFormat,
     po_options: Option<&PoOutputOptions>,
 ) -> PalamedesResult<String> {
+    if format == PalamedesCatalogFormat::Po {
+        validate_po_target_locale(po, source_locale, locale)?;
+        return Ok(ferrocat::stringify_po(
+            po,
+            &po_serialize_options(po_options),
+        ));
+    }
+    let po_content = ferrocat::stringify_po(po, &SerializeOptions::default());
     let target_mode = format.ferrocat_mode();
     Ok(convert_catalog(
-        ConvertCatalogOptions::new(po_content, source_locale, CatalogMode::IcuPo, target_mode)
+        ConvertCatalogOptions::new(&po_content, source_locale, CatalogMode::IcuPo, target_mode)
             .with_locale(locale)
             .with_po_serialize_options(po_serialize_options(po_options)),
     )?
@@ -2973,6 +3038,7 @@ where
     })
 }
 
+#[cfg(test)]
 fn po_item_indexes(po: &PoFile) -> HashMap<CatalogMessageKey, PoItemIndexes> {
     let mut indexes = HashMap::with_capacity(po.items.len());
     for (index, item) in po.items.iter().enumerate() {
@@ -2988,6 +3054,7 @@ fn po_item_indexes(po: &PoFile) -> HashMap<CatalogMessageKey, PoItemIndexes> {
     indexes
 }
 
+#[cfg(test)]
 fn find_po_item<'a>(
     po: &'a PoFile,
     po_item_indexes: &HashMap<CatalogMessageKey, PoItemIndexes>,
@@ -3169,18 +3236,27 @@ mod tests {
         let fcl =
             load_catalog(&fcl_config(fixture.path()), &fcl_catalog, "de").expect("load FCL once");
         assert_eq!(source_catalog_parse_count(), 1);
-        assert_eq!(
-            po.messages.keys().collect::<Vec<_>>(),
-            fcl.messages.keys().collect::<Vec<_>>()
-        );
+        let mut po_keys = po.po_item_indexes.keys().collect::<Vec<_>>();
+        let mut fcl_keys = fcl.po_item_indexes.keys().collect::<Vec<_>>();
+        po_keys.sort();
+        fcl_keys.sort();
+        assert_eq!(po_keys, fcl_keys);
 
-        for key in po.messages.keys() {
-            let po_candidate =
-                build_candidate(&po, key, &po.po.items[po.messages[key]], usize::MAX)
-                    .expect("project PO candidate");
-            let fcl_candidate =
-                build_candidate(&fcl, key, &fcl.po.items[fcl.messages[key]], usize::MAX)
-                    .expect("project FCL candidate");
+        for key in po_keys {
+            let po_candidate = build_candidate(
+                &po,
+                key,
+                &po.po.items[po.po_item_indexes[key].first],
+                usize::MAX,
+            )
+            .expect("project PO candidate");
+            let fcl_candidate = build_candidate(
+                &fcl,
+                key,
+                &fcl.po.items[fcl.po_item_indexes[key].first],
+                usize::MAX,
+            )
+            .expect("project FCL candidate");
             assert_eq!(po_candidate.source, fcl_candidate.source);
             assert_eq!(po_candidate.translation, fcl_candidate.translation);
             assert_eq!(po_candidate.comments, fcl_candidate.comments);
@@ -3424,14 +3500,13 @@ mod tests {
             .expect("load duplicate catalog");
         let key = CatalogMessageKey::with_context("Open", "menu");
 
-        assert!(loaded.ambiguous_messages.contains(&key));
-        assert_eq!(loaded.messages[&key], loaded.po_item_indexes[&key].first);
-        assert_eq!(loaded.messages[&key], 0);
+        assert!(!loaded.po_item_indexes[&key].unique);
+        assert_eq!(loaded.po_item_indexes[&key].first, 0);
 
         let candidate = build_candidate(
             &loaded,
             &key,
-            &loaded.po.items[loaded.messages[&key]],
+            &loaded.po.items[loaded.po_item_indexes[&key].first],
             usize::MAX,
         )
         .expect("build first duplicate candidate");
@@ -6459,6 +6534,143 @@ mod tests {
         assert_eq!(
             fs::read_to_string(&de_dir_path).expect("read de dir after"),
             before_dir
+        );
+    }
+
+    #[test]
+    fn explicit_targets_load_only_targeted_catalogs_and_direct_po_write_preserves_options() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let app_de = fixture.path().join("app/de.po");
+        let app_fr = fixture.path().join("app/fr.po");
+        let admin_de = fixture.path().join("admin/de.po");
+        for (path, locale) in [(&app_de, "de"), (&app_fr, "fr"), (&admin_de, "de")] {
+            fs::create_dir_all(path.parent().expect("parent")).expect("dir");
+            fs::write(
+                path,
+                format!(
+                    "msgid \"\"\nmsgstr \"\"\n\"Language: {locale}\\n\"\n\nmsgid \"Save\"\nmsgstr \"\"\n\nmsgid \"Cancel\"\nmsgstr \"\"\n"
+                ),
+            )
+            .expect("write po");
+        }
+
+        let make_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned(), "fr".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "app/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: "admin/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+
+        reset_source_catalog_parse_count();
+        let target = TranslationCandidateId {
+            catalog: "app/{locale}".to_owned(),
+            locale: "de".to_owned(),
+            message: "Save".to_owned(),
+            context: None,
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_config(),
+            locales: Vec::new(),
+            targets: vec![target.clone()],
+            max_origins: crate::DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS,
+        })
+        .expect("list explicit target");
+        assert_eq!(
+            source_catalog_parse_count(),
+            1,
+            "explicit targets must only load the targeted catalog/locale"
+        );
+        assert_eq!(listed.candidates.len(), 1);
+        assert_eq!(listed.candidates[0].id, target);
+        assert!(listed.diagnostics.is_empty());
+
+        let long_translation = "Speichern und alle ausstehenden Aenderungen direkt im ausgewaehlten Arbeitsbereich dauerhaft sichern";
+        let patched = apply_translation_patches(TranslationPatchRequest {
+            config: make_config(),
+            po: Some(crate::PoOutputOptions {
+                line_breaks: crate::PoLineBreaks::Off,
+            }),
+            patches: vec![TranslationPatch {
+                id: target,
+                fingerprint: listed.candidates[0].fingerprint.clone(),
+                translation: TranslationValue::Singular {
+                    value: long_translation.to_owned(),
+                },
+                machine: None,
+            }],
+        })
+        .expect("apply patch with PoLineBreaks::Off");
+        assert!(patched.updated);
+        let written = fs::read_to_string(&app_de).expect("read patched po");
+        assert!(
+            written.contains(&format!("msgstr \"{long_translation}\"\n")),
+            "direct PO stringify must honor PoOutputOptions::line_breaks: {written:?}"
+        );
+    }
+
+    #[test]
+    fn apply_translation_patches_rejects_mismatched_po_language_header_before_writing() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let de_po = fixture.path().join("locales/de/messages.po");
+        fs::create_dir_all(de_po.parent().expect("parent")).expect("dir");
+        let original =
+            "msgid \"\"\nmsgstr \"\"\n\"Language: fr\\n\"\n\nmsgid \"Save\"\nmsgstr \"\"\n";
+        fs::write(&de_po, original).expect("write mismatched po");
+
+        let make_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}/messages".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        };
+
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_config(),
+            locales: vec!["de".to_owned()],
+            targets: Vec::new(),
+            max_origins: crate::DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS,
+        })
+        .expect("list candidate");
+        assert_eq!(listed.candidates.len(), 1);
+
+        let error = apply_translation_patches(TranslationPatchRequest {
+            config: make_config(),
+            po: None,
+            patches: vec![TranslationPatch {
+                id: listed.candidates[0].id.clone(),
+                fingerprint: listed.candidates[0].fingerprint.clone(),
+                translation: TranslationValue::Singular {
+                    value: "Speichern".to_owned(),
+                },
+                machine: None,
+            }],
+        })
+        .expect_err("mismatched Language header must fail before writing");
+        assert!(
+            error
+                .to_string()
+                .contains("catalog locale \"fr\" did not match expected locale \"de\""),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&de_po).expect("read po after rejection"),
+            original
         );
     }
 }

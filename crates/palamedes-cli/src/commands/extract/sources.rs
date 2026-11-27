@@ -46,7 +46,6 @@ pub(crate) fn collect_source_files(
                         Verdict::Skip
                     };
                 }
-                let excluded = matches_source_pattern(&exclude, path);
                 if entry.is_dir() {
                     let bytes = source_path_bytes(path);
                     if subtree_excludes
@@ -57,13 +56,16 @@ pub(crate) fn collect_source_files(
                     } else {
                         Verdict::Skip
                     }
-                } else if !excluded
-                    && matches_source_pattern(&include, path)
-                    && (!entry.is_symlink() || path.is_file())
-                {
-                    Verdict::Keep
                 } else {
-                    Verdict::Skip
+                    let bytes = source_path_bytes(path);
+                    if !exclude.is_match(&bytes)
+                        && include.is_match(&bytes)
+                        && (!entry.is_symlink() || path.is_file())
+                    {
+                        Verdict::Keep
+                    } else {
+                        Verdict::Skip
+                    }
                 }
             })?;
         let (entries, _) = result.into_parts();

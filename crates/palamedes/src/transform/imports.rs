@@ -4,7 +4,7 @@ pub(super) use crate::source_macros::ImportedMacro;
 use crate::{source_macros::record_macro_import_declaration, transform::Replacement};
 use oxc_ast::ast::{
     BindingIdentifier, IdentifierReference, ImportDeclaration, ImportDeclarationSpecifier,
-    ImportOrExportKind, JSXIdentifier,
+    ImportOrExportKind, JSXIdentifier, Program, Statement,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_semantic::Semantic;
@@ -24,6 +24,7 @@ pub(super) struct ImportCollector {
     pub runtime_import_binding_count: usize,
     /// All authored identifiers that a generated import alias must not capture.
     pub used_identifier_names: HashSet<String>,
+    reusable_trans_import_spans: Vec<(String, (usize, usize))>,
     reusable_trans_import_symbols: HashMap<String, SymbolId>,
     remix_jsx_specifiers: Vec<RemixJsxImportSpecifier>,
 }
@@ -41,6 +42,7 @@ impl ImportCollector {
             has_reusable_runtime_import: false,
             runtime_import_binding_count: 0,
             used_identifier_names: HashSet::new(),
+            reusable_trans_import_spans: Vec::new(),
             reusable_trans_import_symbols: HashMap::new(),
             remix_jsx_specifiers: Vec::new(),
         }
@@ -49,7 +51,46 @@ impl ImportCollector {
     /// Resolve macro references from the same native OXC semantic analysis used
     /// for transform decisions. Missing facts intentionally make a binding
     /// ineligible for removal.
-    pub(super) fn resolve_references(&mut self, semantic: &Semantic<'_>) {
+    pub(super) fn resolve_references(&mut self, program: &Program<'_>, semantic: &Semantic<'_>) {
+        // Bind import specifier symbols now that `SemanticBuilder` has populated
+        // `BindingIdentifier::symbol_id` on the parsed AST.
+        if !self.macro_specifiers.is_empty()
+            || !self.remix_jsx_specifiers.is_empty()
+            || !self.reusable_trans_import_spans.is_empty()
+        {
+            let mut specifier_symbols = HashMap::new();
+            for statement in &program.body {
+                let Statement::ImportDeclaration(declaration) = statement else {
+                    continue;
+                };
+                let Some(specifiers) = &declaration.specifiers else {
+                    continue;
+                };
+                for specifier in specifiers {
+                    if let ImportDeclarationSpecifier::ImportSpecifier(specifier) = specifier
+                        && let Some(symbol_id) = specifier.local.symbol_id.get()
+                    {
+                        specifier_symbols.insert(
+                            (specifier.span.start as usize, specifier.span.end as usize),
+                            symbol_id,
+                        );
+                    }
+                }
+            }
+            for specifier in &mut self.macro_specifiers {
+                specifier.symbol_id = specifier_symbols.get(&specifier.specifier_range).copied();
+            }
+            for specifier in &mut self.remix_jsx_specifiers {
+                specifier.symbol_id = specifier_symbols.get(&specifier.specifier_range).copied();
+            }
+            for (module, span) in &self.reusable_trans_import_spans {
+                if let Some(&symbol_id) = specifier_symbols.get(span) {
+                    self.reusable_trans_import_symbols
+                        .insert(module.clone(), symbol_id);
+                }
+            }
+        }
+
         for specifier in &self.macro_specifiers {
             let Some(symbol_id) = specifier.symbol_id else {
                 continue;
@@ -252,6 +293,7 @@ struct RemixJsxImportSpecifier {
     binding: RemixJsxBinding,
     local_name: String,
     symbol_id: Option<SymbolId>,
+    specifier_range: (usize, usize),
 }
 
 fn declaration_specifier_count(source: &str, declaration_range: (usize, usize)) -> usize {
@@ -393,6 +435,7 @@ impl<'a> Visit<'a> for ImportCollector {
                     binding,
                     local_name: specifier.local.name.to_string(),
                     symbol_id: specifier.local.symbol_id.get(),
+                    specifier_range: (specifier.span.start as usize, specifier.span.end as usize),
                 });
             }
         }
@@ -408,10 +451,14 @@ impl<'a> Visit<'a> for ImportCollector {
                     && specifier.import_kind == ImportOrExportKind::Value
                     && specifier.imported.name() == "Trans"
                     && specifier.local.name == "Trans"
-                    && let Some(symbol_id) = specifier.local.symbol_id.get()
                 {
-                    self.reusable_trans_import_symbols
-                        .insert(source.to_string(), symbol_id);
+                    let span = (specifier.span.start as usize, specifier.span.end as usize);
+                    self.reusable_trans_import_spans
+                        .push((source.to_string(), span));
+                    if let Some(symbol_id) = specifier.local.symbol_id.get() {
+                        self.reusable_trans_import_symbols
+                            .insert(source.to_string(), symbol_id);
+                    }
                 }
             }
         }

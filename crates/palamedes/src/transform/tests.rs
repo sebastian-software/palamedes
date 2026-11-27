@@ -3452,3 +3452,35 @@ export function f() {
         );
     }
 }
+
+#[test]
+fn transform_macros_skips_source_map_generation_when_disabled() {
+    for (filename, source) in [
+        (
+            "module.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function greet() { return t`Hello`; }\n",
+        ),
+        (
+            "View.vue",
+            "<template><p>{{ label }}</p></template><script setup lang=\"ts\">import { t } from \"@palamedes/core/macro\"; const label = t`Hello`;</script>",
+        ),
+    ] {
+        let with_map = transform_macros_raw(source, filename, None).expect("default source map");
+        let without_map = transform_macros_raw(
+            source,
+            filename,
+            Some(NativeTransformOptions {
+                source_map: Some(false),
+                ..NativeTransformOptions::default()
+            }),
+        )
+        .expect("disabled source map");
+
+        assert!(with_map.has_changed);
+        assert!(with_map.map.is_some());
+        assert!(without_map.has_changed);
+        assert!(without_map.map.is_none());
+        assert_eq!(without_map.code, with_map.code);
+        assert_eq!(without_map.compiled_ids, with_map.compiled_ids);
+    }
+}

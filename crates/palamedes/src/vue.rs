@@ -37,6 +37,7 @@ impl Tag<'_> {
 /// contain nested templates; styles, custom blocks, and non-HTML templates
 /// are raw text in Vue's SFC grammar. A script-looking tag in those blocks or
 /// in a comment must never become an extraction surface.
+#[cfg(test)]
 pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec<ScriptBlock>> {
     scan(source, filename).map(|scan| scan.scripts)
 }
@@ -134,6 +135,7 @@ fn check_template(
     end: usize,
     macros: &std::collections::HashMap<String, String>,
 ) -> PalamedesResult<()> {
+    let mut allocator = oxc_allocator::Allocator::default();
     let mut scopes: Vec<(&str, Vec<&str>)> = Vec::new();
     while cursor < end {
         if source[cursor..].starts_with("<!--") {
@@ -148,7 +150,15 @@ fn check_template(
             if source.as_bytes().get(close) != Some(&b'}') {
                 break;
             }
-            check_template_expression(source, filename, start, close - 1, &scopes, macros)?;
+            check_template_expression(
+                &mut allocator,
+                source,
+                filename,
+                start,
+                close - 1,
+                &scopes,
+                macros,
+            )?;
             cursor = close + 1;
         } else if source.as_bytes()[cursor] == b'<' {
             let Some(tag) = parse_tag(source, cursor) else {
@@ -189,7 +199,15 @@ fn check_template(
                     let name_start = name.as_ptr() as usize - source.as_ptr() as usize;
                     let start = name_start + open + 1;
                     let end = name_start + close;
-                    check_template_expression(source, filename, start, end, &scopes, macros)?;
+                    check_template_expression(
+                        &mut allocator,
+                        source,
+                        filename,
+                        start,
+                        end,
+                        &scopes,
+                        macros,
+                    )?;
                 }
                 if name.starts_with("v-slot") || name.starts_with('#') {
                     continue;
@@ -213,6 +231,7 @@ fn check_template(
                         &scopes
                     };
                     check_template_expression(
+                        &mut allocator,
                         source,
                         filename,
                         start,
@@ -281,7 +300,32 @@ fn split_for(value: &str) -> Option<(&str, &str)> {
     None
 }
 
+fn contains_identifier(haystack: &str, ident: &str) -> bool {
+    if ident.is_empty() || haystack.len() < ident.len() {
+        return false;
+    }
+    let mut search = 0;
+    while let Some(offset) = haystack[search..].find(ident) {
+        let start = search + offset;
+        let end = start + ident.len();
+        let prev_is_part = haystack[..start]
+            .chars()
+            .next_back()
+            .is_some_and(oxc_syntax::identifier::is_identifier_part);
+        let next_is_part = haystack[end..]
+            .chars()
+            .next()
+            .is_some_and(oxc_syntax::identifier::is_identifier_part);
+        if !prev_is_part && !next_is_part {
+            return true;
+        }
+        search = start + haystack[start..].chars().next().map_or(1, char::len_utf8);
+    }
+    false
+}
+
 fn check_template_expression(
+    allocator: &mut oxc_allocator::Allocator,
     source: &str,
     filename: &str,
     start: usize,
@@ -289,15 +333,16 @@ fn check_template_expression(
     scopes: &[(&str, Vec<&str>)],
     macros: &std::collections::HashMap<String, String>,
 ) -> PalamedesResult<()> {
-    use oxc_allocator::Allocator;
     use oxc_parser::Parser;
     use oxc_semantic::SemanticBuilder;
     let expression_source = &source[start..end];
-    // A reference must contain its imported spelling or an identifier escape.
+    // A reference must appear as a whole identifier or contain an identifier escape.
     // This is only a conservative candidate gate: OXC still decides reference
     // identity and shadowing, including escaped and Unicode identifiers.
     if !expression_source.contains('\\')
-        && !macros.keys().any(|name| expression_source.contains(name))
+        && !macros
+            .keys()
+            .any(|name| contains_identifier(expression_source, name))
     {
         return Ok(());
     }
@@ -310,42 +355,48 @@ fn check_template_expression(
         let opening = if expression { "(" } else { "() => {" };
         let closing = if expression { ")" } else { "}" };
         let text = format!("{prefix}{opening}{expression_source}{closing}{suffix}");
-        let allocator = Allocator::default();
-        let parsed = Parser::new(&allocator, &text, SourceType::ts()).parse();
-        if !parsed.diagnostics.is_empty() {
-            continue;
-        }
-        let semantic = SemanticBuilder::new()
-            .with_build_nodes(true)
-            .build(&parsed.program)
-            .semantic;
+        let mut parsed_ok = false;
         let mut first = None;
-        for (name, imported) in macros {
-            if let Some(references) = semantic
-                .scoping()
-                .root_unresolved_references()
-                .get(name.as_str())
-            {
-                for id in references {
-                    let reference = semantic.scoping().get_reference(*id);
-                    let span = semantic.nodes().get_node(reference.node_id()).span();
-                    let Some(relative) =
-                        (span.start as usize).checked_sub(prefix.len() + opening.len())
-                    else {
-                        continue;
-                    };
-                    if relative >= end - start {
-                        continue;
-                    }
-                    let offset = start + relative;
-                    if first
-                        .as_ref()
-                        .is_none_or(|(previous, _)| offset < *previous)
+        {
+            let parsed = Parser::new(allocator, &text, SourceType::ts()).parse();
+            if parsed.diagnostics.is_empty() {
+                parsed_ok = true;
+                let semantic = SemanticBuilder::new()
+                    .with_build_nodes(true)
+                    .build(&parsed.program)
+                    .semantic;
+                for (name, imported) in macros {
+                    if let Some(references) = semantic
+                        .scoping()
+                        .root_unresolved_references()
+                        .get(name.as_str())
                     {
-                        first = Some((offset, imported));
+                        for id in references {
+                            let reference = semantic.scoping().get_reference(*id);
+                            let span = semantic.nodes().get_node(reference.node_id()).span();
+                            let Some(relative) =
+                                (span.start as usize).checked_sub(prefix.len() + opening.len())
+                            else {
+                                continue;
+                            };
+                            if relative >= end - start {
+                                continue;
+                            }
+                            let offset = start + relative;
+                            if first
+                                .as_ref()
+                                .is_none_or(|(previous, _)| offset < *previous)
+                            {
+                                first = Some((offset, imported));
+                            }
+                        }
                     }
                 }
             }
+        }
+        allocator.reset();
+        if !parsed_ok {
+            continue;
         }
         if let Some((offset, imported)) = first {
             return Err(PalamedesError::UnsupportedMacroSyntax {
@@ -788,6 +839,27 @@ mod markup_tests {
         // The collection is still evaluated outside the alias, whatever the spacing.
         let source = format!("{script}<template><p v-for=\"t\tin\n t\">{{{{t}}}}</p></template>");
         assert!(extract_messages(&source, "View.vue").is_err());
+    }
+
+    #[test]
+    fn contains_identifier_checks_whole_identifier_boundaries() {
+        use super::contains_identifier;
+
+        assert!(!contains_identifier("title", "t"));
+        assert!(!contains_identifier("items.length", "t"));
+        assert!(!contains_identifier("status ? active : false", "t"));
+        assert!(!contains_identifier("tä", "t"));
+        assert!(!contains_identifier("_t", "t"));
+        assert!(!contains_identifier("$t", "t"));
+        assert!(!contains_identifier("t1", "t"));
+
+        assert!(contains_identifier("t", "t"));
+        assert!(contains_identifier("t`Hello`", "t"));
+        assert!(contains_identifier("consume(t)", "t"));
+        assert!(contains_identifier("obj.t", "t"));
+        assert!(contains_identifier("a + t + b", "t"));
+        assert!(contains_identifier("zählen(1)", "zählen"));
+        assert!(!contains_identifier("erzählen(1)", "zählen"));
     }
 
     #[test]

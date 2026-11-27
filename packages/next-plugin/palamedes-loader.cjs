@@ -649,17 +649,19 @@ module.exports = function palamedesLoader(source, inputSourceMap) {
           options.clientCatalogDelivery,
         );
     let code = result.code;
-    let sourceMap = result.map ?? inputSourceMap ?? null;
+    let sourceMap = this.sourceMap ? (result.map ?? inputSourceMap ?? null) : null;
     if (registration) {
       const registrationCode = serverMessageSplitting ? registration.code : registration;
       if (clientMessageSplitting) {
         const output = prependClientMessageBootstrap(code, registrationCode);
         code = output.code;
-        sourceMap = offsetSourceMapForInsertion(
-          sourceMap,
-          output.insertion,
-          output.insertion.value,
-        );
+        if (this.sourceMap && sourceMap) {
+          sourceMap = offsetSourceMapForInsertion(
+            sourceMap,
+            output.insertion,
+            output.insertion.value,
+          );
+        }
       } else {
         code += registrationCode;
       }

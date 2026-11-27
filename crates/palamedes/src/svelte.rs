@@ -21,6 +21,7 @@ pub(crate) fn is_svelte(filename: &str) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("svelte"))
 }
 
+#[cfg(test)]
 pub(crate) fn script_blocks(source: &str, filename: &str) -> PalamedesResult<Vec<ScriptBlock>> {
     scan(source, filename).map(|scan| scan.scripts)
 }

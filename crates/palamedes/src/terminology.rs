@@ -1,7 +1,8 @@
 //! Caller-owned terminology relevance, independent of catalogs and translation providers.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
+use aho_corasick::AhoCorasick;
 use ferrocat_icu::IcuNode;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -88,6 +89,95 @@ pub enum TerminologyError {
     ParseIcu(#[from] ferrocat_icu::IcuParseError),
 }
 
+#[derive(Clone, Debug)]
+struct TerminologyPatternEntry {
+    id: String,
+    kind: TerminologyKind,
+}
+
+/// Reusable Aho-Corasick-backed matcher for caller-supplied terminology entries.
+///
+/// Build once per glossary and reuse across messages to avoid repeatedly
+/// validating entries and constructing the multi-pattern automaton.
+#[derive(Debug)]
+pub struct TerminologyMatcher {
+    automaton: Option<AhoCorasick>,
+    groups: Vec<Vec<TerminologyPatternEntry>>,
+}
+
+impl TerminologyMatcher {
+    /// Validates `entries` and compiles a reusable multi-pattern matcher.
+    ///
+    /// # Errors
+    ///
+    /// Rejects blank IDs, sources, or explicit `preferred_target` values and
+    /// duplicate entry IDs.
+    pub fn new(entries: &[TerminologyEntry]) -> Result<Self, TerminologyError> {
+        let mut ids = BTreeSet::new();
+        let mut pattern_indices: HashMap<&str, usize> = HashMap::with_capacity(entries.len());
+        let mut unique_patterns: Vec<&str> = Vec::with_capacity(entries.len());
+        let mut groups: Vec<Vec<TerminologyPatternEntry>> = Vec::with_capacity(entries.len());
+
+        for (index, entry) in entries.iter().enumerate() {
+            for (field, value) in [
+                ("id", Some(entry.id.as_str())),
+                ("source", Some(entry.source.as_str())),
+                ("preferredTarget", entry.preferred_target.as_deref()),
+            ] {
+                if value.is_some_and(|value| value.trim().is_empty()) {
+                    return Err(TerminologyError::BlankField { index, field });
+                }
+            }
+            if !ids.insert(&entry.id) {
+                return Err(TerminologyError::DuplicateId {
+                    id: entry.id.clone(),
+                });
+            }
+            let meta = TerminologyPatternEntry {
+                id: entry.id.clone(),
+                kind: entry.kind,
+            };
+            if let Some(&pattern_index) = pattern_indices.get(entry.source.as_str()) {
+                groups[pattern_index].push(meta);
+            } else {
+                let pattern_index = unique_patterns.len();
+                pattern_indices.insert(entry.source.as_str(), pattern_index);
+                unique_patterns.push(entry.source.as_str());
+                groups.push(vec![meta]);
+            }
+        }
+
+        let automaton = (!unique_patterns.is_empty()).then(|| {
+            AhoCorasick::new(&unique_patterns)
+                .expect("non-empty validated terminology patterns build a standard automaton")
+        });
+
+        Ok(Self { automaton, groups })
+    }
+
+    /// Finds every occurrence of the compiled terminology entries in decoded
+    /// native ICU literal nodes of `message`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TerminologyError::ParseIcu`] when `message` is malformed ICU.
+    pub fn match_message(&self, message: &str) -> Result<Vec<TerminologyMatch>, TerminologyError> {
+        let parsed = parse_runtime_icu(message)?;
+        let Some(automaton) = &self.automaton else {
+            return Ok(Vec::new());
+        };
+        let mut matches = Vec::new();
+        visit_literals(
+            &parsed.nodes,
+            &mut Vec::new(),
+            automaton,
+            &self.groups,
+            &mut matches,
+        );
+        Ok(matches)
+    }
+}
+
 /// Finds caller-supplied phrases in decoded native ICU literal nodes.
 ///
 /// Matching is exact, case-sensitive substring matching: no Unicode normalization,
@@ -110,49 +200,29 @@ pub enum TerminologyError {
 pub fn match_terminology(
     request: &TerminologyRequest,
 ) -> Result<Vec<TerminologyMatch>, TerminologyError> {
-    let mut ids = BTreeSet::new();
-    for (index, entry) in request.entries.iter().enumerate() {
-        for (field, value) in [
-            ("id", Some(entry.id.as_str())),
-            ("source", Some(entry.source.as_str())),
-            ("preferredTarget", entry.preferred_target.as_deref()),
-        ] {
-            if value.is_some_and(|value| value.trim().is_empty()) {
-                return Err(TerminologyError::BlankField { index, field });
-            }
-        }
-        if !ids.insert(&entry.id) {
-            return Err(TerminologyError::DuplicateId {
-                id: entry.id.clone(),
-            });
-        }
-    }
-    let message = parse_runtime_icu(&request.message)?;
-    let mut matches = Vec::new();
-    visit_literals(
-        &message.nodes,
-        &mut Vec::new(),
-        &request.entries,
-        &mut matches,
-    );
-    Ok(matches)
+    TerminologyMatcher::new(&request.entries)?.match_message(&request.message)
 }
 
 fn visit_literals(
     nodes: &[IcuNode],
     path: &mut Vec<usize>,
-    entries: &[TerminologyEntry],
+    automaton: &AhoCorasick,
+    groups: &[Vec<TerminologyPatternEntry>],
     matches: &mut Vec<TerminologyMatch>,
 ) {
     for (index, node) in nodes.iter().enumerate() {
         path.push(index);
         match node {
-            IcuNode::Literal(literal) => matches.extend(match_literal(literal, path, entries)),
-            IcuNode::Tag { children, .. } => visit_literals(children, path, entries, matches),
+            IcuNode::Literal(literal) => {
+                matches.extend(match_literal(literal, path, automaton, groups));
+            }
+            IcuNode::Tag { children, .. } => {
+                visit_literals(children, path, automaton, groups, matches);
+            }
             IcuNode::Plural { options, .. } | IcuNode::Select { options, .. } => {
                 for (option_index, option) in options.iter().enumerate() {
                     path.push(option_index);
-                    visit_literals(&option.value, path, entries, matches);
+                    visit_literals(&option.value, path, automaton, groups, matches);
                     path.pop();
                 }
             }
@@ -165,24 +235,23 @@ fn visit_literals(
 fn match_literal(
     literal: &str,
     path: &[usize],
-    entries: &[TerminologyEntry],
+    automaton: &AhoCorasick,
+    groups: &[Vec<TerminologyPatternEntry>],
 ) -> Vec<TerminologyMatch> {
     let mut matches = Vec::new();
-    for entry in entries {
-        // `match_indices` omits self-overlaps. Starting at every Unicode scalar
-        // boundary retains them without ever slicing within a UTF-8 sequence.
-        for (start, _) in literal.char_indices() {
-            if literal[start..].starts_with(&entry.source) {
-                matches.push(TerminologyMatch {
-                    entry_id: entry.id.clone(),
-                    kind: entry.kind,
-                    literal_path: path.to_vec(),
-                    literal: literal.to_owned(),
-                    start,
-                    end: start + entry.source.len(),
-                    preferred: false,
-                });
-            }
+    for found in automaton.find_overlapping_iter(literal) {
+        let start = found.start();
+        let end = found.end();
+        for entry in &groups[found.pattern().as_usize()] {
+            matches.push(TerminologyMatch {
+                entry_id: entry.id.clone(),
+                kind: entry.kind,
+                literal_path: path.to_vec(),
+                literal: literal.to_owned(),
+                start,
+                end,
+                preferred: false,
+            });
         }
     }
     matches.sort_by(|left, right| {
@@ -414,5 +483,47 @@ mod tests {
             Err(TerminologyError::ParseIcu(_))
         ));
         assert!(run("valid", vec![]).is_empty());
+    }
+
+    #[test]
+    fn reusable_matcher_handles_self_overlaps_duplicate_patterns_and_multiple_messages() {
+        let entries = vec![
+            entry("aaa-1", "aaa", TerminologyKind::Protected),
+            entry("aaa-2", "aaa", TerminologyKind::Advisory),
+            entry("aa", "aa", TerminologyKind::Advisory),
+            entry("unicode", "東京", TerminologyKind::Protected),
+        ];
+        let matcher = TerminologyMatcher::new(&entries).expect("compile matcher");
+
+        let first = matcher.match_message("aaaaa 東京").expect("match first");
+        assert_eq!(
+            first,
+            run("aaaaa 東京", entries.clone()),
+            "reusable matcher must match one-shot API exactly"
+        );
+        assert_eq!(
+            first
+                .iter()
+                .filter(|m| m.entry_id == "aaa-1")
+                .map(|m| (m.start, m.end, m.preferred))
+                .collect::<Vec<_>>(),
+            [(0, 3, true), (1, 4, false), (2, 5, false)]
+        );
+        assert_eq!(
+            first
+                .iter()
+                .filter(|m| m.entry_id == "aaa-2")
+                .map(|m| (m.start, m.end, m.preferred))
+                .collect::<Vec<_>>(),
+            [(0, 3, false), (1, 4, false), (2, 5, false)]
+        );
+
+        let second = matcher
+            .match_message("{count, plural, one {aaa} other {東京 aaa}}")
+            .expect("match second");
+        assert_eq!(
+            second,
+            run("{count, plural, one {aaa} other {東京 aaa}}", entries)
+        );
     }
 }

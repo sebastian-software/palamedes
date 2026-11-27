@@ -1,12 +1,10 @@
 //! `pmds lint` — non-mutating Palamedes source-authoring diagnostics.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 use palamedes::{
-    SOURCE_DIAGNOSTIC_CODES, SourceComment, SourceCommentKind, SourceDiagnostic,
-    SourceDiagnosticSeverity, SourceFileAnalysisRequest, SourceRange, analyze_source_files_cached,
+    SourceDiagnostic, SourceDiagnosticSeverity, SourceFileAnalysisRequest, lint_source_files_cached,
 };
 use serde::Serialize;
 
@@ -125,7 +123,7 @@ impl Command for LintOptions {
                 filename: display_source_path(path, &config.root_dir),
             })
             .collect::<Vec<_>>();
-        let analyses = analyze_source_files_cached(
+        let analyses = lint_source_files_cached(
             &analysis_files,
             &config.source_reference_root.to_string_lossy(),
             &analysis_options,
@@ -135,16 +133,9 @@ impl Command for LintOptions {
 
         for (file, analysis) in analysis_files.iter().zip(analyses) {
             match analysis {
-                Ok(result) => {
-                    let comments = result.analysis.comments;
-                    let (mut file_diagnostics, file_suppressed) = apply_suppressions(
-                        &result.source,
-                        &file.filename,
-                        result.analysis.diagnostics,
-                        &comments,
-                    );
-                    diagnostics.append(&mut file_diagnostics);
-                    suppressed += file_suppressed;
+                Ok(mut result) => {
+                    diagnostics.append(&mut result.diagnostics);
+                    suppressed += result.suppressed;
                 }
                 Err(error) => failed_files.push(LintFileFailure {
                     file: file.filename.clone(),
@@ -288,172 +279,6 @@ fn severity_name(severity: SourceDiagnosticSeverity) -> &'static str {
     }
 }
 
-#[derive(Debug)]
-struct Suppression {
-    line: usize,
-    code: String,
-    primary: SourceRange,
-}
-
-fn apply_suppressions(
-    source: &str,
-    filename: &str,
-    diagnostics: Vec<SourceDiagnostic>,
-    comments: &[SourceComment],
-) -> (Vec<SourceDiagnostic>, usize) {
-    let (suppressions, mut suppression_diagnostics) =
-        parse_suppressions_from_comments(source, filename, comments);
-    let mut used = vec![false; suppressions.len()];
-    let mut suppressed = 0usize;
-    for diagnostic in diagnostics {
-        if let Some(index) = suppressions.iter().position(|suppression| {
-            suppression.line == diagnostic.primary.line && suppression.code == diagnostic.code
-        }) {
-            used[index] = true;
-            suppressed += 1;
-        } else {
-            suppression_diagnostics.push(diagnostic);
-        }
-    }
-    for (suppression, used) in suppressions.into_iter().zip(used) {
-        if !used {
-            suppression_diagnostics.push(suppression_diagnostic(
-                filename,
-                suppression.primary,
-                "pmds/unused-suppression",
-                &format!("Unused suppression for `{}`.", suppression.code),
-                "Remove the directive or move it to the exact line that emits this diagnostic.",
-            ));
-        }
-    }
-    (suppression_diagnostics, suppressed)
-}
-
-fn parse_suppressions_from_comments(
-    source: &str,
-    filename: &str,
-    comments: &[SourceComment],
-) -> (Vec<Suppression>, Vec<SourceDiagnostic>) {
-    const DIRECTIVES: &[(&str, usize)] = &[
-        ("palamedes-lint-disable-next-line", 1),
-        ("palamedes-lint-disable-line", 0),
-    ];
-
-    let mut suppressions = Vec::new();
-    let mut diagnostics = Vec::new();
-    for comment in comments {
-        let Some((directive_start, directive_source)) = comment_directive_source(source, comment)
-        else {
-            continue;
-        };
-        let Some((directive, line_delta)) = DIRECTIVES
-            .iter()
-            .find(|(directive, _)| directive_source.starts_with(*directive))
-        else {
-            continue;
-        };
-        let rest = directive_source[directive.len()..].trim();
-        let codes = rest
-            .split([',', ' ', '\t'])
-            .filter(|code| !code.is_empty())
-            .collect::<BTreeSet<_>>();
-        let range = source_range(source, directive_start, directive.len());
-        if codes.is_empty() {
-            diagnostics.push(suppression_diagnostic(
-                filename,
-                range,
-                "pmds/invalid-suppression",
-                "This suppression does not name a diagnostic code.",
-                "Add one or more exact Palamedes diagnostic codes after the directive.",
-            ));
-            continue;
-        }
-        for code in codes {
-            if SOURCE_DIAGNOSTIC_CODES.contains(&code) {
-                suppressions.push(Suppression {
-                    line: suppression_line(
-                        source,
-                        comment,
-                        directive_start,
-                        range.line,
-                        *line_delta,
-                    ),
-                    code: code.to_owned(),
-                    primary: range.clone(),
-                });
-            } else {
-                diagnostics.push(suppression_diagnostic(
-                    filename,
-                    range.clone(),
-                    "pmds/unknown-suppression-code",
-                    &format!("Unknown Palamedes suppression code `{code}`."),
-                    "Use a diagnostic code emitted by `pmds lint`; suppressions are code-specific.",
-                ));
-            }
-        }
-    }
-    (suppressions, diagnostics)
-}
-
-fn comment_directive_source<'a>(
-    source: &'a str,
-    comment: &SourceComment,
-) -> Option<(usize, &'a str)> {
-    source.get(comment.range.start..comment.range.end)?;
-    let (opening_width, closing_width) = match comment.kind {
-        SourceCommentKind::Line => (2, 0),
-        SourceCommentKind::Block => (2, 2),
-        SourceCommentKind::Html => (4, 3),
-    };
-    let content_start = comment.range.start.checked_add(opening_width)?;
-    let content_end = comment.range.end.checked_sub(closing_width)?;
-    let content = source.get(content_start..content_end)?;
-    let directive_source = content.trim_start();
-    let directive_start = content_start + content.len() - directive_source.len();
-    Some((directive_start, directive_source))
-}
-
-fn source_range(source: &str, start: usize, length: usize) -> SourceRange {
-    let prefix = source.get(..start).unwrap_or_else(|| {
-        let mut clamped = start.min(source.len());
-        while clamped > 0 && !source.is_char_boundary(clamped) {
-            clamped -= 1;
-        }
-        &source[..clamped]
-    });
-    let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
-    let line_prefix = prefix.get(line_start..).unwrap_or_default();
-    SourceRange {
-        start,
-        end: start.saturating_add(length),
-        line: prefix.bytes().filter(|byte| *byte == b'\n').count() + 1,
-        column: line_prefix.chars().count() + 1,
-    }
-}
-
-fn suppression_line(
-    source: &str,
-    comment: &SourceComment,
-    directive_start: usize,
-    directive_line: usize,
-    line_delta: usize,
-) -> usize {
-    if line_delta == 0 {
-        return directive_line;
-    }
-    if comment.kind == SourceCommentKind::Line {
-        return directive_line + 1;
-    }
-    directive_line
-        + source
-            .get(directive_start..comment.range.end)
-            .unwrap_or_default()
-            .bytes()
-            .filter(|byte| *byte == b'\n')
-            .count()
-        + 1
-}
-
 impl LintOptions {
     pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
         self.config.as_deref()
@@ -461,28 +286,40 @@ impl LintOptions {
 }
 
 #[cfg(test)]
-fn parse_suppressions(source: &str, filename: &str) -> (Vec<Suppression>, Vec<SourceDiagnostic>) {
+fn apply_suppressions(
+    source: &str,
+    filename: &str,
+    diagnostics: Vec<SourceDiagnostic>,
+    comments: &[palamedes::SourceComment],
+) -> (Vec<SourceDiagnostic>, usize) {
+    let (suppressions, suppression_diagnostics) =
+        palamedes::parse_lint_suppressions_from_comments(source, filename, comments);
+    let result = palamedes::apply_lint_suppressions(
+        filename,
+        diagnostics,
+        &suppressions,
+        &suppression_diagnostics,
+    );
+    (result.diagnostics, result.suppressed)
+}
+
+#[cfg(test)]
+fn parse_suppressions_from_comments(
+    source: &str,
+    filename: &str,
+    comments: &[palamedes::SourceComment],
+) -> (Vec<palamedes::LintSuppression>, Vec<SourceDiagnostic>) {
+    palamedes::parse_lint_suppressions_from_comments(source, filename, comments)
+}
+
+#[cfg(test)]
+fn parse_suppressions(
+    source: &str,
+    filename: &str,
+) -> (Vec<palamedes::LintSuppression>, Vec<SourceDiagnostic>) {
     let analysis = palamedes::analyze_source(source, filename)
         .expect("suppression fixture should be valid authored source");
     parse_suppressions_from_comments(source, filename, &analysis.comments)
-}
-
-fn suppression_diagnostic(
-    filename: &str,
-    primary: SourceRange,
-    code: &str,
-    message: &str,
-    help: &str,
-) -> SourceDiagnostic {
-    SourceDiagnostic {
-        code: code.to_owned(),
-        severity: SourceDiagnosticSeverity::Warning,
-        file: filename.to_owned(),
-        primary,
-        message: message.to_owned(),
-        help: help.to_owned(),
-        related: None,
-    }
 }
 
 #[cfg(test)]
@@ -949,6 +786,172 @@ function View({ status }) { return <p>{t`${status}`}</p>; }
     }
 
     #[test]
+    fn warm_lint_reuses_extraction_only_and_suppressed_cache_entries() {
+        let app = temp_dir("source-lint-warm-cache");
+        fs::create_dir_all(app.join("src")).expect("create source dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/app
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let plain = app.join("src/plain.ts");
+        let suppressed = app.join("src/suppressed.tsx");
+        fs::write(&plain, "// ordinary comment\nexport const answer = 42;\n").expect("write plain");
+        fs::write(
+            &suppressed,
+            r#"import { t } from "@palamedes/core/macro";
+export function View({ status }: { status: string }) {
+  // palamedes-lint-disable-next-line pmds/no-placeholder-only-message
+  return <p>{t`${status}`}</p>;
+}
+"#,
+        )
+        .expect("write suppressed");
+        let aged = std::time::SystemTime::now() - std::time::Duration::from_secs(10);
+        for path in [&plain, &suppressed] {
+            fs::File::options()
+                .write(true)
+                .open(path)
+                .expect("open")
+                .set_modified(aged)
+                .expect("age");
+        }
+
+        let context = Context::with_cwd(&app);
+        // Seed the shared cache via extraction (creating ExtractionOnly for plain.ts
+        // and Complete with cached suppressions for suppressed.tsx).
+        let config = context.load_config(None).expect("load config");
+        let mut cache = crate::commands::extract::cache::load_extract_cache(&config, false);
+        palamedes::extract_catalog_messages_cached(
+            palamedes::ExtractCatalogMessagesRequest {
+                root_dir: config.source_reference_root.to_string_lossy().into_owned(),
+                files: vec![
+                    plain.to_string_lossy().into_owned(),
+                    suppressed.to_string_lossy().into_owned(),
+                ],
+                max_threads: Some(1),
+            },
+            config.analysis_options(),
+            &mut cache,
+        )
+        .expect("seed extract cache");
+        crate::commands::extract::cache::persist_extract_cache(&config, &mut cache);
+
+        let warm = LintOptions {
+            files: Vec::new(),
+            config: None,
+            json: true,
+            fail_on: LintFailOn::Error,
+            threads: Some(1),
+            no_cache: false,
+        }
+        .run(&context)
+        .expect("warm lint");
+        let cold = LintOptions {
+            files: Vec::new(),
+            config: None,
+            json: true,
+            fail_on: LintFailOn::Error,
+            threads: Some(1),
+            no_cache: true,
+        }
+        .run(&context)
+        .expect("cold lint");
+
+        assert_eq!(warm.summary.files, 2);
+        assert_eq!(warm.summary.suppressed, 1);
+        assert_eq!(
+            serde_json::to_vec(&warm).expect("warm json"),
+            serde_json::to_vec(&cold).expect("cold json")
+        );
+        fs::remove_dir_all(app).expect("cleanup");
+    }
+
+    #[test]
+    fn cached_and_uncached_lint_agree_on_syntax_broken_marker_free_and_marked_files() {
+        let app = std::env::temp_dir().join(format!(
+            "palamedes-lint-marker-parity-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        fs::create_dir_all(app.join("src")).expect("create src");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\nextract-cache: true\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        let broken_plain = app.join("src/broken-plain.ts");
+        let broken_marked = app.join("src/broken-marked.ts");
+        fs::write(&broken_plain, "export const x = {{{;\n").expect("write broken plain");
+        fs::write(
+            &broken_marked,
+            "import { t } from \"@palamedes/core/macro\";\nexport const y = {{{;\n",
+        )
+        .expect("write broken marked");
+        let aged = std::time::SystemTime::now() - std::time::Duration::from_secs(10);
+        for path in [&broken_plain, &broken_marked] {
+            fs::File::options()
+                .write(true)
+                .open(path)
+                .expect("open")
+                .set_modified(aged)
+                .expect("age");
+        }
+
+        let context = Context::with_cwd(&app);
+        let config = context.load_config(None).expect("load config");
+        let mut cache = crate::commands::extract::cache::load_extract_cache(&config, false);
+        let _ = palamedes::extract_catalog_messages_cached(
+            palamedes::ExtractCatalogMessagesRequest {
+                root_dir: config.source_reference_root.to_string_lossy().into_owned(),
+                files: vec![broken_plain.to_string_lossy().into_owned()],
+                max_threads: Some(1),
+            },
+            config.analysis_options(),
+            &mut cache,
+        )
+        .expect("seed extract cache for plain file");
+        crate::commands::extract::cache::persist_extract_cache(&config, &mut cache);
+
+        let cached = LintOptions {
+            files: Vec::new(),
+            config: None,
+            json: true,
+            fail_on: LintFailOn::Error,
+            threads: Some(1),
+            no_cache: false,
+        }
+        .run(&context)
+        .expect("cached lint");
+        let uncached = LintOptions {
+            files: Vec::new(),
+            config: None,
+            json: true,
+            fail_on: LintFailOn::Error,
+            threads: Some(1),
+            no_cache: true,
+        }
+        .run(&context)
+        .expect("uncached lint");
+
+        assert_eq!(cached.failed_files.len(), 1);
+        assert!(cached.failed_files[0].file.ends_with("broken-marked.ts"));
+        assert_eq!(
+            serde_json::to_vec(&cached).expect("cached json"),
+            serde_json::to_vec(&uncached).expect("uncached json")
+        );
+        fs::remove_dir_all(app).expect("cleanup");
+    }
+
+    #[test]
     fn warning_threshold_fails_after_building_the_result() {
         let mut result = super::LintResult {
             diagnostics: Vec::new(),
@@ -1011,11 +1014,5 @@ function View({ status }) { return <p>{t`${status}`}</p>; }
             super::parse_suppressions_from_comments(source, "app.ts", &corrupt_comments);
         assert!(suppressions.is_empty());
         assert!(diagnostics.is_empty());
-
-        // Direct helpers also remain panic-free on invalid offsets.
-        let range = super::source_range(source, cafe_mid_char, 4);
-        assert_eq!(range.line, 1);
-        let line = super::suppression_line(source, &corrupt_comments[0], 3, 1, 1);
-        assert_eq!(line, 2);
     }
 }
