@@ -3349,6 +3349,38 @@ export function f() {
     );
     assert!(!transformed.code.contains('\0'));
 
+    // Valid: decoded NUL-sentinel text in lowered Trans children with includeSourceMetadata: true
+    // must never collide with internal Trans rebinding placeholders.
+    let decoded_nul_sentinel = "import { Trans as MacroTrans } from \"@palamedes/remix/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nexport const el = <MacroTrans><Button title={render(MacroTrans, { children: \"\\u0000__palamedesTransSlot0__\\u0000\" })} /></MacroTrans>;\n";
+    let transformed = transform_macros_raw(
+        decoded_nul_sentinel,
+        "decoded-nul-sentinel.tsx",
+        Some(NativeTransformOptions {
+            include_source_metadata: Some(true),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("decoded sentinel in lowered Trans message metadata must not break rebinding");
+    assert!(
+        transformed.code.contains("title={render(Trans, { id:"),
+        "lowered Trans callee must be rebound:\n{}",
+        transformed.code
+    );
+    assert!(
+        transformed
+            .code
+            .contains("message: \"\0__palamedesTransSlot0__\0\""),
+        "message metadata must stay intact:\n{}",
+        transformed.code
+    );
+    let parsed = Parser::new(&allocator, &transformed.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "decoded sentinel output must be valid TSX: {:?}\n{}",
+        parsed.diagnostics,
+        transformed.code
+    );
+
     let custom_getter_collision = r#"import { Trans as ReactTrans } from "@palamedes/react/macro";
 import { Trans as RemixTrans } from "@palamedes/remix/macro";
 import { t } from "@palamedes/core/macro";

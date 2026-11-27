@@ -46,6 +46,13 @@ struct TransReplacement {
     reference_span: (u32, u32),
     replacement_index: usize,
     placeholder: String,
+    style: TransReplacementStyle,
+}
+
+#[derive(Clone, Copy)]
+enum TransReplacementStyle {
+    Identifier,
+    Jsx,
 }
 
 impl<'a> TransformVisitor<'a> {
@@ -74,12 +81,12 @@ impl<'a> TransformVisitor<'a> {
         }
     }
 
-    fn next_trans_placeholder(&mut self) -> String {
+    fn next_trans_placeholder(&mut self, text: &str) -> String {
         loop {
             let id = self.next_trans_placeholder;
             self.next_trans_placeholder += 1;
             let candidate = format!("\0__palamedesTransSlot{id}__\0");
-            if !self.source.contains(&candidate) {
+            if !self.source.contains(&candidate) && !text.contains(&candidate) {
                 return candidate;
             }
         }
@@ -199,12 +206,22 @@ impl<'a> TransformVisitor<'a> {
                 reserved.insert("Trans".to_string());
                 "Trans".to_string()
             };
+            let (needle, rendered) = match replacement.style {
+                TransReplacementStyle::Jsx => (
+                    format!("<{} id=", replacement.placeholder),
+                    format!("<{local_name} id="),
+                ),
+                TransReplacementStyle::Identifier => (
+                    format!("({}, {{ id:", replacement.placeholder),
+                    format!("({local_name}, {{ id:"),
+                ),
+            };
             if let Some(target) = self.replacements.get_mut(replacement_index)
-                && let Some(pos) = target.text.rfind(&replacement.placeholder)
+                && let Some(pos) = target.text.rfind(&needle)
             {
                 target
                     .text
-                    .replace_range(pos..pos + replacement.placeholder.len(), &local_name);
+                    .replace_range(pos..pos + needle.len(), &rendered);
             }
             if local_name == "Trans" && reuses_trans_import {
                 self.reused_trans_imports.insert(module.clone());
@@ -355,8 +372,8 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 let trans_placeholder = if macro_info.imported_name == "Trans"
                     && macro_info.source.strip_suffix("/macro").is_some()
                 {
-                    let placeholder = self.next_trans_placeholder();
-                    text = text.replacen("<Trans ", &format!("<{placeholder} "), 1);
+                    let placeholder = self.next_trans_placeholder(&text);
+                    text = text.replacen("<Trans id=", &format!("<{placeholder} id="), 1);
                     Some(placeholder)
                 } else {
                     None
@@ -402,6 +419,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                                 it.opening_element.name.span().end,
                             ),
                             placeholder,
+                            style: TransReplacementStyle::Jsx,
                         });
                     }
                 } else {
@@ -718,8 +736,12 @@ impl TransformVisitor<'_> {
                 let trans_placeholder = if macro_info.imported_name == "Trans"
                     && macro_info.source.strip_suffix("/macro").is_some()
                 {
-                    let placeholder = self.next_trans_placeholder();
-                    text = text.replacen("__palamedesTrans", &placeholder, 1);
+                    let placeholder = self.next_trans_placeholder(&text);
+                    text = text.replacen(
+                        "(__palamedesTrans, { id:",
+                        &format!("({placeholder}, {{ id:"),
+                        1,
+                    );
                     Some(placeholder)
                 } else {
                     None
@@ -754,6 +776,7 @@ impl TransformVisitor<'_> {
                             reference_span,
                             replacement_index: self.replacements.len() - 1,
                             placeholder,
+                            style: TransReplacementStyle::Identifier,
                         });
                     }
                 } else {
