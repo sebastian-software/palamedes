@@ -3039,7 +3039,7 @@ describe("workflow contracts", () => {
     }
   });
 
-  it("evaluates workflow_dispatch inputs, event guards, SBOM attestations, and BuildKit/QEMU actions", async () => {
+  it("evaluates workflow_dispatch inputs, default assignments, and SBOM attestations", async () => {
     const digest = `sha256:${"a".repeat(64)}`;
     // Unresolved `working-directory` stays unknown instead of falling back to
     // the repo root; non-dispatch triggers (`schedule` + `workflow_dispatch`)
@@ -3194,6 +3194,13 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r37Fixture, { recursive: true, force: true });
     }
+  });
+
+  it("validates QEMU, Buildx appended nodes, and checkout boundary isolation", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const seventeenChoices = Array.from({ length: 17 }, (_, idx) => `          - opt-${idx}`).join(
+      "\n",
+    );
     // `docker/setup-qemu-action` requires a digest-pinned image; checkout +
     // workflow-level `env` choices unused by container steps do not explode;
     // Podman `--sbom` presets pair with `--sbom-scanner-image` instead of
@@ -3350,6 +3357,10 @@ describe("workflow contracts", () => {
       "<memory>:25: docker/setup-buildx-action appended node uses unpinned default BuildKit image (pin driver-opts image=...@sha256:...)",
       "<memory>:27: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
     ]);
+  });
+
+  it("validates dynamic registry prefixes and BuildKit syntax directives", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Shell image pulls/runs with dynamic registry prefixes still catch literal
     // unpinned tags while allowing opaque local image IDs and dynamic tags; and
     // BuildKit `DetectSyntax` rules honor shebangs, `// syntax=`, and JSON syntax.
@@ -3441,6 +3452,10 @@ describe("workflow contracts", () => {
       "<memory>:14: $REGISTRY/tools:1.0 is not pinned to a sha256 digest",
       "<memory>:14: $REGISTRY/syft:latest is not pinned to a sha256 digest",
     ]);
+  });
+
+  it("applies event guards and reusable workflow event inheritance", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Event guards (`if: github.event_name == 'workflow_dispatch'`) prevent
     // push/schedule empty-input contexts from flagging dispatch-only jobs and
     // steps whose dispatch choices are pinned, while still catching unpinned
@@ -3546,6 +3561,10 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r43Fixture, { recursive: true, force: true });
     }
+  });
+
+  it("validates container option image mounts and conditional GITHUB_ENV/GITHUB_OUTPUT writes", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Job/service `container.options` image mounts, literal `GITHUB_OUTPUT`
     // step outputs (while keeping runtime-derived image IDs dynamic), and
     // omitted optional `workflow_dispatch` string inputs are checked.
@@ -3674,6 +3693,10 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r46Fixture, { recursive: true, force: true });
     }
+  });
+
+  it("evaluates Actions fallback, boolean precedence, and format expressions", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Literal fallback values in Actions expressions (`${{ inputs.image || 'node:24' }}`,
     // `${{ cond && 'a' || 'b' }}`), upstream job outputs (`needs.<id>.outputs.*`),
     // and always-true step guards (`if: github.event_name == 'push'` on a push-only
@@ -3956,6 +3979,10 @@ describe("workflow contracts", () => {
     ).toContain(
       "<memory>:26: run script env expression exceeds expansion limit and cannot be verified exhaustively",
     );
+  });
+
+  it("resolves matrix fallbacks, typed scalars, shared aliases, and deep helper recursion", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Matrix properties inside `${{ matrix.image || '...' }}` resolve per row
     // before fallback selection; alternative JSON exclusion lists and partially
     // empty JSON matrix outputs keep valid rows separate; and shell continued
@@ -4197,6 +4224,10 @@ describe("workflow contracts", () => {
       "<memory>:144: shell function call f8 exceeds maximum nesting depth (8) and cannot be verified",
       "<memory>:145: redis:7 is not pinned to a sha256 digest",
     ]);
+  });
+
+  it("isolates reusable workflow caller inputs and step env scoping", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Reusable workflow receives caller's `github.event.inputs.*` independently
     // from its own `workflow_call` `inputs.*`, and false substituted boolean
     // guards skip disabled branches cleanly.
@@ -4332,6 +4363,10 @@ describe("workflow contracts", () => {
       "<memory>:176: nginx:1.27 is not pinned to a sha256 digest",
       "<memory>:177: redis:7 is not pinned to a sha256 digest",
     ]);
+  });
+
+  it("tracks uncalled helpers, always/failure cleanup steps, and Bash scalar appends", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Uncalled shell helpers do not pollute later steps' `GITHUB_ENV` /
     // `GITHUB_OUTPUT`, object-valued matrix entries satisfy `!= null`, OR
     // runner guards prune non-matching rows, and unary `!` binds tighter than
@@ -4549,6 +4584,10 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r59Fixture, { recursive: true, force: true });
     }
+  });
+
+  it("handles Dockerfile backslash quoting, Bash arrays, helper args, and shift", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Dockerfile lines ending in an escaped backslash (`\\`) are not treated
     // as continuations, quoted `FROM "${BASE}"` honors Dockerfile quoting, and
     // numeric heredoc delimiters (`COPY <<123`) keep payload lines out of
@@ -4697,6 +4736,10 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:13: alpine:3.20 is not pinned to a sha256 digest"]);
+  });
+
+  it("propagates grouped redirections and validates builtin BuildKit syntax", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Grouped redirections (`{ ...; } >> "$GITHUB_ENV"` and
     // `( ... ) >> "$GITHUB_OUTPUT"`) propagate to inner echo/printf commands,
     // `BUILDKIT_SYNTAX=builtin` / `# syntax=builtin` are accepted as built-in
@@ -4734,6 +4777,10 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:20: alpine:3.20 is not pinned to a sha256 digest"]);
+  });
+
+  it("inspects non-shell run steps, heredocs, loop fixed points, and Buildx build-args", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Non-shell `shell: python` steps fail closed when invoking container CLIs
     // (while benign Python steps pass), loop-carried mutations across
     // iterations are caught, multiline `GITHUB_ENV`/`GITHUB_OUTPUT` writes
@@ -4892,6 +4939,10 @@ describe("workflow contracts", () => {
       "<memory>:18: container tool invocation in non-shell run step cannot be verified statically",
       "<memory>:23: container tool invocation in non-shell run step cannot be verified statically",
     ]);
+  });
+
+  it("validates multiline Buildx driver-opts, nested sh -c args, and composite event inputs", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Multiline env expressions in `setup-buildx-action` `driver-opts` split
     // after expansion before extracting `image=`, and non-shell exec detection
     // inspects the actual invoked command rather than unrelated print strings.
@@ -5034,6 +5085,10 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r70Fixture, { recursive: true, force: true });
     }
+  });
+
+  it("resolves dynamic container CLIs, custom shell templates, aliased process bindings, and SDK operations", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Variable-selected container CLIs (`"$ENGINE" pull ...`) resolve before
     // dispatching to the container checker, and SDK imports/calls inside quoted
     // Python/Node string literals (`print("Example: import docker")`) do not
@@ -5160,6 +5215,57 @@ describe("workflow contracts", () => {
       "<memory>:21: container tool invocation in non-shell run step cannot be verified statically",
       "<memory>:30: container tool invocation in non-shell run step cannot be verified statically",
     ]);
+    // Language-specific SDK tracking distinguishes bare imports / metadata reads
+    // and unrelated JS modules (`import docker from "./metadata.mjs"`) from
+    // actual container/image operations, and canonical Docker alias
+    // normalization treats `docker start`/`restart`/`rename`/`attach` identically
+    // to `docker container <action>`.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r74:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - shell: python",
+          "        run: |",
+          "          import docker",
+          "          print(docker.__version__)",
+          "          client = docker.from_env()",
+          "          print(client.version())",
+          "      - shell: node {0}",
+          "        run: |",
+          '          import docker from "./metadata.mjs";',
+          "          console.log(docker.version);",
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["docker", "start", "examples-smoke"], check=True)',
+          '          subprocess.run(["docker", "container", "start", "examples-smoke"], check=True)',
+          '          subprocess.run(["docker", "restart", "examples-smoke"], check=True)',
+          '          subprocess.run(["docker", "rename", "old-name", "new-name"], check=True)',
+          '          subprocess.run(["docker", "attach", "examples-smoke"], check=True)',
+          "      - shell: node {0}",
+          "        run: |",
+          '          import Docker from "dockerode";',
+          "          const d = new Docker();",
+          '          await d.pull("alpine:3.20");',
+          "      - shell: python",
+          "        run: |",
+          "          from python_on_whales import docker as wh",
+          '          wh.run("busybox:1.36")',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:26: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:31: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
+  });
+
+  it("enforces case-insensitive schema keys, PowerShell continuations, and matrix expansion limits", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

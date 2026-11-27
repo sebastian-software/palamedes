@@ -657,6 +657,46 @@ function getMapField(mapNode, key) {
   return null;
 }
 
+function classifyNonShellLanguage(executableName) {
+  const norm = normalizeExecutableName(executableName ?? "");
+  if (norm === "python" || norm === "python3" || norm === "py") {
+    return "python";
+  }
+  if (
+    norm === "node" ||
+    norm === "nodejs" ||
+    norm === "deno" ||
+    norm === "bun" ||
+    norm === "tsx" ||
+    norm === "ts-node"
+  ) {
+    return "js";
+  }
+  if (norm === "ruby") {
+    return "ruby";
+  }
+  if (norm === "perl") {
+    return "perl";
+  }
+  if (norm === "php") {
+    return "php";
+  }
+  return "unknown";
+}
+
+function extractLeadingNonShellExecutable(tokens) {
+  let cursor = 0;
+  while (cursor < tokens.length) {
+    const token = tokens[cursor];
+    if (SHELL_COMMAND_PREFIXES.has(token) || ENV_PREFIX_ASSIGNMENT_PATTERN.test(token)) {
+      cursor += 1;
+      continue;
+    }
+    break;
+  }
+  return tokens[cursor] ?? "";
+}
+
 function normalizeShellMode(shellValue) {
   if (!shellValue) {
     return "posix";
@@ -716,7 +756,7 @@ function normalizeShellMode(shellValue) {
   }
   const execToken = shellTokens[idx];
   if (!execToken) {
-    return "unsupported";
+    return "unsupported:unknown";
   }
   const norm = normalizeExecutableName(execToken);
   if (norm === "pwsh" || norm === "powershell") {
@@ -735,7 +775,7 @@ function normalizeShellMode(shellValue) {
   ) {
     return "posix";
   }
-  return "unsupported";
+  return `unsupported:${classifyNonShellLanguage(execToken)}`;
 }
 
 function isWindowsRunnerLabel(label) {
@@ -2915,6 +2955,7 @@ function inspectNonShellScript(
   problems,
   emittedGithubEnv = null,
   emittedGithubOutput = null,
+  language = "unknown",
 ) {
   // Strip line/block comments outside quoted strings into `codeOnly`, and build
   // a parallel same-length `codeWithoutStrings` where string literal interiors
@@ -3009,29 +3050,8 @@ function inspectNonShellScript(
   ]);
   const CONTAINER_SHELL_CMD_PATTERN =
     /(?:^|[;&|(\s`'"])(?:(?:[A-Za-z]:)?(?:[\\/][\w.@-]+)*[\\/])?(?:docker|podman|buildah|docker-compose|podman-compose)(?:\.exe)?(?=$|[\s;&|)'"`])/iu;
-  let hasContainerSdkImport =
-    /\b(?:import\s+(?:docker|podman|python_on_whales)\b|from\s+(?:docker|podman|python_on_whales)\b)/u.test(
-      codeWithoutStrings,
-    );
-  if (!hasContainerSdkImport) {
-    for (const reqMatch of codeWithoutStrings.matchAll(/\brequire\s*\(/gu)) {
-      const openIdx = reqMatch.index + reqMatch[0].length - 1;
-      const argSlice = codeOnly.slice(openIdx + 1, openIdx + 40);
-      if (/^\s*['"](?:dockerode|podman)['"]\s*\)/u.test(argSlice)) {
-        hasContainerSdkImport = true;
-        break;
-      }
-    }
-  }
-  if (!hasContainerSdkImport) {
-    for (const fromMatch of codeWithoutStrings.matchAll(/\bfrom\s+(?=['"])/gu)) {
-      const afterFrom = codeOnly.slice(fromMatch.index + fromMatch[0].length, fromMatch.index + 40);
-      if (/^['"](?:dockerode|podman)['"]/u.test(afterFrom)) {
-        hasContainerSdkImport = true;
-        break;
-      }
-    }
-  }
+  const allowPythonSyntax = language === "python" || language === "unknown";
+  const allowJsSyntax = language === "js" || language === "unknown";
 
   const extractBalancedSlice = (src, openIndex, openChar, closeChar) => {
     let depth = 0;
@@ -3222,54 +3242,58 @@ function inspectNonShellScript(
     "--debug",
   ]);
   const IMMEDIATE_HELP_OR_VERSION_FLAGS = new Set(["-v", "--version", "-h", "--help"]);
-  const DOCKER_IMAGE_FREE_SUBCOMMANDS = new Set([
+  // Canonical mapping from Docker/Podman top-level shortcuts to their
+  // management-command equivalents so `docker start foo` and
+  // `docker container start foo` are always classified identically.
+  const DOCKER_TOP_LEVEL_ALIASES = new Map([
+    ["attach", ["container", "attach"]],
+    ["commit", ["container", "commit"]],
+    ["cp", ["container", "cp"]],
+    ["create", ["container", "create"]],
+    ["diff", ["container", "diff"]],
+    ["exec", ["container", "exec"]],
+    ["export", ["container", "export"]],
+    ["kill", ["container", "kill"]],
+    ["logs", ["container", "logs"]],
+    ["pause", ["container", "pause"]],
+    ["port", ["container", "port"]],
+    ["ps", ["container", "ls"]],
+    ["rename", ["container", "rename"]],
+    ["restart", ["container", "restart"]],
+    ["rm", ["container", "rm"]],
+    ["run", ["container", "run"]],
+    ["start", ["container", "start"]],
+    ["stats", ["container", "stats"]],
+    ["stop", ["container", "stop"]],
+    ["top", ["container", "top"]],
+    ["unpause", ["container", "unpause"]],
+    ["update", ["container", "update"]],
+    ["wait", ["container", "wait"]],
+    ["build", ["image", "build"]],
+    ["history", ["image", "history"]],
+    ["images", ["image", "ls"]],
+    ["import", ["image", "import"]],
+    ["load", ["image", "load"]],
+    ["pull", ["image", "pull"]],
+    ["push", ["image", "push"]],
+    ["rmi", ["image", "rm"]],
+    ["save", ["image", "save"]],
+    ["tag", ["image", "tag"]],
+    ["events", ["system", "events"]],
+    ["info", ["system", "info"]],
+  ]);
+  const DOCKER_STANDALONE_IMAGE_FREE = new Set([
     "version",
-    "info",
-    "ps",
-    "images",
     "inspect",
-    "logs",
-    "stats",
-    "top",
-    "port",
-    "diff",
-    "history",
-    "events",
     "login",
     "logout",
-    "tag",
-    "push",
-    "rm",
-    "rmi",
-    "stop",
-    "kill",
-    "pause",
-    "unpause",
-    "wait",
-    "exec",
-    "cp",
-    "save",
     "search",
     "help",
   ]);
   const DOCKER_MANAGEMENT_IMAGE_FREE = {
-    image: new Set([
-      "ls",
-      "list",
-      "inspect",
-      "history",
-      "rm",
-      "remove",
-      "prune",
-      "tag",
-      "push",
-      "save",
-      "help",
-    ]),
+    image: new Set(["ls", "inspect", "history", "rm", "prune", "tag", "push", "save", "help"]),
     container: new Set([
       "ls",
-      "list",
-      "ps",
       "inspect",
       "logs",
       "top",
@@ -3277,7 +3301,6 @@ function inspectNonShellScript(
       "port",
       "diff",
       "rm",
-      "remove",
       "prune",
       "stop",
       "kill",
@@ -3286,33 +3309,23 @@ function inspectNonShellScript(
       "wait",
       "exec",
       "cp",
+      "commit",
+      "export",
       "rename",
       "restart",
       "start",
       "attach",
+      "update",
       "help",
     ]),
-    network: new Set([
-      "ls",
-      "list",
-      "inspect",
-      "rm",
-      "remove",
-      "prune",
-      "create",
-      "connect",
-      "disconnect",
-      "help",
-    ]),
-    volume: new Set(["ls", "list", "inspect", "rm", "remove", "prune", "create", "help"]),
+    network: new Set(["ls", "inspect", "rm", "prune", "create", "connect", "disconnect", "help"]),
+    volume: new Set(["ls", "inspect", "rm", "prune", "create", "help"]),
     context: new Set([
       "ls",
-      "list",
       "inspect",
       "show",
       "use",
       "rm",
-      "remove",
       "create",
       "update",
       "export",
@@ -3343,19 +3356,17 @@ function inspectNonShellScript(
       "wait",
       "help",
     ]),
-    service: new Set([
-      "ls",
-      "list",
-      "ps",
-      "inspect",
-      "logs",
-      "rm",
-      "remove",
-      "scale",
-      "rollback",
-      "help",
-    ]),
-    stack: new Set(["ls", "list", "ps", "services", "rm", "remove", "down", "help"]),
+    service: new Set(["ls", "ps", "inspect", "logs", "rm", "scale", "rollback", "help"]),
+    stack: new Set(["ls", "ps", "services", "rm", "down", "help"]),
+  };
+  const canonicalizeManagementAction = (group, action) => {
+    if (action === "list" || (group === "container" && action === "ps")) {
+      return "ls";
+    }
+    if (action === "remove") {
+      return "rm";
+    }
+    return action;
   };
   const BUILDAH_IMAGE_FREE_SUBCOMMANDS = new Set([
     "version",
@@ -3412,8 +3423,7 @@ function inspectNonShellScript(
     return next === "--help" || (allowShortH && next === "-h");
   };
 
-  const isKnownImageFreeContainerInvocation = (cliName, rawArgs) => {
-    const normCli = normalizeExecutableName(cliName.trim());
+  const normalizeDockerOperation = (normCli, rawArgs) => {
     if (normCli === "docker-compose" || normCli === "podman-compose") {
       const scan = skipKnownFlags(
         rawArgs,
@@ -3423,17 +3433,87 @@ function inspectNonShellScript(
         IMMEDIATE_HELP_OR_VERSION_FLAGS,
       );
       if (scan.kind === "help_or_version") {
-        return true;
+        return { kind: "help_or_version" };
       }
       if (scan.kind !== "subcommand") {
-        return false;
+        return { kind: "unknown" };
       }
-      const sub = rawArgs[scan.idx];
-      if (DOCKER_MANAGEMENT_IMAGE_FREE.compose.has(sub)) {
-        return true;
-      }
-      return isImmediateSubcommandHelp(rawArgs, scan.idx, true);
+      return {
+        kind: "operation",
+        group: "compose",
+        action: canonicalizeManagementAction("compose", rawArgs[scan.idx]),
+        actionIdx: scan.idx,
+      };
     }
+    const globalValueFlags =
+      normCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
+    const globalBoolFlags =
+      normCli === "podman" ? PODMAN_GLOBAL_BOOL_FLAGS : DOCKER_GLOBAL_BOOL_FLAGS;
+    const scan = skipKnownFlags(
+      rawArgs,
+      0,
+      globalValueFlags,
+      globalBoolFlags,
+      IMMEDIATE_HELP_OR_VERSION_FLAGS,
+    );
+    if (scan.kind === "help_or_version") {
+      return { kind: "help_or_version" };
+    }
+    if (scan.kind !== "subcommand") {
+      return { kind: "unknown" };
+    }
+    const sub = rawArgs[scan.idx];
+    const aliased = DOCKER_TOP_LEVEL_ALIASES.get(sub);
+    if (aliased) {
+      return {
+        kind: "operation",
+        group: aliased[0],
+        action: aliased[1],
+        actionIdx: scan.idx,
+      };
+    }
+    if (Object.hasOwn(DOCKER_MANAGEMENT_IMAGE_FREE, sub)) {
+      const subValueFlags =
+        sub === "buildx"
+          ? DOCKER_BUILDX_GLOBAL_VALUE_FLAGS
+          : sub === "compose"
+            ? COMPOSE_GLOBAL_VALUE_FLAGS
+            : new Set();
+      const subBoolFlags =
+        sub === "compose"
+          ? COMPOSE_GLOBAL_BOOL_FLAGS
+          : sub === "buildx"
+            ? DOCKER_GLOBAL_BOOL_FLAGS
+            : new Set();
+      const subHelpFlags =
+        sub === "compose" || sub === "buildx"
+          ? IMMEDIATE_HELP_OR_VERSION_FLAGS
+          : new Set(["-h", "--help"]);
+      const nested = skipKnownFlags(
+        rawArgs,
+        scan.idx + 1,
+        subValueFlags,
+        subBoolFlags,
+        subHelpFlags,
+      );
+      if (nested.kind === "help_or_version") {
+        return { kind: "help_or_version" };
+      }
+      if (nested.kind !== "subcommand") {
+        return { kind: "unknown" };
+      }
+      return {
+        kind: "operation",
+        group: sub,
+        action: canonicalizeManagementAction(sub, rawArgs[nested.idx]),
+        actionIdx: nested.idx,
+      };
+    }
+    return { kind: "operation", group: null, action: sub, actionIdx: scan.idx };
+  };
+
+  const isKnownImageFreeContainerInvocation = (cliName, rawArgs) => {
+    const normCli = normalizeExecutableName(cliName.trim());
     if (normCli === "buildah") {
       const scan = skipKnownFlags(
         rawArgs,
@@ -3454,70 +3534,33 @@ function inspectNonShellScript(
       }
       return isImmediateSubcommandHelp(rawArgs, scan.idx, true);
     }
-    if (normCli === "docker" || normCli === "podman") {
-      const globalValueFlags =
-        normCli === "podman" ? PODMAN_GLOBAL_VALUE_FLAGS : DOCKER_GLOBAL_VALUE_FLAGS;
-      const globalBoolFlags =
-        normCli === "podman" ? PODMAN_GLOBAL_BOOL_FLAGS : DOCKER_GLOBAL_BOOL_FLAGS;
-      const scan = skipKnownFlags(
-        rawArgs,
-        0,
-        globalValueFlags,
-        globalBoolFlags,
-        IMMEDIATE_HELP_OR_VERSION_FLAGS,
-      );
-      if (scan.kind === "help_or_version") {
+    if (
+      normCli === "docker" ||
+      normCli === "podman" ||
+      normCli === "docker-compose" ||
+      normCli === "podman-compose"
+    ) {
+      const normalized = normalizeDockerOperation(normCli, rawArgs);
+      if (normalized.kind === "help_or_version") {
         return true;
       }
-      if (scan.kind !== "subcommand") {
+      if (normalized.kind !== "operation") {
         return false;
       }
-      const sub = rawArgs[scan.idx];
-      if (DOCKER_IMAGE_FREE_SUBCOMMANDS.has(sub)) {
+      if (normalized.group === null) {
+        if (DOCKER_STANDALONE_IMAGE_FREE.has(normalized.action)) {
+          return true;
+        }
+        return isImmediateSubcommandHelp(rawArgs, normalized.actionIdx, true);
+      }
+      if (DOCKER_MANAGEMENT_IMAGE_FREE[normalized.group].has(normalized.action)) {
         return true;
       }
-      if (Object.hasOwn(DOCKER_MANAGEMENT_IMAGE_FREE, sub)) {
-        const subValueFlags =
-          sub === "buildx"
-            ? DOCKER_BUILDX_GLOBAL_VALUE_FLAGS
-            : sub === "compose"
-              ? COMPOSE_GLOBAL_VALUE_FLAGS
-              : new Set();
-        const subBoolFlags =
-          sub === "compose"
-            ? COMPOSE_GLOBAL_BOOL_FLAGS
-            : sub === "buildx"
-              ? DOCKER_GLOBAL_BOOL_FLAGS
-              : new Set();
-        const subHelpFlags =
-          sub === "compose" || sub === "buildx"
-            ? IMMEDIATE_HELP_OR_VERSION_FLAGS
-            : new Set(["-h", "--help"]);
-        const nested = skipKnownFlags(
-          rawArgs,
-          scan.idx + 1,
-          subValueFlags,
-          subBoolFlags,
-          subHelpFlags,
-        );
-        if (nested.kind === "help_or_version") {
-          return true;
-        }
-        if (nested.kind !== "subcommand") {
-          return false;
-        }
-        const nestedSub = rawArgs[nested.idx];
-        if (DOCKER_MANAGEMENT_IMAGE_FREE[sub].has(nestedSub)) {
-          return true;
-        }
-        const allowShortH = !(
-          sub === "container" &&
-          (nestedSub === "run" || nestedSub === "create")
-        );
-        return isImmediateSubcommandHelp(rawArgs, nested.idx, allowShortH);
-      }
-      const allowShortH = sub !== "run" && sub !== "create";
-      return isImmediateSubcommandHelp(rawArgs, scan.idx, allowShortH);
+      const allowShortH = !(
+        normalized.group === "container" &&
+        (normalized.action === "run" || normalized.action === "create")
+      );
+      return isImmediateSubcommandHelp(rawArgs, normalized.actionIdx, allowShortH);
     }
     return false;
   };
@@ -3914,6 +3957,9 @@ function inspectNonShellScript(
   const subprocessAliases = new Set(["subprocess"]);
   const osAliases = new Set(["os"]);
   const localExecAliases = new Map();
+  const pySdkModuleAliases = new Set();
+  const sdkFactoryBindings = new Set();
+  const sdkClientVars = new Set();
   let importsChildProcess = false;
 
   const mapNodeCpMethod = (methodName) =>
@@ -3943,116 +3989,179 @@ function inspectNonShellScript(
     }
   };
 
-  for (const reqMatch of codeWithoutStrings.matchAll(
-    /(?:(?:const|let|var)\s+(?:(?<alias>[A-Za-z_$][A-Za-z0-9_$]*)|\{(?<destructured>[^}]*)\})\s*=\s*(?:await\s+)?)?\b(?:require|import)\s*\(/gu,
-  )) {
-    const openIdx = reqMatch.index + reqMatch[0].length - 1;
-    const reqArg = extractBalancedSlice(codeOnly, openIdx, "(", ")");
-    const reqLit = unquoteSimpleLiteral(reqArg);
-    if (reqLit === "child_process" || reqLit === "node:child_process") {
-      importsChildProcess = true;
-      const afterCloseIdx = openIdx + 1 + reqArg.length + 1;
-      const memberAccess = /^\s*\.\s*(?<prop>[A-Za-z_$][A-Za-z0-9_$]*)/u.exec(
-        codeWithoutStrings.slice(afterCloseIdx, afterCloseIdx + 40),
-      );
-      if (reqMatch.groups?.destructured) {
-        recordJsDestructuredBindings(reqMatch.groups.destructured, false);
-      } else if (reqMatch.groups?.alias) {
-        if (memberAccess && NODE_CP_METHODS.has(memberAccess.groups.prop)) {
-          localExecAliases.set(reqMatch.groups.alias, mapNodeCpMethod(memberAccess.groups.prop));
-        } else {
-          childProcessAliases.add(reqMatch.groups.alias);
-        }
+  const recordJsSdkDestructuredBindings = (braceBody, isEsImport) => {
+    for (const rawItem of braceBody.split(",")) {
+      const item = rawItem.trim();
+      if (!item) {
+        continue;
       }
+      const bindMatch = isEsImport
+        ? /^(?:type\s+)?(?<orig>[A-Za-z_$][A-Za-z0-9_$]*)(?:\s+as\s+(?<local>[A-Za-z_$][A-Za-z0-9_$]*))?$/u.exec(
+            item,
+          )
+        : /^(?<orig>[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*(?<local>[A-Za-z_$][A-Za-z0-9_$]*))?(?:\s*=.*)?$/u.exec(
+            item,
+          );
+      if (!bindMatch) {
+        continue;
+      }
+      sdkFactoryBindings.add(bindMatch.groups.local ?? bindMatch.groups.orig);
     }
-  }
-  for (const impMatch of codeWithoutStrings.matchAll(
-    /\bimport\s+(?:(?:\*\s+as\s+(?<ns>[A-Za-z_$][A-Za-z0-9_$]*))|(?:(?<def>[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*,\s*\{(?<defNamed>[^}]*)\})?)|(?:\{(?<named>[^}]*)\}))\s+from\s+(?=['"])/gu,
-  )) {
-    const afterFrom = codeOnly.slice(
-      impMatch.index + impMatch[0].length,
-      impMatch.index + impMatch[0].length + 40,
-    );
-    if (/^['"](?:node:)?child_process['"]/u.test(afterFrom)) {
-      importsChildProcess = true;
-      if (impMatch.groups?.ns) {
-        childProcessAliases.add(impMatch.groups.ns);
-      }
-      if (impMatch.groups?.def) {
-        childProcessAliases.add(impMatch.groups.def);
-      }
-      if (impMatch.groups?.defNamed) {
-        recordJsDestructuredBindings(impMatch.groups.defNamed, true);
-      }
-      if (impMatch.groups?.named) {
-        recordJsDestructuredBindings(impMatch.groups.named, true);
-      }
-    }
-  }
-  if (importsChildProcess) {
-    for (const rebindMatch of codeWithoutStrings.matchAll(
-      /\b(?:const|let|var)\s+(?:(?<alias>[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?<src1>[A-Za-z_$][A-Za-z0-9_$]*)\s*\.\s*(?<prop>[A-Za-z_$][A-Za-z0-9_$]*)|\{(?<destructured>[^}]*)\}\s*=\s*(?<src2>[A-Za-z_$][A-Za-z0-9_$]*))/gu,
+  };
+
+  if (allowJsSyntax) {
+    for (const reqMatch of codeWithoutStrings.matchAll(
+      /(?:(?:const|let|var)\s+(?:(?<alias>[A-Za-z_$][A-Za-z0-9_$]*)|\{(?<destructured>[^}]*)\})\s*=\s*(?:await\s+)?)?\b(?:require|import)\s*\(/gu,
     )) {
-      if (
-        rebindMatch.groups?.src1 &&
-        childProcessAliases.has(rebindMatch.groups.src1) &&
-        NODE_CP_METHODS.has(rebindMatch.groups.prop)
-      ) {
-        localExecAliases.set(rebindMatch.groups.alias, mapNodeCpMethod(rebindMatch.groups.prop));
-      } else if (rebindMatch.groups?.src2 && childProcessAliases.has(rebindMatch.groups.src2)) {
-        recordJsDestructuredBindings(rebindMatch.groups.destructured, false);
-      }
-    }
-  }
-  for (const pyImpMatch of codeWithoutStrings.matchAll(
-    /(?:^|[;\n])\s*import\s+(?<list>[^\n;]+)/gu,
-  )) {
-    for (const rawItem of pyImpMatch.groups.list.split(",")) {
-      const itemMatch =
-        /^(?<mod>subprocess|os)(?:\s+as\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*))?$/u.exec(
-          rawItem.trim(),
+      const openIdx = reqMatch.index + reqMatch[0].length - 1;
+      const reqArg = extractBalancedSlice(codeOnly, openIdx, "(", ")");
+      const reqLit = unquoteSimpleLiteral(reqArg);
+      if (reqLit === "child_process" || reqLit === "node:child_process") {
+        importsChildProcess = true;
+        const afterCloseIdx = openIdx + 1 + reqArg.length + 1;
+        const memberAccess = /^\s*\.\s*(?<prop>[A-Za-z_$][A-Za-z0-9_$]*)/u.exec(
+          codeWithoutStrings.slice(afterCloseIdx, afterCloseIdx + 40),
         );
-      if (!itemMatch?.groups?.alias) {
-        continue;
-      }
-      if (itemMatch.groups.mod === "subprocess") {
-        subprocessAliases.add(itemMatch.groups.alias);
-      } else if (itemMatch.groups.mod === "os") {
-        osAliases.add(itemMatch.groups.alias);
-      }
-    }
-  }
-  for (const pyFromMatch of codeWithoutStrings.matchAll(
-    /\bfrom\s+(?<mod>subprocess|os)\s+import\s+(?:\((?<parenList>[^)]*)\)|(?<lineList>[^\n;]+))/gu,
-  )) {
-    const mod = pyFromMatch.groups.mod;
-    const rawList = pyFromMatch.groups.parenList ?? pyFromMatch.groups.lineList ?? "";
-    for (const rawItem of rawList.split(",")) {
-      const trimmedItem = rawItem.trim();
-      if (trimmedItem === "*") {
-        if (mod === "subprocess") {
-          for (const method of PYTHON_SUBPROCESS_METHODS) {
-            localExecAliases.set(method, `subprocess.${method}`);
+        if (reqMatch.groups?.destructured) {
+          recordJsDestructuredBindings(reqMatch.groups.destructured, false);
+        } else if (reqMatch.groups?.alias) {
+          if (memberAccess && NODE_CP_METHODS.has(memberAccess.groups.prop)) {
+            localExecAliases.set(reqMatch.groups.alias, mapNodeCpMethod(memberAccess.groups.prop));
+          } else {
+            childProcessAliases.add(reqMatch.groups.alias);
           }
-        } else {
-          localExecAliases.set("system", "os.system");
-          localExecAliases.set("popen", "os.popen");
         }
+      } else if (reqLit === "dockerode" || reqLit === "podman") {
+        if (reqMatch.groups?.destructured) {
+          recordJsSdkDestructuredBindings(reqMatch.groups.destructured, false);
+        } else if (reqMatch.groups?.alias) {
+          sdkFactoryBindings.add(reqMatch.groups.alias);
+        }
+      }
+    }
+    for (const impMatch of codeWithoutStrings.matchAll(
+      /\bimport\s+(?:(?:\*\s+as\s+(?<ns>[A-Za-z_$][A-Za-z0-9_$]*))|(?:(?<def>[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*,\s*\{(?<defNamed>[^}]*)\})?)|(?:\{(?<named>[^}]*)\}))\s+from\s+(?=['"])/gu,
+    )) {
+      const afterFrom = codeOnly.slice(
+        impMatch.index + impMatch[0].length,
+        impMatch.index + impMatch[0].length + 40,
+      );
+      if (/^['"](?:node:)?child_process['"]/u.test(afterFrom)) {
+        importsChildProcess = true;
+        if (impMatch.groups?.ns) {
+          childProcessAliases.add(impMatch.groups.ns);
+        }
+        if (impMatch.groups?.def) {
+          childProcessAliases.add(impMatch.groups.def);
+        }
+        if (impMatch.groups?.defNamed) {
+          recordJsDestructuredBindings(impMatch.groups.defNamed, true);
+        }
+        if (impMatch.groups?.named) {
+          recordJsDestructuredBindings(impMatch.groups.named, true);
+        }
+      } else if (/^['"](?:dockerode|podman)['"]/u.test(afterFrom)) {
+        if (impMatch.groups?.ns) {
+          sdkFactoryBindings.add(impMatch.groups.ns);
+        }
+        if (impMatch.groups?.def) {
+          sdkFactoryBindings.add(impMatch.groups.def);
+        }
+        if (impMatch.groups?.defNamed) {
+          recordJsSdkDestructuredBindings(impMatch.groups.defNamed, true);
+        }
+        if (impMatch.groups?.named) {
+          recordJsSdkDestructuredBindings(impMatch.groups.named, true);
+        }
+      }
+    }
+    if (importsChildProcess) {
+      for (const rebindMatch of codeWithoutStrings.matchAll(
+        /\b(?:const|let|var)\s+(?:(?<alias>[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?<src1>[A-Za-z_$][A-Za-z0-9_$]*)\s*\.\s*(?<prop>[A-Za-z_$][A-Za-z0-9_$]*)|\{(?<destructured>[^}]*)\}\s*=\s*(?<src2>[A-Za-z_$][A-Za-z0-9_$]*))/gu,
+      )) {
+        if (
+          rebindMatch.groups?.src1 &&
+          childProcessAliases.has(rebindMatch.groups.src1) &&
+          NODE_CP_METHODS.has(rebindMatch.groups.prop)
+        ) {
+          localExecAliases.set(rebindMatch.groups.alias, mapNodeCpMethod(rebindMatch.groups.prop));
+        } else if (rebindMatch.groups?.src2 && childProcessAliases.has(rebindMatch.groups.src2)) {
+          recordJsDestructuredBindings(rebindMatch.groups.destructured, false);
+        }
+      }
+    }
+  }
+  if (allowPythonSyntax) {
+    for (const pyImpMatch of codeWithoutStrings.matchAll(
+      /(?:^|[;\n])\s*import\s+(?<list>[^\n;]+)/gu,
+    )) {
+      // Never misread JS ESM `import docker from "./metadata.mjs"` as Python.
+      if (/\bfrom\s+['"]/u.test(pyImpMatch.groups.list)) {
         continue;
       }
-      const itemMatch =
-        /^(?<orig>[A-Za-z_][A-Za-z0-9_]*)(?:\s+as\s+(?<local>[A-Za-z_][A-Za-z0-9_]*))?$/u.exec(
-          trimmedItem,
-        );
-      if (!itemMatch) {
-        continue;
+      for (const rawItem of pyImpMatch.groups.list.split(",")) {
+        const itemMatch =
+          /^(?<mod>subprocess|os|docker|podman|python_on_whales)(?:\s+as\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*))?$/u.exec(
+            rawItem.trim(),
+          );
+        if (!itemMatch) {
+          continue;
+        }
+        const mod = itemMatch.groups.mod;
+        const alias = itemMatch.groups.alias ?? mod;
+        if (mod === "subprocess" && itemMatch.groups.alias) {
+          subprocessAliases.add(alias);
+        } else if (mod === "os" && itemMatch.groups.alias) {
+          osAliases.add(alias);
+        } else if (mod === "docker" || mod === "podman" || mod === "python_on_whales") {
+          pySdkModuleAliases.add(alias);
+        }
       }
-      const orig = itemMatch.groups.orig;
-      const local = itemMatch.groups.local ?? orig;
-      if (mod === "subprocess" && PYTHON_SUBPROCESS_METHODS.has(orig)) {
-        localExecAliases.set(local, `subprocess.${orig}`);
-      } else if (mod === "os" && /^(?:system|popen|spawn\w*|exec\w*)$/u.test(orig)) {
-        localExecAliases.set(local, `os.${orig}`);
+    }
+    for (const pyFromMatch of codeWithoutStrings.matchAll(
+      /\bfrom\s+(?<mod>subprocess|os|docker|podman|python_on_whales)\s+import\s+(?:\((?<parenList>[^)]*)\)|(?<lineList>[^\n;]+))/gu,
+    )) {
+      const mod = pyFromMatch.groups.mod;
+      const rawList = pyFromMatch.groups.parenList ?? pyFromMatch.groups.lineList ?? "";
+      for (const rawItem of rawList.split(",")) {
+        const trimmedItem = rawItem.trim();
+        if (trimmedItem === "*") {
+          if (mod === "subprocess") {
+            for (const method of PYTHON_SUBPROCESS_METHODS) {
+              localExecAliases.set(method, `subprocess.${method}`);
+            }
+          } else if (mod === "os") {
+            localExecAliases.set("system", "os.system");
+            localExecAliases.set("popen", "os.popen");
+          } else if (mod === "python_on_whales") {
+            sdkClientVars.add("docker");
+            sdkFactoryBindings.add("DockerClient");
+          } else {
+            sdkFactoryBindings.add("from_env");
+            sdkFactoryBindings.add("DockerClient");
+            sdkFactoryBindings.add("APIClient");
+            sdkFactoryBindings.add("PodmanClient");
+          }
+          continue;
+        }
+        const itemMatch =
+          /^(?<orig>[A-Za-z_][A-Za-z0-9_]*)(?:\s+as\s+(?<local>[A-Za-z_][A-Za-z0-9_]*))?$/u.exec(
+            trimmedItem,
+          );
+        if (!itemMatch) {
+          continue;
+        }
+        const orig = itemMatch.groups.orig;
+        const local = itemMatch.groups.local ?? orig;
+        if (mod === "subprocess" && PYTHON_SUBPROCESS_METHODS.has(orig)) {
+          localExecAliases.set(local, `subprocess.${orig}`);
+        } else if (mod === "os" && /^(?:system|popen|spawn\w*|exec\w*)$/u.test(orig)) {
+          localExecAliases.set(local, `os.${orig}`);
+        } else if (mod === "python_on_whales" && orig === "docker") {
+          sdkClientVars.add(local);
+        } else if (mod === "docker" || mod === "podman" || mod === "python_on_whales") {
+          sdkFactoryBindings.add(local);
+        }
       }
     }
   }
@@ -4065,7 +4174,164 @@ function inspectNonShellScript(
     return k;
   };
 
-  let invokesContainerTool = hasContainerSdkImport;
+  const readSdkCallChain = (src, startIdx) => {
+    let idx = startIdx;
+    const calledMethods = [];
+    let sawRootCall = false;
+    let sawAnyCall = false;
+    let pendingProp = null;
+    while (idx < src.length) {
+      while (idx < src.length && /\s/u.test(src[idx])) {
+        idx += 1;
+      }
+      if (src[idx] === "(") {
+        sawAnyCall = true;
+        if (pendingProp !== null) {
+          calledMethods.push(pendingProp);
+          pendingProp = null;
+        } else if (calledMethods.length === 0) {
+          sawRootCall = true;
+        }
+        const inner = extractBalancedSlice(src, idx, "(", ")");
+        idx += inner.length + 2;
+        continue;
+      }
+      if (src[idx] === ".") {
+        idx += 1;
+        while (idx < src.length && /\s/u.test(src[idx])) {
+          idx += 1;
+        }
+        const propMatch = /^[A-Za-z_$][A-Za-z0-9_$]*/u.exec(src.slice(idx));
+        if (!propMatch) {
+          break;
+        }
+        pendingProp = propMatch[0];
+        idx += propMatch[0].length;
+        continue;
+      }
+      break;
+    }
+    return { calledMethods, sawRootCall, sawAnyCall };
+  };
+
+  const SDK_FACTORY_METHODS = new Set([
+    "from_env",
+    "DockerClient",
+    "APIClient",
+    "PodmanClient",
+    "Docker",
+    "Podman",
+  ]);
+  const SDK_IMAGE_FREE_METHODS = new Set([
+    "version",
+    "info",
+    "ping",
+    "df",
+    "events",
+    "close",
+    "list",
+    "listContainers",
+    "listImages",
+    "listNetworks",
+    "listVolumes",
+    "inspect",
+    "logs",
+    "stop",
+    "start",
+    "restart",
+    "rename",
+    "remove",
+    "rm",
+    "kill",
+    "pause",
+    "unpause",
+    "wait",
+    "stats",
+    "top",
+    "attach",
+    "tag",
+    "push",
+    "login",
+    "logout",
+    "prune",
+    "get",
+    "getContainer",
+    "getImage",
+    "getNetwork",
+    "getVolume",
+  ]);
+
+  let invokesContainerTool = false;
+  if (pySdkModuleAliases.size > 0 || sdkFactoryBindings.size > 0 || sdkClientVars.size > 0) {
+    // Track client instances assigned from SDK factories/constructors
+    // (e.g. `client = docker.from_env()`, `const d = new Docker()`).
+    for (const assignMatch of codeWithoutStrings.matchAll(
+      /(?:^|[;\n])\s*(?:(?:const|let|var)\s+)?(?<lhs>[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:(?:await|new)\s+)*(?<rhsRoot>[A-Za-z_$][A-Za-z0-9_$]*)/gu,
+    )) {
+      const rhsRoot = assignMatch.groups.rhsRoot;
+      const afterRootIdx = assignMatch.index + assignMatch[0].length;
+      if (sdkFactoryBindings.has(rhsRoot)) {
+        const chain = readSdkCallChain(codeWithoutStrings, afterRootIdx);
+        if (chain.sawRootCall && chain.calledMethods.length === 0) {
+          sdkClientVars.add(assignMatch.groups.lhs);
+        }
+      } else if (pySdkModuleAliases.has(rhsRoot)) {
+        const chain = readSdkCallChain(codeWithoutStrings, afterRootIdx);
+        if (chain.calledMethods.length === 1 && SDK_FACTORY_METHODS.has(chain.calledMethods[0])) {
+          sdkClientVars.add(assignMatch.groups.lhs);
+        } else if (!chain.sawAnyCall) {
+          const propOnly = /^\s*\.\s*(?<prop>[A-Za-z_$][A-Za-z0-9_$]*)/u.exec(
+            codeWithoutStrings.slice(afterRootIdx, afterRootIdx + 40),
+          );
+          if (propOnly && SDK_FACTORY_METHODS.has(propOnly.groups.prop)) {
+            sdkFactoryBindings.add(assignMatch.groups.lhs);
+          } else if (propOnly && propOnly.groups.prop === "docker") {
+            sdkClientVars.add(assignMatch.groups.lhs);
+          }
+        }
+      }
+    }
+
+    // Check actual SDK operations (never bare imports or metadata reads like
+    // `print(docker.__version__)`).
+    for (const identMatch of codeWithoutStrings.matchAll(
+      /\b(?<root>[A-Za-z_$][A-Za-z0-9_$]*)\b/gu,
+    )) {
+      const root = identMatch.groups.root;
+      const isPyMod = pySdkModuleAliases.has(root);
+      const isFactory = sdkFactoryBindings.has(root);
+      const isClient = sdkClientVars.has(root);
+      if (!isPyMod && !isFactory && !isClient) {
+        continue;
+      }
+      const prevNonSpaceIdx = findPrevNonSpaceIndex(codeWithoutStrings, identMatch.index - 1);
+      if (prevNonSpaceIdx >= 0 && codeWithoutStrings[prevNonSpaceIdx] === ".") {
+        continue;
+      }
+      const beforeMatch = codeWithoutStrings.slice(
+        Math.max(0, identMatch.index - 32),
+        identMatch.index,
+      );
+      if (/\b(?:import|from|as|function|def|class)\s+$/u.test(beforeMatch)) {
+        continue;
+      }
+      const chain = readSdkCallChain(codeWithoutStrings, identMatch.index + root.length);
+      if (!chain.sawAnyCall) {
+        continue;
+      }
+      let ops = chain.calledMethods;
+      if (isPyMod && ops.length > 0 && SDK_FACTORY_METHODS.has(ops[0])) {
+        ops = ops.slice(1);
+      }
+      if (ops.length === 0) {
+        continue;
+      }
+      if (!ops.every((method) => SDK_IMAGE_FREE_METHODS.has(method))) {
+        invokesContainerTool = true;
+        break;
+      }
+    }
+  }
   if (!invokesContainerTool) {
     const execCallPattern =
       /(?:(?<receiver>[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*)?(?<callee>subprocess\.(?:run|Popen|call|check_call|check_output|getoutput|getstatusoutput)|os\.(?:system|popen|spawn\w*|exec\w*)|pty\.spawn|asyncio\.create_subprocess\w*|Bun\.spawn\w*|Deno\.(?:Command|run)|Open3\.\w+|execSync|execFileSync|spawnSync|execFile|spawn|exec|system|popen|shell_exec|proc_open|passthru)\s*\(/gu;
@@ -5322,6 +5588,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
           body: bodyText,
           startLine: bodyStartLine,
           conditional: spec.conditional,
+          language: classifyNonShellLanguage(extractLeadingNonShellExecutable(spec.ownerTokens)),
         });
       } else {
         if (!spec.quoted) {
@@ -8548,7 +8815,8 @@ function inspectShellText(
     return;
   }
 
-  if (shellMode === "unsupported") {
+  if (shellMode.startsWith("unsupported")) {
+    const language = shellMode.includes(":") ? shellMode.slice("unsupported:".length) : "unknown";
     inspectNonShellScript(
       scriptText,
       startLine,
@@ -8556,6 +8824,7 @@ function inspectShellText(
       problems,
       emittedGithubEnv,
       emittedGithubOutput,
+      language,
     );
     return;
   }
@@ -9135,6 +9404,7 @@ function inspectShellText(
           problems,
           suppressSideEffects ? null : emittedGithubEnv,
           suppressSideEffects ? null : emittedGithubOutput,
+          event.language ?? "unknown",
         );
         continue;
       }
@@ -11177,8 +11447,9 @@ function inspectShellText(
       }
 
       if (NON_SHELL_SCRIPT_INTERPRETERS.has(normalizedCli)) {
+        const scriptLanguage = classifyNonShellLanguage(normalizedCli);
         const evalFlags =
-          normalizedCli === "python" || normalizedCli === "python3" || normalizedCli === "py"
+          scriptLanguage === "python"
             ? new Set(["-c"])
             : new Set(["-e", "--eval", "-p", "--print"]);
         for (let idx = cursor + 1; idx < tokens.length; idx += 1) {
@@ -11194,6 +11465,7 @@ function inspectShellText(
               problems,
               suppressSideEffects ? null : emittedGithubEnv,
               suppressSideEffects ? null : emittedGithubOutput,
+              scriptLanguage,
             );
             idx += 1;
             continue;
@@ -11206,6 +11478,7 @@ function inspectShellText(
               problems,
               suppressSideEffects ? null : emittedGithubEnv,
               suppressSideEffects ? null : emittedGithubOutput,
+              scriptLanguage,
             );
           }
         }
