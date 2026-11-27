@@ -5380,6 +5380,57 @@ describe("workflow contracts", () => {
     ]);
   });
 
+  it("validates matrix container mappings, JS regex literals, and scoped github-script exports", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const sha = "a".repeat(40);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  matrix-container-map:",
+          "    runs-on: ubuntu-latest",
+          "    strategy:",
+          "      matrix:",
+          "        container:",
+          "          - image: alpine:3.20",
+          "            options: --mount type=image,source=busybox:1.36,target=/mnt",
+          `          - image: node:24@${digest}`,
+          "    container: ${{ matrix.container }}",
+          "    steps:",
+          '      - run: echo "ok"',
+          "  js-regex-and-scoped-exports:",
+          "    runs-on: ubuntu-latest",
+          "    env:",
+          `      IMAGE: node:24@${digest}`,
+          "    steps:",
+          `      - uses: actions/github-script@${sha}`,
+          "        with:",
+          "          script: |",
+          '            core.exportVariable("BUILD_NUMBER", context.runNumber);',
+          '            console.log("GITHUB_ENV");',
+          '      - run: docker run --rm "$IMAGE" node -v',
+          `      - uses: actions/github-script@${sha}`,
+          "        with:",
+          "          script: |",
+          '            core.exportVariable("IMAGE", "debian:12");',
+          '      - run: docker run --rm "$IMAGE" node -v',
+          "      - shell: node {0}",
+          "        run: |",
+          '          import { execFileSync } from "node:child_process";',
+          "          const cleaned = input.replace(/['\"]/g, '');",
+          '          execFileSync("docker", ["pull", "redis:7"]);',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:8: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:9: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:28: debian:12 is not pinned to a sha256 digest",
+      "<memory>:32: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
+  });
+
   it("enforces case-insensitive schema keys, PowerShell continuations, and matrix expansion limits", () => {
     const digest = `sha256:${"a".repeat(64)}`;
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.

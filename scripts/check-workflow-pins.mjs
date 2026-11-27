@@ -3018,6 +3018,81 @@ function inspectNonShellScript(
   let codeOnly = "";
   let codeWithoutStrings = "";
   const lexStack = [];
+  const JS_REGEX_PREFIX_KEYWORDS = new Set([
+    "return",
+    "throw",
+    "case",
+    "in",
+    "instanceof",
+    "typeof",
+    "void",
+    "delete",
+    "new",
+    "yield",
+    "await",
+    "of",
+    "else",
+    "do",
+  ]);
+  const jsCanStartRegex = (maskedSoFar) => {
+    let k = maskedSoFar.length - 1;
+    while (k >= 0 && /\s/u.test(maskedSoFar[k])) {
+      k -= 1;
+    }
+    if (k < 0) {
+      return true;
+    }
+    const last = maskedSoFar[k];
+    if ("([{,;:=!?&|^~*/%<>".includes(last)) {
+      return true;
+    }
+    if (last === "+" || last === "-") {
+      return !(k > 0 && maskedSoFar[k - 1] === last);
+    }
+    if (/[A-Za-z0-9_$]/u.test(last)) {
+      let start = k;
+      while (start > 0 && /[A-Za-z0-9_$]/u.test(maskedSoFar[start - 1])) {
+        start -= 1;
+      }
+      return JS_REGEX_PREFIX_KEYWORDS.has(maskedSoFar.slice(start, k + 1));
+    }
+    return false;
+  };
+  const scanJsRegexLiteral = (src, slashIdx) => {
+    let inClass = false;
+    for (let j = slashIdx + 1; j < src.length; j += 1) {
+      const rc = src[j];
+      if (rc === "\n" || rc === "\r") {
+        return null;
+      }
+      if (rc === "\\") {
+        if (j + 1 >= src.length || src[j + 1] === "\n" || src[j + 1] === "\r") {
+          return null;
+        }
+        j += 1;
+        continue;
+      }
+      if (inClass) {
+        if (rc === "]") {
+          inClass = false;
+        }
+        continue;
+      }
+      if (rc === "[") {
+        inClass = true;
+        continue;
+      }
+      if (rc === "/") {
+        let flagEnd = j + 1;
+        while (flagEnd < src.length && /[A-Za-z]/u.test(src[flagEnd])) {
+          flagEnd += 1;
+        }
+        return { closingSlash: j, endIdx: flagEnd - 1 };
+      }
+    }
+    return null;
+  };
+
   for (let i = 0; i < scriptText.length; i += 1) {
     const ch = scriptText[i];
     const state = lexStack.at(-1) ?? null;
@@ -3128,6 +3203,23 @@ function inspectNonShellScript(
       }
       i += 1;
       continue;
+    }
+    if (
+      allowJsSyntax &&
+      ch === "/" &&
+      scriptText[i + 1] !== "/" &&
+      scriptText[i + 1] !== "*" &&
+      jsCanStartRegex(codeWithoutStrings)
+    ) {
+      const regexSpan = scanJsRegexLiteral(scriptText, i);
+      if (regexSpan) {
+        const rawRegex = scriptText.slice(i, regexSpan.endIdx + 1);
+        const flags = scriptText.slice(regexSpan.closingSlash + 1, regexSpan.endIdx + 1);
+        codeOnly += rawRegex;
+        codeWithoutStrings += `/${" ".repeat(regexSpan.closingSlash - i - 1)}/${flags}`;
+        i = regexSpan.endIdx;
+        continue;
+      }
     }
     if (ch === "'" || ch === '"' || (ch === "`" && allowJsSyntax)) {
       const isTriple =
@@ -4659,20 +4751,73 @@ function inspectNonShellScript(
     );
   }
   const opaqueEntries = [{ value: OPAQUE_UNVERIFIED_SENTINEL, line: startLine }];
-  if (
-    emittedGithubOutput &&
-    (/\bGITHUB_OUTPUT\b/u.test(codeOnly) ||
-      (language === "github-script" && /\bcore\s*\.\s*setOutput\s*\(/u.test(codeWithoutStrings)))
-  ) {
-    recordGithubEnvWrite(emittedGithubOutput, "*", opaqueEntries, false);
+  const hasGithubFileWrite = (targetVarName) => {
+    const envLookupPatterns = [
+      new RegExp(`\\b(?:process|Bun)\\s*\\.\\s*env\\s*\\.\\s*${targetVarName}\\b`, "u"),
+      new RegExp(`\\b(?:process|Bun)\\s*\\.\\s*env\\s*\\[\\s*['"]${targetVarName}['"]\\s*\\]`, "u"),
+      new RegExp(
+        `\\{\\s*[^}]*\\b${targetVarName}\\b[^}]*\\}\\s*=\\s*(?:process|Bun)\\s*\\.\\s*env\\b`,
+        "u",
+      ),
+      new RegExp(
+        `\\bDeno\\s*\\.\\s*env\\s*\\.\\s*get\\s*\\(\\s*['"]${targetVarName}['"]\\s*\\)`,
+        "u",
+      ),
+      new RegExp(`\\bos\\s*\\.\\s*environ\\s*\\[\\s*['"]${targetVarName}['"]\\s*\\]`, "u"),
+      new RegExp(
+        `\\bos\\s*\\.\\s*(?:environ\\s*\\.\\s*get|getenv)\\s*\\(\\s*['"]${targetVarName}['"]`,
+        "u",
+      ),
+      new RegExp(
+        `\\bENV\\s*(?:\\[\\s*['"]${targetVarName}['"]\\s*\\]|\\.\\s*fetch\\s*\\(\\s*['"]${targetVarName}['"])`,
+        "u",
+      ),
+      new RegExp(`\\$ENV\\s*\\{\\s*['"]?${targetVarName}['"]?\\s*\\}`, "u"),
+      new RegExp(
+        `\\b(?:getenv\\s*\\(\\s*['"]${targetVarName}['"]|\\$_(?:ENV|SERVER)\\s*\\[\\s*['"]${targetVarName}['"]\\s*\\])`,
+        "u",
+      ),
+    ];
+    if (!envLookupPatterns.some((pattern) => pattern.test(codeOnly))) {
+      return false;
+    }
+    return /\b(?:open|writeFile\w*|appendFile\w*|createWriteStream|write_text|write_bytes|write|writelines|writeTextFile\w*|file_put_contents|fwrite)\s*\(/u.test(
+      codeWithoutStrings,
+    );
+  };
+  const recordActionsCoreWrites = (methodName, targetMap, wildcardKey) => {
+    const pattern = new RegExp(`\\bcore\\s*\\.\\s*${methodName}\\s*\\(`, "gu");
+    for (const match of codeWithoutStrings.matchAll(pattern)) {
+      const openIdx = match.index + match[0].length - 1;
+      const callArgs = splitTopLevelComma(extractBalancedSlice(codeOnly, openIdx, "(", ")"));
+      if (callArgs.length === 0) {
+        continue;
+      }
+      const keyLit = unquoteSimpleLiteral(callArgs[0]);
+      if (keyLit !== null && keyLit.length > 0) {
+        const valLit = callArgs.length >= 2 ? unquoteSimpleLiteral(callArgs[1]) : null;
+        const entries = valLit !== null ? [{ value: valLit, line: startLine }] : opaqueEntries;
+        recordGithubEnvWrite(targetMap, keyLit, entries, false);
+      } else {
+        recordGithubEnvWrite(targetMap, wildcardKey, opaqueEntries, false);
+      }
+    }
+  };
+  if (emittedGithubOutput) {
+    if (hasGithubFileWrite("GITHUB_OUTPUT")) {
+      recordGithubEnvWrite(emittedGithubOutput, "*", opaqueEntries, false);
+    }
+    if (language === "github-script" || allowJsSyntax) {
+      recordActionsCoreWrites("setOutput", emittedGithubOutput, "*");
+    }
   }
-  if (
-    emittedGithubEnv &&
-    (/\bGITHUB_ENV\b/u.test(codeOnly) ||
-      (language === "github-script" &&
-        /\bcore\s*\.\s*exportVariable\s*\(/u.test(codeWithoutStrings)))
-  ) {
-    recordGithubEnvWrite(emittedGithubEnv, OPAQUE_ENV_KEY, opaqueEntries, false);
+  if (emittedGithubEnv) {
+    if (hasGithubFileWrite("GITHUB_ENV")) {
+      recordGithubEnvWrite(emittedGithubEnv, OPAQUE_ENV_KEY, opaqueEntries, false);
+    }
+    if (language === "github-script" || allowJsSyntax) {
+      recordActionsCoreWrites("exportVariable", emittedGithubEnv, OPAQUE_ENV_KEY);
+    }
   }
 }
 
@@ -16971,6 +17116,42 @@ export function unpinnedWorkflowContainerReferences(
         return;
       }
       if (containerNode.kind === "scalar") {
+        const raw = String(containerNode.value).trim();
+        const singleMatrix =
+          /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)\s*\}\}$/iu.exec(
+            raw,
+          );
+        if (singleMatrix && matrixRows.length > 0) {
+          const segments = parseMatrixPathSegments(singleMatrix.groups.path);
+          let handledAny = false;
+          for (const row of matrixRows) {
+            const resolvedNode = resolveMatrixNode(row, segments);
+            if (!resolvedNode) {
+              continue;
+            }
+            handledAny = true;
+            if (resolvedNode.kind === "map") {
+              checkContainerNode(resolvedNode, envMap, [row]);
+            } else if (resolvedNode.kind === "scalar") {
+              checkImageField(resolvedNode, envMap, [row], filePath, ctxProblems);
+            }
+          }
+          if (handledAny) {
+            return;
+          }
+        }
+        const decodedFromJson = decodeFromJsonScalarNodes(containerNode, envMap);
+        if (decodedFromJson) {
+          if (decodedFromJson.truncated) {
+            ctxProblems.push(
+              `${filePath}:${containerNode.line}: ${raw} exceeds expansion limit and cannot be verified exhaustively`,
+            );
+          }
+          for (const node of decodedFromJson.nodes) {
+            checkContainerNode(node, envMap, matrixRows);
+          }
+          return;
+        }
         checkImageField(containerNode, envMap, matrixRows, filePath, ctxProblems);
       } else if (containerNode.kind === "map") {
         checkImageField(
@@ -16985,7 +17166,36 @@ export function unpinnedWorkflowContainerReferences(
     };
 
     const checkServicesNode = (servicesNode, envMap, matrixRows) => {
-      if (servicesNode?.kind !== "map") {
+      if (!servicesNode) {
+        return;
+      }
+      if (servicesNode.kind === "scalar") {
+        const raw = String(servicesNode.value).trim();
+        const singleMatrix =
+          /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)\s*\}\}$/iu.exec(
+            raw,
+          );
+        if (singleMatrix && matrixRows.length > 0) {
+          const segments = parseMatrixPathSegments(singleMatrix.groups.path);
+          for (const row of matrixRows) {
+            const resolvedNode = resolveMatrixNode(row, segments);
+            if (resolvedNode?.kind === "map") {
+              checkServicesNode(resolvedNode, envMap, [row]);
+            }
+          }
+          return;
+        }
+        const decodedFromJson = decodeFromJsonScalarNodes(servicesNode, envMap);
+        if (decodedFromJson) {
+          for (const node of decodedFromJson.nodes) {
+            if (node.kind === "map") {
+              checkServicesNode(node, envMap, matrixRows);
+            }
+          }
+        }
+        return;
+      }
+      if (servicesNode.kind !== "map") {
         return;
       }
       for (const serviceNode of servicesNode.value.values()) {
