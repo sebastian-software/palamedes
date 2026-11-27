@@ -56,12 +56,38 @@ export function scanMarkers(chunks: Iterable<[string, string]>): MarkerScan {
   return { sidecars, chunkKeys };
 }
 
+export const DEFAULT_IO_CONCURRENCY = 32;
+export const DEFAULT_LOCALE_CONCURRENCY = 4;
+
+export async function mapWithConcurrency<TInput, TOutput>(
+  items: readonly TInput[],
+  concurrency: number,
+  mapper: (item: TInput, index: number) => Promise<TOutput>,
+): Promise<TOutput[]> {
+  if (items.length === 0) return [];
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const results = Array.from<TOutput>({ length: items.length });
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(items[index]!, index);
+      }
+    }),
+  );
+  return results;
+}
+
 export async function readChunks(directory: string): Promise<Map<string, string>> {
-  const sources = new Map<string, string>();
-  for (const chunk of await listChunks(directory)) {
-    sources.set(chunk, await readFile(chunk, "utf8"));
-  }
-  return sources;
+  const chunks = await listChunks(directory);
+  const entries = await mapWithConcurrency(
+    chunks,
+    DEFAULT_IO_CONCURRENCY,
+    async (chunk): Promise<[string, string]> => [chunk, await readFile(chunk, "utf8")],
+  );
+  return new Map(entries);
 }
 
 export type CatalogCompilerOptions = {
