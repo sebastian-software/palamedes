@@ -125,6 +125,28 @@ impl<'a> TransformVisitor<'a> {
         self.consumed_binding_ranges.push((symbol_id, start, end));
     }
 
+    fn record_consumed_binding_outside_retained(
+        &mut self,
+        symbol_id: SymbolId,
+        outer_start: usize,
+        outer_end: usize,
+        mut retained: Vec<(usize, usize)>,
+    ) {
+        retained.sort_unstable();
+        let mut cursor = outer_start;
+        for (start, end) in retained {
+            let start = start.clamp(outer_start, outer_end);
+            let end = end.clamp(outer_start, outer_end);
+            if start > cursor {
+                self.record_consumed_binding(symbol_id, cursor, start);
+            }
+            cursor = cursor.max(end);
+        }
+        if cursor < outer_end {
+            self.record_consumed_binding(symbol_id, cursor, outer_end);
+        }
+    }
+
     pub(super) fn rebind_surviving_trans(&mut self, semantic: &Semantic<'_>) {
         let mut aliases = HashMap::<SymbolId, String>::new();
         let mut reserved = self.imports.used_identifier_names.clone();
@@ -284,11 +306,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
         match replacement {
             Ok(Some((text, compiled_id))) => {
+                let is_plural = matches!(
+                    macro_info.imported_name.as_str(),
+                    "Plural" | "SelectOrdinal"
+                );
                 let nested = if macro_info.imported_name == "Trans" {
                     nested_macro_use_in_trans_expressions(&it.children, self.imports)
                 } else {
                     nested_macro_use_in_choice_jsx_attributes(
                         &it.opening_element.attributes,
+                        is_plural,
                         self.imports,
                     )
                 };
@@ -313,11 +340,24 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     text,
                 });
                 self.push_compiled_id(&compiled_id);
-                self.record_consumed_binding(
-                    macro_symbol_id,
-                    it.span.start as usize,
-                    it.span.end as usize,
-                );
+                if macro_info.imported_name == "Trans" {
+                    self.record_consumed_binding(
+                        macro_symbol_id,
+                        it.span.start as usize,
+                        it.span.end as usize,
+                    );
+                } else {
+                    let retained = retained_choice_jsx_attribute_spans(
+                        &it.opening_element.attributes,
+                        is_plural,
+                    );
+                    self.record_consumed_binding_outside_retained(
+                        macro_symbol_id,
+                        it.span.start as usize,
+                        it.span.end as usize,
+                        retained,
+                    );
+                }
 
                 if macro_info.imported_name == "Trans" {
                     if let Some(module) = macro_info.source.strip_suffix("/macro") {
@@ -398,16 +438,26 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     );
                     return;
                 }
+                let retained = it
+                    .quasi
+                    .expressions
+                    .iter()
+                    .map(|expression| {
+                        let span = expression.span();
+                        (span.start as usize, span.end as usize)
+                    })
+                    .collect();
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,
                     end: it.span.end as usize,
                     text,
                 });
                 self.push_compiled_id(&compiled_id);
-                self.record_consumed_binding(
+                self.record_consumed_binding_outside_retained(
                     macro_symbol_id,
-                    tag_span.0 as usize,
-                    tag_span.1 as usize,
+                    it.span.start as usize,
+                    it.span.end as usize,
+                    retained,
                 );
                 self.needs_runtime_import = true;
             }
@@ -485,16 +535,18 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             );
                             return;
                         }
+                        let retained = retained_descriptor_call_spans(it);
                         self.replacements.push(Replacement {
                             start: it.span.start as usize,
                             end: it.span.end as usize,
                             text,
                         });
                         self.push_compiled_id(&compiled_id);
-                        self.record_consumed_binding(
+                        self.record_consumed_binding_outside_retained(
                             macro_symbol_id,
-                            callee_span.0 as usize,
-                            callee_span.1 as usize,
+                            it.span.start as usize,
+                            it.span.end as usize,
+                            retained,
                         );
                         self.needs_runtime_import = true;
                     }
@@ -529,16 +581,26 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             );
                             return;
                         }
+                        let retained = it
+                            .arguments
+                            .iter()
+                            .take(2)
+                            .map(|argument| {
+                                let span = argument.span();
+                                (span.start as usize, span.end as usize)
+                            })
+                            .collect();
                         self.replacements.push(Replacement {
                             start: it.span.start as usize,
                             end: it.span.end as usize,
                             text,
                         });
                         self.push_compiled_id(&compiled_id);
-                        self.record_consumed_binding(
+                        self.record_consumed_binding_outside_retained(
                             macro_symbol_id,
-                            callee_span.0 as usize,
-                            callee_span.1 as usize,
+                            it.span.start as usize,
+                            it.span.end as usize,
+                            retained,
                         );
                         self.needs_runtime_import = true;
                     }
@@ -608,9 +670,13 @@ impl TransformVisitor<'_> {
 
         match replacement {
             Ok(Some((text, compiled_id))) => {
+                let is_plural = matches!(
+                    macro_info.imported_name.as_str(),
+                    "Plural" | "SelectOrdinal"
+                );
                 if macro_info.imported_name != "Trans"
                     && let Some((nested_macro, nested_start)) =
-                        nested_macro_use_in_lowered_choice_call(call, self.imports)
+                        nested_macro_use_in_lowered_choice_call(call, is_plural, self.imports)
                 {
                     self.fail_nested_macro_in_value(
                         &macro_info.imported_name,
@@ -625,11 +691,21 @@ impl TransformVisitor<'_> {
                     text,
                 });
                 self.push_compiled_id(&compiled_id);
-                self.record_consumed_binding(
-                    macro_symbol_id,
-                    call.span.start as usize,
-                    call.span.end as usize,
-                );
+                if macro_info.imported_name == "Trans" {
+                    self.record_consumed_binding(
+                        macro_symbol_id,
+                        call.span.start as usize,
+                        call.span.end as usize,
+                    );
+                } else {
+                    let retained = retained_lowered_choice_call_spans(call, is_plural);
+                    self.record_consumed_binding_outside_retained(
+                        macro_symbol_id,
+                        call.span.start as usize,
+                        call.span.end as usize,
+                        retained,
+                    );
+                }
                 if macro_info.imported_name == "Trans" {
                     if let Some(module) = macro_info.source.strip_suffix("/macro") {
                         self.trans_replacements.push(TransReplacement {
@@ -712,8 +788,92 @@ fn nested_macro_use_in_choice_call<'a>(
     finder.nested
 }
 
+fn retained_descriptor_call_spans(call: &CallExpression<'_>) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    if let Some(Argument::ObjectExpression(descriptor)) = call.arguments.first()
+        && let Some(message) = crate::descriptor::descriptor_property_value(descriptor, "message")
+        && let Expression::TemplateLiteral(template) = message.without_parentheses()
+    {
+        for expression in &template.expressions {
+            let span = expression.span();
+            spans.push((span.start as usize, span.end as usize));
+        }
+    }
+    if let Some(values) = call.arguments.get(1) {
+        let span = values.span();
+        spans.push((span.start as usize, span.end as usize));
+    }
+    spans
+}
+
+fn retained_lowered_choice_call_spans(
+    call: &CallExpression<'_>,
+    is_plural: bool,
+) -> Vec<(usize, usize)> {
+    let Some(Argument::ObjectExpression(props)) = call.arguments.get(1) else {
+        return Vec::new();
+    };
+    let mut spans = Vec::new();
+    if let Some(value) = crate::descriptor::descriptor_property_value(props, "value") {
+        let span = value.span();
+        spans.push((span.start as usize, span.end as usize));
+    }
+    for property in &props.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            continue;
+        };
+        if let Some(key) = property.key.static_name()
+            && is_non_branch_choice_key(key.as_ref(), is_plural, true)
+        {
+            continue;
+        }
+        let span = property.value.span();
+        spans.push((span.start as usize, span.end as usize));
+    }
+    spans
+}
+
+fn retained_choice_jsx_attribute_spans(
+    attributes: &[JSXAttributeItem<'_>],
+    is_plural: bool,
+) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    let mut checked_value = false;
+    for attribute in attributes {
+        if let Some(attr) = attribute.as_attribute() {
+            let name = attr.name.get_identifier().name.as_str();
+            if name == "value" {
+                if !checked_value
+                    && let Some(JSXAttributeValue::ExpressionContainer(container)) =
+                        attr.value.as_ref()
+                {
+                    checked_value = true;
+                    let span = container.span;
+                    spans.push((span.start as usize, span.end as usize));
+                }
+                continue;
+            }
+            if is_non_branch_choice_key(name, is_plural, false) {
+                continue;
+            }
+        }
+        let span = attribute.span();
+        spans.push((span.start as usize, span.end as usize));
+    }
+    spans
+}
+
+fn is_non_branch_choice_key(key: &str, is_plural: bool, lowered: bool) -> bool {
+    matches!(
+        key,
+        "id" | "message" | "comment" | "context" | "value" | "key"
+    ) || (lowered && key == "children")
+        || (is_plural && key == "offset")
+}
+
 fn nested_macro_use_in_lowered_choice_call<'a>(
     call: &CallExpression<'a>,
+    is_plural: bool,
     imports: &ImportCollector,
 ) -> Option<(String, usize)> {
     let Some(Argument::ObjectExpression(props)) = call.arguments.get(1) else {
@@ -735,10 +895,7 @@ fn nested_macro_use_in_lowered_choice_call<'a>(
             continue;
         };
         if let Some(key) = property.key.static_name()
-            && matches!(
-                key.as_ref(),
-                "id" | "message" | "comment" | "context" | "value" | "children" | "key" | "offset"
-            )
+            && is_non_branch_choice_key(key.as_ref(), is_plural, true)
         {
             continue;
         }
@@ -752,6 +909,7 @@ fn nested_macro_use_in_lowered_choice_call<'a>(
 
 fn nested_macro_use_in_choice_jsx_attributes<'a>(
     attributes: &[JSXAttributeItem<'a>],
+    is_plural: bool,
     imports: &ImportCollector,
 ) -> Option<(String, usize)> {
     let mut finder = NestedMacroUseFinder {
@@ -776,10 +934,7 @@ fn nested_macro_use_in_choice_jsx_attributes<'a>(
                 }
                 continue;
             }
-            if matches!(
-                name,
-                "id" | "message" | "comment" | "context" | "key" | "offset"
-            ) {
+            if is_non_branch_choice_key(name, is_plural, false) {
                 continue;
             }
         }

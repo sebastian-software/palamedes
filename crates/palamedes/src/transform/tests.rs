@@ -3172,6 +3172,16 @@ fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements()
             "Plural",
         ),
         (
+            "jsx-select-offset-branch.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Select } from \"@palamedes/react/macro\";\nexport function f(mode: string, label?: string) { return <Select value={mode} offset={`${label ?? t`b`}`} other=\"Default\" />; }\n",
+            "Select",
+        ),
+        (
+            "lowered-select-offset-branch.js",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Select } from \"@palamedes/react/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nexport function f(mode, label) { return render(Select, { value: mode, offset: `${label ?? t`b`}`, other: \"Default\" }); }\n",
+            "Select",
+        ),
+        (
             "trans-expression-value.tsx",
             "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f(name?: string) { return <Trans>Hello {name ?? t`b`}</Trans>; }\n",
             "Trans",
@@ -3238,6 +3248,26 @@ fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements()
     let transformed = transform_macros_raw(keyed_lowered_plural, "keyed-lowered.js", None)
         .expect("lowered choice macro with discarded key/overwritten value prop should transform");
     assert_eq!(transformed.compiled_ids.len(), 2);
+
+    // Valid: macro references only in discarded descriptor fields still allow import removal,
+    // while bare macro references in retained values preserve the import.
+    let discarded_spread = "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"Welcome\", ...{ tooltip: t`Help` } }); }\n";
+    let transformed = transform_macros_raw(discarded_spread, "discarded-spread.ts", None)
+        .expect("discarded descriptor field should transform cleanly");
+    assert!(
+        !transformed.code.contains("@palamedes/core/macro"),
+        "unused macro import from discarded descriptor field must be removed:\n{}",
+        transformed.code
+    );
+
+    let retained_ref = "import { t } from \"@palamedes/core/macro\";\nexport function f(inspect: (fn: unknown) => string) { return t({ message: \"a {x}\" }, { x: inspect(t) }); }\n";
+    let transformed = transform_macros_raw(retained_ref, "retained-ref.ts", None)
+        .expect("retained bare macro reference in descriptor values should transform");
+    assert!(
+        transformed.code.contains("@palamedes/core/macro"),
+        "macro import referenced in retained descriptor value must be preserved:\n{}",
+        transformed.code
+    );
 
     // Valid: direct runtime calls inside macro value expressions remain extractable and preserved.
     for (filename, source) in [
