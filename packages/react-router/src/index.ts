@@ -374,6 +374,8 @@ function renderDocument({
   return new Promise((resolve, reject) => {
     let statusCode = responseStatusCode;
     let shellRendered = false;
+    let streamFinished = false;
+    let abortedOnClose = false;
     const userAgent = request.headers.get("user-agent");
     // Bots and SPA Mode renders wait for all content before responding.
     const readyOption: keyof RenderToPipeableStreamOptions =
@@ -406,11 +408,19 @@ function renderDocument({
           shellRendered = true;
           const body = new PassThrough({
             final(callback) {
+              streamFinished = true;
               clearStreamTimeout();
               callback();
             },
           });
-          body.once("close", clearStreamTimeout);
+          body.once("close", () => {
+            clearStreamTimeout();
+            if (!streamFinished) {
+              abortedOnClose = true;
+              if (!documentTransform.destroyed) documentTransform.destroy();
+              abort();
+            }
+          });
           const stream = createReadableStreamFromReadable(body);
           responseHeaders.set("Content-Type", "text/html");
           documentTransform.on("error", (error) => {
@@ -428,7 +438,7 @@ function renderDocument({
           statusCode = 500;
           // Shell errors reject and React Router logs them; log streaming
           // errors from inside the shell here.
-          if (shellRendered) console.error(error);
+          if (shellRendered && !abortedOnClose) console.error(error);
         },
       },
     );

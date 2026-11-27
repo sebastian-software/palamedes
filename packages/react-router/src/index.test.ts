@@ -583,10 +583,22 @@ describe("createReactRouterI18n", () => {
     }
   });
 
-  it("clears the stream abort timer when the response body is closed early", async () => {
-    const never = new Promise<never>(() => {});
+  it("clears the stream abort timer and aborts React rendering when the response body is closed early", async () => {
+    let resolved = false;
+    let resolvePending!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      resolvePending = () => {
+        resolved = true;
+        resolve();
+      };
+    });
+    const renderCalls = vi.fn();
+    let resolvedRenders = 0;
     function Suspended(): ReactNode {
-      throw never;
+      renderCalls();
+      if (!resolved) throw pending;
+      resolvedRenders += 1;
+      return createElement("p", null, "done");
     }
     const i18n = createReactRouterI18n({
       resolveLocale: localeFromRequest,
@@ -655,6 +667,11 @@ describe("createReactRouterI18n", () => {
       await response.body?.cancel();
       await new Promise((resolve) => setImmediate(resolve));
       expect(clearTimeoutSpy).toHaveBeenCalledWith(streamTimer);
+      const rendersAfterCancel = renderCalls.mock.calls.length;
+      resolvePending();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(resolvedRenders).toBe(0);
+      expect(renderCalls).toHaveBeenCalledTimes(rendersAfterCancel);
     } finally {
       setTimeoutSpy.mockRestore();
       clearTimeoutSpy.mockRestore();
