@@ -4604,6 +4604,53 @@ describe("workflow contracts", () => {
       "<memory>:18: ubuntu:24.04 is not pinned to a sha256 digest",
       "<memory>:21: nginx:1.27 is not pinned to a sha256 digest",
     ]);
+    // Bash helper functions forward `"$@"` to Docker commands, indexed array
+    // writes (`images[0]=...`) update tracked elements in both directions,
+    // unquoted `for img in $IMAGES` splits whitespace-separated operands, and
+    // redirections placed between Docker flags and values (`--name >log smoke`)
+    // are stripped before option parsing.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r62:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: |",
+          "          run_image() {",
+          '            docker run "$@"',
+          "          }",
+          "          outer_run() {",
+          '            run_image "$@"',
+          "          }",
+          `          outer_run --rm node:24@${digest} echo ok`,
+          "          outer_run --rm alpine:3.20 echo bad",
+          `          arr=(node:24@${digest} debian:12)`,
+          "          arr[0]=busybox:1.36",
+          `          arr[1]=node:24@${digest}`,
+          '          docker pull "${arr[0]}"',
+          '          docker pull "${arr[1]}"',
+          `          dyn_arr=(node:24@${digest})`,
+          '          dyn_arr["$UNKNOWN_IDX"]=fedora:41',
+          '          docker pull "${dyn_arr[0]}"',
+          `          IMAGES="ubuntu:24.04 node:24@${digest}"`,
+          "          for img in $IMAGES; do",
+          '            docker pull "$img"',
+          "          done",
+          `          docker run --name >build.log smoke node:24@${digest} echo ok`,
+          `          docker run --name ">" node:24@${digest} echo ok`,
+          "          docker run --name >|build.log smoke nginx:1.27 echo bad",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:14: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:16: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:21: fedora:41 is not pinned to a sha256 digest",
+      "<memory>:24: ubuntu:24.04 is not pinned to a sha256 digest",
+      "<memory>:29: nginx:1.27 is not pinned to a sha256 digest",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

@@ -2273,10 +2273,14 @@ function expandShellParamCandidates(candidates, shellVars, caseInsensitive, init
         if (expr.arrayIndex !== null) {
           const elemKey = `${ARRAY_ELEM_KEY_PREFIX}${expr.name}\0${expr.arrayIndex}`;
           entries = shellVars.get(elemKey) ?? null;
+          const dynWildcard = shellVars.get(`${ARRAY_ELEM_KEY_PREFIX}${expr.name}\0*`) ?? null;
           if (!entries && shellVars.has(`${ARRAY_ELEM_KEY_PREFIX}${expr.name}\0has`)) {
             entries = [{ value: "", line: 0, unset: true }];
           } else if (!entries && expr.arrayIndex === 0) {
             entries = lookupVarEntries(shellVars, expr.name, caseInsensitive);
+          }
+          if (dynWildcard && dynWildcard.length > 0) {
+            entries = mergeVarEntries(entries ?? [], dynWildcard);
           }
         } else {
           entries = lookupVarEntries(shellVars, expr.name, caseInsensitive);
@@ -2284,6 +2288,10 @@ function expandShellParamCandidates(candidates, shellVars, caseInsensitive, init
             entries = shellVars.get(`${ARRAY_ELEM_KEY_PREFIX}${expr.name}\u00000`) ?? [
               { value: "", line: 0, unset: true },
             ];
+            const dynWildcard = shellVars.get(`${ARRAY_ELEM_KEY_PREFIX}${expr.name}\0*`) ?? null;
+            if (dynWildcard && dynWildcard.length > 0) {
+              entries = mergeVarEntries(entries, dynWildcard);
+            }
           }
         }
         const isWholeToken = expr.start === 0 && expr.end === candidate.text.length;
@@ -2911,22 +2919,29 @@ function isRedirectionOperator(token) {
   return (
     token === ">" ||
     token === ">>" ||
+    token === ">|" ||
     token === ">&" ||
     token === "<" ||
     token === "<>" ||
-    token === "<&"
+    token === "<&" ||
+    token === "<<<"
   );
 }
 
-function consumeShellRedirection(tokens, index, stdinRedirectTargets = null) {
+function consumeShellRedirection(tokens, index, stdinRedirectTargets = null, tokenQuoted = null) {
   const token = tokens[index];
-  if (isRedirectionOperator(token)) {
+  if (!tokenQuoted?.[index] && isRedirectionOperator(token)) {
     if (token === "<" && stdinRedirectTargets && tokens[index + 1] !== undefined) {
       stdinRedirectTargets.push(tokens[index + 1]);
     }
     return 2;
   }
-  if (/^\d+$/u.test(token ?? "") && isRedirectionOperator(tokens[index + 1])) {
+  if (
+    !tokenQuoted?.[index] &&
+    !tokenQuoted?.[index + 1] &&
+    /^\d+$/u.test(token ?? "") &&
+    isRedirectionOperator(tokens[index + 1])
+  ) {
     if (
       token === "0" &&
       tokens[index + 1] === "<" &&
@@ -4139,6 +4154,12 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         tokenSingleQuoted.push(false);
         tokenQuoted.push(false);
         index += 1;
+      } else if (text[index + 1] === "|") {
+        tokens.push(">|");
+        tokenOffsets.push(index);
+        tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
+        index += 1;
       } else {
         tokens.push(">");
         tokenOffsets.push(index);
@@ -4148,10 +4169,19 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       continue;
     }
 
-    // Heredoc redirect `<<` / `<<-` (never `<<<` here-string, never inside arithmetic).
+    // Heredoc redirect `<<` / `<<-` (and `<<<` here-string, never inside arithmetic).
     if (ch === "<" && text[index + 1] === "<") {
       if (text[index + 2] === "<") {
         flushToken();
+        if (tokens.length === 0) {
+          commandLine = line;
+          commandConditional = nextConditional;
+          nextConditional = false;
+        }
+        tokens.push("<<<");
+        tokenOffsets.push(index);
+        tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
         index += 2;
         continue;
       }
@@ -5482,7 +5512,15 @@ function extractRedirectedWriteLines(tokens, startIndex, targetPredicate = isGit
   return null;
 }
 
-function peelControlKeywords(tokens, frame, lineNumber, stepEnv, shellMode) {
+function peelControlKeywords(
+  tokens,
+  frame,
+  lineNumber,
+  stepEnv,
+  shellMode,
+  tokenQuoted = null,
+  tokenSingleQuoted = null,
+) {
   let start = 0;
   while (start < tokens.length) {
     const keyword = tokens[start];
@@ -5541,17 +5579,50 @@ function peelControlKeywords(tokens, frame, lineNumber, stepEnv, shellMode) {
       if (varName && /^[A-Za-z_][A-Za-z0-9_]*$/u.test(varName) && tokens[start + 2] === "in") {
         let entries = [];
         const arrayExpPattern = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
-        for (const operand of tokens.slice(start + 3)) {
-          const arrMatch = shellMode === "posix" ? arrayExpPattern.exec(operand) : null;
-          if (arrMatch) {
-            const arrAllEntries = frame.vars.get(
-              `${ARRAY_ELEM_KEY_PREFIX}${arrMatch.groups.name}\0@`,
-            );
-            if (arrAllEntries && arrAllEntries.length > 0) {
-              entries = mergeVarEntries(entries, arrAllEntries);
+        const splitUnquotedEntries = (rawEntries) => {
+          const splitOut = [];
+          for (const entry of rawEntries) {
+            if (entry.truncated) {
+              splitOut.push(entry);
               continue;
             }
-            const arrObj = frame.arrays?.get(arrMatch.groups.name);
+            if (entry.unset) {
+              continue;
+            }
+            const trimmed = entry.value.trim();
+            if (trimmed.length === 0) {
+              continue;
+            }
+            for (const word of trimmed.split(/\s+/u)) {
+              splitOut.push({ value: word, line: entry.line });
+            }
+          }
+          return splitOut;
+        };
+        for (let opIdx = start + 3; opIdx < tokens.length; opIdx += 1) {
+          const operand = tokens[opIdx];
+          const isOpSingleQuoted = Boolean(tokenSingleQuoted?.[opIdx]);
+          const isOpQuoted = Boolean(tokenQuoted?.[opIdx]);
+          if (isOpSingleQuoted) {
+            entries = mergeVarEntries(entries, [{ value: operand, line: lineNumber }]);
+            continue;
+          }
+          const arrMatch = shellMode === "posix" ? arrayExpPattern.exec(operand) : null;
+          const isPositionalList =
+            shellMode === "posix" &&
+            (operand === "$@" || operand === "${@}" || operand === "$*" || operand === "${*}");
+          if (arrMatch || isPositionalList) {
+            const arrName = arrMatch ? arrMatch.groups.name : "@";
+            const arrAllEntries = frame.vars.get(`${ARRAY_ELEM_KEY_PREFIX}${arrName}\0@`);
+            if (arrAllEntries && arrAllEntries.length > 0) {
+              const nextEntries =
+                !isOpQuoted && shellMode === "posix"
+                  ? splitUnquotedEntries(arrAllEntries)
+                  : arrAllEntries;
+              entries = mergeVarEntries(entries, nextEntries);
+              continue;
+            }
+            const arrObj = frame.arrays?.get(arrName);
             if (arrObj && arrObj.variants.length > 0) {
               const elemEntries = [];
               for (const variant of arrObj.variants) {
@@ -5562,7 +5633,11 @@ function peelControlKeywords(tokens, frame, lineNumber, stepEnv, shellMode) {
               if (arrObj.truncated) {
                 elemEntries.push({ value: "", line: lineNumber, truncated: true });
               }
-              entries = mergeVarEntries(entries, elemEntries);
+              const nextEntries =
+                !isOpQuoted && shellMode === "posix"
+                  ? splitUnquotedEntries(elemEntries)
+                  : elemEntries;
+              entries = mergeVarEntries(entries, nextEntries);
               continue;
             }
           }
@@ -5573,7 +5648,13 @@ function peelControlKeywords(tokens, frame, lineNumber, stepEnv, shellMode) {
             lineNumber,
             shellMode,
           );
-          entries = mergeVarEntries(entries, candidatesToVarEntries(expanded, lineNumber));
+          const candidateEntries = candidatesToVarEntries(expanded, lineNumber);
+          const hasExpansion = operand.includes("$") || operand.includes("${{");
+          const nextEntries =
+            shellMode === "posix" && !isOpQuoted && hasExpansion
+              ? splitUnquotedEntries(candidateEntries)
+              : candidateEntries;
+          entries = mergeVarEntries(entries, nextEntries);
         }
         if (entries.length > 0) {
           frame.vars.set(varName, entries);
@@ -6954,13 +7035,21 @@ function inspectShellText(
         continue;
       }
 
-      const tokens = peelControlKeywords(event.tokens, frame, lineNumber, stepEnv, shellMode);
+      let tokens = peelControlKeywords(
+        event.tokens,
+        frame,
+        lineNumber,
+        stepEnv,
+        shellMode,
+        event.tokenQuoted,
+        event.tokenSingleQuoted,
+      );
       const peeledCount = event.tokens.length - tokens.length;
-      const peeledTokenOffsets = event.tokenOffsets ? event.tokenOffsets.slice(peeledCount) : [];
-      const peeledSingleQuoted = event.tokenSingleQuoted
+      let peeledTokenOffsets = event.tokenOffsets ? event.tokenOffsets.slice(peeledCount) : [];
+      let peeledSingleQuoted = event.tokenSingleQuoted
         ? event.tokenSingleQuoted.slice(peeledCount)
         : [];
-      const peeledQuoted = event.tokenQuoted ? event.tokenQuoted.slice(peeledCount) : [];
+      let peeledQuoted = event.tokenQuoted ? event.tokenQuoted.slice(peeledCount) : [];
       const peeledEscapedDollarOffsets = event.tokenEscapedDollarOffsets
         ? event.tokenEscapedDollarOffsets.slice(peeledCount)
         : [];
@@ -6983,6 +7072,7 @@ function inspectShellText(
       if (tokens[0] === "unset" && tokens.length > 1) {
         let unsetFunctions = false;
         const unsetNames = [];
+        const unsetIndexed = [];
         for (const token of tokens.slice(1)) {
           if (token === "-f") {
             unsetFunctions = true;
@@ -6991,11 +7081,19 @@ function inspectShellText(
           if (token === "-v" || token === "--") {
             continue;
           }
-          if (
-            unsetFunctions
-              ? /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(token)
-              : /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token)
-          ) {
+          if (unsetFunctions) {
+            if (/^[A-Za-z_][A-Za-z0-9_-]*$/u.test(token)) {
+              unsetNames.push(token);
+            }
+            continue;
+          }
+          const idxMatch =
+            shellMode === "posix"
+              ? /^(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?<index>\d+)\]$/u.exec(token)
+              : null;
+          if (idxMatch) {
+            unsetIndexed.push({ name: idxMatch.groups.name, index: Number(idxMatch.groups.index) });
+          } else if (/^[A-Za-z_][A-Za-z0-9_]*$/u.test(token)) {
             unsetNames.push(token);
           }
         }
@@ -7006,6 +7104,27 @@ function inspectShellText(
             }
           }
         } else {
+          for (const { name, index: unsetIdx } of unsetIndexed) {
+            const existingArr = frame.arrays.get(name);
+            if (!existingArr) {
+              continue;
+            }
+            const updatedVariants = existingArr.variants.map((variant) =>
+              variant.map((item, i) =>
+                i === unsetIdx ? { text: "", line: 0, preExpanded: true } : { ...item },
+              ),
+            );
+            const merged =
+              conditional || frame.branches.length > 0
+                ? [...existingArr.variants, ...updatedVariants]
+                : updatedVariants;
+            const nextArr = {
+              variants: merged.slice(0, MAX_VAR_VALUES),
+              truncated: existingArr.truncated || merged.length > MAX_VAR_VALUES,
+            };
+            frame.arrays.set(name, nextArr);
+            syncArrayMirrorToVars(frame.vars, name, nextArr, lineNumber);
+          }
           for (const name of unsetNames) {
             if (conditional) {
               const existing = frame.vars.has(name)
@@ -7375,12 +7494,167 @@ function inspectShellText(
         }
       }
 
-      // Pure shell-local variable assignment (`image=rust:1.96-alpine` or
-      // Bash scalar append `image+=@sha256:...`).
+      // Pure shell-local variable assignment (`image=rust:1.96-alpine`, Bash
+      // scalar append `image+=@sha256:...`, or indexed Bash array element write
+      // `images[0]=...` / `images[0]+=@sha256:...`).
+      const BASH_INDEXED_ARRAY_ASSIGN_PATTERN =
+        /^(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?<index>[^\]]+)\](?<op>\+?=)(?<value>[\s\S]*)$/u;
       const scalarAssignPattern =
         shellMode === "posix" ? BASH_SCALAR_ASSIGN_PATTERN : ENV_PREFIX_ASSIGNMENT_PATTERN;
-      if (tokens.every((token) => scalarAssignPattern.test(token))) {
+      if (
+        tokens.every(
+          (token) =>
+            scalarAssignPattern.test(token) ||
+            (shellMode === "posix" && BASH_INDEXED_ARRAY_ASSIGN_PATTERN.test(token)),
+        )
+      ) {
         for (const token of tokens) {
+          const idxMatch =
+            shellMode === "posix" ? BASH_INDEXED_ARRAY_ASSIGN_PATTERN.exec(token) : null;
+          if (idxMatch) {
+            const { name, index: rawIndexExpr, op, value: rawVal } = idxMatch.groups;
+            const resolvedVal = resolveImageTokenCandidates(
+              rawVal,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            const trimmedIdxExpr = rawIndexExpr.trim();
+            const idxLookupToken = /^[A-Za-z_][A-Za-z0-9_]*$/u.test(trimmedIdxExpr)
+              ? `$${trimmedIdxExpr}`
+              : trimmedIdxExpr;
+            const resolvedIdx = resolveImageTokenCandidates(
+              idxLookupToken,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            const concreteIndices = [];
+            let indexDynamic = resolvedIdx.truncated || resolvedIdx.candidates.length === 0;
+            for (const idxCand of resolvedIdx.candidates) {
+              const trimmedCand = idxCand.text.trim();
+              if (/^\d+$/u.test(trimmedCand)) {
+                const parsedIdx = Number(trimmedCand);
+                if (parsedIdx >= 0 && parsedIdx < 256) {
+                  if (!concreteIndices.includes(parsedIdx)) {
+                    concreteIndices.push(parsedIdx);
+                  }
+                  continue;
+                }
+              }
+              indexDynamic = true;
+            }
+            let existingEntry = frame.arrays.get(name);
+            if (!existingEntry && frame.vars.has(name)) {
+              const scalarEntries = frame.vars.get(name);
+              const promotedVariants = [];
+              let promotedTrunc = false;
+              for (const se of scalarEntries) {
+                if (se.truncated) {
+                  promotedTrunc = true;
+                  continue;
+                }
+                if (se.unset) {
+                  promotedVariants.push([]);
+                  continue;
+                }
+                promotedVariants.push([{ text: se.value, line: se.line, preExpanded: true }]);
+              }
+              existingEntry = {
+                variants: promotedVariants.length > 0 ? promotedVariants : [[]],
+                truncated: promotedTrunc,
+              };
+            }
+            const baseVariants = existingEntry?.variants?.length ? existingEntry.variants : [[]];
+            const isBranchConditional = conditional || frame.branches.length > 0;
+            let arrayTruncated = Boolean(existingEntry?.truncated || resolvedVal.truncated);
+            if (!indexDynamic && concreteIndices.length > 0) {
+              const updatedVariants = [];
+              for (const variant of baseVariants) {
+                for (const targetIdx of concreteIndices) {
+                  for (const valCand of resolvedVal.candidates) {
+                    if (updatedVariants.length >= MAX_VAR_VALUES) {
+                      arrayTruncated = true;
+                      break;
+                    }
+                    const nextVariant = variant.map((item) => ({ ...item }));
+                    while (nextVariant.length <= targetIdx) {
+                      nextVariant.push({ text: "", line: 0, preExpanded: true });
+                    }
+                    if (op === "+=") {
+                      const prevItem = nextVariant[targetIdx];
+                      nextVariant[targetIdx] = {
+                        text: `${prevItem.text}${valCand.text}`,
+                        line: valCand.line || prevItem.line || lineNumber,
+                        preExpanded: true,
+                      };
+                    } else {
+                      nextVariant[targetIdx] = {
+                        text: valCand.text,
+                        line: valCand.line,
+                        preExpanded: true,
+                      };
+                    }
+                    updatedVariants.push(nextVariant);
+                  }
+                }
+              }
+              const merged = isBranchConditional
+                ? [...baseVariants, ...updatedVariants]
+                : updatedVariants;
+              if (merged.length > MAX_VAR_VALUES) {
+                arrayTruncated = true;
+              }
+              const nextArrayEntry = {
+                variants: merged.slice(0, MAX_VAR_VALUES),
+                truncated: arrayTruncated,
+              };
+              const prevWildcard = frame.vars.get(`${ARRAY_ELEM_KEY_PREFIX}${name}\0*`) ?? null;
+              if (!isBranchConditional) {
+                frame.vars.delete(name);
+              }
+              frame.arrays.set(name, nextArrayEntry);
+              syncArrayMirrorToVars(frame.vars, name, nextArrayEntry, lineNumber);
+              if (prevWildcard) {
+                frame.vars.set(`${ARRAY_ELEM_KEY_PREFIX}${name}\0*`, prevWildcard);
+              }
+            } else {
+              // Index could not be resolved statically: merge the written
+              // value(s) into the array variants and wildcard element slot so
+              // an unpinned write is still flagged and stale initializers are
+              // not trusted blindly.
+              const valEntries = candidatesToVarEntries(resolvedVal, lineNumber);
+              const extraVariants = [];
+              for (const variant of baseVariants) {
+                for (const valCand of resolvedVal.candidates) {
+                  if (extraVariants.length >= MAX_VAR_VALUES) {
+                    arrayTruncated = true;
+                    break;
+                  }
+                  const elemItem = { text: valCand.text, line: valCand.line, preExpanded: true };
+                  extraVariants.push([...variant, elemItem]);
+                }
+              }
+              const merged = [...baseVariants, ...extraVariants];
+              if (merged.length > MAX_VAR_VALUES) {
+                arrayTruncated = true;
+              }
+              const nextArrayEntry = {
+                variants: merged.slice(0, MAX_VAR_VALUES),
+                truncated: arrayTruncated,
+              };
+              const prevWildcard = frame.vars.get(`${ARRAY_ELEM_KEY_PREFIX}${name}\0*`) ?? [];
+              frame.arrays.set(name, nextArrayEntry);
+              syncArrayMirrorToVars(frame.vars, name, nextArrayEntry, lineNumber);
+              frame.vars.set(
+                `${ARRAY_ELEM_KEY_PREFIX}${name}\0*`,
+                mergeVarEntries(prevWildcard, valEntries),
+              );
+            }
+            continue;
+          }
           const match = scalarAssignPattern.exec(token);
           if (match) {
             const resolved = candidatesToVarEntries(
@@ -7505,30 +7779,126 @@ function inspectShellText(
           nextActive.add(cli);
           const isCallConditional = conditional || frame.branches.length > 0 || fnDef.conditional;
           // Extract and expand positional arguments passed to the function call,
-          // skipping redirections like `>/dev/null`.
-          const positionalArgEntries = [];
+          // preserving the full argument vector for `"$@"` / `"$*"` as well as
+          // individual `$1`, `$2`, ... slots while skipping redirections.
+          let posVariants = [[]];
+          let posTruncated = false;
+          const fnCallArrayExpPattern = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
           for (let argIdx = cursor + 1; argIdx < tokens.length;) {
-            const redirSkip = consumeShellRedirection(tokens, argIdx, []);
+            const redirSkip = consumeShellRedirection(tokens, argIdx, [], peeledQuoted);
             if (redirSkip > 0) {
               argIdx += redirSkip;
               continue;
             }
             const rawArg = tokens[argIdx];
             const isSingleQuotedArg = Boolean(peeledSingleQuoted[argIdx]);
-            const resolvedArg = isSingleQuotedArg
-              ? [{ value: rawArg, line: lineNumber }]
-              : candidatesToVarEntries(
-                  resolveImageTokenCandidates(rawArg, stepEnv, frame.vars, lineNumber, shellMode),
-                  lineNumber,
-                );
-            positionalArgEntries.push(resolvedArg);
+            const isAnyQuotedArg = Boolean(peeledQuoted[argIdx]);
+            const argLine = resolveFoldedLine(peeledTokenOffsets[argIdx], rawArg, lineNumber);
+            const arrExpMatch = !isSingleQuotedArg ? fnCallArrayExpPattern.exec(rawArg) : null;
+            const isPosForward =
+              !isSingleQuotedArg &&
+              (rawArg === "$@" || rawArg === "${@}" || rawArg === "$*" || rawArg === "${*}");
+            if (arrExpMatch || isPosForward) {
+              const srcArrName = arrExpMatch ? arrExpMatch.groups.name : "@";
+              const srcArr = frame.arrays.get(srcArrName);
+              if (srcArr && srcArr.variants.length > 0) {
+                if (srcArr.truncated) {
+                  posTruncated = true;
+                }
+                const nextPosVariants = [];
+                for (const base of posVariants) {
+                  for (const added of srcArr.variants) {
+                    if (nextPosVariants.length >= MAX_VAR_VALUES) {
+                      posTruncated = true;
+                      break;
+                    }
+                    const itemsToAppend =
+                      isAnyQuotedArg &&
+                      (rawArg === "$*" || rawArg === "${*}" || rawArg.endsWith("[*]}"))
+                        ? [
+                            {
+                              text: added.map((it) => it.text).join(" "),
+                              line: added[0]?.line ?? argLine,
+                              preExpanded: true,
+                            },
+                          ]
+                        : added;
+                    nextPosVariants.push([...base, ...itemsToAppend]);
+                  }
+                }
+                posVariants = nextPosVariants;
+                argIdx += 1;
+                continue;
+              }
+            }
+            const expandedArg = isSingleQuotedArg
+              ? { candidates: [{ text: rawArg, line: argLine }], truncated: false }
+              : resolveImageTokenCandidates(rawArg, stepEnv, frame.vars, argLine, shellMode);
+            if (expandedArg.truncated) {
+              posTruncated = true;
+            }
+            const hasExpansion =
+              !isSingleQuotedArg && (rawArg.includes("$") || rawArg.includes("${{"));
+            const nextPosVariants = [];
+            for (const base of posVariants) {
+              for (const cand of expandedArg.candidates) {
+                if (nextPosVariants.length >= MAX_VAR_VALUES) {
+                  posTruncated = true;
+                  break;
+                }
+                if (!isAnyQuotedArg && hasExpansion) {
+                  const trimmed = cand.text.trim();
+                  const splitItems =
+                    trimmed.length > 0
+                      ? trimmed
+                          .split(/\s+/u)
+                          .map((part) => ({ text: part, line: cand.line, preExpanded: true }))
+                      : [];
+                  nextPosVariants.push([...base, ...splitItems]);
+                } else {
+                  nextPosVariants.push([
+                    ...base,
+                    { text: cand.text, line: cand.line, preExpanded: true },
+                  ]);
+                }
+              }
+            }
+            posVariants = nextPosVariants;
             argIdx += 1;
+          }
+          const positionalArrayEntry = {
+            variants: posVariants.slice(0, MAX_VAR_VALUES),
+            truncated: posTruncated || posVariants.length > MAX_VAR_VALUES,
+          };
+          const maxPosLen = positionalArrayEntry.variants.reduce(
+            (acc, v) => Math.max(acc, v.length),
+            0,
+          );
+          const positionalArgEntries = [];
+          for (let pIdx = 0; pIdx < maxPosLen; pIdx += 1) {
+            let slotEntries = [];
+            for (const variant of positionalArrayEntry.variants) {
+              if (pIdx < variant.length) {
+                slotEntries = mergeVarEntries(slotEntries, [
+                  { value: variant[pIdx].text, line: variant[pIdx].line },
+                ]);
+              } else {
+                slotEntries = mergeVarEntries(slotEntries, [{ value: "", line: 0, unset: true }]);
+              }
+            }
+            if (positionalArrayEntry.truncated) {
+              slotEntries = mergeVarEntries(slotEntries, [
+                { value: "", line: lineNumber, truncated: true },
+              ]);
+            }
+            positionalArgEntries.push(slotEntries);
           }
           const existingPositionalKeys = [...frame.vars.keys()].filter((k) =>
             /^[1-9][0-9]*$/u.test(k),
           );
           if (fnDef.subshellBody) {
             const subVars = cloneVarMap(frame.vars);
+            const subArrays = cloneArrayMap(frame.arrays);
             const subExported = new Set(frame.exportedVars);
             for (const [pName, pEntries] of prefixAssignEntries) {
               subVars.set(pName, pEntries);
@@ -7540,9 +7910,11 @@ function inspectShellText(
             for (let pIdx = 0; pIdx < positionalArgEntries.length; pIdx += 1) {
               subVars.set(String(pIdx + 1), positionalArgEntries[pIdx]);
             }
+            subArrays.set("@", positionalArrayEntry);
+            syncArrayMirrorToVars(subVars, "@", positionalArrayEntry, lineNumber);
             scopeStack.push({
               vars: subVars,
-              arrays: cloneArrayMap(frame.arrays),
+              arrays: subArrays,
               exportedVars: subExported,
               functions: new Map(frame.functions),
               branches: [],
@@ -7597,6 +7969,9 @@ function inspectShellText(
               saveCallLocal(posKey);
               frame.vars.set(posKey, positionalArgEntries[pIdx]);
             }
+            saveCallLocal("@");
+            frame.arrays.set("@", positionalArrayEntry);
+            syncArrayMirrorToVars(frame.vars, "@", positionalArrayEntry, lineNumber);
             processEvents(fnDef.bodyEvents, {
               localVars: callLocalVars,
               activeFunctions: nextActive,
@@ -8146,6 +8521,36 @@ function inspectShellText(
       ) {
         continue;
       }
+
+      // Strip all unquoted shell redirections and their target operands before
+      // parsing Docker/Podman/Buildah/Compose global flags, subcommands,
+      // option values, or `--` so log routing like `--name >build.log smoke`
+      // never shifts which operand is treated as an option value or image.
+      const strippedTokens = tokens.slice(0, cursor + 1);
+      const strippedOffsets = peeledTokenOffsets.slice(0, cursor + 1);
+      const strippedSingleQuoted = peeledSingleQuoted.slice(0, cursor + 1);
+      const strippedQuoted = peeledQuoted.slice(0, cursor + 1);
+      for (let rawIdx = cursor + 1; rawIdx < tokens.length;) {
+        const redirConsumed = consumeShellRedirection(
+          tokens,
+          rawIdx,
+          stdinRedirectTargets,
+          peeledQuoted,
+        );
+        if (redirConsumed > 0) {
+          rawIdx += redirConsumed;
+          continue;
+        }
+        strippedTokens.push(tokens[rawIdx]);
+        strippedOffsets.push(peeledTokenOffsets[rawIdx]);
+        strippedSingleQuoted.push(peeledSingleQuoted[rawIdx]);
+        strippedQuoted.push(peeledQuoted[rawIdx]);
+        rawIdx += 1;
+      }
+      tokens = strippedTokens;
+      peeledTokenOffsets = strippedOffsets;
+      peeledSingleQuoted = strippedSingleQuoted;
+      peeledQuoted = strippedQuoted;
 
       let argIndex = cursor + 1;
       if (normalizedCli === "docker" || normalizedCli === "podman" || normalizedCli === "buildah") {
@@ -9334,11 +9739,17 @@ function inspectShellText(
         const isSingleQuoted = Boolean(peeledSingleQuoted[index]);
         const isAnyQuoted = Boolean(peeledQuoted[index]);
         const arrayExpMatch = !isSingleQuoted ? BASH_ARRAY_EXPANSION_PATTERN.exec(token) : null;
+        const isPositionalForward =
+          shellMode === "posix" &&
+          !isSingleQuoted &&
+          (token === "$@" || token === "${@}" || token === "$*" || token === "${*}");
         const isArrayExpansion =
           Boolean(arrayExpMatch) ||
+          isPositionalForward ||
           (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]")));
         const fallbackLine = resolveFoldedLine(peeledTokenOffsets[index], token, lineNumber);
-        const isRawFdRedirPrefix = /^\d+$/u.test(token) && isRedirectionOperator(tokens[index + 1]);
+        const isRawFdRedirPrefix =
+          !isAnyQuoted && /^\d+$/u.test(token) && isRedirectionOperator(tokens[index + 1]);
         if (isRawFdRedirPrefix) {
           const nextLine = resolveFoldedLine(
             peeledTokenOffsets[index + 1],
@@ -9362,8 +9773,9 @@ function inspectShellText(
         CMD_VAR_PATTERN.lastIndex = 0;
 
         let expandedSlices = null;
-        if (arrayExpMatch) {
-          const knownArrayEntry = frame.arrays.get(arrayExpMatch.groups.name);
+        if (arrayExpMatch || isPositionalForward) {
+          const lookupArrName = arrayExpMatch ? arrayExpMatch.groups.name : "@";
+          const knownArrayEntry = frame.arrays.get(lookupArrName);
           if (knownArrayEntry && knownArrayEntry.variants.length > 0) {
             if (knownArrayEntry.truncated) {
               const limitMessage = `${filePath}:${fallbackLine}: ${token} exceeds expansion limit and cannot be verified exhaustively`;
@@ -9372,8 +9784,31 @@ function inspectShellText(
                 problems.push(limitMessage);
               }
             }
-            expandedSlices = knownArrayEntry.variants;
-          } else {
+            const joinsAsSingleWord =
+              isAnyQuoted && (token === "$*" || token === "${*}" || token.endsWith("[*]}"));
+            if (joinsAsSingleWord) {
+              expandedSlices = knownArrayEntry.variants.map((variant) => [
+                {
+                  text: variant.map((item) => item.text).join(" "),
+                  line: variant[0]?.line ?? fallbackLine,
+                  preExpanded: true,
+                },
+              ]);
+            } else if (!isAnyQuoted && shellMode === "posix") {
+              expandedSlices = knownArrayEntry.variants.map((variant) =>
+                variant.flatMap((item) => {
+                  const trimmed = item.text.trim();
+                  return trimmed.length > 0
+                    ? trimmed
+                        .split(/\s+/u)
+                        .map((part) => ({ text: part, line: item.line, preExpanded: true }))
+                    : [];
+                }),
+              );
+            } else {
+              expandedSlices = knownArrayEntry.variants;
+            }
+          } else if (arrayExpMatch) {
             unknownArrayTokens.push(token);
           }
         } else if (mayContainVar) {
