@@ -1002,10 +1002,14 @@ describe("security hardening", () => {
       const validOverBudgetExclusion = `de-AT,de-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-deber-x-${Array.from({ length: 24 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(validOverBudgetExclusion)).toBe("en");
 
-      // Structurally malformed over-budget exclusion tag is ignored instead of dropping valid preferences.
+      // Structurally malformed over-budget exclusion tags are ignored instead of dropping valid preferences.
       const malformedOverBudgetExclusion = `de-AT,${"a".repeat(140)}-US;q=0`;
       expect(controls.preferredLocale(malformedOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(malformedOverBudgetExclusion)).toStrictEqual(["de-at", "de"]);
+
+      const numericPrimaryOverBudgetExclusion = `de-AT,123-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(controls.preferredLocale(numericPrimaryOverBudgetExclusion)).toBe("de");
+      expect(parseAcceptLanguage(numericPrimaryOverBudgetExclusion)).toStrictEqual(["de-at", "de"]);
     });
 
     it("keeps exact, canonical, and extension-insensitive matching working for short and long configured locales", () => {
