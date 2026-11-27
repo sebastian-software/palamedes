@@ -331,6 +331,31 @@ async function verifyOptionalRootLocaleOwnership() {
         experimental: { turbopackModuleFragments: true, turbopackMinify: false },
       },
     },
+    {
+      name: "layout-above-optional-fragments-keep-unused",
+      layoutAbove: true,
+      expectedLocale: "de",
+      nextConfig: {
+        experimental: {
+          turbopackModuleFragments: true,
+          turbopackRemoveUnusedImports: false,
+          turbopackRemoveUnusedExports: false,
+        },
+      },
+    },
+    {
+      name: "layout-above-optional-fragments-unmin-keep-unused",
+      layoutAbove: true,
+      expectedLocale: "de",
+      nextConfig: {
+        experimental: {
+          turbopackModuleFragments: true,
+          turbopackMinify: false,
+          turbopackRemoveUnusedImports: false,
+          turbopackRemoveUnusedExports: false,
+        },
+      },
+    },
   ]) {
     // Create the fixture directly under `repoRoot` (outside `examples/nextjs-route`)
     // so Turbopack keeps `distDir` inside `outputFileTracingRoot` without

@@ -600,6 +600,7 @@ function walkCompiledLoaderTree(
 type ScopeFrame = {
   binding?: { value: string | null; blockScoped: boolean; isConst: boolean };
   tainted: boolean;
+  sawExportSetter?: boolean;
   declKind?: "let" | "const" | "var";
   exprDepth: number;
   pendingCondition: boolean;
@@ -781,6 +782,9 @@ function resolveIdentifierArrayInScope(
         if (closed.tainted || (closed.binding !== undefined && !closed.binding.blockScoped)) {
           scopeStack.at(-1)!.tainted = true;
         }
+        if (closed.sawExportSetter && !closed.binding?.blockScoped) {
+          scopeStack.at(-1)!.sawExportSetter = true;
+        }
         index += 1;
         prevTokenKind = "other";
         prevNonWsChar = "}";
@@ -867,16 +871,17 @@ function resolveIdentifierArrayInScope(
         while (index < limit && /[\w$]/u.test(source[index] ?? "")) index += 1;
         const word = source.slice(wordStart, index);
         if (prevTokenKind !== "dot") {
-          // With `experimental.turbopackModuleFragments: true`, Turbopack exports
-          // `const tree` after the entrypoint call via `ctx.s([..., "g", () => tree, a => tree = a])`.
-          // A `const` binding cannot be reassigned by the generated setter (calling
-          // it throws TypeError), so skip verified read-only/const-setter export calls.
+          // With `experimental.turbopackModuleFragments: true`, Turbopack may
+          // register `ctx.s([..., "tree", () => tree, a => tree = a])` either
+          // before or after `const tree = [...]` (for example before init when
+          // unminified with unused-export removal disabled). A `const` binding
+          // cannot be reassigned by the generated setter (calling it throws
+          // TypeError), so skip verified read-only/const-setter export calls
+          // here and enforce `finalFrame.binding.isConst === true` below.
           if (
-            stopBelowDepth > 0 &&
             moduleParam !== undefined &&
-            scopeStack.length === stopBelowDepth &&
+            (stopBelowDepth === 0 || scopeStack.length === stopBelowDepth) &&
             top.exprDepth === 0 &&
-            top.binding?.isConst === true &&
             word === moduleParam
           ) {
             const afterParam = skipWhitespaceAndComments(source, index);
@@ -896,6 +901,7 @@ function resolveIdentifierArrayInScope(
                     const bindings = elements
                       ? parseTurbopackEsmExportBindings(elements)
                       : undefined;
+                    let usesSetter = false;
                     if (
                       bindings &&
                       bindings.every((binding) => {
@@ -907,15 +913,21 @@ function resolveIdentifierArrayInScope(
                                 identWord.test(binding.setterExpr));
                         if (!mentionsIdent) return true;
                         if (binding.kind === "value") {
-                          return stripOuterParens(binding.expr) === ident;
+                          return (
+                            top.binding?.value !== undefined &&
+                            top.binding.value !== null &&
+                            stripOuterParens(binding.expr) === ident
+                          );
                         }
-                        return (
-                          unwrapExportGetter(binding.getterExpr) === ident &&
-                          (binding.setterExpr === undefined ||
-                            isSimpleSetterForIdentifier(binding.setterExpr, ident))
-                        );
+                        if (unwrapExportGetter(binding.getterExpr) !== ident) return false;
+                        if (binding.setterExpr !== undefined) {
+                          if (!isSimpleSetterForIdentifier(binding.setterExpr, ident)) return false;
+                          usesSetter = true;
+                        }
+                        return true;
                       })
                     ) {
+                      if (usesSetter) top.sawExportSetter = true;
                       index = callEnd;
                       prevTokenKind = "other";
                       prevNonWsChar = ")";
@@ -1057,7 +1069,13 @@ function resolveIdentifierArrayInScope(
   // be mutated after the declaration and before deferred execution.
   const targetDepth = scopeStack.length;
   const finalFrame = scopeStack.at(-1)!;
-  if (finalFrame.tainted || !finalFrame.binding?.value) return;
+  if (
+    finalFrame.tainted ||
+    !finalFrame.binding?.value ||
+    (finalFrame.sawExportSetter && !finalFrame.binding.isConst)
+  ) {
+    return;
+  }
   const candidateValue = finalFrame.binding.value;
 
   // Also scan the remainder of the enclosing scope after the entrypoint call so
@@ -1068,7 +1086,13 @@ function resolveIdentifierArrayInScope(
   prevNonWsChar = "}";
   regexAllowed = false;
   if (!scanRange(source.length, targetDepth)) return;
-  if (finalFrame.tainted || finalFrame.binding?.value !== candidateValue) return;
+  if (
+    finalFrame.tainted ||
+    finalFrame.binding?.value !== candidateValue ||
+    (finalFrame.sawExportSetter && !finalFrame.binding.isConst)
+  ) {
+    return;
+  }
   return candidateValue;
 }
 
@@ -2679,119 +2703,386 @@ function extractTurbopackExportedFunction(
   return;
 }
 
-function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): boolean {
-  const identWord = new RegExp(
-    `(?:(?<![\\w$.])|\\.\\.\\.)${escapeRegExpLiteral(ident)}(?![\\w$])`,
-    "u",
-  );
-  let prevToken: "dot" | "other" = "other";
-  let prevWord = "";
-  let prevChar = "";
-  let regexAllowed = true;
-  let index = 0;
+const AST_METADATA_KEYS = new Set([
+  "type",
+  "start",
+  "end",
+  "loc",
+  "extra",
+  "comments",
+  "tokens",
+  "leadingComments",
+  "trailingComments",
+  "innerComments",
+]);
 
-  while (index < source.length) {
-    const ch = source[index];
-    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
-      index += 1;
-      continue;
-    }
-    if (ch === "/" && (source[index + 1] === "/" || source[index + 1] === "*")) {
-      index = skipWhitespaceAndComments(source, index);
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      const end = scanQuotedStringEnd(source, index);
-      if (end === -1) return true;
-      index = end;
-      prevToken = "other";
-      prevWord = "";
-      prevChar = ch;
-      regexAllowed = false;
-      continue;
-    }
-    if (ch === "`") {
-      const end = scanTemplateLiteralEnd(source, index);
-      if (end === -1) return true;
-      const literal = source.slice(index, end);
-      if (literal.includes("${") && identWord.test(literal)) return true;
-      index = end;
-      prevToken = "other";
-      prevWord = "";
-      prevChar = "`";
-      regexAllowed = false;
-      continue;
-    }
-    if (ch === "/" && regexAllowed) {
-      const end = scanRegexLiteralEnd(source, index);
-      if (end !== -1) {
-        index = end;
-        prevToken = "other";
-        prevWord = "";
-        prevChar = "/";
-        regexAllowed = false;
-        continue;
+function collectPatternBindingNames(
+  pattern: JsAstNode | undefined,
+  names: Set<string>,
+  skipOffset = -1,
+): void {
+  if (!pattern) return;
+  switch (pattern.type) {
+    case "Identifier": {
+      if (typeof pattern.name === "string" && pattern.start !== skipOffset) {
+        names.add(pattern.name);
       }
+      return;
     }
-    if (ch === "." || ch === "#") {
-      index += 1;
-      prevToken = "dot";
-      prevWord = "";
-      prevChar = ch;
-      regexAllowed = false;
-      continue;
+    case "RestElement":
+    case "SpreadElement": {
+      if (isAstNode(pattern.argument)) {
+        collectPatternBindingNames(pattern.argument, names, skipOffset);
+      }
+      return;
     }
-    if (/[A-Za-z_$]/u.test(ch ?? "")) {
-      const wordStart = index;
-      index += 1;
-      while (index < source.length && /[\w$]/u.test(source[index] ?? "")) index += 1;
-      const word = source.slice(wordStart, index);
-      if (prevToken !== "dot" && word === ident && wordStart !== skipOffset) {
-        const afterWord = skipWhitespaceAndComments(source, index);
-        const isObjectKey = (prevChar === "{" || prevChar === ",") && source[afterWord] === ":";
-        if (!isObjectKey) {
-          if (
-            prevWord === "delete" ||
-            prevChar === "+" ||
-            prevChar === "-" ||
-            isAssignmentOperatorAt(source, afterWord)
-          ) {
-            return true;
-          }
-          // Check member/index writes such as `tree[2] = ...` or `tree.foo = ...`
-          if (source[afterWord] === "[") {
-            const bracketEnd = scanBalancedEnd(source, afterWord);
-            if (bracketEnd === -1) return true;
-            const afterBracket = skipWhitespaceAndComments(source, bracketEnd);
-            if (isAssignmentOperatorAt(source, afterBracket)) return true;
-          } else if (source[afterWord] === ".") {
-            let propEnd = skipWhitespaceAndComments(source, afterWord + 1);
-            while (propEnd < source.length && /[\w$]/u.test(source[propEnd] ?? "")) propEnd += 1;
-            const afterProp = skipWhitespaceAndComments(source, propEnd);
-            if (isAssignmentOperatorAt(source, afterProp)) return true;
+    case "AssignmentPattern": {
+      if (isAstNode(pattern.left)) {
+        collectPatternBindingNames(pattern.left, names, skipOffset);
+      }
+      return;
+    }
+    case "ArrayPattern": {
+      if (Array.isArray(pattern.elements)) {
+        for (const elem of pattern.elements) {
+          if (isAstNode(elem)) collectPatternBindingNames(elem, names, skipOffset);
+        }
+      }
+      return;
+    }
+    case "ObjectPattern": {
+      if (Array.isArray(pattern.properties)) {
+        for (const prop of pattern.properties) {
+          if (!isAstNode(prop)) continue;
+          if (prop.type === "RestElement" && isAstNode(prop.argument)) {
+            collectPatternBindingNames(prop.argument, names, skipOffset);
+          } else if (prop.type === "ObjectProperty" && isAstNode(prop.value)) {
+            collectPatternBindingNames(prop.value, names, skipOffset);
           }
         }
       }
-      regexAllowed = prevToken !== "dot" && REGEX_PRECEDING_KEYWORDS.has(word);
-      prevToken = "other";
-      prevWord = word;
-      prevChar = word.at(-1) ?? "";
-      continue;
+      return;
     }
-    if ((ch === "+" && source[index + 1] === "+") || (ch === "-" && source[index + 1] === "-")) {
-      index += 2;
-      prevToken = "other";
-      prevWord = "";
-      prevChar = ch;
-      continue;
-    }
-    index += 1;
-    prevToken = "other";
-    prevWord = "";
-    prevChar = ch ?? "";
-    regexAllowed = "([{=,:;!?&|^~+-*/%<>}".includes(ch ?? "");
+    default:
+      return;
   }
-  return false;
+}
+
+function collectLexicalStatementBindings(statements: readonly unknown[], names: Set<string>): void {
+  for (const stmt of statements) {
+    if (!isAstNode(stmt)) continue;
+    if (stmt.type === "VariableDeclaration" && stmt.kind !== "var") {
+      if (Array.isArray(stmt.declarations)) {
+        for (const decl of stmt.declarations) {
+          if (isAstNode(decl) && isAstNode(decl.id)) {
+            collectPatternBindingNames(decl.id, names);
+          }
+        }
+      }
+    } else if (
+      (stmt.type === "FunctionDeclaration" || stmt.type === "ClassDeclaration") &&
+      isAstNode(stmt.id) &&
+      stmt.id.type === "Identifier" &&
+      typeof stmt.id.name === "string"
+    ) {
+      names.add(stmt.id.name);
+    }
+  }
+}
+
+function collectHoistedFunctionBodyBindings(node: JsAstNode, names: Set<string>): void {
+  if (
+    node.type === "FunctionExpression" ||
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "ObjectMethod" ||
+    node.type === "ClassMethod" ||
+    node.type === "ClassPrivateMethod" ||
+    node.type === "StaticBlock"
+  ) {
+    return;
+  }
+  if (node.type === "FunctionDeclaration") {
+    if (isAstNode(node.id) && node.id.type === "Identifier" && typeof node.id.name === "string") {
+      names.add(node.id.name);
+    }
+    return;
+  }
+  if (node.type === "VariableDeclaration" && node.kind === "var") {
+    if (Array.isArray(node.declarations)) {
+      for (const decl of node.declarations) {
+        if (isAstNode(decl) && isAstNode(decl.id)) {
+          collectPatternBindingNames(decl.id, names);
+        }
+      }
+    }
+    return;
+  }
+  for (const [key, value] of Object.entries(node)) {
+    if (AST_METADATA_KEYS.has(key)) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (isAstNode(item)) collectHoistedFunctionBodyBindings(item, names);
+      }
+    } else if (isAstNode(value)) {
+      collectHoistedFunctionBodyBindings(value, names);
+    }
+  }
+}
+
+function targetWritesToIdent(node: JsAstNode, ident: string): boolean {
+  switch (node.type) {
+    case "Identifier":
+      return node.name === ident;
+    case "MemberExpression":
+    case "OptionalMemberExpression":
+      return isAstNode(node.object) && targetWritesToIdent(node.object, ident);
+    case "RestElement":
+    case "SpreadElement":
+      return isAstNode(node.argument) && targetWritesToIdent(node.argument, ident);
+    case "AssignmentPattern":
+      return isAstNode(node.left) && targetWritesToIdent(node.left, ident);
+    case "ArrayPattern":
+      return (
+        Array.isArray(node.elements) &&
+        node.elements.some((elem) => isAstNode(elem) && targetWritesToIdent(elem, ident))
+      );
+    case "ObjectPattern":
+      return (
+        Array.isArray(node.properties) &&
+        node.properties.some((prop) => {
+          if (!isAstNode(prop)) return false;
+          if (prop.type === "RestElement") {
+            return isAstNode(prop.argument) && targetWritesToIdent(prop.argument, ident);
+          }
+          if (prop.type === "ObjectProperty") {
+            return isAstNode(prop.value) && targetWritesToIdent(prop.value, ident);
+          }
+          return false;
+        })
+      );
+    default:
+      return false;
+  }
+}
+
+function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): boolean {
+  const program = parseJsProgram(source);
+  if (!program) return true;
+
+  let foundWrite = false;
+
+  const visitChildren = (node: JsAstNode, depth: number, skipKey?: string): void => {
+    for (const [key, value] of Object.entries(node)) {
+      if (foundWrite) return;
+      if (AST_METADATA_KEYS.has(key) || key === skipKey) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (foundWrite) return;
+          if (isAstNode(item)) visit(item, depth);
+        }
+      } else if (isAstNode(value)) {
+        visit(value, depth);
+      }
+    }
+  };
+
+  const visit = (node: JsAstNode, depth: number): void => {
+    if (foundWrite) return;
+
+    // Nested functions create both parameter and hoisted `var`/function scopes.
+    if (
+      node.type === "FunctionDeclaration" ||
+      node.type === "FunctionExpression" ||
+      node.type === "ArrowFunctionExpression" ||
+      node.type === "ObjectMethod" ||
+      node.type === "ClassMethod" ||
+      node.type === "ClassPrivateMethod"
+    ) {
+      if (
+        node.type === "FunctionDeclaration" &&
+        depth === 0 &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        node.id.name === ident &&
+        node.id.start !== skipOffset
+      ) {
+        foundWrite = true;
+        return;
+      }
+      if (
+        (node.type === "ObjectMethod" || node.type === "ClassMethod") &&
+        node.computed &&
+        isAstNode(node.key)
+      ) {
+        visit(node.key, depth);
+        if (foundWrite) return;
+      }
+      if (
+        node.type === "FunctionExpression" &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        node.id.name === ident
+      ) {
+        return;
+      }
+      const paramNames = new Set<string>();
+      if (Array.isArray(node.params)) {
+        for (const param of node.params) {
+          if (isAstNode(param)) collectPatternBindingNames(param, paramNames);
+        }
+      }
+      if (paramNames.has(ident)) return;
+      if (Array.isArray(node.params)) {
+        for (const param of node.params) {
+          if (isAstNode(param)) visit(param, depth + 1);
+        }
+      }
+      if (foundWrite || !isAstNode(node.body)) return;
+      const hoistedNames = new Set<string>();
+      collectHoistedFunctionBodyBindings(node.body, hoistedNames);
+      if (hoistedNames.has(ident)) return;
+      visit(node.body, depth + 1);
+      return;
+    }
+
+    if (node.type === "BlockStatement" || node.type === "StaticBlock") {
+      if (Array.isArray(node.body)) {
+        const blockNames = new Set<string>();
+        collectLexicalStatementBindings(node.body, blockNames);
+        if (blockNames.has(ident)) return;
+      }
+      visitChildren(node, depth + 1);
+      return;
+    }
+
+    if (node.type === "SwitchStatement") {
+      if (isAstNode(node.discriminant)) visit(node.discriminant, depth);
+      if (foundWrite) return;
+      if (Array.isArray(node.cases)) {
+        const switchNames = new Set<string>();
+        for (const c of node.cases) {
+          if (isAstNode(c) && Array.isArray(c.consequent)) {
+            collectLexicalStatementBindings(c.consequent, switchNames);
+          }
+        }
+        if (switchNames.has(ident)) return;
+        for (const c of node.cases) {
+          if (isAstNode(c)) visit(c, depth + 1);
+        }
+      }
+      return;
+    }
+
+    if (node.type === "ForStatement") {
+      if (
+        isAstNode(node.init) &&
+        node.init.type === "VariableDeclaration" &&
+        node.init.kind !== "var"
+      ) {
+        const loopNames = new Set<string>();
+        collectLexicalStatementBindings([node.init], loopNames);
+        if (loopNames.has(ident)) return;
+      }
+      visitChildren(node, depth + 1);
+      return;
+    }
+
+    if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
+      if (isAstNode(node.left)) {
+        if (node.left.type === "VariableDeclaration") {
+          if (node.left.kind !== "var") {
+            const loopNames = new Set<string>();
+            collectLexicalStatementBindings([node.left], loopNames);
+            if (loopNames.has(ident)) return;
+          }
+        } else if (targetWritesToIdent(node.left, ident)) {
+          foundWrite = true;
+          return;
+        }
+      }
+      visitChildren(node, depth + 1);
+      return;
+    }
+
+    if (node.type === "CatchClause") {
+      if (isAstNode(node.param)) {
+        const catchNames = new Set<string>();
+        collectPatternBindingNames(node.param, catchNames);
+        if (catchNames.has(ident)) return;
+      }
+      visitChildren(node, depth + 1);
+      return;
+    }
+
+    if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
+      if (
+        node.type === "ClassDeclaration" &&
+        depth === 0 &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        node.id.name === ident &&
+        node.id.start !== skipOffset
+      ) {
+        foundWrite = true;
+        return;
+      }
+      if (isAstNode(node.superClass)) {
+        visit(node.superClass, depth);
+        if (foundWrite) return;
+      }
+      if (
+        node.type === "ClassExpression" &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        node.id.name === ident
+      ) {
+        return;
+      }
+      if (isAstNode(node.body)) visit(node.body, depth + 1);
+      return;
+    }
+
+    if (node.type === "VariableDeclaration") {
+      if (Array.isArray(node.declarations)) {
+        for (const decl of node.declarations) {
+          if (!isAstNode(decl)) continue;
+          if (isAstNode(decl.id)) {
+            const declNames = new Set<string>();
+            collectPatternBindingNames(decl.id, declNames, skipOffset);
+            if (declNames.has(ident)) {
+              foundWrite = true;
+              return;
+            }
+          }
+          if (isAstNode(decl.init)) visit(decl.init, depth);
+          if (foundWrite) return;
+        }
+      }
+      return;
+    }
+
+    if (node.type === "AssignmentExpression") {
+      if (isAstNode(node.left) && targetWritesToIdent(node.left, ident)) {
+        foundWrite = true;
+        return;
+      }
+    } else if (node.type === "UpdateExpression") {
+      if (isAstNode(node.argument) && targetWritesToIdent(node.argument, ident)) {
+        foundWrite = true;
+        return;
+      }
+    } else if (node.type === "UnaryExpression" && node.operator === "delete") {
+      if (isAstNode(node.argument) && targetWritesToIdent(node.argument, ident)) {
+        foundWrite = true;
+        return;
+      }
+    }
+
+    visitChildren(node, depth);
+  };
+
+  visit(program, 0);
+  return foundWrite;
 }
 
 function verifyTurbopackAppPageRuntimeExport(

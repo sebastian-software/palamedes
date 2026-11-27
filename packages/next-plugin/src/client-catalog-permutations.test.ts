@@ -1602,6 +1602,62 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
           );
           expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
 
+          // Shadowed lexical bindings inside nested runtime handlers (for
+          // example `tree: c` with an inner `let c = ...` inside `handler`)
+          // must not be treated as writes to the outer `tree` parameter, while
+          // an unshadowed write to `c` inside the handler still fails closed.
+          writeFileSync(
+            namedRuntimeChunk,
+            `module.exports = ([
+'${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function({tree:c,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},r=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:c}}); async function W(){ let c = 1; c = 2; return c; } return {__next_app__:U,routeModule:r,handler:W}; }], '${namedRuntimeId}'); },
+'${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
+'${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
+]);\n`,
+          );
+          writeFileSync(
+            path.join(distDir, "server/app/[[...locale]]/page.js"),
+            `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+          // Unminified module fragments with unused-export removal disabled can
+          // register `a.s(["tree", () => j, a => j = a])` BEFORE `const j = [...]`.
+          // Verify that a `const` binding still resolves cleanly while a mutable
+          // `let` binding with a registered setter fails closed.
+          writeFileSync(
+            templateChunk,
+            `module.exports = [
+'${namedEntryId}', a => { "use strict"; a.s(["tree", () => j, a => j = a, "__next_app__", () => n, "handler", () => p, "routeModule", () => o]); let c = a.i('${namedRuntimeId}'); const j = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []]; const m = (0, c.f)({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: k, loadChunk: lc, interopDefault: d.interopDefault }), n = m.__next_app__, o = m.routeModule, p = m.handler; }
+];\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+
+          writeFileSync(
+            templateChunk,
+            `module.exports = [
+'${namedEntryId}', a => { "use strict"; a.s(["tree", () => j, a => j = a, "__next_app__", () => n, "handler", () => p, "routeModule", () => o]); let c = a.i('${namedRuntimeId}'); let j = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []]; const m = (0, c.f)({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: k, loadChunk: lc, interopDefault: d.interopDefault }), n = m.__next_app__, o = m.routeModule, p = m.handler; }
+];\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
+          // Restore standard template chunk for subsequent assertions.
+          writeFileSync(
+            templateChunk,
+            `module.exports = [
+'${namedEntryId}', a => { "use strict"; let c = a.i('${namedRuntimeId}'); let j = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []]; let m = (0, c.f)({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: k, loadChunk: lc, interopDefault: d.interopDefault }), n = m.__next_app__, o = m.routeModule, p = m.handler; a.s(["__next_app__", 0, n, "handler", 0, p, "routeModule", 0, o]); }
+];\n`,
+          );
+
+          writeFileSync(
+            namedRuntimeChunk,
+            `module.exports = ([
+'${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function({tree:c,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},r=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:c}}); async function W(){ c = tampered; return null; } return {__next_app__:U,routeModule:r,handler:W}; }], '${namedRuntimeId}'); },
+'${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
+'${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
+]);\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
           // Minified single-letter routeModule local bindings (`r` colliding with
           // `require`, or `l` colliding with `loadChunk`) must use the captured
           // declaration offset rather than `indexOf(routeModVar, ...)`, while a
