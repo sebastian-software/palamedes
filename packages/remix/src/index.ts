@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   existsSync,
@@ -701,119 +701,190 @@ function toCatalogArtifactConfig(config: LoadedPalamedesConfig) {
 // Emit native compiler output as ordinary ESM. Node owns module evaluation;
 // neither authored ICU nor generated function bodies pass through eval/vm.
 const MAX_SERVER_MODULE_WRITES = 256;
-const activeServerModuleDirectories = new Set<string>();
-let serverModuleExitCleanupRegistered = false;
 
-function cleanupAllServerModuleDirectories(): void {
-  for (const directory of activeServerModuleDirectories) {
-    try {
-      rmSync(directory, { recursive: true, force: true });
-    } catch {
-      // Best-effort cleanup on process exit.
-    }
-  }
-  activeServerModuleDirectories.clear();
-  serverModuleExitCleanupRegistered = false;
-}
+type CachedServerModuleEntry = {
+  filename: string;
+  urlPromise: Promise<string>;
+  inFlight: number;
+  evicted: boolean;
+};
 
-function trackServerModuleDirectory(directory: string): void {
-  activeServerModuleDirectories.add(directory);
-  if (!serverModuleExitCleanupRegistered) {
-    serverModuleExitCleanupRegistered = true;
-    process.once("exit", cleanupAllServerModuleDirectories);
-  }
-}
+const activeServerModuleRegistries = new Set<symbol>();
+const serverModuleWrites = new Map<string, CachedServerModuleEntry>();
+let sharedServerModuleDirectoryPromise: Promise<string> | undefined;
+let sharedServerModuleDirectory: string | undefined;
+let serverModuleCleanupRegistered = false;
 
-function removeServerModuleDirectory(directory: string): void {
-  activeServerModuleDirectories.delete(directory);
+function removeDirectoryBestEffort(directory: string): void {
   try {
     rmSync(directory, { recursive: true, force: true });
   } catch {
-    // Best-effort cleanup when closing a registry.
+    // Best-effort cleanup on close or process termination.
   }
-  if (activeServerModuleDirectories.size === 0 && serverModuleExitCleanupRegistered) {
-    process.off("exit", cleanupAllServerModuleDirectories);
-    serverModuleExitCleanupRegistered = false;
+}
+
+function cleanupSharedServerModuleDirectory(): void {
+  serverModuleWrites.clear();
+  const directory = sharedServerModuleDirectory;
+  sharedServerModuleDirectory = undefined;
+  sharedServerModuleDirectoryPromise = undefined;
+  if (directory) {
+    removeDirectoryBestEffort(directory);
   }
+}
+
+function unregisterServerModuleCleanup(): void {
+  if (!serverModuleCleanupRegistered) return;
+  serverModuleCleanupRegistered = false;
+  process.off("exit", onServerModuleProcessExit);
+  process.off("SIGTERM", onServerModuleSigterm);
+  process.off("SIGINT", onServerModuleSigint);
+}
+
+function onServerModuleProcessExit(): void {
+  cleanupSharedServerModuleDirectory();
+  unregisterServerModuleCleanup();
+}
+
+function handleServerModuleTerminationSignal(signal: "SIGTERM" | "SIGINT"): void {
+  // Only intercept termination when the host has no signal handler of its own;
+  // hosts with graceful-shutdown handlers drain requests and clean up on `exit`.
+  if (process.listenerCount(signal) > 0) {
+    return;
+  }
+  cleanupSharedServerModuleDirectory();
+  unregisterServerModuleCleanup();
+  try {
+    process.kill(process.pid, signal);
+  } catch {
+    process.exit(signal === "SIGINT" ? 130 : 143);
+  }
+}
+
+function onServerModuleSigterm(): void {
+  handleServerModuleTerminationSignal("SIGTERM");
+}
+
+function onServerModuleSigint(): void {
+  handleServerModuleTerminationSignal("SIGINT");
+}
+
+function registerServerModuleCleanup(): void {
+  if (serverModuleCleanupRegistered) return;
+  serverModuleCleanupRegistered = true;
+  process.once("exit", onServerModuleProcessExit);
+  process.once("SIGTERM", onServerModuleSigterm);
+  process.once("SIGINT", onServerModuleSigint);
 }
 
 function createServerCatalogModuleLoader(): {
   importModule(source: string): Promise<CompiledCatalogMessages>;
   close(): void;
 } {
-  let directoryPromise: Promise<string> | undefined;
-  let resolvedDirectory: string | undefined;
+  const token = Symbol("palamedes-remix-registry");
   let loaderClosed = false;
-  const serverModuleWrites = new Map<string, Promise<string>>();
 
   return {
     async importModule(source: string): Promise<CompiledCatalogMessages> {
       if (loaderClosed) {
         throw new Error("Palamedes Remix catalog registry has been closed.");
       }
+      activeServerModuleRegistries.add(token);
+      registerServerModuleCleanup();
+
       const code = source.replace(
         'from"@palamedes/core/compiled"',
         `from${JSON.stringify(pathToFileURL(createRequire(import.meta.url).resolve("@palamedes/core/compiled")).href)}`,
       );
       const digest = createHash("sha256").update(code).digest("hex");
-      let moduleUrl = serverModuleWrites.get(digest);
-      if (moduleUrl) {
+      let entry = serverModuleWrites.get(digest);
+      if (entry) {
         // Refresh insertion order so active digests stay warm under eviction.
         serverModuleWrites.delete(digest);
-        serverModuleWrites.set(digest, moduleUrl);
+        serverModuleWrites.set(digest, entry);
       } else {
-        directoryPromise ??= mkdtemp(path.join(tmpdir(), "palamedes-remix-modules-"))
+        sharedServerModuleDirectoryPromise ??= mkdtemp(
+          path.join(tmpdir(), "palamedes-remix-modules-"),
+        )
           .then((directory) => {
-            if (loaderClosed) {
-              removeServerModuleDirectory(directory);
+            if (activeServerModuleRegistries.size === 0) {
+              removeDirectoryBestEffort(directory);
+              sharedServerModuleDirectoryPromise = undefined;
               throw new Error("Palamedes Remix catalog registry has been closed.");
             }
-            resolvedDirectory = directory;
-            trackServerModuleDirectory(directory);
+            sharedServerModuleDirectory = directory;
             return directory;
           })
           .catch((error: unknown) => {
-            directoryPromise = undefined;
+            sharedServerModuleDirectoryPromise = undefined;
             throw error;
           });
-        moduleUrl = directoryPromise.then(async (directory) => {
-          if (loaderClosed) {
-            throw new Error("Palamedes Remix catalog registry has been closed.");
-          }
-          const filename = path.join(directory, `${digest}.mjs`);
-          await writeFile(filename, code, "utf8");
-          return pathToFileURL(filename).href;
-        });
+        const currentDirPromise = sharedServerModuleDirectoryPromise;
+        const created: CachedServerModuleEntry = {
+          filename: "",
+          inFlight: 0,
+          evicted: false,
+          urlPromise: currentDirPromise.then(async (directory) => {
+            if (
+              loaderClosed ||
+              activeServerModuleRegistries.size === 0 ||
+              sharedServerModuleDirectoryPromise !== currentDirPromise
+            ) {
+              throw new Error("Palamedes Remix catalog registry has been closed.");
+            }
+            const filename = path.join(directory, `${digest}.mjs`);
+            created.filename = filename;
+            await writeFile(filename, code, "utf8");
+            return pathToFileURL(filename).href;
+          }),
+        };
         if (serverModuleWrites.size >= MAX_SERVER_MODULE_WRITES) {
           const oldestDigest = serverModuleWrites.keys().next().value;
           if (oldestDigest !== undefined) {
+            const evicted = serverModuleWrites.get(oldestDigest);
             serverModuleWrites.delete(oldestDigest);
+            if (evicted) {
+              evicted.evicted = true;
+              if (evicted.inFlight === 0 && evicted.filename) {
+                void rm(evicted.filename, { force: true }).catch(() => {});
+              }
+            }
           }
         }
-        serverModuleWrites.set(digest, moduleUrl);
-        void moduleUrl.catch(() => {
-          if (serverModuleWrites.get(digest) === moduleUrl) {
+        serverModuleWrites.set(digest, created);
+        void created.urlPromise.catch(() => {
+          if (serverModuleWrites.get(digest) === created) {
             serverModuleWrites.delete(digest);
           }
         });
+        entry = created;
       }
-      const { messages } = await import(/* @vite-ignore */ await moduleUrl);
-      if (!isCompiledCatalogObject(messages)) {
-        throw new TypeError(
-          "Palamedes generated server catalog did not produce an executable catalog.",
-        );
+
+      entry.inFlight += 1;
+      try {
+        const { messages } = await import(/* @vite-ignore */ await entry.urlPromise);
+        if (!isCompiledCatalogObject(messages)) {
+          throw new TypeError(
+            "Palamedes generated server catalog did not produce an executable catalog.",
+          );
+        }
+        return messages;
+      } finally {
+        entry.inFlight -= 1;
+        if (entry.evicted && entry.inFlight === 0 && entry.filename) {
+          void rm(entry.filename, { force: true }).catch(() => {});
+        }
       }
-      return messages;
     },
 
     close(): void {
+      if (loaderClosed) return;
       loaderClosed = true;
-      serverModuleWrites.clear();
-      if (resolvedDirectory) {
-        removeServerModuleDirectory(resolvedDirectory);
-        resolvedDirectory = undefined;
+      activeServerModuleRegistries.delete(token);
+      if (activeServerModuleRegistries.size === 0) {
+        cleanupSharedServerModuleDirectory();
+        unregisterServerModuleCleanup();
       }
-      directoryPromise = undefined;
     },
   };
 }

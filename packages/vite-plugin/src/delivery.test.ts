@@ -516,6 +516,29 @@ describe("Vite catalog delivery", () => {
     expect(emittedBeforeEnd.join("").length).toBeGreaterThan(1024 * 1024);
     expect(allChunks.join("")).toBe(`<html><body>${block.repeat(18)}</body></html>`);
   });
+
+  it("preserves exact </head> offsets with Turkish İ text and ignores </HEAD> inside scripts or comments", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const html =
+      '<!DOCTYPE html><html><head><title>İstanbul İZMİR</title><!-- </HEAD> --><script type="application/json">{"tag":"</HEAD>"}</script><style>/* </head> */</style></HEAD><body>app</body></html>';
+    const output = await collect(
+      delivery.createDocumentTransform(delivery.getLocaleBinding("de")),
+      html,
+    );
+
+    expect(output).toContain("<title>İstanbul İZMİR</title>");
+    expect(output).toContain(
+      '<!-- </HEAD> --><script type="application/json">{"tag":"</HEAD>"}</script><style>/* </head> */</style>',
+    );
+    expect(output).toContain("</script></HEAD><body>app</body></html>");
+    expect(output.indexOf("palamedes.document-catalogs-ready-promise")).toBeGreaterThan(
+      output.indexOf("</style>"),
+    );
+    expect(output.indexOf("palamedes.document-catalogs-ready-promise")).toBeLessThan(
+      output.lastIndexOf("</HEAD>"),
+    );
+  });
 });
 
 async function createFixture(): Promise<string> {

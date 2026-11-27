@@ -640,5 +640,21 @@ describe("TanStack server catalog adapter", () => {
         rmSync(clientDirectory, { recursive: true, force: true });
       }
     });
+
+    it("handles Turkish İ text and many script blocks in one chunk without index drift", async () => {
+      const manyScripts = Array.from(
+        { length: 1000 },
+        (_, index) => `<script>/* İstanbul ${index} */</script>`,
+      ).join("");
+      const html = `<html><head><title>İstanbul İZMİR</title></head><body><p>İstanbul</p>${manyScripts}<script type="module" src="/assets/index-tr.js"></script></body></html>`;
+      const response = await deliverDocument(html, false);
+      const rendered = await response.text();
+
+      expect(rendered).toContain("<title>İstanbul İZMİR</title>");
+      expect(rendered).toContain("<p>İstanbul</p>");
+      expect(rendered).toContain("/* İstanbul 999 */");
+      expect(rendered).toContain('import("/assets/index-tr.js")');
+      expect(rendered).not.toContain('src="/assets/index-tr.js"');
+    });
   });
 });

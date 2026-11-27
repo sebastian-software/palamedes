@@ -51,6 +51,7 @@ export type ViteDocumentTransformOptions = {
 
 const HTML_ATTRIBUTE_NAME = /^[a-z][a-z0-9-]*$/iu;
 const MAX_HEAD_BUFFER_LENGTH = 1024 * 1024;
+const HEAD_RAW_TAGS = ["script", "style", "title"] as const;
 
 /**
  * Owns the server half of Vite's locale-bound catalog delivery for SSR hosts
@@ -200,8 +201,8 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
       ? `<script type="importmap"${nonce}>${escapeScriptData(binding.importMapJson)}</script>`
       : "";
     const decoder = new StringDecoder("utf8");
+    const headScanner = createHeadCloseScanner();
     let buffered = "";
-    let headScanOffset = 0;
     let passthrough = false;
     return new Transform({
       transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
@@ -212,10 +213,8 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
             output = text;
           } else {
             buffered += text;
-            const headClose = findHeadClose(buffered, headScanOffset);
-            headScanOffset = headClose.nextScanOffset;
-            if (headClose.index !== -1) {
-              const headEnd = headClose.index;
+            const headEnd = headScanner.scan(buffered);
+            if (headEnd !== -1 && headEnd <= MAX_HEAD_BUFFER_LENGTH) {
               const head = buffered.slice(0, headEnd);
               const tail = buffered.slice(headEnd);
               // A recovery link must start a new document and module graph, even
@@ -253,7 +252,10 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
               output = `${sanitizedHead.replace(/<head\b[^>]*>/iu, (tag) => `${tag}${importMap}`)}${probe}${links}${tail}`;
               passthrough = true;
               buffered = "";
-            } else if (buffered.length > MAX_HEAD_BUFFER_LENGTH) {
+            } else if (
+              headEnd > MAX_HEAD_BUFFER_LENGTH ||
+              buffered.length > MAX_HEAD_BUFFER_LENGTH
+            ) {
               output = buffered;
               passthrough = true;
               buffered = "";
@@ -354,34 +356,205 @@ function decodeChunk(decoder: StringDecoder, chunk: unknown): string {
   return String(chunk);
 }
 
-function findHeadClose(value: string, from: number): { index: number; nextScanOffset: number } {
-  const lower = value.slice(from).toLowerCase();
-  const needle = "</head";
-  let cursor = 0;
-  while (cursor < lower.length) {
-    const match = lower.indexOf(needle, cursor);
-    if (match === -1) {
-      return {
-        index: -1,
-        nextScanOffset: Math.max(from, value.length - (needle.length - 1)),
-      };
-    }
-    let after = match + needle.length;
-    while (after < lower.length && /\s/u.test(lower[after] ?? "")) {
-      after += 1;
-    }
-    if (after >= lower.length) {
-      return { index: -1, nextScanOffset: from + match };
-    }
-    if (lower[after] === ">") {
-      return { index: from + match, nextScanOffset: from + match };
-    }
-    cursor = match + needle.length;
-  }
+function createHeadCloseScanner(): { scan(value: string): number } {
+  let state: "normal" | "comment" | "raw-open" | "raw-body" = "normal";
+  let rawTag = "";
+  let rawQuote: "" | '"' | "'" = "";
+  let scanOffset = 0;
+
   return {
-    index: -1,
-    nextScanOffset: Math.max(from, value.length - (needle.length - 1)),
+    scan(value: string): number {
+      let cursor = scanOffset;
+      while (cursor < value.length) {
+        if (state === "normal") {
+          const lt = value.indexOf("<", cursor);
+          if (lt === -1) {
+            scanOffset = value.length;
+            return -1;
+          }
+          cursor = lt;
+          const remaining = value.length - cursor;
+
+          if (value.charCodeAt(cursor + 1) === 33 /* ! */) {
+            if (remaining < 4) {
+              if ("<!--".startsWith(value.slice(cursor))) {
+                scanOffset = cursor;
+                return -1;
+              }
+              cursor += 1;
+              continue;
+            }
+            if (value.startsWith("<!--", cursor)) {
+              state = "comment";
+              cursor += 4;
+              continue;
+            }
+            cursor += 1;
+            continue;
+          }
+
+          if (value.charCodeAt(cursor + 1) === 47 /* / */) {
+            if (remaining < "</head".length) {
+              if (asciiPrefixIgnoreCase("</head", value, cursor)) {
+                scanOffset = cursor;
+                return -1;
+              }
+              cursor += 1;
+              continue;
+            }
+            if (asciiEqualsIgnoreCase(value, cursor, "</head")) {
+              let after = cursor + "</head".length;
+              while (after < value.length && isAsciiWhitespace(value.charCodeAt(after))) {
+                after += 1;
+              }
+              if (after >= value.length) {
+                scanOffset = cursor;
+                return -1;
+              }
+              if (value.charCodeAt(after) === 62 /* > */) {
+                scanOffset = cursor;
+                return cursor;
+              }
+              cursor += "</head".length;
+              continue;
+            }
+            cursor += 1;
+            continue;
+          }
+
+          let matchedRaw: string | undefined;
+          let partialRaw = false;
+          for (const tag of HEAD_RAW_TAGS) {
+            const opener = `<${tag}`;
+            if (remaining <= opener.length) {
+              if (asciiPrefixIgnoreCase(opener, value, cursor)) {
+                partialRaw = true;
+                break;
+              }
+            } else if (
+              asciiEqualsIgnoreCase(value, cursor, opener) &&
+              isHtmlTagBoundary(value.charCodeAt(cursor + opener.length))
+            ) {
+              matchedRaw = tag;
+              break;
+            }
+          }
+          if (partialRaw) {
+            scanOffset = cursor;
+            return -1;
+          }
+          if (matchedRaw) {
+            state = "raw-open";
+            rawTag = matchedRaw;
+            rawQuote = "";
+            cursor += 1 + matchedRaw.length;
+            continue;
+          }
+
+          cursor += 1;
+          continue;
+        }
+
+        if (state === "comment") {
+          const end = value.indexOf("-->", cursor);
+          if (end === -1) {
+            scanOffset = Math.max(cursor, value.length - 2);
+            return -1;
+          }
+          cursor = end + 3;
+          state = "normal";
+          continue;
+        }
+
+        if (state === "raw-open") {
+          let foundEnd = -1;
+          for (let index = cursor; index < value.length; index += 1) {
+            const character = value[index];
+            if (rawQuote) {
+              if (character === rawQuote) rawQuote = "";
+            } else if (character === '"' || character === "'") {
+              rawQuote = character;
+            } else if (character === ">") {
+              foundEnd = index;
+              break;
+            }
+          }
+          if (foundEnd === -1) {
+            scanOffset = value.length;
+            return -1;
+          }
+          cursor = foundEnd + 1;
+          rawQuote = "";
+          state = "raw-body";
+          continue;
+        }
+
+        // state === "raw-body"
+        const closeNeedle = `</${rawTag}`;
+        const rawLt = value.indexOf("<", cursor);
+        if (rawLt === -1) {
+          scanOffset = value.length;
+          return -1;
+        }
+        cursor = rawLt;
+        const rawRemaining = value.length - cursor;
+        if (rawRemaining <= closeNeedle.length) {
+          if (asciiPrefixIgnoreCase(closeNeedle, value, cursor)) {
+            scanOffset = cursor;
+            return -1;
+          }
+          cursor += 1;
+          continue;
+        }
+        if (
+          asciiEqualsIgnoreCase(value, cursor, closeNeedle) &&
+          isHtmlTagBoundary(value.charCodeAt(cursor + closeNeedle.length))
+        ) {
+          const gt = value.indexOf(">", cursor + closeNeedle.length);
+          if (gt === -1) {
+            scanOffset = cursor;
+            return -1;
+          }
+          cursor = gt + 1;
+          state = "normal";
+          rawTag = "";
+          continue;
+        }
+        cursor += 1;
+      }
+      scanOffset = value.length;
+      return -1;
+    },
   };
+}
+
+function asciiEqualsIgnoreCase(value: string, offset: number, lowerTarget: string): boolean {
+  if (offset + lowerTarget.length > value.length) return false;
+  for (let index = 0; index < lowerTarget.length; index += 1) {
+    let code = value.charCodeAt(offset + index);
+    if (code >= 65 && code <= 90) code += 32;
+    if (code !== lowerTarget.charCodeAt(index)) return false;
+  }
+  return true;
+}
+
+function asciiPrefixIgnoreCase(lowerTarget: string, value: string, offset: number): boolean {
+  const length = value.length - offset;
+  if (length > lowerTarget.length) return false;
+  for (let index = 0; index < length; index += 1) {
+    let code = value.charCodeAt(offset + index);
+    if (code >= 65 && code <= 90) code += 32;
+    if (code !== lowerTarget.charCodeAt(index)) return false;
+  }
+  return true;
+}
+
+function isAsciiWhitespace(code: number): boolean {
+  return code === 32 || code === 9 || code === 10 || code === 12 || code === 13;
+}
+
+function isHtmlTagBoundary(code: number): boolean {
+  return isAsciiWhitespace(code) || code === 47 /* / */ || code === 62; /* > */
 }
 
 function escapeAttribute(value: string): string {

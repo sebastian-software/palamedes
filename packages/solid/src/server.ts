@@ -163,40 +163,33 @@ function createSolidBootstrapGateTransform(options: {
   });
 
   function flushMarkup(final: boolean): string {
-    let output = "";
-    while (buffered.length > 0) {
+    const parts: string[] = [];
+    let cursor = 0;
+
+    while (cursor < buffered.length) {
       if (mode === "text") {
-        const lower = buffered.toLowerCase();
-        const open = findScriptOpen(lower, 0);
-        if (open === -1) {
+        const openMatch = findScriptOpen(buffered, cursor);
+        if (openMatch.kind === "none") {
+          parts.push(buffered.slice(cursor));
+          cursor = buffered.length;
+          break;
+        }
+        if (openMatch.kind === "incomplete") {
           if (final) {
-            output += buffered;
-            buffered = "";
-          } else {
-            const keepFrom = trailingPrefixStart(lower, "<script");
-            if (keepFrom > 0) {
-              output += buffered.slice(0, keepFrom);
-              buffered = buffered.slice(keepFrom);
-            }
+            parts.push(buffered.slice(cursor));
+            cursor = buffered.length;
+          } else if (openMatch.index > cursor) {
+            parts.push(buffered.slice(cursor, openMatch.index));
+            cursor = openMatch.index;
           }
           break;
         }
-        if (open + "<script".length === buffered.length) {
-          if (final) {
-            output += buffered;
-            buffered = "";
-          } else if (open > 0) {
-            output += buffered.slice(0, open);
-            buffered = buffered.slice(open);
-          }
-          break;
-        }
-        if (open > 0) {
-          output += buffered.slice(0, open);
-          buffered = buffered.slice(open);
+        if (openMatch.index > cursor) {
+          parts.push(buffered.slice(cursor, openMatch.index));
+          cursor = openMatch.index;
         }
         mode = "opening-tag";
-        scanOffset = "<script".length;
+        scanOffset = cursor + "<script".length;
         tagQuote = "";
         continue;
       }
@@ -206,9 +199,9 @@ function createSolidBootstrapGateTransform(options: {
         tagQuote = scan.quote;
         if (scan.index === -1) {
           scanOffset = buffered.length;
-          if (final || buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
-            output += buffered;
-            buffered = "";
+          if (final || buffered.length - cursor > MAX_SCRIPT_BUFFER_LENGTH) {
+            parts.push(buffered.slice(cursor));
+            cursor = buffered.length;
             mode = "text";
             scanOffset = 0;
             tagQuote = "";
@@ -216,7 +209,7 @@ function createSolidBootstrapGateTransform(options: {
           break;
         }
         const openingEnd = scan.index;
-        const openingTag = buffered.slice(0, openingEnd + 1);
+        const openingTag = buffered.slice(cursor, openingEnd + 1);
         tagQuote = "";
         const moduleSource =
           readTagAttribute(openingTag, "type")?.toLowerCase() === "module"
@@ -240,10 +233,10 @@ function createSolidBootstrapGateTransform(options: {
         // Inline and foreign scripts never need rewriting; stream their body
         // without buffering while still waiting for </script> so script text
         // cannot be mistaken for a nested HTML <script> tag.
-        output += openingTag;
-        buffered = buffered.slice(openingEnd + 1);
+        parts.push(openingTag);
+        cursor = openingEnd + 1;
         mode = "pass-through-script";
-        scanOffset = 0;
+        scanOffset = cursor;
         closeTagStart = -1;
         continue;
       }
@@ -252,32 +245,32 @@ function createSolidBootstrapGateTransform(options: {
         if (closeTagStart === -1) {
           const closeMatch = findScriptCloseStart(buffered, scanOffset);
           if (closeMatch.kind === "none") {
-            output += buffered;
-            buffered = "";
+            parts.push(buffered.slice(cursor));
+            cursor = buffered.length;
             scanOffset = 0;
             break;
           }
           if (closeMatch.kind === "incomplete") {
             if (final) {
-              output += buffered;
-              buffered = "";
+              parts.push(buffered.slice(cursor));
+              cursor = buffered.length;
               mode = "text";
               scanOffset = 0;
             } else {
-              if (closeMatch.index > 0) {
-                output += buffered.slice(0, closeMatch.index);
-                buffered = buffered.slice(closeMatch.index);
+              if (closeMatch.index > cursor) {
+                parts.push(buffered.slice(cursor, closeMatch.index));
+                cursor = closeMatch.index;
               }
-              scanOffset = 0;
+              scanOffset = cursor;
             }
             break;
           }
-          if (closeMatch.index > 0) {
-            output += buffered.slice(0, closeMatch.index);
-            buffered = buffered.slice(closeMatch.index);
+          if (closeMatch.index > cursor) {
+            parts.push(buffered.slice(cursor, closeMatch.index));
+            cursor = closeMatch.index;
           }
-          closeTagStart = 0;
-          scanOffset = "</script".length;
+          closeTagStart = cursor;
+          scanOffset = cursor + "</script".length;
           tagQuote = "";
         }
 
@@ -285,9 +278,9 @@ function createSolidBootstrapGateTransform(options: {
         tagQuote = closeEnd.quote;
         if (closeEnd.index === -1) {
           scanOffset = buffered.length;
-          if (final || buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
-            output += buffered;
-            buffered = "";
+          if (final || buffered.length - cursor > MAX_SCRIPT_BUFFER_LENGTH) {
+            parts.push(buffered.slice(cursor));
+            cursor = buffered.length;
             mode = "text";
             closeTagStart = -1;
             scanOffset = 0;
@@ -295,8 +288,8 @@ function createSolidBootstrapGateTransform(options: {
           }
           break;
         }
-        output += buffered.slice(0, closeEnd.index + 1);
-        buffered = buffered.slice(closeEnd.index + 1);
+        parts.push(buffered.slice(cursor, closeEnd.index + 1));
+        cursor = closeEnd.index + 1;
         mode = "text";
         closeTagStart = -1;
         scanOffset = 0;
@@ -314,26 +307,26 @@ function createSolidBootstrapGateTransform(options: {
           continue;
         }
         if (final) {
-          output += buffered;
-          buffered = "";
+          parts.push(buffered.slice(cursor));
+          cursor = buffered.length;
           mode = "text";
           gatedOpeningEnd = -1;
           gatedModuleSource = "";
           scanOffset = 0;
           break;
         }
-        if (buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+        if (buffered.length - cursor > MAX_SCRIPT_BUFFER_LENGTH) {
           if (closeMatch.kind === "incomplete") {
-            output += buffered.slice(0, closeMatch.index);
-            buffered = buffered.slice(closeMatch.index);
+            parts.push(buffered.slice(cursor, closeMatch.index));
+            cursor = closeMatch.index;
           } else {
-            output += buffered;
-            buffered = "";
+            parts.push(buffered.slice(cursor));
+            cursor = buffered.length;
           }
           mode = "pass-through-script";
           gatedOpeningEnd = -1;
           gatedModuleSource = "";
-          scanOffset = 0;
+          scanOffset = cursor;
           closeTagStart = -1;
           break;
         }
@@ -346,8 +339,8 @@ function createSolidBootstrapGateTransform(options: {
       if (gatedCloseEnd.index === -1) {
         scanOffset = buffered.length;
         if (final) {
-          output += buffered;
-          buffered = "";
+          parts.push(buffered.slice(cursor));
+          cursor = buffered.length;
           mode = "text";
           gatedOpeningEnd = -1;
           gatedModuleSource = "";
@@ -356,19 +349,17 @@ function createSolidBootstrapGateTransform(options: {
           tagQuote = "";
           break;
         }
-        if (buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+        if (buffered.length - cursor > MAX_SCRIPT_BUFFER_LENGTH) {
           if (buffered.length - closeTagStart > MAX_SCRIPT_BUFFER_LENGTH) {
-            output += buffered;
-            buffered = "";
+            parts.push(buffered.slice(cursor));
+            cursor = buffered.length;
             mode = "text";
             closeTagStart = -1;
             scanOffset = 0;
             tagQuote = "";
           } else {
-            output += buffered.slice(0, closeTagStart);
-            buffered = buffered.slice(closeTagStart);
-            scanOffset -= closeTagStart;
-            closeTagStart = 0;
+            parts.push(buffered.slice(cursor, closeTagStart));
+            cursor = closeTagStart;
             mode = "pass-through-script";
           }
           gatedOpeningEnd = -1;
@@ -377,7 +368,7 @@ function createSolidBootstrapGateTransform(options: {
         break;
       }
 
-      const gatedOpeningTag = buffered.slice(0, gatedOpeningEnd + 1);
+      const gatedOpeningTag = buffered.slice(cursor, gatedOpeningEnd + 1);
       const unsupportedAttributes = (
         ["integrity", "crossorigin", "referrerpolicy"] as const
       ).filter((attribute) => readTagAttribute(gatedOpeningTag, attribute) !== undefined);
@@ -392,8 +383,10 @@ function createSolidBootstrapGateTransform(options: {
       const importExpression = options.allowMissingPromise
         ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source})) : import(${source}))`
         : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source}))`;
-      output += `<script type="module"${nonce}>${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}]) throw error; globalThis.dispatchEvent(new CustomEvent("palamedes:catalogError", { detail: error })); });</script>`;
-      buffered = buffered.slice(gatedCloseEnd.index + 1);
+      parts.push(
+        `<script type="module"${nonce}>${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}]) throw error; globalThis.dispatchEvent(new CustomEvent("palamedes:catalogError", { detail: error })); });</script>`,
+      );
+      cursor = gatedCloseEnd.index + 1;
       mode = "text";
       gatedOpeningEnd = -1;
       gatedModuleSource = "";
@@ -401,7 +394,14 @@ function createSolidBootstrapGateTransform(options: {
       scanOffset = 0;
       tagQuote = "";
     }
-    return output;
+
+    if (cursor > 0) {
+      buffered = cursor >= buffered.length ? "" : buffered.slice(cursor);
+      if (scanOffset > 0) scanOffset = Math.max(0, scanOffset - cursor);
+      if (gatedOpeningEnd >= 0) gatedOpeningEnd -= cursor;
+      if (closeTagStart >= 0) closeTagStart -= cursor;
+    }
+    return parts.length === 0 ? "" : parts.length === 1 ? parts[0]! : parts.join("");
   }
 }
 
@@ -464,39 +464,79 @@ function decodeChunk(decoder: StringDecoder, chunk: unknown): string {
   return String(chunk);
 }
 
-function findScriptOpen(lower: string, from: number): number {
-  let index = lower.indexOf("<script", from);
-  while (index !== -1) {
-    const next = lower[index + "<script".length];
-    if (next === undefined || /[\s/>]/u.test(next)) return index;
-    index = lower.indexOf("<script", index + "<script".length);
-  }
-  return -1;
+function findScriptOpen(
+  value: string,
+  from: number,
+): { kind: "found"; index: number } | { kind: "incomplete"; index: number } | { kind: "none" } {
+  return findAsciiTagStart(value, from, "<script");
 }
 
 function findScriptCloseStart(
   value: string,
   from: number,
 ): { kind: "found"; index: number } | { kind: "incomplete"; index: number } | { kind: "none" } {
-  const slice = value.slice(from).toLowerCase();
-  let cursor = 0;
-  while (cursor < slice.length) {
-    const match = slice.indexOf("</script", cursor);
-    if (match === -1) break;
-    const next = slice[match + "</script".length];
-    if (next === undefined) {
-      return { kind: "incomplete", index: from + match };
+  return findAsciiTagStart(value, from, "</script");
+}
+
+function findAsciiTagStart(
+  value: string,
+  from: number,
+  lowerNeedle: string,
+): { kind: "found"; index: number } | { kind: "incomplete"; index: number } | { kind: "none" } {
+  let cursor = from;
+  while (cursor < value.length) {
+    const lt = value.indexOf("<", cursor);
+    if (lt === -1) return { kind: "none" };
+    const remaining = value.length - lt;
+    if (remaining <= lowerNeedle.length) {
+      if (asciiPrefixIgnoreCase(lowerNeedle, value, lt)) {
+        return { kind: "incomplete", index: lt };
+      }
+      cursor = lt + 1;
+      continue;
     }
-    if (/[\s/>]/u.test(next)) {
-      return { kind: "found", index: from + match };
+    if (
+      asciiEqualsIgnoreCase(value, lt, lowerNeedle) &&
+      isHtmlTagBoundary(value.charCodeAt(lt + lowerNeedle.length))
+    ) {
+      return { kind: "found", index: lt };
     }
-    cursor = match + "</script".length;
-  }
-  const prefixStart = trailingPrefixStart(slice, "</script");
-  if (prefixStart < slice.length) {
-    return { kind: "incomplete", index: from + prefixStart };
+    cursor = lt + 1;
   }
   return { kind: "none" };
+}
+
+function asciiEqualsIgnoreCase(value: string, offset: number, lowerTarget: string): boolean {
+  if (offset + lowerTarget.length > value.length) return false;
+  for (let index = 0; index < lowerTarget.length; index += 1) {
+    let code = value.charCodeAt(offset + index);
+    if (code >= 65 && code <= 90) code += 32;
+    if (code !== lowerTarget.charCodeAt(index)) return false;
+  }
+  return true;
+}
+
+function asciiPrefixIgnoreCase(lowerTarget: string, value: string, offset: number): boolean {
+  const length = value.length - offset;
+  if (length > lowerTarget.length) return false;
+  for (let index = 0; index < length; index += 1) {
+    let code = value.charCodeAt(offset + index);
+    if (code >= 65 && code <= 90) code += 32;
+    if (code !== lowerTarget.charCodeAt(index)) return false;
+  }
+  return true;
+}
+
+function isHtmlTagBoundary(code: number): boolean {
+  return (
+    code === 32 ||
+    code === 9 ||
+    code === 10 ||
+    code === 12 ||
+    code === 13 ||
+    code === 47 /* / */ ||
+    code === 62 /* > */
+  );
 }
 
 function scanTagEnd(
@@ -516,16 +556,6 @@ function scanTagEnd(
     }
   }
   return { index: -1, quote };
-}
-
-function trailingPrefixStart(lower: string, prefix: string): number {
-  const max = Math.min(prefix.length - 1, lower.length);
-  for (let length = max; length > 0; length -= 1) {
-    if (lower.endsWith(prefix.slice(0, length))) {
-      return lower.length - length;
-    }
-  }
-  return lower.length;
 }
 
 function readTagAttribute(

@@ -563,4 +563,19 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     expect(receivedBeforeEnd.length).toBeGreaterThanOrEqual(256 * 1024);
     expect(full).toContain(`<script data-huge="${paddingBlock.repeat(10)}</body></html>`);
   });
+
+  it("handles Turkish İ text and many script blocks in one large chunk without index drift or quadratic work", async () => {
+    const manyScripts = Array.from(
+      { length: 1000 },
+      (_, index) => `<script>/* İstanbul ${index} */</script>`,
+    ).join("");
+    const html = `<html><head><title>İstanbul İZMİR</title></head><body><p>İstanbul</p>${manyScripts}<script type="module" src="${SOLID_CLIENT_ENTRY}"></script></body></html>`;
+    const output = await transformDocument(html, "solid-test", html.length);
+
+    expect(output).toContain("<title>İstanbul İZMİR</title>");
+    expect(output).toContain("<p>İstanbul</p>");
+    expect(output).toContain("/* İstanbul 999 */");
+    expect(output).toContain(`import("${SOLID_CLIENT_ENTRY}")`);
+    expect(output).not.toContain(`src="${SOLID_CLIENT_ENTRY}"`);
+  });
 });
