@@ -5542,6 +5542,36 @@ describe("workflow contracts", () => {
     ]);
   });
 
+  it("unwraps cmd /c and pwsh -Command launchers and preserves column-zero YAML comments", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "# CI pipeline",
+          "  on: push",
+          "  jobs:",
+          "    win:",
+          "      runs-on: windows-latest",
+          "      steps:",
+          "        - shell: cmd",
+          "          run: |",
+          `            cmd /c docker pull node:24@${digest}`,
+          "            cmd /c docker pull alpine:3.20",
+          '            cmd /d /s /c "docker pull busybox:1.36"',
+          "        - shell: pwsh",
+          "          run: |",
+          `            pwsh -NoProfile -Command "docker pull node:24@${digest}"`,
+          '            pwsh -NoProfile -Command "docker pull debian:12"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:10: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:11: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:15: debian:12 is not pinned to a sha256 digest",
+    ]);
+  });
+
   it("enforces case-insensitive schema keys, PowerShell continuations, and matrix expansion limits", () => {
     const digest = `sha256:${"a".repeat(64)}`;
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.

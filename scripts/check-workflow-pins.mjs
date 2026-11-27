@@ -2815,7 +2815,10 @@ function dedentYamlSnippet(source) {
     return source;
   }
   return rawLines
-    .map((line) => (line.length >= minIndent ? line.slice(minIndent) : line.trimStart()))
+    .map((line) => {
+      const leadingSpaces = line.length - line.trimStart().length;
+      return line.slice(Math.min(minIndent, leadingSpaces));
+    })
     .join("\n");
 }
 
@@ -12167,6 +12170,94 @@ function inspectShellText(
                 problems.push(message);
               }
             }
+          }
+        }
+        continue;
+      }
+
+      if (normalizedCli === "cmd" || normalizedCli === "pwsh" || normalizedCli === "powershell") {
+        let nestedScript = null;
+        const targetShellMode = normalizedCli === "cmd" ? "cmd" : "pwsh";
+        if (normalizedCli === "cmd") {
+          for (let idx = cursor + 1; idx < tokens.length; idx += 1) {
+            const flag = tokens[idx].toLowerCase();
+            if (flag === "/c" || flag === "/k") {
+              const rest = tokens.slice(idx + 1);
+              if (rest.length === 1) {
+                nestedScript = rest[0];
+              } else if (rest.length > 1) {
+                nestedScript = rest
+                  .map((part) => (/\s/u.test(part) ? `"${part.replaceAll('"', '\\"')}"` : part))
+                  .join(" ");
+              }
+              break;
+            }
+            if (flag.startsWith("/")) {
+              continue;
+            }
+            break;
+          }
+        } else {
+          const pwshValueFlags = new Set([
+            "-executionpolicy",
+            "-ep",
+            "-workingdirectory",
+            "-wd",
+            "-inputformat",
+            "-outputformat",
+            "-windowstyle",
+            "-configurationname",
+            "-settingsfile",
+          ]);
+          for (let idx = cursor + 1; idx < tokens.length; idx += 1) {
+            const flag = tokens[idx].toLowerCase();
+            if (flag === "-command" || flag === "-c") {
+              const rest = tokens.slice(idx + 1);
+              if (rest.length === 1) {
+                nestedScript = rest[0];
+              } else if (rest.length > 1) {
+                nestedScript = rest
+                  .map((part) => (/\s/u.test(part) ? `"${part.replaceAll('"', '\\"')}"` : part))
+                  .join(" ");
+              }
+              break;
+            }
+            if (flag.startsWith("-")) {
+              if (pwshValueFlags.has(flag)) {
+                idx += 1;
+              }
+              continue;
+            }
+            break;
+          }
+        }
+        if (nestedScript !== null) {
+          const childShellVars = cloneVarMap(frame.vars);
+          const childBuildContext = buildFileContext
+            ? {
+                ...buildFileContext,
+                rowCwds: cloneRowCwds(frame.rowCwds),
+                rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
+              }
+            : null;
+          const scriptProblems = [];
+          inspectShellText(
+            nestedScript,
+            lineNumber,
+            sourceLines,
+            stepEnv,
+            childShellVars,
+            matrixRows,
+            filePath,
+            scriptProblems,
+            suppressSideEffects ? null : emittedGithubEnv,
+            targetShellMode,
+            depth + 1,
+            childBuildContext,
+            suppressSideEffects ? null : emittedGithubOutput,
+          );
+          for (const message of scriptProblems) {
+            problems.push(message);
           }
         }
         continue;
