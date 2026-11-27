@@ -4451,6 +4451,44 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r57Fixture, { recursive: true, force: true });
     }
+    // Bash scalar `+=` appends concatenate tracked values, `docker run` stops
+    // expanding application arguments after the image operand, `docker build
+    // --help` skips Dockerfile discovery, and folded `run: >` scripts report
+    // the exact line of the inspected image operand.
+    const r58Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r58-"));
+    try {
+      await mkdir(join(r58Fixture, ".github", "workflows"), { recursive: true });
+      const flagSetup = Array.from(
+        { length: 7 },
+        (_, i) => `          if [ "$C${i}" = "1" ]; then F${i}=-a; else F${i}=-b; fi`,
+      );
+      const r58Workflow = [
+        "on: push",
+        "jobs:",
+        "  r58:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - run: |",
+        "          image=node:24",
+        `          image+=@${digest}`,
+        '          docker pull "$image"',
+        ...flagSetup,
+        `          docker run --rm node:24@${digest} app "$F0" "$F1" "$F2" "$F3" "$F4" "$F5" "$F6"`,
+        "          docker build --help",
+        "          docker buildx build -h",
+        "      - run: >",
+        "          echo node:24 &&",
+        "          docker pull node:24",
+        "",
+      ].join("\n");
+      expect(
+        unpinnedWorkflowContainerReferences(r58Workflow, ".github/workflows/r58.yml", {
+          root: r58Fixture,
+        }),
+      ).toEqual([".github/workflows/r58.yml:22: node:24 is not pinned to a sha256 digest"]);
+    } finally {
+      await rm(r58Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

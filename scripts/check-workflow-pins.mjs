@@ -64,6 +64,7 @@ const SINGLE_MATRIX_EXPRESSION_PATTERN =
   /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)\s*\}\}$/iu;
 const MATRIX_SEGMENT_PATTERN = /\.([A-Za-z0-9_-]+)|\[(?:'([^']+)'|"([^"]+)"|\s*(\d+)\s*)\]/gu;
 const ENV_PREFIX_ASSIGNMENT_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$/u;
+const BASH_SCALAR_ASSIGN_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?<op>\+?=)(?<value>.*)$/u;
 const SHELL_INTERPRETERS = new Set(["sh", "bash", "ash", "dash", "zsh", "ksh"]);
 const SHELL_COMMAND_PREFIXES = new Set([
   "if",
@@ -3646,6 +3647,7 @@ function redirectsToGithubOutput(tokens) {
 function lexShellScript(text, startLine, shellMode = "posix") {
   const events = [];
   let tokens = [];
+  let tokenOffsets = [];
   let tokenSingleQuoted = [];
   let tokenQuoted = [];
   let tokenEscapedDollarOffsets = [];
@@ -3670,6 +3672,8 @@ function lexShellScript(text, startLine, shellMode = "posix") {
     commandStartEventIndex = events.length;
   };
   let current = "";
+  let currentStartOffset = 0;
+  let scanOffset = 0;
   let currentEscapedDollarOffsets = [];
   let tokenStarted = false;
   let currentHasUnquotedOrDoubleQuoted = false;
@@ -3687,6 +3691,9 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   const isCmd = shellMode === "cmd";
 
   const markTokenStart = ({ singleQuoted = false, quoted = false } = {}) => {
+    if (!tokenStarted) {
+      currentStartOffset = scanOffset;
+    }
     if (!tokenStarted && tokens.length === 0) {
       commandLine = line;
       commandConditional = nextConditional;
@@ -3709,6 +3716,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         commandLine = line;
       }
       tokens.push(current);
+      tokenOffsets.push(currentStartOffset);
       tokenSingleQuoted.push(currentSawSingleQuote && !currentHasUnquotedOrDoubleQuoted);
       tokenQuoted.push(currentSawAnyQuote);
       tokenEscapedDollarOffsets.push(currentEscapedDollarOffsets);
@@ -3727,6 +3735,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       events.push({
         kind: "command",
         tokens,
+        tokenOffsets,
         tokenSingleQuoted,
         tokenQuoted,
         tokenEscapedDollarOffsets,
@@ -3736,6 +3745,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         substitutions: commandSubstitutions,
       });
       tokens = [];
+      tokenOffsets = [];
       tokenSingleQuoted = [];
       tokenQuoted = [];
       tokenEscapedDollarOffsets = [];
@@ -3827,6 +3837,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   };
 
   for (let index = 0; index < text.length; index += 1) {
+    scanOffset = index;
     const ch = text[index];
 
     if (arrayParenDepth > 0) {
@@ -4099,16 +4110,19 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       }
       if (text[index + 1] === ">") {
         tokens.push(">>");
+        tokenOffsets.push(index);
         tokenSingleQuoted.push(false);
         tokenQuoted.push(false);
         index += 1;
       } else if (text[index + 1] === "&") {
         tokens.push(">&");
+        tokenOffsets.push(index);
         tokenSingleQuoted.push(false);
         tokenQuoted.push(false);
         index += 1;
       } else {
         tokens.push(">");
+        tokenOffsets.push(index);
         tokenSingleQuoted.push(false);
         tokenQuoted.push(false);
       }
@@ -4202,16 +4216,19 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       }
       if (text[index + 1] === "&") {
         tokens.push("<&");
+        tokenOffsets.push(index);
         tokenSingleQuoted.push(false);
         tokenQuoted.push(false);
         index += 1;
       } else if (text[index + 1] === ">") {
         tokens.push("<>");
+        tokenOffsets.push(index);
         tokenSingleQuoted.push(false);
         tokenQuoted.push(false);
         index += 1;
       } else {
         tokens.push("<");
+        tokenOffsets.push(index);
         tokenSingleQuoted.push(false);
         tokenQuoted.push(false);
       }
@@ -4323,6 +4340,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         if (fnName && /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(fnName)) {
           const fnCond = commandConditional || nextConditional;
           tokens = [];
+          tokenOffsets = [];
           tokenSingleQuoted = [];
           tokenQuoted = [];
           tokenEscapedDollarOffsets = [];
@@ -4396,11 +4414,13 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       }
       if (text[index + 2] === ">") {
         tokens.push(">>");
+        tokenOffsets.push(index);
         tokenSingleQuoted.push(false);
         tokenQuoted.push(false);
         index += 2;
       } else {
         tokens.push(">");
+        tokenOffsets.push(index);
         tokenSingleQuoted.push(false);
         tokenQuoted.push(false);
         index += 1;
@@ -4456,6 +4476,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
           const fnName = tokens[1];
           const fnCond = commandConditional || nextConditional;
           tokens = [];
+          tokenOffsets = [];
           tokenSingleQuoted = [];
           tokenQuoted = [];
           tokenEscapedDollarOffsets = [];
@@ -6507,6 +6528,88 @@ function inspectShellText(
   ];
   const isWindowsShell = shellMode === "pwsh" || shellMode === "cmd";
   const calledFnDefs = new Set();
+  const foldedLineSpans = (() => {
+    if (!sourceLines || sourceLines.length === 0) {
+      return null;
+    }
+    const spans = [];
+    let searchFrom = 0;
+    for (const entry of sourceLines) {
+      const trimmedLine = entry.text.trim();
+      if (!trimmedLine) {
+        continue;
+      }
+      const pos = scriptText.indexOf(trimmedLine, searchFrom);
+      if (pos !== -1) {
+        spans.push({ start: pos, end: pos + trimmedLine.length, lineNumber: entry.lineNumber });
+        searchFrom = pos + trimmedLine.length;
+      }
+    }
+    return spans.length > 0 ? spans : null;
+  })();
+  const resolveFoldedLine = (offset, fallbackToken, defaultLine) => {
+    if (foldedLineSpans && typeof offset === "number") {
+      let bestLine = null;
+      for (const span of foldedLineSpans) {
+        if (offset >= span.start && offset < span.end) {
+          return span.lineNumber;
+        }
+        if (span.start <= offset) {
+          bestLine = span.lineNumber;
+        } else {
+          break;
+        }
+      }
+      if (bestLine !== null) {
+        return bestLine;
+      }
+    }
+    if (sourceLines && fallbackToken) {
+      return (
+        sourceLines.find((entry) => entry.text.includes(fallbackToken))?.lineNumber ?? defaultLine
+      );
+    }
+    return defaultLine;
+  };
+  const concatScalarVarEntries = (existingEntries, appendedEntries, assignLine) => {
+    const base =
+      existingEntries && existingEntries.length > 0
+        ? existingEntries
+        : [{ value: "", line: assignLine, unset: true }];
+    const result = [];
+    const seen = new Set();
+    let truncatedLine = null;
+    for (const lhs of base) {
+      if (lhs.truncated) {
+        truncatedLine ??= lhs.line;
+        continue;
+      }
+      const lhsVal = lhs.unset ? "" : lhs.value;
+      for (const rhs of appendedEntries) {
+        if (rhs.truncated) {
+          truncatedLine ??= rhs.line;
+          continue;
+        }
+        const rhsVal = rhs.unset ? "" : rhs.value;
+        const combined = `${lhsVal}${rhsVal}`;
+        const line = rhs.line || lhs.line || assignLine;
+        const key = `${line}:${combined}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        if (result.length >= MAX_VAR_VALUES) {
+          truncatedLine ??= assignLine;
+          continue;
+        }
+        seen.add(key);
+        result.push({ value: combined, line });
+      }
+    }
+    if (truncatedLine !== null) {
+      result.push({ value: "", line: truncatedLine, truncated: true });
+    }
+    return result;
+  };
 
   const inspectUncalledFunctions = (targetFrame) => {
     for (const fnDef of targetFrame.functions.values()) {
@@ -6758,6 +6861,7 @@ function inspectShellText(
 
       const tokens = peelControlKeywords(event.tokens, frame, lineNumber, stepEnv, shellMode);
       const peeledCount = event.tokens.length - tokens.length;
+      const peeledTokenOffsets = event.tokenOffsets ? event.tokenOffsets.slice(peeledCount) : [];
       const peeledSingleQuoted = event.tokenSingleQuoted
         ? event.tokenSingleQuoted.slice(peeledCount)
         : [];
@@ -6895,15 +6999,16 @@ function inspectShellText(
       // `export VAR` / `export VAR=value` marks variables as exported to child processes.
       if (tokens[0] === "export" && tokens.length > 1) {
         const exportOperands = tokens.slice(1).filter((token) => !token.startsWith("-"));
+        const exportAssignPattern =
+          shellMode === "posix" ? BASH_SCALAR_ASSIGN_PATTERN : ENV_PREFIX_ASSIGNMENT_PATTERN;
         if (
           exportOperands.length > 0 &&
           exportOperands.every(
-            (token) =>
-              ENV_PREFIX_ASSIGNMENT_PATTERN.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
+            (token) => exportAssignPattern.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
           )
         ) {
           for (const token of exportOperands) {
-            const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+            const match = exportAssignPattern.exec(token);
             if (match) {
               const resolved = candidatesToVarEntries(
                 resolveImageTokenCandidates(
@@ -6915,14 +7020,18 @@ function inspectShellText(
                 ),
                 lineNumber,
               );
+              const nextEntries =
+                match.groups.op === "+="
+                  ? concatScalarVarEntries(frame.vars.get(match.groups.name), resolved, lineNumber)
+                  : resolved;
               frame.exportedVars.add(match.groups.name);
               if (conditional) {
                 const existing = frame.vars.has(match.groups.name)
                   ? frame.vars.get(match.groups.name)
                   : [{ value: "", line: 0, unset: true }];
-                frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
+                frame.vars.set(match.groups.name, mergeVarEntries(existing, nextEntries));
               } else {
-                frame.vars.set(match.groups.name, resolved);
+                frame.vars.set(match.groups.name, nextEntries);
               }
             } else {
               frame.exportedVars.add(token);
@@ -7097,11 +7206,11 @@ function inspectShellText(
           declOperands.length > 0 &&
           declOperands.every(
             (token) =>
-              ENV_PREFIX_ASSIGNMENT_PATTERN.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
+              BASH_SCALAR_ASSIGN_PATTERN.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
           )
         ) {
           for (const token of declOperands) {
-            const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+            const match = BASH_SCALAR_ASSIGN_PATTERN.exec(token);
             if (match) {
               if (declIsLocal) {
                 recordLocalBinding(match.groups.name, frame);
@@ -7116,6 +7225,10 @@ function inspectShellText(
                 ),
                 lineNumber,
               );
+              const nextEntries =
+                match.groups.op === "+="
+                  ? concatScalarVarEntries(frame.vars.get(match.groups.name), resolved, lineNumber)
+                  : resolved;
               if (marksExported) {
                 frame.exportedVars.add(match.groups.name);
               }
@@ -7123,9 +7236,9 @@ function inspectShellText(
                 const existing = frame.vars.has(match.groups.name)
                   ? frame.vars.get(match.groups.name)
                   : [{ value: "", line: 0, unset: true }];
-                frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
+                frame.vars.set(match.groups.name, mergeVarEntries(existing, nextEntries));
               } else {
-                frame.vars.set(match.groups.name, resolved);
+                frame.vars.set(match.groups.name, nextEntries);
                 frame.arrays.delete(match.groups.name);
               }
             } else {
@@ -7145,10 +7258,13 @@ function inspectShellText(
         }
       }
 
-      // Pure shell-local variable assignment (`image=rust:1.96-alpine`).
-      if (tokens.every((token) => ENV_PREFIX_ASSIGNMENT_PATTERN.test(token))) {
+      // Pure shell-local variable assignment (`image=rust:1.96-alpine` or
+      // Bash scalar append `image+=@sha256:...`).
+      const scalarAssignPattern =
+        shellMode === "posix" ? BASH_SCALAR_ASSIGN_PATTERN : ENV_PREFIX_ASSIGNMENT_PATTERN;
+      if (tokens.every((token) => scalarAssignPattern.test(token))) {
         for (const token of tokens) {
-          const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+          const match = scalarAssignPattern.exec(token);
           if (match) {
             const resolved = candidatesToVarEntries(
               resolveImageTokenCandidates(
@@ -7160,13 +7276,17 @@ function inspectShellText(
               ),
               lineNumber,
             );
+            const nextEntries =
+              match.groups.op === "+="
+                ? concatScalarVarEntries(frame.vars.get(match.groups.name), resolved, lineNumber)
+                : resolved;
             if (conditional) {
               const existing = frame.vars.has(match.groups.name)
                 ? frame.vars.get(match.groups.name)
                 : [{ value: "", line: 0, unset: true }];
-              frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
+              frame.vars.set(match.groups.name, mergeVarEntries(existing, nextEntries));
             } else {
-              frame.vars.set(match.groups.name, resolved);
+              frame.vars.set(match.groups.name, nextEntries);
               frame.arrays.delete(match.groups.name);
             }
           }
@@ -8041,6 +8161,7 @@ function inspectShellText(
         const rawAttestSpecs = [];
         const rawPodmanSbomPresets = [];
         let hasPodmanSbomScanner = false;
+        let isBuildHelpRequest = false;
         let contextArg = null;
         for (let index = buildArgStart; index < tokens.length; index += 1) {
           const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
@@ -8060,6 +8181,10 @@ function inspectShellText(
                 contextArg = tokens[restIndex];
               }
             }
+            break;
+          }
+          if (token === "--help" || token === "-h") {
+            isBuildHelpRequest = true;
             break;
           }
           if (token === "-f" || token === "--file") {
@@ -8190,6 +8315,9 @@ function inspectShellText(
           if (contextArg === null) {
             contextArg = token;
           }
+        }
+        if (isBuildHelpRequest) {
+          continue;
         }
 
         const buildRows = matrixRows.length > 0 ? matrixRows : [null];
@@ -8866,12 +8994,111 @@ function inspectShellText(
       // Expand statically known shell option variables (e.g. `opts="--rm"` or
       // `opts="--platform linux/amd64"`) and Bash arrays (`"${args[@]}"`) before
       // scanning flags so option tokens are consumed and array-supplied images
-      // are validated rather than skipped.
-      let argTokenVariants = [[]];
+      // are validated rather than skipped. For single-image commands (`docker
+      // run`/`create`/`pull`/`service create`, `podman run`/`create`, `buildah
+      // from`/`pull`), stop expanding each branch once its image operand has
+      // been identified so container application arguments cannot trigger the
+      // expansion cap.
+      const stopAfterFirstImage = !allowMultipleImages && subcommand !== "service-update";
+      const advanceBranchWithSlice = (branch, slice) => {
+        const next = {
+          tokens: [...branch.tokens],
+          expectingFlagValue: branch.expectingFlagValue,
+          expectingRedirTarget: branch.expectingRedirTarget,
+          afterDoubleDash: branch.afterDoubleDash,
+          usesPodmanRootfs: branch.usesPodmanRootfs,
+          done: branch.done,
+        };
+        for (let sIdx = 0; sIdx < slice.length; sIdx += 1) {
+          if (next.done) {
+            break;
+          }
+          const item = slice[sIdx];
+          const tok = item.text;
+          next.tokens.push(item);
+          if (!stopAfterFirstImage) {
+            continue;
+          }
+          if (next.expectingRedirTarget) {
+            next.expectingRedirTarget = false;
+            continue;
+          }
+          if (next.expectingFlagValue) {
+            next.expectingFlagValue = false;
+            continue;
+          }
+          if (!next.afterDoubleDash) {
+            if (tok === "--") {
+              next.afterDoubleDash = true;
+              if (next.usesPodmanRootfs) {
+                next.done = true;
+              }
+              continue;
+            }
+            if (tok === ">" || tok === ">>" || tok === ">&" || tok === "<") {
+              next.expectingRedirTarget = true;
+              continue;
+            }
+            if (
+              /^\d+$/u.test(tok) &&
+              (slice[sIdx + 1]?.text === ">" ||
+                slice[sIdx + 1]?.text === ">>" ||
+                slice[sIdx + 1]?.text === ">&")
+            ) {
+              next.tokens.push(slice[sIdx + 1]);
+              sIdx += 1;
+              next.expectingRedirTarget = true;
+              continue;
+            }
+            if (tok.startsWith("${") && (tok.includes("[@]") || tok.includes("[*]"))) {
+              continue;
+            }
+            if (subcommand === "run" && normalizedCli === "podman") {
+              if (tok === "--rootfs" || tok.toLowerCase() === "--rootfs=true") {
+                next.usesPodmanRootfs = true;
+                continue;
+              }
+              if (tok.toLowerCase() === "--rootfs=false") {
+                next.usesPodmanRootfs = false;
+                continue;
+              }
+            }
+            if (
+              (subcommand === "run" || subcommand === "service-create") &&
+              normalizedCli !== "buildah" &&
+              tok === "--mount"
+            ) {
+              next.expectingFlagValue = true;
+              continue;
+            }
+            if (tok.startsWith("-")) {
+              if (flagConsumesNextArg(tok, valueFlags)) {
+                next.expectingFlagValue = true;
+              }
+              continue;
+            }
+          }
+          next.done = true;
+        }
+        return next;
+      };
+      let argBranches = [
+        {
+          tokens: [],
+          expectingFlagValue: false,
+          expectingRedirTarget: false,
+          afterDoubleDash: false,
+          usesPodmanRootfs: false,
+          done: false,
+        },
+      ];
       let argExpansionTruncated = false;
       const unknownArrayTokens = [];
       const BASH_ARRAY_EXPANSION_PATTERN = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
       for (let index = argIndex; index < tokens.length; index += 1) {
+        if (stopAfterFirstImage && argBranches.every((branch) => branch.done)) {
+          break;
+        }
         const token = tokens[index];
         const isSingleQuoted = Boolean(peeledSingleQuoted[index]);
         const isAnyQuoted = Boolean(peeledQuoted[index]);
@@ -8879,9 +9106,26 @@ function inspectShellText(
         const isArrayExpansion =
           Boolean(arrayExpMatch) ||
           (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]")));
-        const fallbackLine = sourceLines
-          ? (sourceLines.find((entry) => entry.text.includes(token))?.lineNumber ?? lineNumber)
-          : lineNumber;
+        const fallbackLine = resolveFoldedLine(peeledTokenOffsets[index], token, lineNumber);
+        const isRawFdRedirPrefix =
+          /^\d+$/u.test(token) &&
+          (tokens[index + 1] === ">" || tokens[index + 1] === ">>" || tokens[index + 1] === ">&");
+        if (isRawFdRedirPrefix) {
+          const nextLine = resolveFoldedLine(
+            peeledTokenOffsets[index + 1],
+            tokens[index + 1],
+            lineNumber,
+          );
+          const pairSlice = [
+            { text: token, line: fallbackLine, preExpanded: false },
+            { text: tokens[index + 1], line: nextLine, preExpanded: false },
+          ];
+          argBranches = argBranches.map((branch) =>
+            branch.done ? branch : advanceBranchWithSlice(branch, pairSlice),
+          );
+          index += 1;
+          continue;
+        }
         const mayContainVar =
           !isSingleQuoted &&
           !isArrayExpansion &&
@@ -8947,26 +9191,32 @@ function inspectShellText(
         }
 
         if (expandedSlices) {
-          const nextVariants = [];
-          for (const existing of argTokenVariants) {
+          const nextBranches = [];
+          for (const branch of argBranches) {
+            if (branch.done) {
+              nextBranches.push(branch);
+              continue;
+            }
             for (const slice of expandedSlices) {
-              if (nextVariants.length >= MAX_TOKEN_EXPANSIONS) {
+              if (nextBranches.length >= MAX_TOKEN_EXPANSIONS) {
                 argExpansionTruncated = true;
                 break;
               }
-              nextVariants.push([...existing, ...slice]);
+              nextBranches.push(advanceBranchWithSlice(branch, slice));
             }
             if (argExpansionTruncated) {
               break;
             }
           }
-          argTokenVariants = nextVariants;
+          argBranches = nextBranches;
         } else {
-          for (const existing of argTokenVariants) {
-            existing.push({ text: token, line: fallbackLine, preExpanded: false });
-          }
+          const singleSlice = [{ text: token, line: fallbackLine, preExpanded: false }];
+          argBranches = argBranches.map((branch) =>
+            branch.done ? branch : advanceBranchWithSlice(branch, singleSlice),
+          );
         }
       }
+      const argTokenVariants = argBranches.map((branch) => branch.tokens);
 
       if (argExpansionTruncated) {
         const limitMessage = `${filePath}:${lineNumber}: container command arguments exceed expansion limit and cannot be verified exhaustively`;
