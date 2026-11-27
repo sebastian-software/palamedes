@@ -494,6 +494,78 @@ describe("palamedes vite plugin", () => {
     expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(4);
   });
 
+  it("keeps prior failed catalog files in subsequent HMR transactions until fixed", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de", "fr"],
+      sourceLocale: "en",
+      catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
+    });
+    const plugin = palamedes({
+      framework: "solid",
+      experimentalSolidCatalogHmr: true,
+      mdx: false,
+    }).find((candidate) => candidate.name === "palamedes:transform") as any;
+    const send = vi.fn();
+    const server = {
+      config: { logger: { warn: vi.fn() } },
+      environments: {
+        client: {
+          hot: { send },
+          moduleGraph: { idToModuleMap: new Map(), getModulesByFile: () => [] },
+        },
+      },
+    };
+    plugin.configureServer(server);
+
+    const frCatalogPath = path.resolve("/repo/src/locales/fr.po");
+    let deBroken = true;
+    mocks.compileCatalogArtifact.mockImplementation(async (_config, resourcePath: string) => {
+      if (deBroken && resourcePath === deCatalogPath) {
+        throw new Error("invalid ICU in de.po");
+      }
+      return { messages: { greeting: "ok" }, missing: [], diagnostics: [], watchFiles: [] };
+    });
+
+    // 1. Broken edit in de.po enters error state.
+    await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 1, server });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          err: expect.objectContaining({ message: "invalid ICU in de.po" }),
+        }),
+      ),
+    );
+
+    // 2. Saving unrelated fr.po must still revalidate de.po and must NOT reload Solid while de.po is broken.
+    send.mockClear();
+    mocks.compileCatalogArtifact.mockClear();
+    await plugin.hotUpdate.handler({ file: frCatalogPath, type: "update", timestamp: 2, server });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          err: expect.objectContaining({ message: "invalid ICU in de.po" }),
+        }),
+      ),
+    );
+    expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "full-reload" }));
+
+    // 3. Once de.po is fixed, both pending de.po and fr.po validate and Solid recovers cleanly.
+    deBroken = false;
+    send.mockClear();
+    mocks.compileCatalogArtifact.mockClear();
+    await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 3, server });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: "full-reload" })),
+    );
+    expect(mocks.compileCatalogArtifact.mock.calls.map(([, resourcePath]) => resourcePath)).toEqual(
+      [deCatalogPath, frCatalogPath],
+    );
+  });
+
   it("still reports a current refresh failure after committing its catalog generation", async () => {
     const plugin = palamedes({ experimentalReactCatalogHmr: true, mdx: false }).find(
       (candidate) => candidate.name === "palamedes:transform",
@@ -1899,6 +1971,52 @@ describe("automatic graph splitting", () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/broken.ts"));
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("/repo/src/ok.ts"));
+  });
+
+  it("uses its snapshotted sidecar entries when another environment re-registers a key during generateBundle", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages)),
+    );
+    let releaseCompile!: () => void;
+    const compileGate = new Promise<void>((resolve) => {
+      releaseCompile = resolve;
+    });
+    const compileStarted = new Promise<void>((resolve) => {
+      mocks.compileCatalogArtifactSelected.mockImplementation(
+        async (_config: unknown, resourcePath: string, ids: string[]) => {
+          resolve();
+          await compileGate;
+          return {
+            messages: Object.fromEntries(
+              ids.map((id) => [id, `${id}:${resourcePath === deCatalogPath ? "de" : "en"}`]),
+            ),
+            missing: [],
+            diagnostics: [],
+            watchFiles: [],
+            resolvedLocaleChain: [],
+          };
+        },
+      );
+    });
+
+    const { key, sidecarPlugin, addSidecar } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: {}, command: "build", sourceId: "/repo/src/label.ts" },
+    );
+    const emitPromise = emitImportMap(sidecarPlugin, key);
+    await compileStarted;
+    // Simulate a concurrent SSR transform replacing the sidecar registry entry object for the same key.
+    await addSidecar("/repo/src/label.ts", ["id-a"]);
+    releaseCompile();
+
+    const emitted = await emitPromise;
+    const deAsset = emitted.find(
+      (file) => file.fileName.startsWith("assets/palamedes-m-") && file.fileName.includes(".de-"),
+    );
+    expect(deAsset?.source).toBe(
+      'export const locale="de";export const messages=({"id-a":"id-a:de"});',
+    );
   });
 
   it("keeps separate assets when a chunk's sidecars disagree or a sidecar has two importers", async () => {

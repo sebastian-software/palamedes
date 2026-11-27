@@ -312,17 +312,17 @@ function resolveLocaleChain(cfg: LoadedPalamedesConfig, locale: string): string[
   return chain;
 }
 
-function affectedForCatalogFile(
+function affectedForCatalogFiles(
   cfg: LoadedPalamedesConfig,
-  changedFile: string,
+  changedFiles: Iterable<string>,
 ): { locales: string[]; catalogs: PalamedesCatalogConfig[] } {
-  const canonicalChanged = canonicalPath(changedFile);
+  const canonicalChanged = new Set([...changedFiles].map(canonicalPath));
   const directLocales = new Set<string>();
   const matchedCatalogs = new Set<PalamedesCatalogConfig>();
 
   for (const catalog of cfg.catalogs) {
     for (const locale of cfg.locales) {
-      if (canonicalPath(catalogResourcePath(cfg, catalog, locale)) === canonicalChanged) {
+      if (canonicalChanged.has(canonicalPath(catalogResourcePath(cfg, catalog, locale)))) {
         directLocales.add(locale);
         matchedCatalogs.add(catalog);
       }
@@ -582,6 +582,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   type ReactCatalogSnapshot = { code: string; ids: string[] };
   let reactCatalogSnapshots = new Map<string, Promise<ReactCatalogSnapshot>>();
   let solidCatalogError = false;
+  const pendingFailedCatalogFiles = new Set<string>();
   let lastReactCatalogUpdate = "";
   let lastReactReload = "";
   let reactCatalogUpdate = Promise.resolve();
@@ -793,12 +794,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       const server = devServer;
       if (!server) return;
       let ownedGeneration = reactCatalogGeneration;
+      let committed = false;
       try {
         const cfg = await getConfigLazy();
         const client = server.environments.client;
-        const { locales: affectedLocales, catalogs: affectedCatalogs } = affectedForCatalogFile(
+        const filesToValidate = new Set(pendingFailedCatalogFiles);
+        filesToValidate.add(file);
+        const { locales: affectedLocales, catalogs: affectedCatalogs } = affectedForCatalogFiles(
           cfg,
-          file,
+          filesToValidate,
         );
         const sourceEntries = [...sidecarModules.values()].filter(
           (entry) =>
@@ -830,6 +834,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         if (epoch !== reactCatalogEpoch || reactCatalogGeneration !== ownedGeneration) return;
         reactCatalogGeneration += 1;
         ownedGeneration = reactCatalogGeneration;
+        committed = true;
+        pendingFailedCatalogFiles.clear();
         const nextSnapshots = new Map(reactCatalogSnapshots);
         for (const [locale, snapshot] of snapshots) {
           nextSnapshots.set(locale, Promise.resolve(snapshot));
@@ -852,8 +858,10 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
               devEnvironment.moduleGraph.invalidateModule(module);
             }
           }
-          for (const module of devEnvironment.moduleGraph.getModulesByFile(file) ?? []) {
-            devEnvironment.moduleGraph.invalidateModule(module);
+          for (const changedFile of filesToValidate) {
+            for (const module of devEnvironment.moduleGraph.getModulesByFile(changedFile) ?? []) {
+              devEnvironment.moduleGraph.invalidateModule(module);
+            }
           }
         }
         if (removedMessages || (experimentalSolidCatalogHmr && solidCatalogError)) {
@@ -876,6 +884,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         }
       } catch (error) {
         if (epoch !== reactCatalogEpoch || reactCatalogGeneration !== ownedGeneration) return;
+        if (!committed) pendingFailedCatalogFiles.add(file);
         if (experimentalSolidCatalogHmr) solidCatalogError = true;
         server.environments.client?.hot.send({
           type: "error",
@@ -1250,6 +1259,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         resetConfig();
         reactCatalogRestarting = false;
         solidCatalogError = false;
+        pendingFailedCatalogFiles.clear();
       }
     },
 
@@ -1776,9 +1786,15 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           if (!grouped.has(key)) groups.push([key]);
         }
 
-        const orderedEntries = groups.flatMap((keys) =>
-          keys.map((key) => sidecarModules.get(key)!),
-        );
+        const entryByKey = new Map<string, SidecarEntry>();
+        const orderedEntries: SidecarEntry[] = [];
+        for (const keys of groups) {
+          for (const key of keys) {
+            const entry = sidecarModules.get(key)!;
+            entryByKey.set(key, entry);
+            orderedEntries.push(entry);
+          }
+        }
         const compiledByLocale = await compileBatchedSidecarLocales(cfg, orderedEntries, locales, {
           warn: (message) => this.warn(message),
         });
@@ -1788,7 +1804,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             const localeSelections = compiledByLocale.get(locale)!;
             const selections: [string, Record<string, string>][] = keys.map((key) => [
               key,
-              localeSelections.get(sidecarModules.get(key)!) ?? {},
+              localeSelections.get(entryByKey.get(key)!) ?? {},
             ]);
             const union = mergeSelections(selections.map(([, selected]) => selected));
             const assets: [string, Record<string, string>, string[]][] = union
