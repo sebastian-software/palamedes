@@ -216,9 +216,12 @@ export type WithPalamedesOptions = {
    * Experimental: deliver production client catalogs as per-locale copies of
    * the client chunks that use them, selected by the server per request.
    * Turbopack only. Call `bindClientCatalogPermutations()` from
-   * `@palamedes/next-plugin/server` in `instrumentation.ts`. The locale comes
-   * from the `x-palamedes-locale` header a Proxy sets, else from the root
-   * route param named `locale`, else from the source locale. Development
+   * `@palamedes/next-plugin/server` in `instrumentation.ts`. By default, the
+   * root route param named `locale` takes precedence, falling back to the
+   * `x-palamedes-locale` header a Proxy sets when no `locale` root param
+   * exists, else the source locale; pass `{ localeSource: "header" }` or
+   * `{ headerSecret }` to `bindClientCatalogPermutations()` when Proxy headers
+   * should override route params or require HMAC verification. Development
    * keeps the in-graph fragments. Mutually exclusive with
    * `experimentalClientCatalogAssets`.
    * @default false

@@ -56,6 +56,7 @@ const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-pro
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
 const TAIL_SIZE = 512;
 const SCRIPT_BLOCK_PATTERN = /<script\b[^>]*>[\s\S]*?<\/script>/iu;
+const UNSAFE_SCRIPT_SOURCE_PATTERN = /[<>]|\p{Cc}/u;
 const SOLID_PRODUCTION_ENTRY_PATTERN =
   /(?:^|\/)virtual[_-]solid-ssr-entry-client(?:-[^/?#]+)?\.(?:c|m)?js(?:[?#].*)?$/iu;
 const SOLID_DEVELOPMENT_ENTRY_PATTERN =
@@ -173,7 +174,7 @@ function createSolidBootstrapGateTransform(options: {
               `Cannot defer Solid entry ${moduleSource} with unsupported fetch attributes: ${unsupportedAttributes.join(", ")}.`,
             );
           }
-          const source = JSON.stringify(moduleSource);
+          const source = escapeScriptData(JSON.stringify(moduleSource));
           const nonceValue = options.nonce ?? readCspNonce(script);
           const nonce = nonceValue ? ` nonce="${escapeAttribute(nonceValue)}"` : "";
           const importExpression = options.allowMissingPromise
@@ -214,6 +215,7 @@ function isTrustedSolidEntrySource(
   allowDevelopmentEntry: boolean,
   trustedOrigins: readonly string[],
 ): boolean {
+  if (UNSAFE_SCRIPT_SOURCE_PATTERN.test(source)) return false;
   // Solid's generated entries are same-origin URLs by default. Absolute
   // custom bases are trusted only when Vite's generated catalog assets identify
   // the configured origin as part of this application.
@@ -346,4 +348,12 @@ function safeTextCut(value: string, desired: number): number {
 
 function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+}
+
+function escapeScriptData(value: string): string {
+  return value
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
 }

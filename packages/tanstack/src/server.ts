@@ -146,6 +146,7 @@ export function createTanStackCatalogResponseDelivery(
 
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
+const UNSAFE_SCRIPT_SOURCE_PATTERN = /[<>]|\p{Cc}/u;
 
 let driftWarned = false;
 
@@ -245,6 +246,7 @@ function isTanStackEntryScript(
   source: string,
   options: { allowedOrigins: ReadonlySet<string>; baseOrigin: string },
 ): boolean {
+  if (UNSAFE_SCRIPT_SOURCE_PATTERN.test(source)) return false;
   const type = readTagAttribute(openingTag, "type");
   return (
     type?.toLowerCase() === "module" &&
@@ -259,6 +261,7 @@ function isBuiltAssetModuleScript(
   source: string,
   options: { allowedOrigins: ReadonlySet<string>; baseOrigin: string },
 ): boolean {
+  if (UNSAFE_SCRIPT_SOURCE_PATTERN.test(source)) return false;
   return (
     readTagAttribute(openingTag, "type")?.toLowerCase() === "module" &&
     isAllowedScriptOrigin(source, options) &&
@@ -278,10 +281,19 @@ function gateTanStackEntry(
   // Preserve the framework's original attributes, including its native CSP
   // nonce. The adapter must never authorize a previously nonced-less script.
   const trustedOpeningTag = removeTagAttribute(openingTag, "src");
+  const serializedSource = escapeScriptData(JSON.stringify(source));
   const importExpression = options.development
-    ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${JSON.stringify(source)})) : import(${JSON.stringify(source)}))`
-    : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${JSON.stringify(source)}))`;
+    ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${serializedSource})) : import(${serializedSource}))`
+    : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${serializedSource}))`;
   return `${trustedOpeningTag}${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}] || !globalThis[${CATALOG_READY_PROMISE}]) throw error; });</script>`;
+}
+
+function escapeScriptData(value: string): string {
+  return value
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
 }
 
 function getAllowedScriptOrigins(

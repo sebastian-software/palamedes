@@ -6,8 +6,78 @@ import type { evalManifest as evalManifestType } from "next/dist/server/load-man
 import type { workAsyncStorage as workAsyncStorageType } from "next/dist/server/app-render/work-async-storage.external.js";
 import type { workUnitAsyncStorage as workUnitAsyncStorageType } from "next/dist/server/app-render/work-unit-async-storage.external.js";
 
-/** The request header an app's Proxy sets with the locale it resolved. */
-export const CLIENT_CATALOG_LOCALE_HEADER = "x-palamedes-locale";
+import {
+  CLIENT_CATALOG_LOCALE_HEADER,
+  signClientCatalogLocaleHeader,
+  verifyClientCatalogLocaleHeader,
+} from "./client-catalog-header";
+
+export {
+  CLIENT_CATALOG_LOCALE_HEADER,
+  signClientCatalogLocaleHeader,
+  verifyClientCatalogLocaleHeader,
+};
+
+/**
+ * Precedence between the `locale` root route param and the
+ * `x-palamedes-locale` request header when selecting client chunk permutations:
+ * - `"route-first"` (default): prefers `rootParams.locale` when present and
+ *   only reads `x-palamedes-locale` when no `locale` root param exists.
+ * - `"route"`: reads `rootParams.locale` only and ignores `x-palamedes-locale`.
+ * - `"header"`: prefers `x-palamedes-locale` over `rootParams.locale` for
+ *   applications whose Proxy always sets or strips that header on every route.
+ */
+export type ClientCatalogLocaleSource = "route-first" | "route" | "header";
+
+const VALID_LOCALE_SOURCES: ReadonlySet<string> = new Set<ClientCatalogLocaleSource>([
+  "route-first",
+  "route",
+  "header",
+]);
+
+function resolveLocaleSourceOption(options: ClientCatalogHeaderOptions): ClientCatalogLocaleSource {
+  if (!("localeSource" in options)) return "route-first";
+  if (typeof options.localeSource === "string" && VALID_LOCALE_SOURCES.has(options.localeSource)) {
+    return options.localeSource as ClientCatalogLocaleSource;
+  }
+  throw new Error(
+    `Palamedes client catalog permutations: unsupported localeSource ${JSON.stringify(options.localeSource)}. Expected "route-first", "route", or "header".`,
+  );
+}
+
+export type ClientCatalogHeaderOptions = {
+  /**
+   * Precedence between `rootParams.locale` and `x-palamedes-locale`.
+   * @default "route-first"
+   */
+  localeSource?: ClientCatalogLocaleSource;
+  /**
+   * Optional HMAC secret shared with `proxy.ts` via
+   * `signClientCatalogLocaleHeader()`. When configured, `x-palamedes-locale`
+   * is accepted only when its signature verifies; unsigned or forged headers
+   * are ignored.
+   */
+  headerSecret?: string;
+};
+
+export type ResolveRenderLocaleOptions = ClientCatalogHeaderOptions & {
+  /**
+   * Whether the route's root layout sits at or below an optional catch-all
+   * `[[...locale]]` segment. Derived from the Next.js client reference
+   * manifest by `bindClientCatalogPermutationsAt()`.
+   */
+  optionalRootLocale?: boolean;
+};
+
+function parseLocaleHeader(
+  raw: string | null,
+  options: { requireSignature: boolean; secret?: string },
+): string | undefined {
+  if (!raw) return;
+  if (!options.requireSignature) return raw;
+  if (typeof options.secret !== "string" || options.secret.length === 0) return;
+  return verifyClientCatalogLocaleHeader(raw, options.secret);
+}
 
 /*
  * Binds the locale resolver into the client reference manifests of a
@@ -25,40 +95,80 @@ export const CLIENT_CATALOG_PERMUTATIONS_ENV = "PALAMEDES_NEXT_CATALOG_PERMUTATI
 export const CLIENT_CATALOG_PERMUTATIONS_DIST_ENV = "__PALAMEDES_NEXT_CATALOG_PERMUTATIONS_DIST";
 const BIND_GLOBAL = "__PALAMEDES_CLIENT_CATALOG_BIND";
 
-type LocaleResolver = (locales: readonly string[], fallback: string) => string;
-type BindableManifest = { [BIND_GLOBAL]?: (resolve: LocaleResolver) => void };
+type LocaleResolver = (
+  locales: readonly string[],
+  fallback: string,
+  optionalRootLocale?: boolean,
+) => string;
+type BindableManifest = {
+  [BIND_GLOBAL]?: (resolve: LocaleResolver) => void;
+};
 
 type RenderStore = ReturnType<typeof workAsyncStorageType.getStore>;
 type UnitStore = ReturnType<typeof workUnitAsyncStorageType.getStore>;
 
 const localeByRender = new WeakMap<object, string>();
+const ROOT_OPTIONAL_CATCH_ALL_LOCALE_ROUTE = /^\/(?:\([^/]+\)\/)*\[\[\.\.\.locale\]\](?:\/|$)/u;
+
+function hasRootOptionalLocaleRoute(render: RenderStore): boolean {
+  if (!render) return false;
+  if (typeof render.route === "string" && ROOT_OPTIONAL_CATCH_ALL_LOCALE_ROUTE.test(render.route)) {
+    return true;
+  }
+  return typeof render.page === "string" && ROOT_OPTIONAL_CATCH_ALL_LOCALE_ROUTE.test(render.page);
+}
 
 /*
- * The header wins: the app's Proxy sets it from its own strategy and
- * overwrites any incoming value, so it is the explicit, trusted choice. Without
- * it, the root route param named `locale` decides; another param name or a
- * param value that happens to look like a locale is not guessed at. Anything
- * else, including an unknown locale, renders with the fallback locale, so
- * `notFound()`, `_not-found`, and `_global-error` work without the app
- * validating locales in the Proxy. The result is memoized per render because
- * Next serializes segment prefetch files and ISR output after the request
- * store is gone.
+ * By default (`localeSource: "route-first"`), a present root route param named
+ * `locale` wins so an untrusted incoming `x-palamedes-locale` header cannot
+ * override `app/[locale]/` routes or poison route-keyed ISR/CDN caches. When
+ * no `locale` root param exists, the Proxy header decides (unless
+ * `localeSource: "route"` disables headers). Apps that explicitly opt into
+ * `localeSource: "header"` let the Proxy header take precedence, and any
+ * header-reading mode can require an HMAC signature via `headerSecret`. Other
+ * param names are never guessed at, and unknown or missing locales fall back
+ * to the source locale so `notFound()`, `_not-found`, and `_global-error` work
+ * without Proxy validation. The result is memoized per render because Next
+ * serializes segment prefetch files and ISR output after the request store is
+ * gone.
  */
 export function resolveRenderLocale(
   locales: readonly string[],
   fallback: string,
   render: RenderStore,
   unit: UnitStore,
+  options: ResolveRenderLocaleOptions = {},
 ): string {
   const memoized = render && localeByRender.get(render);
   if (memoized) return memoized;
 
+  const localeSource = resolveLocaleSourceOption(options);
+  const rootParams =
+    unit && "rootParams" in unit && unit.rootParams && typeof unit.rootParams === "object"
+      ? unit.rootParams
+      : undefined;
+  const hasRootLocaleParam = rootParams !== undefined && Object.hasOwn(rootParams, "locale");
+  const hasOptionalRootLocale =
+    options.optionalRootLocale !== undefined
+      ? options.optionalRootLocale
+      : hasRootOptionalLocaleRoute(render);
+  const hasRootLocale = hasRootLocaleParam || hasOptionalRootLocale;
+  const rootLocale = hasRootLocaleParam ? rootParams.locale : undefined;
+  const readHeaderLocale = () =>
+    unit && "headers" in unit && unit.headers
+      ? parseLocaleHeader(unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER), {
+          requireSignature: "headerSecret" in options,
+          secret: options.headerSecret,
+        })
+      : undefined;
+
   let candidate: unknown;
-  if (unit && "headers" in unit && unit.headers) {
-    candidate = unit.headers.get(CLIENT_CATALOG_LOCALE_HEADER);
-  }
-  if (!candidate && unit && "rootParams" in unit && unit.rootParams) {
-    candidate = unit.rootParams.locale;
+  if (localeSource === "header") {
+    candidate = readHeaderLocale() ?? (hasRootLocale ? rootLocale : undefined);
+  } else if (localeSource === "route") {
+    candidate = hasRootLocale ? rootLocale : undefined;
+  } else {
+    candidate = hasRootLocale ? rootLocale : readHeaderLocale();
   }
   const locale =
     typeof candidate === "string" && locales.includes(candidate) ? candidate : fallback;
@@ -84,7 +194,21 @@ function manifestFiles(directory: string): string[] {
  * the bound manifests; an empty list means the directory has none, which is
  * the case in processes that never render.
  */
-export function bindClientCatalogPermutationsAt(distDir: string): string[] {
+export function bindClientCatalogPermutationsAt(
+  distDir: string,
+  options: ClientCatalogHeaderOptions = {},
+): string[] {
+  const hasLocaleSource = "localeSource" in options;
+  const validatedLocaleSource = resolveLocaleSourceOption(options);
+  const hasHeaderSecret = "headerSecret" in options;
+  if (
+    hasHeaderSecret &&
+    (typeof options.headerSecret !== "string" || options.headerSecret.length === 0)
+  ) {
+    throw new Error(
+      "Palamedes client catalog permutations: headerSecret must be a non-empty string when provided.",
+    );
+  }
   // Resolve Next from the build output, so a monorepo with several Next
   // copies binds the instance that serves this app.
   const nextRequire = createRequire(path.join(distDir, "package.json"));
@@ -108,13 +232,21 @@ export function bindClientCatalogPermutationsAt(distDir: string): string[] {
     storages = loaded;
     return loaded;
   }
-  const resolve: LocaleResolver = (locales, fallback) => {
+  const resolveOptions: ClientCatalogHeaderOptions = {
+    ...(hasLocaleSource ? { localeSource: validatedLocaleSource } : {}),
+    ...(hasHeaderSecret ? { headerSecret: options.headerSecret } : {}),
+  };
+
+  const resolve: LocaleResolver = (locales, fallback, optionalRootLocale) => {
     const { workAsyncStorage, workUnitAsyncStorage } = loadStorages();
     return resolveRenderLocale(
       locales,
       fallback,
       workAsyncStorage.getStore(),
       workUnitAsyncStorage.getStore(),
+      typeof optionalRootLocale === "boolean"
+        ? { ...resolveOptions, optionalRootLocale }
+        : resolveOptions,
     );
   };
 
@@ -129,7 +261,7 @@ export function bindClientCatalogPermutationsAt(distDir: string): string[] {
   return bound;
 }
 
-export type BindClientCatalogPermutationsOptions = {
+export type BindClientCatalogPermutationsOptions = ClientCatalogHeaderOptions & {
   /** The Next project directory that holds `distDir`. Defaults to `process.cwd()`. */
   dir?: string;
 };
@@ -143,10 +275,13 @@ export type BindClientCatalogPermutationsOptions = {
 export function bindClientCatalogPermutations(
   options: BindClientCatalogPermutationsOptions = {},
 ): string[] | undefined {
-  const distDir = process.env[CLIENT_CATALOG_PERMUTATIONS_ENV];
+  // Literal property access ensures Next's build-time `env` replacement still
+  // inlines `distDir` when `experimental.turbopackModuleFragments` splits
+  // `CLIENT_CATALOG_PERMUTATIONS_ENV` into a separate fragment.
+  const distDir = process.env.PALAMEDES_NEXT_CATALOG_PERMUTATIONS;
   if (!distDir) return;
   const absoluteDistDir = path.join(options.dir ?? process.cwd(), distDir);
-  const bound = bindClientCatalogPermutationsAt(absoluteDistDir);
+  const bound = bindClientCatalogPermutationsAt(absoluteDistDir, options);
   if (bound.length === 0) {
     throw new Error(
       `Palamedes client catalog permutations: ${absoluteDistDir}/server/app has no client reference manifests with permutation tables. Start the server from the project directory, or pass { dir } to bindClientCatalogPermutations().`,
