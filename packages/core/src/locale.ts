@@ -218,7 +218,11 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number)
           return null;
         }
         const tLang = subtags.slice(tLangStart, nextIndex).join("-");
-        if (!languageTag(`und-t-${tLang}`)) {
+        const syntheticTransformedTag = `und-t-${tLang}`;
+        if (
+          syntheticTransformedTag.length <= maxTagLength &&
+          !languageTag(syntheticTransformedTag, maxTagLength)
+        ) {
           return null;
         }
         hasLangOrField = true;
@@ -279,7 +283,9 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number)
 
   const baseTag = subtags.slice(0, baseEndIndex).join("-");
   const reducedTag = hasPosixVariant ? `${baseTag}-u-va-posix` : baseTag;
-  return reducedTag.length <= maxTagLength && languageTag(reducedTag) ? reducedTag : null;
+  return reducedTag.length <= maxTagLength && languageTag(reducedTag, maxTagLength)
+    ? reducedTag
+    : null;
 }
 
 function languagePreferences(
