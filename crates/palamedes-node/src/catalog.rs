@@ -10,7 +10,7 @@ use crate::catalog_config::{
     CatalogArtifactConfig, CatalogArtifactRequest, CatalogArtifactSelectedRequest,
     CatalogConfigFormat,
 };
-const SELECTED_CATALOG_CACHE_CAPACITY: usize = 64;
+const SELECTED_CATALOG_CACHE_CAPACITY: usize = 256;
 
 /*
  * N-API entrypoints can be invoked from Node worker threads. The core cache

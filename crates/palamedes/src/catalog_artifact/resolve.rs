@@ -1,12 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use regex::Regex;
-
 use crate::error::{PalamedesError, PalamedesResult};
 
 use super::load::{
     CatalogSources, ResolvedCatalogFile, load_catalogs, parse_catalog_sources_with_observer,
-    read_catalog_sources,
 };
 use super::types::{CatalogArtifactConfig, CatalogConfig, FallbackLocales};
 use super::{
@@ -21,10 +18,33 @@ struct ResolvedCatalogRequest {
     primary_file: PathBuf,
 }
 
-pub(super) fn prepare_compilation(
+pub(super) struct PreparedCompilationRequest {
+    pub(super) locale: String,
+    pub(super) fallback_chain: Vec<String>,
+    pub(super) resolved_files: Vec<ResolvedCatalogFile>,
+    pub(super) watch_files: Vec<PathBuf>,
+}
+
+impl PreparedCompilationRequest {
+    pub(super) fn into_snapshot(
+        self,
+        sources: CatalogSources,
+        source_locale: String,
+    ) -> CompilationSnapshot {
+        CompilationSnapshot {
+            locale: self.locale,
+            fallback_chain: self.fallback_chain,
+            watch_files: self.watch_files,
+            sources,
+            source_locale,
+        }
+    }
+}
+
+pub(super) fn prepare_compilation_request(
     config: &CatalogArtifactConfig,
     resource_path: &str,
-) -> PalamedesResult<PreparedCompilation> {
+) -> PalamedesResult<PreparedCompilationRequest> {
     let resource_path = PathBuf::from(resource_path);
     let root_dir = PathBuf::from(&config.root_dir);
     let resolved = resolve_catalog_request(config, &resource_path)?;
@@ -36,12 +56,26 @@ pub(super) fn prepare_compilation(
         .iter()
         .map(|file| file.path.clone())
         .collect();
-    let loaded = load_catalogs(&resolved_files, config)?;
 
-    Ok(PreparedCompilation {
+    Ok(PreparedCompilationRequest {
         locale: resolved.locale,
         fallback_chain,
+        resolved_files,
         watch_files,
+    })
+}
+
+pub(super) fn prepare_compilation(
+    config: &CatalogArtifactConfig,
+    resource_path: &str,
+) -> PalamedesResult<PreparedCompilation> {
+    let prepared = prepare_compilation_request(config, resource_path)?;
+    let loaded = load_catalogs(&prepared.resolved_files, config)?;
+
+    Ok(PreparedCompilation {
+        locale: prepared.locale,
+        fallback_chain: prepared.fallback_chain,
+        watch_files: prepared.watch_files,
         loaded,
     })
 }
@@ -71,30 +105,6 @@ impl CompilationSnapshot {
             loaded,
         })
     }
-}
-
-pub(super) fn prepare_compilation_snapshot(
-    config: &CatalogArtifactConfig,
-    resource_path: &str,
-) -> PalamedesResult<CompilationSnapshot> {
-    let resource_path = PathBuf::from(resource_path);
-    let root_dir = PathBuf::from(&config.root_dir);
-    let resolved = resolve_catalog_request(config, &resource_path)?;
-    let fallback_chain = resolve_locale_chain(config, &resolved.locale);
-    let catalog = &config.catalogs[resolved.catalog_index];
-    let resolved_files = collect_watch_files(&root_dir, &resolved, catalog, &fallback_chain)?;
-    let watch_files = resolved_files
-        .iter()
-        .map(|file| file.path.clone())
-        .collect();
-    let sources = read_catalog_sources(&resolved_files, config)?;
-    Ok(CompilationSnapshot {
-        locale: resolved.locale,
-        fallback_chain,
-        watch_files,
-        sources,
-        source_locale: config.source_locale.clone(),
-    })
 }
 
 pub(super) fn resolve_locale_chain(config: &CatalogArtifactConfig, locale: &str) -> Vec<String> {
@@ -148,25 +158,6 @@ pub(super) fn ferrocat_fallback_chain(
         .collect()
 }
 
-/// Returns the 1-based regex capture index of the first `{locale}` placeholder
-/// that is the sole placeholder in its `/` path segment, allowing O(1) locale
-/// extraction even when `{locale}` appears in multiple segments (such as
-/// `locales/{locale}/{locale}`). Returns `None` only when every segment
-/// containing `{locale}` has two or more placeholders (such as
-/// `locales/{locale}-{locale}` or `locales/{locale}{locale}`).
-fn unambiguous_locale_capture_index(catalog_path: &str) -> Option<usize> {
-    let portable = catalog_path.replace('\\', "/");
-    let mut capture_index = 0usize;
-    for segment in portable.split('/') {
-        let count = segment.matches("{locale}").count();
-        if count == 1 {
-            return Some(capture_index + 1);
-        }
-        capture_index += count;
-    }
-    None
-}
-
 fn resolve_catalog_request(
     config: &CatalogArtifactConfig,
     resource_path: &Path,
@@ -175,15 +166,6 @@ fn resolve_catalog_request(
     let root_dir = Path::new(&config.root_dir);
     let mut deferred_error: Option<PalamedesError> = None;
 
-    // Pass 1: validate every catalog pattern and resolve matches.
-    // - Patterns with at least one unambiguous single-placeholder segment
-    //   (`locales/{locale}`, `locales/{locale}/{locale}`, etc.) capture the
-    //   candidate locale directly in O(1) and verify the full expansion once.
-    // - Genuinely ambiguous multi-placeholder patterns where every placeholder
-    //   segment contains 2+ placeholders (`{locale}-{locale}`, `{locale}{locale}`)
-    //   enumerate configured locales so splitting stays unambiguous.
-    // - Fixed patterns without `{locale}` or ambiguous multi-locale expansions
-    //   fail with `CouldNotResolveLocale`.
     for (catalog_index, catalog) in config.catalogs.iter().enumerate() {
         validate_catalog_path_pattern(&catalog.path).map_err(|reason| {
             PalamedesError::UnsafeCatalogPath {
@@ -191,8 +173,7 @@ fn resolve_catalog_request(
                 reason: reason.to_owned(),
             }
         })?;
-        let placeholder_count = catalog.path.matches("{locale}").count();
-        if placeholder_count == 0 {
+        if !catalog.path.contains("{locale}") {
             let expected =
                 try_resolve_catalog_file_path(root_dir, &catalog.path, "a", catalog.format)?;
             if normalize_path(&expected) == normalized_resource {
@@ -200,135 +181,57 @@ fn resolve_catalog_request(
                     resource_path: resource_path.to_path_buf(),
                 });
             }
-        } else if let Some(capture_index) = unambiguous_locale_capture_index(&catalog.path) {
-            let matcher = catalog_locale_matcher(root_dir, catalog)?;
-            if let Some(captures) = matcher.captures(&normalized_resource) {
-                let locale = captures
-                    .get(capture_index)
-                    .map(|value| value.as_str().to_owned())
-                    .ok_or_else(|| PalamedesError::CouldNotResolveLocale {
-                        resource_path: resource_path.to_path_buf(),
-                    })?;
-                if !is_valid_locale(&locale) {
-                    let expanded_matches = placeholder_count == 1
-                        || normalize_path(&resolve_catalog_file_path(
-                            root_dir,
-                            &catalog.path,
-                            &locale,
-                            catalog.format,
-                        )) == normalized_resource;
-                    if expanded_matches && deferred_error.is_none() {
-                        deferred_error = Some(PalamedesError::InvalidCatalogLocale { locale });
-                    }
-                    continue;
-                }
-                let expected_primary = try_resolve_catalog_file_path(
-                    root_dir,
-                    &catalog.path,
-                    &locale,
-                    catalog.format,
-                )?;
-                if normalize_path(&expected_primary) != normalized_resource {
-                    continue;
-                }
-                if config
-                    .locales
-                    .iter()
-                    .any(|configured| configured == &locale)
-                {
-                    let primary_file = if resource_path.strip_prefix(root_dir).is_ok() {
-                        resource_path.to_path_buf()
-                    } else {
-                        expected_primary
-                    };
-                    return Ok(ResolvedCatalogRequest {
-                        locale,
-                        catalog_index,
-                        primary_file,
-                    });
-                }
-                if deferred_error.is_none() {
-                    deferred_error = Some(PalamedesError::ResolvedLocaleNotConfigured {
-                        locale,
-                        resource_path: resource_path.to_path_buf(),
-                    });
-                }
+            continue;
+        }
+
+        let matcher = catalog_locale_matcher(root_dir, catalog)?;
+        let Some(captured) = matcher.capture_locale(&normalized_resource) else {
+            continue;
+        };
+        let locale = captured.to_owned();
+        if !is_valid_locale(&locale) {
+            let expanded_matches = normalize_path(&resolve_catalog_file_path(
+                root_dir,
+                &catalog.path,
+                &locale,
+                catalog.format,
+            )) == normalized_resource;
+            if expanded_matches && deferred_error.is_none() {
+                deferred_error = Some(PalamedesError::InvalidCatalogLocale { locale });
             }
-        } else {
-            let mut matched: Option<(String, PathBuf)> = None;
-            for locale in &config.locales {
-                if !is_valid_locale(locale) {
-                    continue;
-                }
-                let expected_primary =
-                    try_resolve_catalog_file_path(root_dir, &catalog.path, locale, catalog.format)?;
-                if normalize_path(&expected_primary) == normalized_resource {
-                    match &matched {
-                        None => matched = Some((locale.clone(), expected_primary)),
-                        Some((existing_locale, _)) if existing_locale == locale => {}
-                        Some(_) => {
-                            return Err(PalamedesError::CouldNotResolveLocale {
-                                resource_path: resource_path.to_path_buf(),
-                            });
-                        }
-                    }
-                }
-            }
-            if let Some((locale, primary_file)) = matched {
-                let primary_file = if resource_path.strip_prefix(root_dir).is_ok() {
-                    resource_path.to_path_buf()
-                } else {
-                    primary_file
-                };
-                return Ok(ResolvedCatalogRequest {
-                    locale,
-                    catalog_index,
-                    primary_file,
-                });
-            }
+            continue;
+        }
+        let expected_primary =
+            try_resolve_catalog_file_path(root_dir, &catalog.path, &locale, catalog.format)?;
+        if normalize_path(&expected_primary) != normalized_resource {
+            continue;
+        }
+        if config
+            .locales
+            .iter()
+            .any(|configured| configured == &locale)
+        {
+            let primary_file = if resource_path.strip_prefix(root_dir).is_ok() {
+                resource_path.to_path_buf()
+            } else {
+                expected_primary
+            };
+            return Ok(ResolvedCatalogRequest {
+                locale,
+                catalog_index,
+                primary_file,
+            });
+        }
+        if deferred_error.is_none() {
+            deferred_error = Some(PalamedesError::ResolvedLocaleNotConfigured {
+                locale,
+                resource_path: resource_path.to_path_buf(),
+            });
         }
     }
 
     if let Some(error) = deferred_error {
         return Err(error);
-    }
-
-    // Pass 2: no configured locale matched; check genuinely ambiguous
-    // repeated-placeholder patterns to report invalid or unconfigured locales.
-    for catalog in &config.catalogs {
-        if catalog.path.matches("{locale}").count() < 2
-            || unambiguous_locale_capture_index(&catalog.path).is_some()
-        {
-            continue;
-        }
-        let matcher = catalog_locale_matcher(root_dir, catalog)?;
-        if let Some(captures) = matcher.captures(&normalized_resource) {
-            let locale = captures
-                .get(1)
-                .map(|value| value.as_str().to_owned())
-                .ok_or_else(|| PalamedesError::CouldNotResolveLocale {
-                    resource_path: resource_path.to_path_buf(),
-                })?;
-            if !is_valid_locale(&locale) {
-                if (2..captures.len()).any(|index| {
-                    captures
-                        .get(index)
-                        .is_none_or(|value| value.as_str() != locale)
-                }) {
-                    continue;
-                }
-                return Err(PalamedesError::InvalidCatalogLocale { locale });
-            }
-            let expected_primary =
-                try_resolve_catalog_file_path(root_dir, &catalog.path, &locale, catalog.format)?;
-            if normalize_path(&expected_primary) != normalized_resource {
-                continue;
-            }
-            return Err(PalamedesError::ResolvedLocaleNotConfigured {
-                locale,
-                resource_path: resource_path.to_path_buf(),
-            });
-        }
     }
 
     Err(PalamedesError::ResourceNotMatchedToCatalogPath {
@@ -366,12 +269,31 @@ fn collect_watch_files(
     Ok(files)
 }
 
+/// Direct prefix/suffix and segment matcher for `{locale}` placeholders without
+/// compiling a regular expression on every catalog lookup.
+pub(super) struct CatalogLocaleMatcher {
+    root_prefix: String,
+    relative_pattern: String,
+}
+
+impl CatalogLocaleMatcher {
+    pub(super) fn capture_locale<'a>(&self, normalized_resource: &'a str) -> Option<&'a str> {
+        let relative_resource = normalized_resource.strip_prefix(&self.root_prefix)?;
+        match_catalog_locale_pattern(&self.relative_pattern, relative_resource)
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_match(&self, normalized_resource: &str) -> bool {
+        self.capture_locale(normalized_resource).is_some()
+    }
+}
+
 /// Builds the locale-capturing matcher used to resolve a catalog resource and
-/// its fallback watch files. Invalid patterns must fail both paths equally.
+/// its fallback watch files.
 pub(super) fn catalog_locale_matcher(
     root_dir: &Path,
     catalog: &CatalogConfig,
-) -> PalamedesResult<Regex> {
+) -> PalamedesResult<CatalogLocaleMatcher> {
     validate_catalog_path_pattern(&catalog.path).map_err(|reason| {
         PalamedesError::UnsafeCatalogPath {
             path: catalog.path.clone(),
@@ -379,16 +301,103 @@ pub(super) fn catalog_locale_matcher(
         }
     })?;
     let portable_catalog_path = catalog.path.replace('\\', "/");
-    let absolute_catalog_path =
-        resolve_catalog_file_path(root_dir, &portable_catalog_path, "{locale}", catalog.format);
-    let pattern = normalize_path(&absolute_catalog_path);
-    let regex_pattern = regex::escape(&pattern).replace("\\{locale\\}", "([^/]+)");
-    Regex::new(&format!("^{regex_pattern}$")).map_err(|source| {
-        PalamedesError::InvalidCatalogPathPattern {
-            pattern: catalog.path.clone(),
-            source,
-        }
+    let relative_pattern = normalize_path(&resolve_catalog_file_path(
+        Path::new(""),
+        &portable_catalog_path,
+        "{locale}",
+        catalog.format,
+    ));
+    let root_prefix = normalized_root_prefix(root_dir);
+    Ok(CatalogLocaleMatcher {
+        root_prefix,
+        relative_pattern,
     })
+}
+
+fn normalized_root_prefix(root_dir: &Path) -> String {
+    const PROBE_SEGMENT: &str = "__pmds_root_probe__";
+    let joined = normalize_path(&root_dir.join(PROBE_SEGMENT));
+    joined
+        .strip_suffix(PROBE_SEGMENT)
+        .unwrap_or(&joined)
+        .to_owned()
+}
+
+fn match_catalog_locale_pattern<'a>(pattern: &str, resource: &'a str) -> Option<&'a str> {
+    let (prefix, suffix) = pattern.split_once("{locale}")?;
+    if !suffix.contains("{locale}") {
+        let remainder = resource.strip_prefix(prefix)?;
+        let locale = remainder.strip_suffix(suffix)?;
+        return (!locale.is_empty() && !locale.contains('/')).then_some(locale);
+    }
+
+    let mut pat_segments = pattern.split('/');
+    let mut res_segments = resource.split('/');
+    let mut captured: Option<&'a str> = None;
+    loop {
+        match (pat_segments.next(), res_segments.next()) {
+            (Some(pat_segment), Some(res_segment)) => {
+                if let Some(locale) = match_segment_locale(pat_segment, res_segment, captured)? {
+                    match captured {
+                        Some(previous) if previous != locale => return None,
+                        None => captured = Some(locale),
+                        Some(_) => {}
+                    }
+                }
+            }
+            (None, None) => return captured,
+            _ => return None,
+        }
+    }
+}
+
+fn match_segment_locale<'a>(
+    pattern_segment: &str,
+    resource_segment: &'a str,
+    known_locale: Option<&str>,
+) -> Option<Option<&'a str>> {
+    if !pattern_segment.contains("{locale}") {
+        return (pattern_segment == resource_segment).then_some(None);
+    }
+
+    let mut part_count = 0usize;
+    let mut literal_len = 0usize;
+    for part in pattern_segment.split("{locale}") {
+        part_count += 1;
+        literal_len += part.len();
+    }
+    let placeholder_count = part_count - 1;
+    let remaining_len = resource_segment.len().checked_sub(literal_len)?;
+    if remaining_len < placeholder_count || !remaining_len.is_multiple_of(placeholder_count) {
+        return None;
+    }
+    let locale_len = remaining_len / placeholder_count;
+
+    let mut parts = pattern_segment.split("{locale}");
+    let first_literal = parts.next()?;
+    let rest = resource_segment.strip_prefix(first_literal)?;
+    if !rest.is_char_boundary(locale_len) {
+        return None;
+    }
+    let (locale, mut rest) = rest.split_at(locale_len);
+    if locale.is_empty() {
+        return None;
+    }
+    if let Some(previous) = known_locale
+        && previous != locale
+    {
+        return None;
+    }
+
+    let mut remaining_parts = parts.peekable();
+    while let Some(literal) = remaining_parts.next() {
+        rest = rest.strip_prefix(literal)?;
+        if remaining_parts.peek().is_some() {
+            rest = rest.strip_prefix(locale)?;
+        }
+    }
+
+    rest.is_empty().then_some(Some(locale))
 }
 
 pub(super) fn normalize_path(path: &Path) -> String {
@@ -447,9 +456,7 @@ mod tests {
         };
         let matcher = catalog_locale_matcher(root, &catalog).expect("catalog matcher");
         let expected = normalize_path(&root.join("locales/pt.BR/messages.v2.po"));
-        let captures = matcher.captures(&expected).expect("dotted catalog match");
-
-        assert_eq!(captures.get(1).map(|value| value.as_str()), Some("pt.BR"));
+        assert_eq!(matcher.capture_locale(&expected), Some("pt.BR"));
         assert!(!matcher.is_match(&normalize_path(&root.join("locales/pt.BR/messages.po"))));
         assert!(!matcher.is_match(&normalize_path(&root.join("locales/pt.BR/messages.v2.fcl"))));
         assert!(
@@ -480,29 +487,59 @@ mod tests {
     }
 
     #[test]
-    fn unambiguous_locale_capture_index_identifies_single_placeholder_segments() {
-        use super::unambiguous_locale_capture_index;
+    fn locale_matcher_handles_repeated_placeholders_metacharacters_and_utf8() {
+        let root = Path::new("workspace+v1[test]({locale})");
 
+        let repeated_segments = catalog_locale_matcher(
+            root,
+            &CatalogConfig {
+                path: "locales/{locale}/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            },
+        )
+        .expect("repeated segment matcher");
         assert_eq!(
-            unambiguous_locale_capture_index("locales/{locale}"),
-            Some(1)
+            repeated_segments.capture_locale(&normalize_path(&root.join("locales/de-CH/de-CH.po"))),
+            Some("de-CH")
         );
         assert_eq!(
-            unambiguous_locale_capture_index("locales/{locale}/{locale}.po"),
-            Some(1)
-        );
-        assert_eq!(
-            unambiguous_locale_capture_index("locales\\{locale}{locale}\\{locale}"),
-            Some(3)
-        );
-        assert_eq!(
-            unambiguous_locale_capture_index("locales/{locale}-{locale}"),
+            repeated_segments.capture_locale(&normalize_path(&root.join("locales/en/de.po"))),
             None
         );
+
+        let repeated_in_segment = catalog_locale_matcher(
+            root,
+            &CatalogConfig {
+                path: "locales/{locale}-{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            },
+        )
+        .expect("same-segment repeated matcher");
         assert_eq!(
-            unambiguous_locale_capture_index("locales/{locale}{locale}"),
+            repeated_in_segment
+                .capture_locale(&normalize_path(&root.join("locales/zh-Hans-zh-Hans.po"))),
+            Some("zh-Hans")
+        );
+        assert_eq!(
+            repeated_in_segment.capture_locale(&normalize_path(&root.join("locales/en-de.po"))),
             None
         );
-        assert_eq!(unambiguous_locale_capture_index("locales/messages"), None);
+
+        let adjacent = catalog_locale_matcher(
+            root,
+            &CatalogConfig {
+                path: "locales/{locale}{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            },
+        )
+        .expect("adjacent repeated matcher");
+        assert_eq!(
+            adjacent.capture_locale(&normalize_path(&root.join("locales/enen.po"))),
+            Some("en")
+        );
+        assert_eq!(
+            adjacent.capture_locale(&normalize_path(&root.join("locales/ééé.po"))),
+            None
+        );
     }
 }

@@ -334,6 +334,54 @@ pub fn split_relative_catalog_path(
     Ok((parent, file_name))
 }
 
+/// Metadata snapshot for a regular file inspected or read through [`ContainedDir`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ContainedFileMetadata {
+    pub(crate) size: u64,
+    pub(crate) mtime_ns: Option<i128>,
+    pub(crate) ctime_ns: Option<i128>,
+    pub(crate) identity: Option<FileIdentity>,
+}
+
+/// Opens the verified parent [`ContainedDir`] for `target` inside `root_dir`,
+/// returning `Ok(None)` when an intermediate directory does not exist.
+pub(crate) fn open_contained_catalog_parent(
+    root_dir: &Path,
+    relative_parent: &Path,
+    target: &Path,
+) -> PalamedesResult<Option<ContainedDir>> {
+    match ContainedDir::open_subpath(root_dir, relative_parent, false) {
+        Ok(dir) => Ok(dir),
+        Err(ContainedFsError::Containment(reason)) => Err(PalamedesError::UnsafeCatalogPath {
+            path: target.to_string_lossy().into_owned(),
+            reason,
+        }),
+        Err(ContainedFsError::Io(source)) if source.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(ContainedFsError::Io(source)) => Err(PalamedesError::ReadFile {
+            path: target.to_path_buf(),
+            source,
+        }),
+    }
+}
+
+/// Maps a [`ContainedFsError`] encountered while reading or stating `target`
+/// into a [`PalamedesError`].
+pub(crate) fn map_contained_catalog_read_error(
+    target: &Path,
+    error: ContainedFsError,
+) -> PalamedesError {
+    match error {
+        ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
+            path: target.to_string_lossy().into_owned(),
+            reason,
+        },
+        ContainedFsError::Io(source) => PalamedesError::ReadFile {
+            path: target.to_path_buf(),
+            source,
+        },
+    }
+}
+
 /// Reads an optional catalog file through a verified [`ContainedDir`] handle
 /// chain anchored at `root_dir`.
 ///
@@ -356,36 +404,13 @@ pub(crate) fn read_optional_contained_catalog_file(
                 reason: error.to_string(),
             }
         })?;
-    let parent_dir = match ContainedDir::open_subpath(root_dir, &relative_parent, false) {
-        Ok(Some(dir)) => dir,
-        Ok(None) => return Ok(None),
-        Err(ContainedFsError::Containment(reason)) => {
-            return Err(PalamedesError::UnsafeCatalogPath {
-                path: target.to_string_lossy().into_owned(),
-                reason,
-            });
-        }
-        Err(ContainedFsError::Io(source)) if source.kind() == io::ErrorKind::NotFound => {
-            return Ok(None);
-        }
-        Err(ContainedFsError::Io(source)) => {
-            return Err(PalamedesError::ReadFile {
-                path: target.to_path_buf(),
-                source,
-            });
-        }
+    let Some(parent_dir) = open_contained_catalog_parent(root_dir, &relative_parent, target)?
+    else {
+        return Ok(None);
     };
-    match parent_dir.read_optional_file(&file_name) {
-        Ok(content) => Ok(content),
-        Err(ContainedFsError::Containment(reason)) => Err(PalamedesError::UnsafeCatalogPath {
-            path: target.to_string_lossy().into_owned(),
-            reason,
-        }),
-        Err(ContainedFsError::Io(source)) => Err(PalamedesError::ReadFile {
-            path: target.to_path_buf(),
-            source,
-        }),
-    }
+    parent_dir
+        .read_optional_file(&file_name)
+        .map_err(|error| map_contained_catalog_read_error(target, error))
 }
 
 fn validate_single_file_name(file_name: &OsStr) -> Result<(), ContainedFsError> {
@@ -1275,6 +1300,65 @@ mod platform {
             &self,
             file_name: &OsStr,
         ) -> Result<Option<String>, ContainedFsError> {
+            Ok(self
+                .read_optional_file_with_metadata(file_name)?
+                .map(|(content, _)| content))
+        }
+
+        /// Returns metadata for regular file `file_name` after verifying read
+        /// access via `openat(O_RDONLY | O_NOFOLLOW | O_NONBLOCK)` without
+        /// reading file contents.
+        pub(crate) fn stat_optional_file(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<Option<super::ContainedFileMetadata>, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            let c_name = os_str_to_cstring(file_name)?;
+            // Open with the same read flags as `read_optional_file` so revoked
+            // read permissions or ACL changes are enforced identically on warm
+            // cache hits without reading any bytes from disk.
+            // SAFETY: `self.fd` is an open directory descriptor and `c_name` is valid.
+            let raw = unsafe {
+                libc::openat(
+                    self.fd.as_raw_fd(),
+                    c_name.as_ptr(),
+                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                )
+            };
+            if raw < 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::ENOENT) {
+                    return Ok(None);
+                }
+                if is_symlink_open_error(error.raw_os_error()) {
+                    return Err(ContainedFsError::Containment(format!(
+                        "refusing to follow symlink \"{}\"",
+                        file_name.to_string_lossy()
+                    )));
+                }
+                return Err(ContainedFsError::Io(error));
+            }
+            // SAFETY: `raw` is a newly opened valid file descriptor.
+            let fd = unsafe { OwnedFd::from_raw_fd(raw) };
+            let stat = fstat_fd(fd.as_raw_fd())?;
+            match stat_mode(&stat) & libc::S_IFMT {
+                libc::S_IFREG => Ok(Some(metadata_from_stat(&stat))),
+                libc::S_IFDIR => Err(ContainedFsError::Io(io::Error::from_raw_os_error(
+                    libc::EISDIR,
+                ))),
+                _ => Err(ContainedFsError::Containment(format!(
+                    "refusing to read non-regular file \"{}\"",
+                    file_name.to_string_lossy()
+                ))),
+            }
+        }
+
+        /// Reads `file_name` together with the `fstat` metadata captured from
+        /// the opened descriptor before reading.
+        pub(crate) fn read_optional_file_with_metadata(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<Option<(String, super::ContainedFileMetadata)>, ContainedFsError> {
             validate_single_file_name(file_name)?;
             let c_name = os_str_to_cstring(file_name)?;
             // Open with `O_NONBLOCK` so a FIFO planted at `file_name` returns
@@ -1317,10 +1401,11 @@ mod platform {
                     )));
                 }
             }
+            let metadata = metadata_from_stat(&stat);
             let mut file = File::from(fd);
             let mut content = String::new();
             file.read_to_string(&mut content)?;
-            Ok(Some(content))
+            Ok(Some((content, metadata)))
         }
 
         /// Writes `bytes` to `file_name` through this verified directory
@@ -2652,6 +2737,33 @@ mod platform {
         }
     }
 
+    #[allow(clippy::unnecessary_cast)]
+    const fn stat_ctime(stat: &libc::stat) -> (i64, i64) {
+        #[cfg(target_os = "netbsd")]
+        {
+            (stat.st_ctime as i64, stat.st_ctimensec as i64)
+        }
+        #[cfg(any(
+            target_os = "aix",
+            target_os = "hurd",
+            target_os = "nto",
+            target_os = "nuttx"
+        ))]
+        {
+            (stat.st_ctim.tv_sec as i64, stat.st_ctim.tv_nsec as i64)
+        }
+        #[cfg(not(any(
+            target_os = "netbsd",
+            target_os = "aix",
+            target_os = "hurd",
+            target_os = "nto",
+            target_os = "nuttx"
+        )))]
+        {
+            (stat.st_ctime as i64, stat.st_ctime_nsec as i64)
+        }
+    }
+
     fn is_empty_dir(fd: std::os::fd::RawFd) -> io::Result<bool> {
         let Some(errno_ptr) = errno_location() else {
             return Err(io::Error::new(
@@ -2827,6 +2939,25 @@ mod platform {
         FileIdentity {
             dev: stat.st_dev as u64,
             ino: stat.st_ino as u64,
+        }
+    }
+
+    fn metadata_from_stat(stat: &libc::stat) -> super::ContainedFileMetadata {
+        let (mtime_sec, mtime_nsec) = stat_mtime(stat);
+        let mtime_ns = i128::from(mtime_sec)
+            .checked_mul(1_000_000_000)
+            .and_then(|seconds| seconds.checked_add(i128::from(mtime_nsec)));
+        let (ctime_sec, ctime_nsec) = stat_ctime(stat);
+        let ctime_ns = i128::from(ctime_sec)
+            .checked_mul(1_000_000_000)
+            .and_then(|seconds| seconds.checked_add(i128::from(ctime_nsec)));
+        #[allow(clippy::unnecessary_cast)]
+        let size = u64::try_from(stat.st_size).unwrap_or(0);
+        super::ContainedFileMetadata {
+            size,
+            mtime_ns,
+            ctime_ns,
+            identity: Some(stat_identity(stat)),
         }
     }
 
@@ -8186,6 +8317,18 @@ mod platform {
             &self,
             file_name: &OsStr,
         ) -> Result<Option<String>, ContainedFsError> {
+            Ok(self
+                .read_optional_file_with_metadata(file_name)?
+                .map(|(content, _)| content))
+        }
+
+        /// Returns metadata for regular file `file_name` handle-relatively
+        /// after verifying read access without reading its contents or
+        /// following reparse points.
+        pub(crate) fn stat_optional_file(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<Option<super::ContainedFileMetadata>, ContainedFsError> {
             validate_single_file_name(file_name)?;
             let handle = match nt_create_relative(
                 self.handle.as_raw_handle(),
@@ -8208,10 +8351,45 @@ mod platform {
                     file_name.to_string_lossy()
                 )));
             }
+            Ok(Some(metadata_from_windows_handle(
+                handle.as_raw_handle(),
+                &info,
+            )))
+        }
+
+        /// Reads `file_name` handle-relatively together with metadata captured
+        /// from the opened handle before reading.
+        pub(crate) fn read_optional_file_with_metadata(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<Option<(String, super::ContainedFileMetadata)>, ContainedFsError> {
+            validate_single_file_name(file_name)?;
+            let handle = match nt_create_relative(
+                self.handle.as_raw_handle(),
+                file_name,
+                GENERIC_READ | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                FILE_ATTRIBUTE_NORMAL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_OPEN,
+                FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            ) {
+                Ok(handle) => handle,
+                Err(status) if is_not_found_status(status) => return Ok(None),
+                Err(status) => return Err(ContainedFsError::Io(nt_status_to_io_error(status))),
+            };
+            let info = file_information(handle.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to follow symlink \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
+            let metadata = metadata_from_windows_handle(handle.as_raw_handle(), &info);
             let mut file = File::from(handle);
             let mut content = String::new();
             file.read_to_string(&mut content)?;
-            Ok(Some(content))
+            Ok(Some((content, metadata)))
         }
 
         /// Writes `bytes` to `file_name` through this verified Windows
@@ -9917,6 +10095,51 @@ mod platform {
         Ok(unsafe { info.assume_init() })
     }
 
+    fn metadata_from_windows_handle(
+        handle: *mut c_void,
+        info: &ByHandleFileInformation,
+    ) -> super::ContainedFileMetadata {
+        const WINDOWS_TO_UNIX_EPOCH_TICKS: i128 = 116_444_736_000_000_000;
+        let ticks = (u64::from(info.last_write_time.high_date_time) << 32)
+            | u64::from(info.last_write_time.low_date_time);
+        let mtime_ns = (i128::from(ticks) - WINDOWS_TO_UNIX_EPOCH_TICKS).checked_mul(100);
+        let mut iosb = IoStatusBlock {
+            status_or_pointer: 0,
+            information: 0,
+        };
+        let mut basic = FileBasicInformation {
+            creation_time: 0,
+            last_access_time: 0,
+            last_write_time: 0,
+            change_time: 0,
+            file_attributes: 0,
+            _padding: 0,
+        };
+        // SAFETY: `handle` is open with `FILE_READ_ATTRIBUTES` and `basic` is writable.
+        let status = unsafe {
+            NtQueryInformationFile(
+                handle,
+                &mut iosb,
+                (&mut basic as *mut FileBasicInformation).cast::<c_void>(),
+                u32::try_from(std::mem::size_of::<FileBasicInformation>()).unwrap_or(40),
+                FILE_BASIC_INFORMATION_CLASS,
+            )
+        };
+        let ctime_ns = if status >= 0 && basic.change_time > 0 {
+            (i128::from(basic.change_time) - WINDOWS_TO_UNIX_EPOCH_TICKS).checked_mul(100)
+        } else {
+            None
+        };
+        let size = (u64::from(info.file_size_high) << 32) | u64::from(info.file_size_low);
+        let identity = handle_file_identity(handle).ok().flatten();
+        super::ContainedFileMetadata {
+            size,
+            mtime_ns,
+            ctime_ns,
+            identity,
+        }
+    }
+
     fn encode_utf16_no_nul(value: &OsStr) -> Result<Vec<u16>, ContainedFsError> {
         let wide: Vec<u16> = value.encode_wide().collect();
         if wide.contains(&0) {
@@ -10155,6 +10378,22 @@ mod platform {
             &self,
             _file_name: &OsStr,
         ) -> Result<Option<String>, ContainedFsError> {
+            Err(unsupported_containment_error())
+        }
+
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
+        pub(crate) fn stat_optional_file(
+            &self,
+            _file_name: &OsStr,
+        ) -> Result<Option<super::ContainedFileMetadata>, ContainedFsError> {
+            Err(unsupported_containment_error())
+        }
+
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
+        pub(crate) fn read_optional_file_with_metadata(
+            &self,
+            _file_name: &OsStr,
+        ) -> Result<Option<(String, super::ContainedFileMetadata)>, ContainedFsError> {
             Err(unsupported_containment_error())
         }
 
