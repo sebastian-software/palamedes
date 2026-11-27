@@ -224,7 +224,8 @@ matrix and reusable in apps:
 <!-- core-locale-exports:end -->
 
 - `parseAcceptLanguage(header)`: parses and quality-sorts `Accept-Language`
-  tags, including base-language fallbacks.
+  tags, including base-language fallbacks. Input length, parsed entry count, and
+  tag length are bounded so oversized headers stay fast.
 - `buildLocaleSwitchItems(options)`: builds UI-agnostic switch items with
   labels, active state, locale, and test ids.
 - `defineLocaleControls(config)`: binds locale resolution, deliberate-choice
@@ -236,6 +237,12 @@ matrix and reusable in apps:
   errors. Cookie names, protocols, configured hosts, and TLD labels are
   validated; locale identifiers must be DNS-safe only for the host-based
   `subdomain` and `tld` strategies.
+  `canonicalUrl`, `suggest`, and `seoLinks` ignore malformed `requestHost`
+  values, normalize `pathname` to begin with a single `/` (preventing
+  protocol-relative, backslash, and userinfo redirects), and require `search` to
+  be empty or start with `?` without control characters.
+  `serializeChoice(locale, { secure? })` validates that `locale` is configured
+  and appends `; Secure` when `secure: true`.
   Language preferences match case-insensitively, preserve configured output
   spelling, and infer missing script/region fields with `Intl.Locale.maximize()`.
   Exact identities for cookies and routes remain case-sensitive. See
