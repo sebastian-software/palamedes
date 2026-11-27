@@ -170,9 +170,18 @@ describe("container publish contract", () => {
     expect(publishContainer).toContain(
       "unsafe=$(find /app /usr/local/share/corepack ! -type l \\( -perm /6022 -o -writable \\)",
     );
+    expect(publishContainer).toContain(
+      "for pruned in crates docs adr tests benchmarks fuzz site video;",
+    );
+    expect(publishContainer).toContain('test ! -e "/app/$pruned"');
 
+    const logicalNonCommentLines = nonCommentLines.replace(/\\\r?\n\s*/gu, " ");
+    const pruneCommands = [...logicalNonCommentLines.matchAll(/^RUN\s+rm\s+-rf\b.*$/gmu)]
+      .map((match) => match[0])
+      .join("\n");
+    expect(pruneCommands.length).toBeGreaterThan(0);
     for (const dir of ["crates", "docs", "adr", "tests", "benchmarks", "fuzz", "site", "video"]) {
-      expect(containerfile).toMatch(new RegExp(`\\b${dir}\\b`, "u"));
+      expect(pruneCommands).toMatch(new RegExp(`\\b${dir}\\b`, "u"));
     }
 
     for (const strategy of ["cookie", "route", "subdomain", "tld"]) {

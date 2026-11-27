@@ -4836,7 +4836,7 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual([
-      "<memory>:12: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:12: node:24 is not pinned to a sha256 digest",
       "<memory>:18: busybox:1.36 is not pinned to a sha256 digest",
       "<memory>:25: ubuntu:24.04 is not pinned to a sha256 digest",
       "<memory>:35: nginx:1.27 is not pinned to a sha256 digest",
@@ -4936,8 +4936,8 @@ describe("workflow contracts", () => {
       ),
     ).toEqual([
       "<memory>:8: alpine:3.20 is not pinned to a sha256 digest",
-      "<memory>:18: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:23: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:18: node:24 is not pinned to a sha256 digest",
+      "<memory>:23: debian:12 is not pinned to a sha256 digest",
     ]);
   });
 
@@ -5021,7 +5021,7 @@ describe("workflow contracts", () => {
       "<memory>:12: docker buildx create uses unpinned default BuildKit image (pass --driver-opt image=...@sha256:...)",
       "<memory>:14: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:15: busybox:1.36 is not pinned to a sha256 digest",
-      "<memory>:22: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:22: debian:12 is not pinned to a sha256 digest",
     ]);
     // Composite actions receive `github.event.inputs.*` separately from their
     // own `inputs.*`, Windows `docker.exe` paths in non-shell subprocesses are
@@ -5079,7 +5079,7 @@ describe("workflow contracts", () => {
           root: r70Fixture,
         }),
       ).toEqual([
-        ".github/workflows/r70.yml:23: container tool invocation in non-shell run step cannot be verified statically",
+        ".github/workflows/r70.yml:23: node:24 is not pinned to a sha256 digest",
         ".github/actions/pull-dispatch/action.yml:12: alpine:3.20 is not pinned to a sha256 digest",
       ]);
     } finally {
@@ -5166,7 +5166,7 @@ describe("workflow contracts", () => {
       "<memory>:9: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:12: busybox:1.36 is not pinned to a sha256 digest",
       "<memory>:16: docker stack deploy target definitions cannot be verified statically for container image digests",
-      "<memory>:23: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:23: debian:12 is not pinned to a sha256 digest",
     ]);
     // Renamed `child_process` / Python `subprocess` imports & destructuring are
     // tracked under their local bindings, while known image-free Docker/Podman
@@ -5210,10 +5210,10 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual([
-      "<memory>:13: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:17: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:13: node:24 is not pinned to a sha256 digest",
+      "<memory>:17: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:21: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:30: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:30: debian:12 is not pinned to a sha256 digest",
     ]);
     // Language-specific SDK tracking distinguishes bare imports / metadata reads
     // and unrelated JS modules (`import docker from "./metadata.mjs"`) from
@@ -5317,13 +5317,13 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual([
-      "<memory>:14: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:19: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:27: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:31: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:35: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:39: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:43: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:14: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:19: debian:12 is not pinned to a sha256 digest",
+      "<memory>:27: node:24 is not pinned to a sha256 digest",
+      "<memory>:31: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:35: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:39: redis:7 is not pinned to a sha256 digest",
+      "<memory>:43: nginx:1.27 is not pinned to a sha256 digest",
     ]);
   });
 
@@ -5374,9 +5374,9 @@ describe("workflow contracts", () => {
     ).toEqual([
       "<memory>:7: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:11: busybox is not pinned to a sha256 digest",
-      "<memory>:19: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:26: container tool invocation in non-shell run step cannot be verified statically",
-      "<memory>:34: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:19: debian:12 is not pinned to a sha256 digest",
+      "<memory>:26: redis:7 is not pinned to a sha256 digest",
+      "<memory>:34: nginx:1.27 is not pinned to a sha256 digest",
     ]);
   });
 
@@ -5427,7 +5427,7 @@ describe("workflow contracts", () => {
       "<memory>:8: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:9: busybox:1.36 is not pinned to a sha256 digest",
       "<memory>:28: debian:12 is not pinned to a sha256 digest",
-      "<memory>:32: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:32: redis:7 is not pinned to a sha256 digest",
     ]);
   });
 
@@ -5570,6 +5570,79 @@ describe("workflow contracts", () => {
       "<memory>:11: busybox:1.36 is not pinned to a sha256 digest",
       "<memory>:15: debian:12 is not pinned to a sha256 digest",
     ]);
+  });
+
+  it("validates literal digest-pinned subprocess calls and defers required Containerfile ARGs", async () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r83:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          `          image = "node:24@${digest}"`,
+          '          subprocess.run(["docker", "pull", image], check=True)',
+          `          subprocess.run(["docker", "run", "--rm", "node:24@${digest}", "true"], check=True)`,
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["docker", "pull", "alpine:3.20"], check=True)',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["docker", "pull", get_image()], check=True)',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:14: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:18: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
+
+    const r83Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r83-"));
+    try {
+      await mkdir(join(r83Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(
+        join(r83Fixture, "Containerfile"),
+        ["ARG BASE", "FROM ghcr.io/example/${BASE}", ""].join("\n"),
+      );
+      await writeFile(
+        join(r83Fixture, ".github", "workflows", "pinned.yml"),
+        [
+          "on: push",
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          `      - run: docker build --build-arg BASE=app@${digest} -f Containerfile .`,
+          "",
+        ].join("\n"),
+      );
+      expect(checkWorkflowPins(r83Fixture).problems).toEqual([]);
+
+      await writeFile(
+        join(r83Fixture, ".github", "workflows", "unpinned.yml"),
+        [
+          "on: push",
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: docker build --build-arg BASE=app:latest -f Containerfile .",
+          "",
+        ].join("\n"),
+      );
+      expect(checkWorkflowPins(r83Fixture).problems).toEqual([
+        "Containerfile:2: ghcr.io/example/app:latest is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r83Fixture, { recursive: true, force: true });
+    }
   });
 
   it("enforces case-insensitive schema keys, PowerShell continuations, and matrix expansion limits", () => {

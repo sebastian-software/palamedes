@@ -3849,9 +3849,162 @@ function inspectNonShellScript(
     return false;
   };
 
+  const validatedShellProblems = [];
+  const seenValidatedShellProblems = new Set();
+  let recordValidatedShellProblems = false;
+
+  const isSelfContainedValidatedContainerCommand = (cliName, rawArgs) => {
+    const normCli = normalizeExecutableName(cliName.trim());
+    if (normCli === "buildah") {
+      const scan = skipKnownFlags(
+        rawArgs,
+        0,
+        BUILDAH_GLOBAL_VALUE_FLAGS,
+        BUILDAH_GLOBAL_BOOL_FLAGS,
+        IMMEDIATE_HELP_OR_VERSION_FLAGS,
+      );
+      if (scan.kind !== "subcommand") {
+        return false;
+      }
+      const sub = rawArgs[scan.idx];
+      if (sub === "pull" || sub === "from") {
+        return true;
+      }
+      if (sub === "manifest") {
+        const next = rawArgs[scan.idx + 1];
+        return next === "create" || next === "add";
+      }
+      return false;
+    }
+    if (normCli === "docker" || normCli === "podman") {
+      const normalized = normalizeDockerOperation(normCli, rawArgs);
+      if (normalized.kind !== "operation") {
+        return false;
+      }
+      if (normalized.group === "image" && normalized.action === "pull") {
+        return true;
+      }
+      if (
+        normalized.group === "container" &&
+        (normalized.action === "run" || normalized.action === "create")
+      ) {
+        return true;
+      }
+      if (
+        normCli === "docker" &&
+        normalized.group === "service" &&
+        (normalized.action === "create" || normalized.action === "update")
+      ) {
+        return true;
+      }
+      if (
+        normCli === "docker" &&
+        normalized.group === "buildx" &&
+        normalized.action === "imagetools" &&
+        rawArgs[normalized.actionIdx + 1] === "create"
+      ) {
+        return true;
+      }
+      if (normalized.group === null) {
+        const next = rawArgs[normalized.actionIdx + 1];
+        if (normCli === "docker" && normalized.action === "plugin") {
+          return next === "install" || next === "upgrade";
+        }
+        if (normalized.action === "manifest") {
+          return next === "create" || (normCli === "podman" && next === "add");
+        }
+        if (normCli === "podman" && normalized.action === "pod") {
+          return next === "create";
+        }
+      }
+    }
+    return false;
+  };
+
+  const literalStringVars = new Map();
+  {
+    const litAssignPattern =
+      /(?:^|[;\n])\s*(?:(?:const|let|var|my|local)\s+)?(?<name>[A-Za-z_$][A-Za-z0-9_$]*)\s*(?<op>\+?=)\s*/gu;
+    for (const m of codeWithoutStrings.matchAll(litAssignPattern)) {
+      const name = m.groups.name;
+      if (m.groups.op === "+=") {
+        literalStringVars.set(name, null);
+        continue;
+      }
+      const rhsStart = m.index + m[0].length;
+      const nl = codeOnly.indexOf("\n", rhsStart);
+      const rawLine = (nl === -1 ? codeOnly.slice(rhsStart) : codeOnly.slice(rhsStart, nl)).trim();
+      const cleanedRhs = rawLine.replace(/;+$/u, "").trim();
+      const lit = unquoteSimpleLiteral(cleanedRhs);
+      if (lit === null) {
+        literalStringVars.set(name, null);
+      } else if (literalStringVars.has(name) && literalStringVars.get(name) !== lit) {
+        literalStringVars.set(name, null);
+      } else if (!literalStringVars.has(name)) {
+        literalStringVars.set(name, lit);
+      }
+    }
+  }
+
+  const resolveStaticStringExpr = (expr) => {
+    const lit = unquoteSimpleLiteral(expr);
+    if (lit !== null) {
+      return lit;
+    }
+    const trimmed = expr.trim();
+    if (/^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(trimmed)) {
+      const resolved = literalStringVars.get(trimmed);
+      if (typeof resolved === "string") {
+        return resolved;
+      }
+    }
+    return null;
+  };
+
+  const evaluateResolvedContainerInvocation = (cliName, rawArgs) => {
+    if (isKnownImageFreeContainerInvocation(cliName, rawArgs)) {
+      return false;
+    }
+    if (
+      rawArgs.every((arg) => arg !== null) &&
+      isSelfContainedValidatedContainerCommand(cliName, rawArgs)
+    ) {
+      const normCli = normalizeExecutableName(cliName.trim());
+      const quotePosix = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+      const syntheticCmd = [normCli, ...rawArgs].map(quotePosix).join(" ");
+      const directProblems = [];
+      inspectShellText(
+        syntheticCmd,
+        startLine,
+        [{ text: syntheticCmd, lineNumber: startLine }],
+        new Map(),
+        new Map(),
+        [],
+        filePath,
+        directProblems,
+        null,
+        "posix",
+        0,
+        null,
+        null,
+      );
+      if (!recordValidatedShellProblems) {
+        return directProblems.length > 0;
+      }
+      for (const msg of directProblems) {
+        if (!seenValidatedShellProblems.has(msg)) {
+          seenValidatedShellProblems.add(msg);
+          validatedShellProblems.push(msg);
+        }
+      }
+      return false;
+    }
+    return true;
+  };
+
   const containerArgvNeedsVerification = (cliName, argExprs) => {
-    const rawArgs = argExprs.map((expr) => unquoteSimpleLiteral(expr));
-    return !isKnownImageFreeContainerInvocation(cliName, rawArgs);
+    const rawArgs = argExprs.map((expr) => resolveStaticStringExpr(expr));
+    return evaluateResolvedContainerInvocation(cliName, rawArgs);
   };
 
   const literalShellCommandInvokesContainer = (shellCmd, depth = 0) => {
@@ -3937,7 +4090,7 @@ function inspectNonShellScript(
             }
             argCursor += 1;
           }
-          if (!isKnownImageFreeContainerInvocation(norm, cliArgs)) {
+          if (evaluateResolvedContainerInvocation(norm, cliArgs)) {
             return true;
           }
           break;
@@ -4625,6 +4778,7 @@ function inspectNonShellScript(
   ]);
 
   let invokesContainerTool = false;
+  recordValidatedShellProblems = true;
   if (pySdkModuleAliases.size > 0 || sdkFactoryBindings.size > 0 || sdkClientVars.size > 0) {
     // Track client instances assigned from SDK factories/constructors
     // (e.g. `client = docker.from_env()`, `const d = new Docker()`).
@@ -4833,6 +4987,9 @@ function inspectNonShellScript(
         break;
       }
     }
+  }
+  for (const msg of validatedShellProblems) {
+    problems.push(msg);
   }
   if (invokesContainerTool) {
     problems.push(
@@ -19155,15 +19312,19 @@ export function unpinnedContainerfileReferences(
         // overrides and BuildKit automatic platform ARGs) and check against
         // previously declared stages BEFORE registering the new stage alias.
         const isUnsetRequiredDigestRef = (rawToken, resolvedRef, activeArgs) => {
-          if (!/@(?:sha256:)?$/iu.test(resolvedRef)) {
+          let separatorIdx = -1;
+          if (/@(?:sha256:)?$/iu.test(resolvedRef)) {
+            separatorIdx = rawToken.lastIndexOf("@");
+          } else if (resolvedRef.endsWith("/")) {
+            separatorIdx = rawToken.lastIndexOf("/");
+          } else if (resolvedRef.endsWith(":")) {
+            separatorIdx = rawToken.lastIndexOf(":");
+          }
+          if (separatorIdx === -1) {
             return false;
           }
-          const atIdx = rawToken.lastIndexOf("@");
-          if (atIdx === -1) {
-            return false;
-          }
-          const digestPart = rawToken.slice(atIdx + 1);
-          for (const m of digestPart.matchAll(
+          const trailingPart = rawToken.slice(separatorIdx + 1);
+          for (const m of trailingPart.matchAll(
             /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu,
           )) {
             const argName = m.groups.braced ?? m.groups.bare;
@@ -19219,15 +19380,19 @@ export function unpinnedContainerfileReferences(
       const isExternalOnbuildImage = (ref) =>
         ref.includes(":") || ref.includes("/") || ref.includes("@");
       const isUnsetRequiredDigestRef = (rawToken, resolvedRef, activeArgs) => {
-        if (!/@(?:sha256:)?$/iu.test(resolvedRef)) {
+        let separatorIdx = -1;
+        if (/@(?:sha256:)?$/iu.test(resolvedRef)) {
+          separatorIdx = rawToken.lastIndexOf("@");
+        } else if (resolvedRef.endsWith("/")) {
+          separatorIdx = rawToken.lastIndexOf("/");
+        } else if (resolvedRef.endsWith(":")) {
+          separatorIdx = rawToken.lastIndexOf(":");
+        }
+        if (separatorIdx === -1) {
           return false;
         }
-        const atIdx = rawToken.lastIndexOf("@");
-        if (atIdx === -1) {
-          return false;
-        }
-        const digestPart = rawToken.slice(atIdx + 1);
-        for (const m of digestPart.matchAll(
+        const trailingPart = rawToken.slice(separatorIdx + 1);
+        for (const m of trailingPart.matchAll(
           /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu,
         )) {
           const argName = m.groups.braced ?? m.groups.bare;
