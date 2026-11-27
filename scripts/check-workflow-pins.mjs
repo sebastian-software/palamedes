@@ -5740,6 +5740,7 @@ const ENV_VALUE_FLAGS = new Set([
   "--ignore-signal",
 ]);
 const EXEC_VALUE_FLAGS = new Set(["-a"]);
+const TIME_VALUE_FLAGS = new Set(["-f", "--format", "-o", "--output"]);
 const TIMEOUT_VALUE_FLAGS = new Set(["-k", "--kill-after", "-s", "--signal"]);
 
 function isRemoteBuildContext(ctxText) {
@@ -5861,7 +5862,7 @@ function advanceWrapperPrefix(
   } else if (normalized === "exec") {
     valueFlags = EXEC_VALUE_FLAGS;
   } else if (normalized === "time") {
-    valueFlags = new Set();
+    valueFlags = TIME_VALUE_FLAGS;
   }
 
   if (valueFlags !== null) {
@@ -19379,6 +19380,33 @@ export function unpinnedContainerfileReferences(
       const effectiveText = onbuildMatch ? onbuildMatch.groups.nested.trimStart() : text;
       const isExternalOnbuildImage = (ref) =>
         ref.includes(":") || ref.includes("/") || ref.includes("@");
+      const checkOnbuildSourceRef = (rawRef) => {
+        if (
+          rawRef.length === 0 ||
+          /^\d+$/u.test(rawRef) ||
+          rawRef.toLowerCase() === "scratch" ||
+          namedContexts?.has(rawRef.toLowerCase()) ||
+          isPinnedDigest(rawRef)
+        ) {
+          return;
+        }
+        if (isDynamicReference(rawRef)) {
+          if (hasProvablyUnpinnedLiteralSuffix(rawRef)) {
+            pushProblem(`${filePath}:${lineNumber}: ${rawRef} is not pinned to a sha256 digest`);
+          }
+          return;
+        }
+        if (isExternalOnbuildImage(rawRef)) {
+          pushProblem(`${filePath}:${lineNumber}: ${rawRef} is not pinned to a sha256 digest`);
+          return;
+        }
+        // A bare non-numeric `--from` / `from=` name in ONBUILD resolves as an
+        // external `:latest` image if the downstream consumer defines no stage
+        // or named context with that name.
+        pushProblem(
+          `${filePath}:${lineNumber}: ONBUILD source ${rawRef} cannot be verified statically`,
+        );
+      };
       const isUnsetRequiredDigestRef = (rawToken, resolvedRef, activeArgs) => {
         let separatorIdx = -1;
         if (/@(?:sha256:)?$/iu.test(resolvedRef)) {
@@ -19406,17 +19434,7 @@ export function unpinnedContainerfileReferences(
       const rawCopySource = extractCopyFromSource(effectiveText);
       if (rawCopySource) {
         if (isOnbuild) {
-          if (
-            rawCopySource.length > 0 &&
-            (!isDynamicReference(rawCopySource) ||
-              hasProvablyUnpinnedLiteralSuffix(rawCopySource)) &&
-            isExternalOnbuildImage(rawCopySource) &&
-            !isPinnedDigest(rawCopySource)
-          ) {
-            pushProblem(
-              `${filePath}:${lineNumber}: ${rawCopySource} is not pinned to a sha256 digest`,
-            );
-          }
+          checkOnbuildSourceRef(rawCopySource);
           continue;
         }
         const mergedArgs = new Map([...globalArgs, ...stageArgs]);
@@ -19459,16 +19477,7 @@ export function unpinnedContainerfileReferences(
         const stageDynamicArgs = new Set([...dynamicOverriddenArgs, ...stageAutomaticDynamicArgs]);
         for (const rawSource of extractRunMountSources(effectiveText)) {
           if (isOnbuild) {
-            if (
-              rawSource.length > 0 &&
-              (!isDynamicReference(rawSource) || hasProvablyUnpinnedLiteralSuffix(rawSource)) &&
-              isExternalOnbuildImage(rawSource) &&
-              !isPinnedDigest(rawSource)
-            ) {
-              pushProblem(
-                `${filePath}:${lineNumber}: ${rawSource} is not pinned to a sha256 digest`,
-              );
-            }
+            checkOnbuildSourceRef(rawSource);
             continue;
           }
           const expandedMount = resolveBuildArgValues(rawSource, mergedArgs, stageDynamicArgs);

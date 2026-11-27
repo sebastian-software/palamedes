@@ -2100,21 +2100,28 @@ describe("workflow contracts", () => {
         ]),
       }),
     ).toEqual(["<memory>:1: docker/dockerfile:1 is not pinned to a sha256 digest"]);
-    // `ONBUILD` triggers check external images while permitting downstream stage names.
+    // `ONBUILD` triggers check external images, permit numeric stage indices or
+    // known named contexts, and report ambiguous bare names whose downstream
+    // consumer is unknown.
     expect(
       unpinnedContainerfileReferences(
         [
           `FROM node:24@${digest}`,
-          "ONBUILD COPY --from=builder /app /app",
+          "ONBUILD COPY --from=0 /app /app",
+          "ONBUILD COPY --from=knownctx /ctx /ctx",
+          "ONBUILD COPY --from=busybox /bin/sh /tmp/sh",
           `ONBUILD COPY --from=alpine:3.20@${digest} /bin/sh /tmp/sh`,
           "ONBUILD COPY --from=alpine:3.20 /bin/sh /tmp/sh",
           "ONBUILD RUN --mount=type=bind,from=golang:1.24,source=/bin,target=/tmp/bin true",
           "",
         ].join("\n"),
+        "<memory>",
+        { namedContexts: new Set(["knownctx"]) },
       ),
     ).toEqual([
-      "<memory>:4: alpine:3.20 is not pinned to a sha256 digest",
-      "<memory>:5: golang:1.24 is not pinned to a sha256 digest",
+      "<memory>:4: ONBUILD source busybox cannot be verified statically",
+      "<memory>:6: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:7: golang:1.24 is not pinned to a sha256 digest",
     ]);
     // Bash argument arrays preserve expansion truncation across loops.
     const arrayOverflowList = [
@@ -5602,6 +5609,25 @@ describe("workflow contracts", () => {
     ).toEqual([
       "<memory>:14: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:18: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
+    // GNU `time` value-taking options (`-f`, `--format`, `-o`, `--output`) are
+    // consumed before checking the wrapped container command.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          "  - run: |",
+          `      /usr/bin/time -f %E -o timing.txt docker pull node:24@${digest}`,
+          "      /usr/bin/time -f %E docker pull alpine:3.20",
+          "      /usr/bin/time --output timing.txt docker pull busybox:1.36",
+          "      /usr/bin/time -ao timing.txt docker pull debian:12",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:4: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:5: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:6: debian:12 is not pinned to a sha256 digest",
     ]);
 
     const r83Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r83-"));
