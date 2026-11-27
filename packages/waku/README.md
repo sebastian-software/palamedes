@@ -28,9 +28,14 @@ Do not import `.po` modules from browser-facing files or serialize catalog
 functions through RSC.
 
 For production builds, connect the generated active-locale import map to Waku's
-document response with the server-only entry point. When using a nonce-based CSP,
-generate a fresh cryptographic nonce per request on the server and share it across
-the response header, Palamedes catalog delivery, and Waku's framework nonce:
+document response with the server-only entry point. For request-rendered HTML
+documents using a nonce-based CSP, generate a fresh cryptographic nonce per
+request on the server, keep those responses out of shared caches, and share the
+nonce across the response header, Palamedes catalog delivery, and Waku's
+framework nonce (with Waku `1.0.0-rc.4`'s default Node adapter, prerendered
+static pages are served by `serveStatic` before `middlewareFns` runs, so static
+routes need a hash-based CSP configured at the static host or edge proxy
+instead):
 
 ```ts
 // src/lib/csp.server.ts
@@ -63,8 +68,10 @@ middlewareFns: [
         // Add any other directives your application needs.
         headers.set(
           "content-security-policy",
-          `script-src 'self' 'nonce-${nonce}'; object-src 'none'`,
+          `script-src 'self' 'nonce-${nonce}'; object-src 'none'; base-uri 'none'`,
         );
+        // Nonce-bearing HTML must never be replayed across visitors by a shared cache.
+        headers.set("cache-control", "private, no-store");
         context.res = new Response(context.res.body, {
           headers,
           status: context.res.status,
@@ -95,9 +102,11 @@ export default cspInterceptor;
 ```
 
 Always generate the nonce per request on the server (or strip and regenerate it
-in a trusted edge proxy). Do not derive a CSP nonce from an arbitrary
-client-supplied request header such as `x-csp-nonce`: an attacker could supply a
-predictable value and bypass the script policy. See the
+in a trusted edge proxy), and ensure any CDN or reverse proxy respects
+`Cache-Control: private, no-store` so nonce-bearing HTML is never cached across
+visitors. Do not derive a CSP nonce from an arbitrary client-supplied request
+header such as `x-csp-nonce`: an attacker could supply a predictable value and
+bypass the script policy. See the
 [deployment security guide](../../docs/security.md#csp-nonces-and-script-delivery).
 
 The middleware transforms HTML document streams after Waku renders them. RSC

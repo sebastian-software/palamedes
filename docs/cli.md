@@ -134,7 +134,8 @@ are described again, while cache failures fall back to the normal handshake.
 `--refresh-plugin-manifests` ignores the cached entries once and replaces them
 after describing every configured plugin again.
 Configured plugins run as trusted local executables with the same permissions as
-`pmds`; the binary protocol is a compatibility boundary, not a sandbox.
+`pmds`—including during `describe` discovery on any non-built-in command—and the
+binary protocol is a compatibility boundary, not a sandbox.
 See the [configuration field](./configuration.md#cli-plugins), the
 [binary plugin protocol](./api/cli-binary-plugin.md), and the
 [CLI plugin trust boundary](./security.md#cli-plugin-execution-trust-boundary).
