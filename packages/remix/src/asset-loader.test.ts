@@ -19,7 +19,10 @@ import { createAssetServer, type ModuleLoader } from "remix/assets";
 import { SourceMapConsumer } from "source-map-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isCompiledCatalog } from "@palamedes/core/compiled";
-import { compileCatalogArtifactSelectedAsync } from "@palamedes/core-node";
+import {
+  compileCatalogArtifactSelected,
+  compileCatalogArtifactSelectedAsync,
+} from "@palamedes/core-node";
 import { transformPalamedesMacros } from "@palamedes/transform";
 import type * as CoreNodeModule from "@palamedes/core-node";
 import type * as TransformModule from "@palamedes/transform";
@@ -40,6 +43,7 @@ vi.mock("@palamedes/core-node", async (importOriginal) => {
   const actual = await importOriginal<typeof CoreNodeModule>();
   return {
     ...actual,
+    compileCatalogArtifactSelected: vi.fn(actual.compileCatalogArtifactSelected),
     compileCatalogArtifactSelectedAsync: vi.fn(actual.compileCatalogArtifactSelectedAsync),
   };
 });
@@ -538,40 +542,37 @@ describe("createPalamedesRemixAssetLoader", () => {
       expect(await module?.text()).toContain(url);
       for (const suffix of ["", "?fragment=1&locale=de"]) {
         const request = new Request(`https://example.test${url}${suffix}`);
-        const firstResponse = await workerA.serve(request);
-        const coldResponse = await workerB.serve(request);
+        const firstResponse = workerA.serve(request);
+        const coldResponse = workerB.serve(request);
         expect(coldResponse?.status).toBe(200);
         expect(await coldResponse?.text()).toBe(await firstResponse?.text());
       }
       const fragmentRequest = new Request(`https://example.test${url}?fragment=1&locale=de`);
-      const fragment = (await workerB.serve(fragmentRequest))!;
+      const fragment = workerB.serve(fragmentRequest)!;
       const text = await fragment.text();
       expect(text).toContain("Grüße");
       expect(text).toContain("Hallo");
       expect(text).not.toContain("Unrelated secret");
       expect(
-        (
-          await workerB.serve(
-            new Request(fragmentRequest, {
-              headers: { "if-none-match": fragment.headers.get("etag")! },
-            }),
-          )
+        workerB.serve(
+          new Request(fragmentRequest, {
+            headers: { "if-none-match": fragment.headers.get("etag")! },
+          }),
         )?.status,
       ).toBe(304);
       expect(
-        (await workerB.serve(new Request(`https://example.test${url}?fragment=1&locale=unknown`)))
-          ?.status,
+        workerB.serve(new Request(`https://example.test${url}?fragment=1&locale=unknown`))?.status,
       ).toBe(400);
       expect(workerB.register(second.modulePath, registration.mock.calls[0]![1])).toBe(key);
       const restarted = createPalamedesRemixCatalogAssetRegistry({
         projectRoot: second.rootDir,
         watch: false,
       });
-      expect((await restarted.serve(fragmentRequest))?.status).toBe(200);
+      expect(restarted.serve(fragmentRequest)?.status).toBe(200);
       restarted.close?.();
       writeFileSync(second.modulePath, source.replace("Greeting", "Changed"));
       workerB.invalidate(second.modulePath);
-      expect((await workerB.serve(fragmentRequest))?.status).toBe(404);
+      expect(workerB.serve(fragmentRequest)?.status).toBe(404);
     } finally {
       workerA.close?.();
       workerB.close?.();
@@ -579,7 +580,7 @@ describe("createPalamedesRemixAssetLoader", () => {
     }
   });
 
-  it("rejects malformed, unconfigured, aliased, and forged fragment identities", async () => {
+  it("rejects malformed, unconfigured, aliased, and forged fragment identities", () => {
     const source =
       'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
     const fixture = createAssetFixture("message.ts", source);
@@ -610,7 +611,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       "app/public/message.ts\0",
     ]) {
       const candidate = `v1.${Buffer.from(sourcePath).toString("base64url")}.${digest}`;
-      expect((await registry.serve(request(candidate)))?.status).toBe(404);
+      expect(registry.serve(request(candidate))?.status).toBe(404);
     }
     for (const candidate of [
       "invalid",
@@ -618,15 +619,15 @@ describe("createPalamedesRemixAssetLoader", () => {
       key.replace(/.$/u, digest?.endsWith("0") ? "1" : "0"),
       `v1.${"a".repeat(8200)}.${digest}`,
     ])
-      expect((await registry.serve(request(candidate)))?.status).toBe(404);
+      expect(registry.serve(request(candidate))?.status).toBe(404);
     expect(() => registry.register(fixture.modulePath, ["request-supplied-id"])).toThrow(
       "preserve the authored message IDs",
     );
-    expect((await registry.serve(request(key)))?.status).toBe(200);
+    expect(registry.serve(request(key))?.status).toBe(200);
     registry.close?.();
   });
 
-  it("rejects case-variant identities without transforming or caching them", async () => {
+  it("rejects case-variant identities without transforming or caching them", () => {
     const source =
       'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
     const fixture = createAssetFixture("message.ts", source);
@@ -643,7 +644,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       watch: false,
     });
     const transform = vi.mocked(transformPalamedesMacros);
-    const compile = vi.mocked(compileCatalogArtifactSelectedAsync);
+    const compile = vi.mocked(compileCatalogArtifactSelected);
     transform.mockClear();
     compile.mockClear();
     const canonical = "app/public/message.ts";
@@ -657,12 +658,10 @@ describe("createPalamedesRemixAssetLoader", () => {
         const candidate = `v1.${Buffer.from(spelling).toString("base64url")}.${candidateDigest}`;
         for (const registry of [warm, cold])
           expect(
-            (
-              await registry.serve(
-                new Request(
-                  `https://example.test${registry.sidecarUrl(candidate)}?fragment=1&locale=de`,
-                ),
-              )
+            registry.serve(
+              new Request(
+                `https://example.test${registry.sidecarUrl(candidate)}?fragment=1&locale=de`,
+              ),
             )?.status,
           ).toBe(404);
       }
@@ -674,10 +673,8 @@ describe("createPalamedesRemixAssetLoader", () => {
     const forged = `v1.${Buffer.from(canonical).toString("base64url")}.${"0".repeat(64)}`;
     for (let index = 0; index < 50; index += 1)
       expect(
-        (
-          await cold.serve(
-            new Request(`https://example.test${cold.sidecarUrl(forged)}?fragment=1&locale=de`),
-          )
+        cold.serve(
+          new Request(`https://example.test${cold.sidecarUrl(forged)}?fragment=1&locale=de`),
         )?.status,
       ).toBe(404);
     expect(transform).toHaveBeenCalledTimes(1);
@@ -685,15 +682,15 @@ describe("createPalamedesRemixAssetLoader", () => {
     const fragment = new Request(
       `https://example.test${cold.sidecarUrl(key)}?fragment=1&locale=de`,
     );
-    expect((await cold.serve(fragment))?.status).toBe(200);
-    expect((await cold.serve(fragment))?.status).toBe(200);
+    expect(cold.serve(fragment)?.status).toBe(200);
+    expect(cold.serve(fragment)?.status).toBe(200);
     expect(transform).toHaveBeenCalledTimes(1);
     expect(compile).toHaveBeenCalledTimes(1);
     warm.close?.();
     cold.close?.();
   });
 
-  it("answers macro-free and untransformable sources like missing files", async () => {
+  it("answers macro-free and untransformable sources like missing files", () => {
     const fixture = createAssetFixture("plain.ts", "export const plain = 1;");
     writeFragmentCatalogFixture(fixture.rootDir);
     writeFileSync(path.join(fixture.rootDir, "app", "public", "broken.ts"), "export const = ;");
@@ -713,23 +710,20 @@ describe("createPalamedesRemixAssetLoader", () => {
       for (const suffix of ["", "?fragment=1&locale=de"])
         for (let index = 0; index < 3; index += 1)
           expect(
-            (
-              await registry.serve(
-                new Request(`https://example.test${registry.sidecarUrl(candidate)}${suffix}`),
-              )
+            registry.serve(
+              new Request(`https://example.test${registry.sidecarUrl(candidate)}${suffix}`),
             )?.status,
           ).toBe(404);
     }
     expect(transform).toHaveBeenCalledTimes(2);
     const directKey = registry.register(fixture.modulePath, []);
     expect(
-      (await registry.serve(new Request(`https://example.test${registry.sidecarUrl(directKey)}`)))
-        ?.status,
+      registry.serve(new Request(`https://example.test${registry.sidecarUrl(directKey)}`))?.status,
     ).toBe(404);
     registry.close?.();
   });
 
-  it("reconstructs only modules that the bound asset loader transforms", async () => {
+  it("reconstructs only modules that the bound asset loader transforms", () => {
     const source =
       'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
     const fixture = createAssetFixture("message.ts", source);
@@ -755,8 +749,8 @@ describe("createPalamedesRemixAssetLoader", () => {
     });
     const request = (key: string) =>
       new Request(`https://example.test${cold.sidecarUrl(key)}?fragment=1&locale=de`);
-    expect((await cold.serve(request(privateKey)))?.status).toBe(404);
-    expect((await cold.serve(request(publicKey)))?.status).toBe(200);
+    expect(cold.serve(request(privateKey))?.status).toBe(404);
+    expect(cold.serve(request(publicKey))?.status).toBe(200);
     expect(() => cold.register(privatePath, ids)).toThrow("not included in a configured catalog");
     unbound.close?.();
     cold.close?.();
@@ -809,7 +803,7 @@ describe("createPalamedesRemixAssetLoader", () => {
     registry.close?.();
   });
 
-  it("reconstructs explicitly included sibling workspace modules", async () => {
+  it("reconstructs explicitly included sibling workspace modules", () => {
     const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-workspace-"));
     tempDirectories.push(rootDir);
     const projectRoot = path.join(rootDir, "web");
@@ -828,11 +822,8 @@ describe("createPalamedesRemixAssetLoader", () => {
       transformPalamedesMacros(source, sourcePath).compiledIds,
     );
     expect(
-      (
-        await cold.serve(
-          new Request(`https://example.test${first.sidecarUrl(key)}?fragment=1&locale=de`),
-        )
-      )?.status,
+      cold.serve(new Request(`https://example.test${first.sidecarUrl(key)}?fragment=1&locale=de`))
+        ?.status,
     ).toBe(200);
     first.close?.();
     cold.close?.();
@@ -873,7 +864,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       sourcePath,
     ).compiledIds;
     const firstKey = registry.register(sourcePath, compiledIds);
-    const sidecar = await registry.serve(
+    const sidecar = registry.serve(
       new Request(`https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js`),
     );
     expect(sidecar?.status).toBe(200);
@@ -882,7 +873,7 @@ describe("createPalamedesRemixAssetLoader", () => {
     expect(sidecarSource).toContain("document.documentElement.lang");
     expect(sidecarSource).not.toContain("Hallo");
 
-    const fragment = await registry.serve(
+    const fragment = registry.serve(
       new Request(
         `https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js?fragment=1&locale=de`,
       ),
@@ -901,10 +892,8 @@ describe("createPalamedesRemixAssetLoader", () => {
     const catalogChangedKey = registry.register(sourcePath, compiledIds);
     expect(catalogChangedKey).toBe(firstKey);
     expect(
-      (
-        await registry.serve(
-          new Request(`https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js`),
-        )
+      registry.serve(
+        new Request(`https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js`),
       )?.status,
     ).toBe(200);
 
@@ -913,8 +902,7 @@ describe("createPalamedesRemixAssetLoader", () => {
     writeFileSync(sourcePath, changedSource);
     registry.invalidate(sourcePath);
     expect(
-      (await registry.serve(new Request(`https://example.test${registry.sidecarUrl(firstKey)}`)))
-        ?.status,
+      registry.serve(new Request(`https://example.test${registry.sidecarUrl(firstKey)}`))?.status,
     ).toBe(404);
     const secondKey = registry.register(
       sourcePath,
@@ -922,17 +910,13 @@ describe("createPalamedesRemixAssetLoader", () => {
     );
     expect(secondKey).not.toBe(firstKey);
     expect(
-      (
-        await registry.serve(
-          new Request(`https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js`),
-        )
+      registry.serve(
+        new Request(`https://example.test/assets/__palamedes/catalog-fragments/${firstKey}.js`),
       )?.status,
     ).toBe(404);
     expect(
-      (
-        await registry.serve(
-          new Request(`https://example.test/assets/__palamedes/catalog-fragments/${secondKey}.js`),
-        )
+      registry.serve(
+        new Request(`https://example.test/assets/__palamedes/catalog-fragments/${secondKey}.js`),
       )?.status,
     ).toBe(200);
   });
@@ -1051,7 +1035,7 @@ describe("createPalamedesRemixAssetLoader", () => {
         expect(Object.values((await registry.load?.("de")) ?? {})).toEqual(["After"]),
       );
       expect(await registry.load?.("de")).not.toBe(first);
-      const response = await registry.serve(
+      const response = registry.serve(
         new Request(`https://example.test${registry.sidecarUrl(key)}?fragment=1&locale=de`),
       );
       expect(response?.status).toBe(200);
@@ -1252,7 +1236,7 @@ describe("createPalamedesRemixAssetLoader", () => {
       );
 
       vi.stubEnv("NODE_ENV", "production");
-      const prodResponse = await registry.serve(fragmentRequest);
+      const prodResponse = registry.serve(fragmentRequest);
       expect(prodResponse?.status).toBe(500);
       const prodBody = await prodResponse?.text();
       expect(prodBody).toBe("Palamedes catalog fragment failed.");
@@ -1265,7 +1249,7 @@ describe("createPalamedesRemixAssetLoader", () => {
 
       errorSpy.mockClear();
       vi.stubEnv("NODE_ENV", "development");
-      const devResponse = await registry.serve(fragmentRequest);
+      const devResponse = registry.serve(fragmentRequest);
       expect(devResponse?.status).toBe(500);
       expect(await devResponse?.text()).toContain(fixture.modulePath);
       expect(errorSpy).toHaveBeenCalledTimes(1);
@@ -1275,7 +1259,7 @@ describe("createPalamedesRemixAssetLoader", () => {
     }
   });
 
-  it("deduplicates concurrent async fragment compilations and retries after failure", async () => {
+  it("compiles fragments asynchronously via serveAsync with in-flight deduplication and retry after failure", async () => {
     const source =
       'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
     const fixture = createAssetFixture("concurrent.ts", source);
@@ -1284,7 +1268,8 @@ describe("createPalamedesRemixAssetLoader", () => {
       projectRoot: fixture.rootDir,
       watch: false,
     });
-    const compile = vi.mocked(compileCatalogArtifactSelectedAsync);
+    const compileAsync = vi.mocked(compileCatalogArtifactSelectedAsync);
+    const compileSync = vi.mocked(compileCatalogArtifactSelected);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const ids = transformPalamedesMacros(source, fixture.modulePath).compiledIds;
@@ -1292,23 +1277,36 @@ describe("createPalamedesRemixAssetLoader", () => {
       const makeRequest = () =>
         new Request(`https://example.test${registry.sidecarUrl(key)}?fragment=1&locale=de`);
 
-      compile.mockClear();
-      compile.mockRejectedValueOnce(new Error("transient native failure"));
-      const failed = await registry.serve(makeRequest());
+      expect(
+        await registry.serveAsync(new Request("https://example.test/assets/other.js")),
+      ).toBeUndefined();
+
+      compileAsync.mockClear();
+      compileSync.mockClear();
+      compileAsync.mockRejectedValueOnce(new Error("transient native failure"));
+      vi.stubEnv("NODE_ENV", "production");
+      const failed = await registry.serveAsync(makeRequest());
       expect(failed?.status).toBe(500);
-      expect(compile).toHaveBeenCalledTimes(1);
+      expect(await failed?.text()).toBe("Palamedes catalog fragment failed.");
+      expect(compileAsync).toHaveBeenCalledTimes(1);
 
       // A failed compilation must not poison the in-flight or asset cache;
-      // concurrent retries share one async compilation.
-      compile.mockClear();
+      // concurrent retries share one async compilation and warm the shared cache.
+      compileAsync.mockClear();
       const [first, second] = await Promise.all([
-        registry.serve(makeRequest()),
-        registry.serve(makeRequest()),
+        registry.serveAsync(makeRequest()),
+        registry.serveAsync(makeRequest()),
       ]);
       expect(first?.status).toBe(200);
       expect(second?.status).toBe(200);
       expect(await first?.text()).toBe(await second?.text());
-      expect(compile).toHaveBeenCalledTimes(1);
+      expect(compileAsync).toHaveBeenCalledTimes(1);
+      expect(compileSync).not.toHaveBeenCalled();
+
+      // Sync serve() hits the warmed cache without recompiling.
+      const syncHit = registry.serve(makeRequest());
+      expect(syncHit?.status).toBe(200);
+      expect(compileSync).not.toHaveBeenCalled();
     } finally {
       registry.close?.();
       errorSpy.mockRestore();

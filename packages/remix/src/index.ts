@@ -32,6 +32,7 @@ import {
 import { isCompiledCatalog, type CompiledCatalogMessages } from "@palamedes/core/compiled";
 import {
   assertNoRemovedPalamedesOptions,
+  compileCatalogArtifactSelected,
   compileCatalogArtifactSelectedAsync,
   compileCatalogModule,
   compileCatalogModuleAsync,
@@ -113,7 +114,9 @@ export type PalamedesRemixCatalogAssetRegistry = {
   /** Return the current config/catalog generation for HTTP cache keys. */
   generation?(): string;
   sidecarUrl(key: string): string;
-  serve(request: Request): Response | Promise<Response> | undefined;
+  serve(request: Request): Response | undefined;
+  /** Asynchronous non-blocking variant of `serve()` with in-flight deduplication. */
+  serveAsync?(request: Request): Promise<Response | undefined>;
   invalidate(sourcePath?: string): void;
   /** Close development file watchers when the host shuts down. */
   close?(): void;
@@ -147,7 +150,9 @@ export const PALAMEDES_REMIX_ASSET_PACKAGES = [
 
 export function createPalamedesRemixCatalogAssetRegistry(
   options: CreatePalamedesRemixCatalogAssetRegistryOptions = {},
-): PalamedesRemixCatalogAssetRegistry {
+): PalamedesRemixCatalogAssetRegistry & {
+  serveAsync(request: Request): Promise<Response | undefined>;
+} {
   assertNoRemovedPalamedesOptions(options, ["cwd"]);
   const projectRoot = resolvePalamedesProjectRoot(options.projectRoot);
   const resolvedConfigPath = resolvePalamedesConfigPath(projectRoot, options.configPath);
@@ -425,7 +430,134 @@ export function createPalamedesRemixCatalogAssetRegistry(
   };
   watchInputs();
 
-  const registry: PalamedesRemixCatalogAssetRegistry = {
+  type FragmentCompilePlan =
+    | { kind: "response"; response: Response | undefined }
+    | {
+        kind: "compile";
+        key: string;
+        locale: string;
+        cacheKey: string;
+        entry: CatalogFragmentEntry;
+        activeConfig: LoadedPalamedesConfig;
+        catalogs: LoadedPalamedesConfig["catalogs"];
+      };
+
+  const prepareFragmentRequest = (request: Request): FragmentCompilePlan => {
+    if (refreshFailure) throw refreshFailure;
+    const url = new URL(request.url);
+    const prefix = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/`;
+    if (!url.pathname.startsWith(prefix) || !url.pathname.endsWith(".js")) {
+      return { kind: "response", response: undefined };
+    }
+
+    const key = url.pathname.slice(prefix.length, -3);
+    const entry = resolveEntry(key);
+    if (!entry) {
+      return {
+        kind: "response",
+        response: new Response(`Unknown Palamedes catalog fragment "${key}".`, { status: 404 }),
+      };
+    }
+    const locale = url.searchParams.get("locale");
+    if (!url.searchParams.has("fragment")) {
+      const fragmentUrl = `${thisSidecarUrl(basePath, key)}fragment=1&locale=`;
+      const source =
+        `import{defineCompiledCatalog as __define}from"@palamedes/core/compiled";` +
+        `import{getI18n as __getI18n}from"@palamedes/runtime";` +
+        `import{loadRegisteredMessages as __load,registerMessageLoaderGroup as __register}from"@palamedes/runtime/internal";` +
+        `const __locale=document.documentElement.lang;` +
+        `__register(${JSON.stringify(key)},[{[__locale]:async()=>` +
+        `__define((await import(${JSON.stringify(fragmentUrl)}+encodeURIComponent(__locale))).messages)}]);` +
+        `let __active;try{__active=__getI18n()}catch(__error){` +
+        `if(!(__error instanceof Error&&__error.message.includes("No active client i18n instance")))throw __error}` +
+        `if(__active)await __load(__active,__locale);`;
+      return {
+        kind: "response",
+        response: new Response(source, {
+          headers: {
+            "cache-control": "no-cache",
+            "content-type": "application/javascript; charset=utf-8",
+          },
+        }),
+      };
+    }
+    if (!locale || !config.locales.includes(locale)) {
+      return {
+        kind: "response",
+        response: new Response("Palamedes catalog fragments require a supported locale.", {
+          status: 400,
+        }),
+      };
+    }
+
+    const cacheKey = `${key}:${locale}`;
+    const cached = fragmentAssets.get(cacheKey);
+    if (cached) return { kind: "response", response: serveFragment(cached, request) };
+
+    const activeConfig = config;
+    const catalogs = activeConfig.catalogs.filter((candidate) =>
+      catalogMatchesSource(activeConfig, candidate, entry.sourcePath),
+    );
+    if (catalogs.length === 0) {
+      const diagnostic = `Palamedes source module "${entry.sourcePath}" is not included in a configured catalog.`;
+      console.error(diagnostic);
+      return {
+        kind: "response",
+        response: new Response(
+          process.env.NODE_ENV === "development"
+            ? diagnostic
+            : "Palamedes catalog fragment is unavailable.",
+          { status: 500 },
+        ),
+      };
+    }
+
+    return { kind: "compile", key, locale, cacheKey, entry, activeConfig, catalogs };
+  };
+
+  const assembleFragmentAsset = (
+    compiledCatalogs: ReadonlyArray<{ messages: Record<string, string> }>,
+    locale: string,
+    epoch: number,
+  ): { source: string; etag: string } => {
+    const messages: Record<string, string> = Object.create(null);
+    for (const result of compiledCatalogs) {
+      for (const [id, message] of Object.entries(result.messages)) {
+        if (Object.hasOwn(messages, id) && messages[id] !== message) {
+          const conflict = `${locale}\0${id}`;
+          if (epoch === fragmentEpoch && !warnedConflicts.has(conflict)) {
+            warnedConflicts.add(conflict);
+            console.warn(
+              `Palamedes compiled message ID "${id}" has different ${locale} values in more than one Remix catalog; the last catalog wins. ` +
+                "Give the messages distinct contexts or make the catalogs agree.",
+            );
+          }
+        }
+        messages[id] = message;
+      }
+    }
+    const source = `${stripCatalogBranding(renderCatalogModule(messages))}export const locale=${JSON.stringify(locale)};`;
+    const etag = `"${createHash("sha256").update(source).digest("hex")}"`;
+    return { source, etag };
+  };
+
+  const formatFragmentError = (
+    entry: CatalogFragmentEntry,
+    locale: string,
+    error: unknown,
+  ): Response => {
+    const detail = error instanceof Error ? error.message : String(error);
+    const diagnostic = `Palamedes catalog fragment failed for "${entry.sourcePath}" (${locale}): ${detail}`;
+    console.error(diagnostic, error);
+    return new Response(
+      process.env.NODE_ENV === "development" ? diagnostic : "Palamedes catalog fragment failed.",
+      { status: 500 },
+    );
+  };
+
+  const registry: PalamedesRemixCatalogAssetRegistry & {
+    serveAsync(request: Request): Promise<Response | undefined>;
+  } = {
     register,
 
     load(locale) {
@@ -446,62 +578,36 @@ export function createPalamedesRemixCatalogAssetRegistry(
     },
 
     serve(request) {
-      if (refreshFailure) throw refreshFailure;
-      const url = new URL(request.url);
-      const prefix = `${basePath.replace(/\/$/u, "")}/__palamedes/catalog-fragments/`;
-      if (!url.pathname.startsWith(prefix) || !url.pathname.endsWith(".js")) {
-        return;
-      }
-
-      const key = url.pathname.slice(prefix.length, -3);
-      const entry = resolveEntry(key);
-      if (!entry) {
-        return new Response(`Unknown Palamedes catalog fragment "${key}".`, { status: 404 });
-      }
-      const locale = url.searchParams.get("locale");
-      if (!url.searchParams.has("fragment")) {
-        const fragmentUrl = `${thisSidecarUrl(basePath, key)}fragment=1&locale=`;
-        const source =
-          `import{defineCompiledCatalog as __define}from"@palamedes/core/compiled";` +
-          `import{getI18n as __getI18n}from"@palamedes/runtime";` +
-          `import{loadRegisteredMessages as __load,registerMessageLoaderGroup as __register}from"@palamedes/runtime/internal";` +
-          `const __locale=document.documentElement.lang;` +
-          `__register(${JSON.stringify(key)},[{[__locale]:async()=>` +
-          `__define((await import(${JSON.stringify(fragmentUrl)}+encodeURIComponent(__locale))).messages)}]);` +
-          `let __active;try{__active=__getI18n()}catch(__error){` +
-          `if(!(__error instanceof Error&&__error.message.includes("No active client i18n instance")))throw __error}` +
-          `if(__active)await __load(__active,__locale);`;
-        return new Response(source, {
-          headers: {
-            "cache-control": "no-cache",
-            "content-type": "application/javascript; charset=utf-8",
-          },
-        });
-      }
-      if (!locale || !config.locales.includes(locale)) {
-        return new Response("Palamedes catalog fragments require a supported locale.", {
-          status: 400,
-        });
-      }
-
-      const cacheKey = `${key}:${locale}`;
-      const cached = fragmentAssets.get(cacheKey);
-      if (cached) return serveFragment(cached, request);
-
-      const activeConfig = config;
-      const catalogs = activeConfig.catalogs.filter((candidate) =>
-        catalogMatchesSource(activeConfig, candidate, entry.sourcePath),
-      );
-      if (catalogs.length === 0) {
-        const diagnostic = `Palamedes source module "${entry.sourcePath}" is not included in a configured catalog.`;
-        console.error(diagnostic);
-        return new Response(
-          process.env.NODE_ENV === "development"
-            ? diagnostic
-            : "Palamedes catalog fragment is unavailable.",
-          { status: 500 },
+      const plan = prepareFragmentRequest(request);
+      if (plan.kind === "response") return plan.response;
+      const { locale, cacheKey, entry, activeConfig, catalogs } = plan;
+      try {
+        const compiledCatalogs = catalogs.map((catalog) =>
+          compileCatalogArtifactSelected(
+            {
+              rootDir: activeConfig.rootDir,
+              locales: activeConfig.locales,
+              sourceLocale: activeConfig.sourceLocale,
+              fallbackLocales: activeConfig.fallbackLocales,
+              pseudoLocale: activeConfig.pseudoLocale,
+              catalogs: [catalog],
+            },
+            catalogResourcePath(activeConfig, catalog, locale),
+            entry.compiledIds,
+          ),
         );
+        const asset = assembleFragmentAsset(compiledCatalogs, locale, fragmentEpoch);
+        fragmentAssets.set(cacheKey, asset);
+        return serveFragment(asset, request);
+      } catch (error) {
+        return formatFragmentError(entry, locale, error);
       }
+    },
+
+    async serveAsync(request) {
+      const plan = prepareFragmentRequest(request);
+      if (plan.kind === "response") return plan.response;
+      const { key, locale, cacheKey, entry, activeConfig, catalogs } = plan;
 
       let pending = fragmentInFlight.get(cacheKey);
       if (!pending) {
@@ -523,25 +629,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
               ),
             ),
           );
-          const messages: Record<string, string> = Object.create(null);
-          for (const result of compiledCatalogs) {
-            for (const [id, message] of Object.entries(result.messages)) {
-              if (Object.hasOwn(messages, id) && messages[id] !== message) {
-                const conflict = `${locale}\0${id}`;
-                if (epoch === fragmentEpoch && !warnedConflicts.has(conflict)) {
-                  warnedConflicts.add(conflict);
-                  console.warn(
-                    `Palamedes compiled message ID "${id}" has different ${locale} values in more than one Remix catalog; the last catalog wins. ` +
-                      "Give the messages distinct contexts or make the catalogs agree.",
-                  );
-                }
-              }
-              messages[id] = message;
-            }
-          }
-          const source = `${stripCatalogBranding(renderCatalogModule(messages))}export const locale=${JSON.stringify(locale)};`;
-          const etag = `"${createHash("sha256").update(source).digest("hex")}"`;
-          const asset = { source, etag };
+          const asset = assembleFragmentAsset(compiledCatalogs, locale, epoch);
           if (epoch === fragmentEpoch && entries.get(key) === entry) {
             fragmentAssets.set(cacheKey, asset);
           }
@@ -557,20 +645,11 @@ export function createPalamedesRemixCatalogAssetRegistry(
         compilePromise.then(cleanup, cleanup);
       }
 
-      return pending.then(
-        (asset) => serveFragment(asset, request),
-        (error) => {
-          const detail = error instanceof Error ? error.message : String(error);
-          const diagnostic = `Palamedes catalog fragment failed for "${entry.sourcePath}" (${locale}): ${detail}`;
-          console.error(diagnostic, error);
-          return new Response(
-            process.env.NODE_ENV === "development"
-              ? diagnostic
-              : "Palamedes catalog fragment failed.",
-            { status: 500 },
-          );
-        },
-      );
+      try {
+        return serveFragment(await pending, request);
+      } catch (error) {
+        return formatFragmentError(entry, locale, error);
+      }
     },
 
     close() {

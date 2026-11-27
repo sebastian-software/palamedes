@@ -76,7 +76,7 @@ describe("stable Remix client entries", () => {
     expect(html.match(/nonce="request&quot;nonce"/gu)).toHaveLength(2);
     expect(html).not.toContain("data-palamedes-entry");
     expect(html).not.toContain("data-palamedes-error-html");
-    const response = await remixI18n.serveClientCatalogAsset(
+    const response = remixI18n.serveClientCatalogAsset(
       new Request(`https://example.test${entryUrl}`),
     );
     expect(response?.status).toBe(200);
@@ -106,9 +106,9 @@ describe("stable Remix client entries", () => {
     const src = html.match(/src="([^"]+)"/u)![1];
     expect(src).toMatch(/^\/custom\/assets\/__palamedes\/entry\/[a-f0-9]{64}\.js$/u);
     const request = new Request(`https://example.test${src}`);
-    const expected = await (await first.serveClientCatalogAsset(request))!.text();
+    const expected = await first.serveClientCatalogAsset(request)!.text();
     for (const worker of [cold, createWorker()]) {
-      const response = (await worker.serveClientCatalogAsset(request))!;
+      const response = worker.serveClientCatalogAsset(request)!;
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("application/javascript; charset=utf-8");
       expect(await response.text()).toBe(expected);
@@ -120,10 +120,8 @@ describe("stable Remix client entries", () => {
       decodeEntryData(parseEntryScope(html, src)["@palamedes/remix/entry-data"]!),
     ).toMatchObject({ catalog: "/custom/assets/__palamedes/catalog/" });
     expect(
-      (
-        await cold.serveClientCatalogAsset(
-          new Request("https://example.test/custom/assets/__palamedes/entry/not-an-entry.js"),
-        )
+      cold.serveClientCatalogAsset(
+        new Request("https://example.test/custom/assets/__palamedes/entry/not-an-entry.js"),
       )?.status,
     ).toBe(404);
   });
@@ -161,9 +159,9 @@ describe("stable Remix client entries", () => {
       errorHtml: "Other entry",
     });
     expect(otherHtml.match(/src="([^"]+)"/u)![1]).not.toBe(src);
-    const source = await (await worker.serveClientCatalogAsset(
-      new Request(`https://example.test${src}`),
-    ))!.text();
+    const source = await worker
+      .serveClientCatalogAsset(new Request(`https://example.test${src}`))!
+      .text();
     expect(source).not.toContain(entryUrl);
     expect(source).not.toContain(errorHtml);
   });
@@ -192,9 +190,9 @@ describe("stable Remix client entries", () => {
       });
       const src = html.match(/src="([^"]+)"/u)![1];
       const scopedEntryData = parseEntryScope(html, src)["@palamedes/remix/entry-data"]!;
-      const source = await (await worker.serveClientCatalogAsset(
-        new Request(`https://example.test${src}`),
-      ))!.text();
+      const source = await worker
+        .serveClientCatalogAsset(new Request(`https://example.test${src}`))!
+        .text();
       // Node has no import maps: route both scoped specifiers through test doubles
       // that model the import-map scope this document rendered for the bootstrap.
       const client = `data:text/javascript,${encodeURIComponent("export const startRemixClient = (...args) => globalThis.startTestRemixClient(...args);")}`;
@@ -764,7 +762,7 @@ describe("createRemixI18nServer", () => {
       const request = new Request("https://example.test/assets/__palamedes/catalog/de.js");
 
       vi.stubEnv("NODE_ENV", "production");
-      const prodResponse = await remixI18n.serveClientCatalogAsset(request);
+      const prodResponse = remixI18n.serveClientCatalogAsset(request);
       expect(prodResponse?.status).toBe(500);
       const prodBody = await prodResponse?.text();
       expect(prodBody).toBe("Palamedes Remix executable catalog asset failed.");
@@ -777,7 +775,7 @@ describe("createRemixI18nServer", () => {
 
       errorSpy.mockClear();
       vi.stubEnv("NODE_ENV", "development");
-      const devResponse = await remixI18n.serveClientCatalogAsset(request);
+      const devResponse = remixI18n.serveClientCatalogAsset(request);
       expect(devResponse?.status).toBe(500);
       expect(await devResponse?.text()).toContain("/srv/secret-app/locales/de.po");
       expect(errorSpy).toHaveBeenCalledTimes(1);
@@ -889,7 +887,7 @@ describe("createRemixI18nServer", () => {
     expect(await response.text()).toBe("es:hello:es");
   });
 
-  it("serves only the requested locale as an executable catalog module", async () => {
+  it("serves only the requested locale as an executable catalog module", () => {
     const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-catalog-"));
     const localePath = path.join(root, "de.po");
     writeFileSync(
@@ -918,36 +916,30 @@ describe("createRemixI18nServer", () => {
       expect(asset.source).toContain('export const locale="de"');
       expect(asset.source).not.toContain("msgid");
       expect(remixI18n.renderClientCatalog("de")).toContain("/assets/__palamedes/catalog/de.js");
-      const response = await remixI18n.serveClientCatalogAsset(
+      const response = remixI18n.serveClientCatalogAsset(
         new Request("https://example.test/assets/__palamedes/catalog/de.js"),
       );
       expect(response?.status).toBe(200);
       expect(response?.headers.get("content-type")).toContain("javascript");
-      const cached = await remixI18n.serveClientCatalogAsset(
+      const cached = remixI18n.serveClientCatalogAsset(
         new Request("https://example.test/assets/__palamedes/catalog/de.js", {
           headers: { "if-none-match": response?.headers.get("etag") ?? "" },
         }),
       );
       expect(cached?.status).toBe(304);
       expect(
-        (
-          await remixI18n.serveClientCatalogAsset(
-            new Request("https://example.test/assets/__palamedes/catalog/fr.js"),
-          )
+        remixI18n.serveClientCatalogAsset(
+          new Request("https://example.test/assets/__palamedes/catalog/fr.js"),
         )?.status,
       ).toBe(404);
       expect(
-        (
-          await remixI18n.serveClientCatalogAsset(
-            new Request("https://example.test/assets/__palamedes/catalog/%E0%A4%A.js"),
-          )
+        remixI18n.serveClientCatalogAsset(
+          new Request("https://example.test/assets/__palamedes/catalog/%E0%A4%A.js"),
         )?.status,
       ).toBe(400);
       expect(
-        (
-          await remixI18n.serveClientCatalogAsset(
-            new Request("https://example.test/assets/__palamedes/catalog/%ZZ.js"),
-          )
+        remixI18n.serveClientCatalogAsset(
+          new Request("https://example.test/assets/__palamedes/catalog/%ZZ.js"),
         )?.status,
       ).toBe(400);
     } finally {
@@ -955,7 +947,7 @@ describe("createRemixI18nServer", () => {
     }
   });
 
-  it("compiles cold client catalog assets asynchronously with in-flight deduplication and retry after failure", async () => {
+  it("compiles cold client catalog assets asynchronously via serveClientCatalogAssetAsync with deduplication and retry", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-async-catalog-"));
     const localePath = path.join(root, "de.po");
     writeFileSync(
@@ -989,20 +981,36 @@ describe("createRemixI18nServer", () => {
       const makeRequest = () =>
         new Request("https://example.test/assets/__palamedes/catalog/de.js");
 
-      const failed = await remixI18n.serveClientCatalogAsset(makeRequest());
+      expect(
+        await remixI18n.serveClientCatalogAssetAsync(
+          new Request("https://example.test/assets/other.js"),
+        ),
+      ).toBeUndefined();
+
+      const failed = await remixI18n.serveClientCatalogAssetAsync(makeRequest());
       expect(failed?.status).toBe(500);
       expect(resolvePath).toHaveBeenCalledTimes(1);
 
       shouldFail = false;
       resolvePath.mockClear();
-      const firstPending = remixI18n.serveClientCatalogAsset(makeRequest());
-      const secondPending = remixI18n.serveClientCatalogAsset(makeRequest());
-      expect(firstPending).toBeInstanceOf(Promise);
-      expect(secondPending).toBeInstanceOf(Promise);
-      const [first, second] = await Promise.all([firstPending, secondPending]);
+      const [first, second] = await Promise.all([
+        remixI18n.serveClientCatalogAssetAsync(makeRequest()),
+        remixI18n.serveClientCatalogAssetAsync(makeRequest()),
+      ]);
       expect(first?.status).toBe(200);
       expect(second?.status).toBe(200);
       expect(await first?.text()).toBe(await second?.text());
+      expect(resolvePath).toHaveBeenCalledTimes(1);
+
+      // Warm cache serves 304 and shares cache with synchronous serveClientCatalogAsset().
+      const notModified = await remixI18n.serveClientCatalogAssetAsync(
+        new Request("https://example.test/assets/__palamedes/catalog/de.js", {
+          headers: { "if-none-match": first?.headers.get("etag") ?? "" },
+        }),
+      );
+      expect(notModified?.status).toBe(304);
+      const syncResponse = remixI18n.serveClientCatalogAsset(makeRequest());
+      expect(syncResponse?.status).toBe(200);
       expect(resolvePath).toHaveBeenCalledTimes(1);
     } finally {
       errorSpy.mockRestore();

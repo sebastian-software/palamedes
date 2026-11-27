@@ -21,9 +21,9 @@ const server = http.createServer(
         return new Response(stylesheet, { headers: { "content-type": "text/css; charset=utf-8" } });
       }
       if (new URL(request.url).pathname.startsWith("/assets/")) {
-        const fragment = await catalogAssetRegistry.serve(request);
+        const fragment = await catalogAssetRegistry.serveAsync(request);
         if (fragment) return fragment;
-        const catalog = await remixI18n.serveClientCatalogAsset(request);
+        const catalog = await remixI18n.serveClientCatalogAssetAsync(request);
         if (catalog) return catalog;
         return (await assetServer.fetch(request)) ?? new Response("Not Found", { status: 404 });
       }

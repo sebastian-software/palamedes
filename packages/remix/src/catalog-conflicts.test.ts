@@ -56,7 +56,7 @@ it.each([true, false])(
       const first = registry.register(path.join(root, "app/page.ts"), ids);
       const second = registry.register(path.join(root, "app/other.ts"), ids);
       for (const key of [first, second, first]) {
-        const response = await registry.serve(
+        const response = registry.serve(
           new Request(`https://example.test${registry.sidecarUrl(key)}?fragment=1&locale=de`),
         );
         expect(response?.status).toBe(200);
@@ -65,7 +65,7 @@ it.each([true, false])(
       expect(warn).toHaveBeenCalledTimes(conflict ? 1 : 0);
       if (conflict) expect(warn).toHaveBeenCalledWith(expect.stringContaining("last catalog wins"));
       registry.invalidate();
-      await registry.serve(
+      registry.serve(
         new Request(`https://example.test${registry.sidecarUrl(first)}?fragment=1&locale=de`),
       );
       expect(warn).toHaveBeenCalledTimes(conflict ? 2 : 0);

@@ -165,7 +165,9 @@ export type RemixI18nServer<TLocale extends string> = {
   renderClientCatalog(locale: TLocale, options?: { basePath?: string }): string;
   /** Render the stable Remix import map and external adapter bootstrap for an entry file. */
   renderClientEntry(entryPath: string, options: RemixClientEntryOptions): Promise<string>;
-  serveClientCatalogAsset(request: Request): Response | Promise<Response> | undefined;
+  serveClientCatalogAsset(request: Request): Response | undefined;
+  /** Asynchronous non-blocking variant of `serveClientCatalogAsset()` with in-flight deduplication. */
+  serveClientCatalogAssetAsync(request: Request): Promise<Response | undefined>;
   serializeLocaleCookie(locale: TLocale, options?: { secure?: boolean }): string;
 };
 
@@ -534,71 +536,102 @@ export function createRemixI18nServer<TLocale extends string>(
     return `<script type="importmap"${nonce}>${serializedImportMap}</script><script type="module" src="${escapeHtmlAttribute(src)}"${nonce}></script>`;
   };
 
-  const serveClientCatalogAsset = (request: Request): Response | Promise<Response> | undefined => {
+  type ClientCatalogRequestMatch =
+    | { kind: "response"; response: Response | undefined }
+    | { kind: "locale"; locale: TLocale };
+
+  const matchClientCatalogRequest = (request: Request): ClientCatalogRequestMatch => {
     const basePath = options.catalogAssets?.basePath ?? "/assets";
     const pathname = new URL(request.url).pathname;
     const entryPrefix = `${basePath.replace(/\/$/u, "")}/__palamedes/entry/`;
     if (pathname.startsWith(entryPrefix) && pathname.endsWith(".js")) {
       const key = pathname.slice(entryPrefix.length, -3);
-      return !/^[a-f0-9]{64}$/u.test(key)
-        ? new Response("Unknown application entry.", { status: 404 })
-        : new Response(CLIENT_ENTRY_SOURCE, {
-            headers: {
-              "content-type": "application/javascript; charset=utf-8",
-              "cache-control": "no-cache",
-            },
-          });
+      return {
+        kind: "response",
+        response: !/^[a-f0-9]{64}$/u.test(key)
+          ? new Response("Unknown application entry.", { status: 404 })
+          : new Response(CLIENT_ENTRY_SOURCE, {
+              headers: {
+                "content-type": "application/javascript; charset=utf-8",
+                "cache-control": "no-cache",
+              },
+            }),
+      };
     }
     const prefix = catalogAssetPrefix(basePath);
     if (!pathname.startsWith(prefix) || !pathname.endsWith(".js")) {
-      return undefined;
+      return { kind: "response", response: undefined };
     }
     const encodedLocale = pathname.slice(prefix.length, -3);
     let locale: TLocale;
     try {
       locale = decodeURIComponent(encodedLocale) as TLocale;
     } catch {
-      return new Response("Malformed Palamedes locale encoding.", { status: 400 });
+      return {
+        kind: "response",
+        response: new Response("Malformed Palamedes locale encoding.", { status: 400 }),
+      };
     }
     if (!options.locales.locales.includes(locale)) {
-      return new Response(`Unknown Palamedes locale "${locale}".`, { status: 404 });
+      return {
+        kind: "response",
+        response: new Response(`Unknown Palamedes locale "${locale}".`, { status: 404 }),
+      };
     }
-    const formatAssetResponse = (asset: RemixClientCatalogAsset<TLocale>): Response => {
-      const etag = `"${asset.catalogVersion}"`;
-      if (request.headers.get("if-none-match") === etag) {
-        return new Response(null, {
-          status: 304,
-          headers: { etag, "cache-control": "no-cache" },
-        });
-      }
-      return new Response(asset.source, {
-        headers: {
-          "cache-control": "no-cache",
-          "content-type": "application/javascript; charset=utf-8",
-          etag,
-          vary: "Accept-Encoding",
-        },
+    return { kind: "locale", locale };
+  };
+
+  const formatClientCatalogResponse = (
+    request: Request,
+    asset: RemixClientCatalogAsset<TLocale>,
+  ): Response => {
+    const etag = `"${asset.catalogVersion}"`;
+    if (request.headers.get("if-none-match") === etag) {
+      return new Response(null, {
+        status: 304,
+        headers: { etag, "cache-control": "no-cache" },
       });
-    };
-    const formatAssetError = (error: unknown): Response => {
-      const detail = error instanceof Error ? error.message : String(error);
-      const diagnostic = `Palamedes Remix executable catalog asset failed for locale "${locale}": ${detail}`;
-      console.error(diagnostic, error);
-      return new Response(
-        process.env.NODE_ENV === "development"
-          ? diagnostic
-          : "Palamedes Remix executable catalog asset failed.",
-        { status: 500 },
-      );
-    };
+    }
+    return new Response(asset.source, {
+      headers: {
+        "cache-control": "no-cache",
+        "content-type": "application/javascript; charset=utf-8",
+        etag,
+        vary: "Accept-Encoding",
+      },
+    });
+  };
+
+  const formatClientCatalogError = (locale: TLocale, error: unknown): Response => {
+    const detail = error instanceof Error ? error.message : String(error);
+    const diagnostic = `Palamedes Remix executable catalog asset failed for locale "${locale}": ${detail}`;
+    console.error(diagnostic, error);
+    return new Response(
+      process.env.NODE_ENV === "development"
+        ? diagnostic
+        : "Palamedes Remix executable catalog asset failed.",
+      { status: 500 },
+    );
+  };
+
+  const serveClientCatalogAsset = (request: Request): Response | undefined => {
+    const matched = matchClientCatalogRequest(request);
+    if (matched.kind === "response") return matched.response;
     try {
-      const assetOrPromise = getOrCompileClientCatalogAssetAsync(locale);
-      if (assetOrPromise instanceof Promise) {
-        return assetOrPromise.then(formatAssetResponse, formatAssetError);
-      }
-      return formatAssetResponse(assetOrPromise);
+      return formatClientCatalogResponse(request, createClientCatalogAsset(matched.locale));
     } catch (error) {
-      return formatAssetError(error);
+      return formatClientCatalogError(matched.locale, error);
+    }
+  };
+
+  const serveClientCatalogAssetAsync = async (request: Request): Promise<Response | undefined> => {
+    const matched = matchClientCatalogRequest(request);
+    if (matched.kind === "response") return matched.response;
+    try {
+      const asset = await getOrCompileClientCatalogAssetAsync(matched.locale);
+      return formatClientCatalogResponse(request, asset);
+    } catch (error) {
+      return formatClientCatalogError(matched.locale, error);
     }
   };
 
@@ -656,6 +689,8 @@ export function createRemixI18nServer<TLocale extends string>(
     renderClientEntry,
 
     serveClientCatalogAsset,
+
+    serveClientCatalogAssetAsync,
 
     serializeLocaleCookie(locale, serializeOptions) {
       if (!options.locales.isLocale(locale) || !COOKIE_VALUE_PATTERN.test(locale)) {
