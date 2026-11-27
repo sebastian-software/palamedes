@@ -1,0 +1,26 @@
+{
+  "targets": [
+    {
+      "id": {
+        "catalog": "locales/{locale}",
+        "locale": "de",
+        "message": "{count, plural, one {# file} other {# files}}"
+      },
+      "translation": {
+        "kind": "plural",
+        "variable": "count",
+        "plural_kind": "cardinal",
+        "offset": 0,
+        "values": {
+          "=0": "Keine Dateien",
+          "one": "# Datei",
+          "other": "# Dateien"
+        }
+      }
+    }
+  ],
+  "checks": {
+    "boundaryWhitespace": true,
+    "metadataLeakage": true
+  }
+}

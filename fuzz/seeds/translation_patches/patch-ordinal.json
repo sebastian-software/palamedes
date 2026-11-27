@@ -1,0 +1,18 @@
+{
+  "id": {
+    "catalog": "locales/{locale}",
+    "locale": "de",
+    "message": "{count, selectordinal, one {#st} other {#th}}",
+    "context": "rank"
+  },
+  "fingerprint": "abc123",
+  "translation": {
+    "kind": "plural",
+    "variable": "count",
+    "plural_kind": "ordinal",
+    "offset": 1,
+    "values": {
+      "other": "#. Platz"
+    }
+  }
+}

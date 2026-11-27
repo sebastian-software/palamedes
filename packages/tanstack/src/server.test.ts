@@ -513,5 +513,148 @@ describe("TanStack server catalog adapter", () => {
 
       await expect(response.text()).rejects.toThrow("warn sink failed");
     });
+
+    it("streams large inline scripts incrementally and caps unclosed script tag buffering", async () => {
+      const clientDirectory = mkdtempSync(path.join(os.tmpdir(), "palamedes-tanstack-cap-"));
+      try {
+        writeFileSync(
+          path.join(clientDirectory, "palamedes-split-manifest.json"),
+          JSON.stringify({
+            locales: ["en"],
+            importMaps: { en: "assets/map.json" },
+            chunkImports: {},
+          }),
+        );
+        mkdirSync(path.join(clientDirectory, "assets"), { recursive: true });
+        writeFileSync(
+          path.join(clientDirectory, "assets/map.json"),
+          JSON.stringify({ imports: {} }),
+        );
+
+        const { createTanStackCatalogResponseDelivery } = await import("./server");
+        const deliver = createTanStackCatalogResponseDelivery({
+          clientDirectory,
+          development: false,
+        });
+        const encoder = new TextEncoder();
+        const block = "x".repeat(32 * 1024);
+        const nestedEntry = '<script type="module" src="/assets/index-fake.js"></script>';
+
+        let releaseInlineEnd!: () => void;
+        const inlineGate = new Promise<void>((resolve) => {
+          releaseInlineEnd = resolve;
+        });
+        const inlineResponse = (await deliver(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              async start(controller) {
+                const prefix = encoder.encode("ZZ<html><head></head><body><script>const s='ZZ");
+                // Pass a subarray with a non-zero byteOffset to verify Uint8Array slicing.
+                controller.enqueue(prefix.subarray(2, -2));
+                for (let index = 0; index < 10; index += 1) {
+                  controller.enqueue(encoder.encode(block));
+                }
+                controller.enqueue(encoder.encode(nestedEntry));
+                await inlineGate;
+                controller.enqueue(
+                  encoder.encode(
+                    '\';</script><script type="module" src="/assets/index-real.js"></script></body></html>',
+                  ),
+                );
+                controller.close();
+              },
+            }),
+            { headers: { "content-type": "text/html" } },
+          ),
+          "en",
+          new Request("https://example.test/"),
+        )) as Response;
+
+        const reader = inlineResponse.body!.getReader();
+        const decoder = new TextDecoder();
+        let beforeClose = "";
+        while (beforeClose.length < 200 * 1024) {
+          const chunk = await reader.read();
+          expect(chunk.done).toBe(false);
+          beforeClose += decoder.decode(chunk.value, { stream: true });
+        }
+        releaseInlineEnd();
+        let rest = "";
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          rest += decoder.decode(chunk.value, { stream: true });
+        }
+        rest += decoder.decode();
+        const rendered = beforeClose + rest;
+
+        expect(beforeClose.length).toBeGreaterThanOrEqual(200 * 1024);
+        expect(rendered).toContain(`const s='${block.repeat(10)}${nestedEntry}';</script>`);
+        expect(rendered).toContain('import("/assets/index-real.js")');
+        expect(rendered).not.toContain('import("/assets/index-fake.js")');
+
+        // Unclosed <script opening tag exceeds buffer cap and flushes before EOF.
+        let releaseUnclosedEnd!: () => void;
+        const unclosedGate = new Promise<void>((resolve) => {
+          releaseUnclosedEnd = resolve;
+        });
+        const unclosedResponse = (await deliver(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              async start(controller) {
+                controller.enqueue(encoder.encode('<html><head></head><body><script data-huge="'));
+                for (let index = 0; index < 10; index += 1) {
+                  controller.enqueue(encoder.encode(block));
+                }
+                await unclosedGate;
+                controller.enqueue(encoder.encode("</body></html>"));
+                controller.close();
+              },
+            }),
+            { headers: { "content-type": "text/html" } },
+          ),
+          "en",
+          new Request("https://example.test/"),
+        )) as Response;
+
+        const unclosedReader = unclosedResponse.body!.getReader();
+        let unclosedBeforeEnd = "";
+        while (unclosedBeforeEnd.length < 256 * 1024) {
+          const chunk = await unclosedReader.read();
+          expect(chunk.done).toBe(false);
+          unclosedBeforeEnd += decoder.decode(chunk.value, { stream: true });
+        }
+        releaseUnclosedEnd();
+        let unclosedRest = "";
+        while (true) {
+          const chunk = await unclosedReader.read();
+          if (chunk.done) break;
+          unclosedRest += decoder.decode(chunk.value, { stream: true });
+        }
+        unclosedRest += decoder.decode();
+        const unclosedRendered = unclosedBeforeEnd + unclosedRest;
+
+        expect(unclosedBeforeEnd.length).toBeGreaterThanOrEqual(256 * 1024);
+        expect(unclosedRendered).toContain(`<script data-huge="${block.repeat(10)}</body></html>`);
+      } finally {
+        rmSync(clientDirectory, { recursive: true, force: true });
+      }
+    });
+
+    it("handles Turkish İ text and many script blocks in one chunk without index drift", async () => {
+      const manyScripts = Array.from(
+        { length: 1000 },
+        (_, index) => `<script>/* İstanbul ${index} */</script>`,
+      ).join("");
+      const html = `<html><head><title>İstanbul İZMİR</title></head><body><p>İstanbul</p>${manyScripts}<script type="module" src="/assets/index-tr.js"></script></body></html>`;
+      const response = await deliverDocument(html, false);
+      const rendered = await response.text();
+
+      expect(rendered).toContain("<title>İstanbul İZMİR</title>");
+      expect(rendered).toContain("<p>İstanbul</p>");
+      expect(rendered).toContain("/* İstanbul 999 */");
+      expect(rendered).toContain('import("/assets/index-tr.js")');
+      expect(rendered).not.toContain('src="/assets/index-tr.js"');
+    });
   });
 });

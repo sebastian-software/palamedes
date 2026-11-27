@@ -857,9 +857,24 @@ name = "palamedes-fuzz"
 version = "0.0.0"
 dependencies = [
  "config",
+ "ferrocat",
  "libfuzzer-sys",
  "palamedes",
+ "palamedes-i18n",
  "palamedes-plugin",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "palamedes-i18n"
+version = "2.2.0"
+dependencies = [
+ "fixed_decimal",
+ "icu_locale_core",
+ "icu_plurals",
+ "icu_provider",
  "serde",
  "serde_json",
  "thiserror",

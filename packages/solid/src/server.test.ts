@@ -444,4 +444,138 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     expect(output).not.toContain("\u2028");
     expect(output).not.toContain("\u2029");
   });
+
+  it("streams large inline scripts incrementally without buffering or mistaking inner script strings", async () => {
+    const middleware = createSolidCatalogDeliveryMiddleware({
+      clientDirectory: fixtureDirectory(),
+      development: false,
+      nonce: "solid-test",
+      resolveLocale: () => "en",
+    });
+    const payloadBlock = "x".repeat(32 * 1024);
+    const fakeEntry = `<script type="module" src="${SOLID_CLIENT_ENTRY}"></script>`;
+    let releaseTail!: () => void;
+    const tailGate = new Promise<void>((resolve) => {
+      releaseTail = resolve;
+    });
+    const encoder = new TextEncoder();
+
+    const response = await middleware(
+      new Request("https://example.test/"),
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async start(controller) {
+              controller.enqueue(encoder.encode("<html><head></head><body><script>const data = '"));
+              for (let index = 0; index < 10; index += 1) {
+                controller.enqueue(encoder.encode(payloadBlock));
+              }
+              controller.enqueue(encoder.encode(fakeEntry));
+              await tailGate;
+              controller.enqueue(
+                encoder.encode(
+                  `';</script><script type="module" src="${SOLID_CLIENT_ENTRY}"></script></body></html>`,
+                ),
+              );
+              controller.close();
+            },
+          }),
+          { headers: { "content-type": "text/html; charset=utf-8" } },
+        ),
+    );
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let seenBeforeClose = "";
+    while (seenBeforeClose.length < 200 * 1024) {
+      const chunk = await reader.read();
+      expect(chunk.done).toBe(false);
+      seenBeforeClose += decoder.decode(chunk.value, { stream: true });
+    }
+    releaseTail();
+    let rest = "";
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      rest += decoder.decode(chunk.value, { stream: true });
+    }
+    rest += decoder.decode();
+    const full = seenBeforeClose + rest;
+
+    // Large inline payload streamed out before </script> arrived.
+    expect(seenBeforeClose.length).toBeGreaterThanOrEqual(200 * 1024);
+    // The nested string inside the inline script was preserved untouched.
+    expect(full).toContain(`const data = '${payloadBlock.repeat(10)}${fakeEntry}';</script>`);
+    // The real Solid entry script after the inline payload was gated.
+    expect(full).toContain(`import("${SOLID_CLIENT_ENTRY}")`);
+  });
+
+  it("caps buffering on unclosed script tags and flushes safely before EOF", async () => {
+    const middleware = createSolidCatalogDeliveryMiddleware({
+      clientDirectory: fixtureDirectory(),
+      development: false,
+      resolveLocale: () => "en",
+    });
+    const paddingBlock = "a".repeat(32 * 1024);
+    let releaseEnd!: () => void;
+    const endGate = new Promise<void>((resolve) => {
+      releaseEnd = resolve;
+    });
+    const encoder = new TextEncoder();
+
+    const response = await middleware(
+      new Request("https://example.test/"),
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async start(controller) {
+              controller.enqueue(encoder.encode('<html><head></head><body><script data-huge="'));
+              for (let index = 0; index < 10; index += 1) {
+                controller.enqueue(encoder.encode(paddingBlock));
+              }
+              await endGate;
+              controller.enqueue(encoder.encode("</body></html>"));
+              controller.close();
+            },
+          }),
+          { headers: { "content-type": "text/html; charset=utf-8" } },
+        ),
+    );
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let receivedBeforeEnd = "";
+    while (receivedBeforeEnd.length < 256 * 1024) {
+      const chunk = await reader.read();
+      expect(chunk.done).toBe(false);
+      receivedBeforeEnd += decoder.decode(chunk.value, { stream: true });
+    }
+    releaseEnd();
+    let tail = "";
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      tail += decoder.decode(chunk.value, { stream: true });
+    }
+    tail += decoder.decode();
+    const full = receivedBeforeEnd + tail;
+
+    expect(receivedBeforeEnd.length).toBeGreaterThanOrEqual(256 * 1024);
+    expect(full).toContain(`<script data-huge="${paddingBlock.repeat(10)}</body></html>`);
+  });
+
+  it("handles Turkish İ text and many script blocks in one large chunk without index drift or quadratic work", async () => {
+    const manyScripts = Array.from(
+      { length: 1000 },
+      (_, index) => `<script>/* İstanbul ${index} */</script>`,
+    ).join("");
+    const html = `<html><head><title>İstanbul İZMİR</title></head><body><p>İstanbul</p>${manyScripts}<script type="module" src="${SOLID_CLIENT_ENTRY}"></script></body></html>`;
+    const output = await transformDocument(html, "solid-test", html.length);
+
+    expect(output).toContain("<title>İstanbul İZMİR</title>");
+    expect(output).toContain("<p>İstanbul</p>");
+    expect(output).toContain("/* İstanbul 999 */");
+    expect(output).toContain(`import("${SOLID_CLIENT_ENTRY}")`);
+    expect(output).not.toContain(`src="${SOLID_CLIENT_ENTRY}"`);
+  });
 });

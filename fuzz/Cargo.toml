@@ -9,8 +9,10 @@ license = "MIT OR Apache-2.0"
 cargo-fuzz = true
 
 [dependencies]
+ferrocat = "3.6.0"
 libfuzzer-sys = "=0.4.13"
 palamedes = { version = "2.2.0", path = ".." }
+palamedes-i18n = { version = "2.2.0", path = "../crates/palamedes-i18n" }
 palamedes-plugin = { version = "2.2.0", path = "../crates/palamedes-plugin" }
 config = { version = "=0.15.25", default-features = false, features = ["json", "toml", "yaml"] }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -37,6 +39,27 @@ bench = false
 [[bin]]
 name = "plugin"
 path = "fuzz_targets/plugin.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "catalog_compile_render"
+path = "fuzz_targets/catalog_compile_render.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "translation_patches"
+path = "fuzz_targets/translation_patches.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "i18n_artifact"
+path = "fuzz_targets/i18n_artifact.rs"
 test = false
 doc = false
 bench = false

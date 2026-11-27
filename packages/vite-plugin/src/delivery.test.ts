@@ -405,6 +405,152 @@ describe("Vite catalog delivery", () => {
       endSpy.mockRestore();
     }
   });
+
+  it("matches uppercase </HEAD> tags split across chunks and ignores </header>", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"), {
+      lang: "de",
+    });
+    const chunks: Buffer[] = [];
+    transform.on("data", (chunk: Buffer | string) => chunks.push(Buffer.from(chunk)));
+    const done = new Promise<void>((resolve, reject) => {
+      transform.once("end", resolve);
+      transform.once("error", reject);
+    });
+    const html =
+      "<!DOCTYPE html><HTML><HEAD><title>Test</title></HE" +
+      "AD ><BODY><header>Hi</header></BODY></HTML>";
+    for (let index = 0; index < html.length; index += 3) {
+      transform.write(html.slice(index, index + 3));
+    }
+    transform.end();
+    await done;
+    const output = Buffer.concat(chunks).toString("utf8");
+
+    expect(output).toContain('<script type="importmap">');
+    expect(output).toContain("palamedes.document-catalogs-ready-promise");
+    expect(output.indexOf("importmap")).toBeLessThan(output.indexOf("</HEAD >"));
+    expect(output).toContain("<header>Hi</header>");
+  });
+
+  it("preserves dollar replacement tokens in <html> attributes", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const binding = delivery.getLocaleBinding("de");
+    const specialValue = "$& $' $` $$ $1";
+    const html = await collect(
+      delivery.createDocumentTransform(binding, {
+        htmlAttributes: {
+          "data-existing": specialValue,
+          "data-added": specialValue,
+        },
+      }),
+      '<html data-existing="old"><head></head><body>app</body></html>',
+    );
+
+    expect(html).toContain(
+      '<html data-added="$&amp; $\' $` $$ $1" data-existing="$&amp; $\' $` $$ $1"><head>',
+    );
+  });
+
+  it("decodes plain Uint8Array subarray chunks without byte-array stringification", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));
+    const encoded = new TextEncoder().encode(
+      "XX<html><head><title>Grüße</title></head><body>ok</body></html>YY",
+    );
+    const subarray = encoded.subarray(2, -2);
+    expect(Buffer.isBuffer(subarray)).toBe(false);
+
+    const emitted: string[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const internal = transform as unknown as {
+        _transform(
+          chunk: unknown,
+          encoding: BufferEncoding,
+          callback: (error?: Error | null, data?: string) => void,
+        ): void;
+      };
+      internal._transform(subarray, "utf8", (error, data) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (data !== undefined) emitted.push(data);
+        resolve();
+      });
+    });
+
+    const output = emitted.join("");
+    expect(output).toContain("<title>Grüße</title>");
+    expect(output).toContain('<script type="importmap">');
+    expect(output).not.toMatch(/\d+,\d+,\d+/u);
+  });
+
+  it("flushes safely instead of buffering unboundedly when a stream has no </head>", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));
+    const emittedBeforeEnd: string[] = [];
+    const allChunks: string[] = [];
+    transform.on("data", (chunk: Buffer | string) => {
+      allChunks.push(chunk.toString());
+    });
+    const done = new Promise<void>((resolve, reject) => {
+      transform.once("end", resolve);
+      transform.once("error", reject);
+    });
+
+    const block = "a".repeat(64 * 1024);
+    transform.write("<html><body>");
+    for (let index = 0; index < 18; index += 1) {
+      transform.write(block);
+    }
+    emittedBeforeEnd.push(...allChunks);
+    transform.write("</body></html>");
+    transform.end();
+    await done;
+
+    expect(emittedBeforeEnd.join("").length).toBeGreaterThan(1024 * 1024);
+    expect(allChunks.join("")).toBe(`<html><body>${block.repeat(18)}</body></html>`);
+  });
+
+  it("preserves exact </head> offsets with Turkish İ text and ignores </HEAD> inside scripts, attributes, or comments", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const html =
+      '<!DOCTYPE html><html><head><meta name="description" content="The <style> element and </head> tag"><title>İstanbul İZMİR</title><!-- </HEAD> --><script type="application/json">{"tag":"</HEAD>"}</script><style>/* </head> */</style></HEAD><body>app</body></html>';
+    const output = await collect(
+      delivery.createDocumentTransform(delivery.getLocaleBinding("de")),
+      html,
+    );
+
+    expect(output).toContain(
+      '<meta name="description" content="The <style> element and </head> tag">',
+    );
+    expect(output).toContain("<title>İstanbul İZMİR</title>");
+    expect(output).toContain(
+      '<!-- </HEAD> --><script type="application/json">{"tag":"</HEAD>"}</script><style>/* </head> */</style>',
+    );
+    expect(output).toContain("</script></HEAD><body>app</body></html>");
+    expect(output.indexOf("palamedes.document-catalogs-ready-promise")).toBeGreaterThan(
+      output.indexOf("</style>"),
+    );
+    expect(output.indexOf("palamedes.document-catalogs-ready-promise")).toBeLessThan(
+      output.lastIndexOf("</HEAD>"),
+    );
+  });
+
+  it("fails closed when an opened <head> exceeds the buffer limit before </head>", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));
+    const hugeHead = `<html><head><style>${"a".repeat(1024 * 1024 + 128)}</style></head><body>app</body></html>`;
+
+    await expect(collect(transform, hugeHead)).rejects.toThrow(/<head> buffer limit/u);
+  });
 });
 
 async function createFixture(): Promise<string> {

@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "fingerprint": "fuzz-arg",
+  "locale": "ar",
+  "messages": {
+    "m": {
+      "kind": "program",
+      "value": [
+        { "op": "text", "value": "مرحبا " },
+        { "op": "argument", "name": "name" }
+      ]
+    }
+  }
+}

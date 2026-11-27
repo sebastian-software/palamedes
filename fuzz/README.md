@@ -1,13 +1,28 @@
 # Native fuzzing
 
-The three targets mutate bytes at the existing native boundaries:
+The six targets mutate bytes at the existing native boundaries:
 
-- `source`: `analyze_source` and `extract_messages`, each in TS, TSX, and MDX mode.
-- `config`: the CLI's YAML parser, key checks, deserialization, and semantic
-  validation. Path resolution and normalization are excluded so generated input
-  cannot select filesystem operations.
+- `source`: `analyze_source`, `extract_messages`, and `transform_macros` across
+  TS, TSX, Vue, Svelte, and MDX (including Server Function transform options,
+  `include_source_metadata`, and Solid / front-matter / attribute `MdxOptions`).
+- `config`: the CLI's YAML, JSON, and TOML parser, key checks, deserialization,
+  and semantic validation. Path resolution and normalization are excluded so
+  generated input cannot select filesystem operations.
 - `plugin`: the SDK's typed request decoder and the host's bounded line reader
   and event decoder. No request is dispatched and no plugin is executed.
+- `catalog_compile_render`: PO and FCL catalog parsing for compilation
+  (`parse_catalog_for_compile`), SDK compile pipeline, ICU runtime compilation
+  (`compile_runtime_catalog_messages`), JS module rendering
+  (`render_catalog_module`), format conversion, multi-catalog combine
+  (`combine_catalogs`), and three-way merge (`merge_catalogs_three_way`).
+- `translation_patches`: untrusted translation target and patch JSON
+  deserialization plus read-only target validation (`check_translation_targets`)
+  and singular/plural value rendering (`render_translation_value`). No catalog
+  files are read or written.
+- `i18n_artifact`: `palamedes-i18n` untrusted `.pmd.json` artifact decoding and
+  validation (`Catalog::from_bytes`, `validate_program`, `plural_arguments`),
+  rendering (`Catalog::render`), and decimal count parsing
+  (`PluralNumber::from_str`).
 
 Expected parse errors and source diagnostics are successful outcomes. Panics,
 address-sanitizer findings, timeouts, and memory-limit exits fail the campaign;
@@ -35,7 +50,7 @@ policy in CI. Its LLVM libFuzzer license exception is scoped to `libfuzzer-sys`.
 Every target uses one worker and seed `1311`, with a fresh copy of checked-in
 seeds, a 64 KiB input cap, a 5-second per-input timeout, a 2 GiB RSS limit, and a
 256 MiB single-allocation limit. The PR smoke budget is 1,000 executions or 20
-seconds per target; the scheduled/manual budget is 1,000,000 executions or 300
+seconds per target; the scheduled/manual budget is 1,000,000 executions or 180
 seconds per target, whichever comes first. The runner also kills a target after
 its time budget plus 15 seconds, and caps the instrumented build at 20 minutes.
 The CI job has a 45-minute ceiling including tool installation. These are test

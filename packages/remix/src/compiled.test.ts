@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createI18n,
@@ -20,7 +20,7 @@ import type {
   SelectOrdinal as MacroSelectOrdinal,
   Trans as MacroTrans,
 } from "./macro";
-import { createRemixMessageRuntimeCache } from "./transShared";
+import { createRemixMessageRuntimeCache, createTrans } from "./transShared";
 
 describe("@palamedes/remix compiled rich-message runtime", () => {
   afterEach(() => {
@@ -96,22 +96,93 @@ describe("@palamedes/remix compiled rich-message runtime", () => {
     );
   });
 
-  it("reuses a runtime for inline component shapes without keeping stale elements", async () => {
-    const i18n = createI18n({ locale: "en" });
+  it("reuses a leased runtime across shapes without keeping stale elements and invalidates on locale changes", async () => {
+    const i18n = createI18n({ locale: "en", timeZone: "UTC" });
     const cache = createRemixMessageRuntimeCache();
-    const firstRuntime = cache.get(i18n, {
+
+    const firstLease = cache.acquire(i18n, {
       0: createElement("strong", { class: "first" }),
     });
-    const first = firstRuntime.tag("0", firstRuntime.join("one"))[0] as RemixElement;
-    const secondRuntime = cache.get(i18n, {
-      0: createElement("em", { class: "second" }),
-    });
-    const second = secondRuntime.tag("0", secondRuntime.join("two"))[0] as RemixElement;
+    const first = firstLease.runtime.tag("0", firstLease.runtime.join("one"))[0] as RemixElement;
+    cache.release(firstLease);
+    // Releasing clears retained component references immediately.
+    expect(firstLease.runtime.tag("0", firstLease.runtime.join("released"))).toEqual(["released"]);
 
-    expect(secondRuntime).toBe(firstRuntime);
+    const secondLease = cache.acquire(i18n, {
+      1: createElement("em", { class: "second" }),
+    });
+    const second = secondLease.runtime.tag("1", secondLease.runtime.join("two"))[0] as RemixElement;
+    cache.release(secondLease);
+
+    expect(secondLease.runtime).toBe(firstLease.runtime);
     expect([first.key, second.key]).toEqual([0, 0]);
     await expect(renderToString(first)).resolves.toBe('<strong class="first">one</strong>');
     await expect(renderToString(second)).resolves.toBe('<em class="second">two</em>');
+
+    i18n.activate("de");
+    const localeChangedLease = cache.acquire(i18n, {
+      0: createElement("strong", { class: "de" }),
+    });
+    cache.release(localeChangedLease);
+    expect(localeChangedLease.runtime).not.toBe(firstLease.runtime);
+  });
+
+  it("isolates nested synchronous Trans renders and releases component references afterwards", async () => {
+    const outer: CompiledMessage = (args, runtime) =>
+      runtime.join(
+        runtime.tag("0", runtime.join("before")),
+        runtime.value(args, "nested"),
+        runtime.tag("0", runtime.join("after")),
+      );
+    const inner: CompiledMessage = (_values, runtime) => runtime.tag("0", runtime.join("inside"));
+    const i18n = createI18n({ locale: "en" });
+    i18n.load("en", defineCompiledCatalog({ outer, inner }));
+    const NestedTrans = createTrans(() => i18n);
+    const renderMessage = vi.spyOn(i18n, "renderMessage");
+
+    const values = {
+      get nested() {
+        return NestedTrans({
+          props: { id: "inner", components: { 0: createElement("em", {}) } },
+        } as never)();
+      },
+    };
+    const rendered = NestedTrans({
+      props: {
+        id: "outer",
+        values,
+        components: { 0: createElement("strong", {}) },
+      },
+    } as never)();
+
+    await expect(renderToString(rendered)).resolves.toBe(
+      "<strong>before</strong><em>inside</em><strong>after</strong>",
+    );
+    const outerRuntime = renderMessage.mock.calls[0]![2];
+    const innerRuntime = renderMessage.mock.calls[1]![2];
+    expect(innerRuntime).not.toBe(outerRuntime);
+    expect(outerRuntime.tag("0", outerRuntime.join("released"))).toEqual(["released"]);
+    expect(innerRuntime.tag("0", innerRuntime.join("released"))).toEqual(["released"]);
+  });
+
+  it("releases a leased renderer when renderMessage throws", () => {
+    const i18n = createI18n({ locale: "en" });
+    i18n.load("en", defineCompiledCatalog({ Hello: "Hello" }));
+    const renderMessage = vi.spyOn(i18n, "renderMessage").mockImplementationOnce(() => {
+      throw new Error("custom renderer failed");
+    });
+    const CachedTrans = createTrans(() => i18n);
+
+    expect(() =>
+      CachedTrans({
+        props: { id: "Hello", components: { 0: createElement("strong", {}) } },
+      } as never)(),
+    ).toThrow("custom renderer failed");
+
+    CachedTrans({ props: { id: "Hello" } } as never)();
+    const runtime = renderMessage.mock.calls[0]![2];
+    expect(renderMessage.mock.calls[1]![2]).toBe(runtime);
+    expect(runtime.tag("0", runtime.join("released"))).toEqual(["released"]);
   });
 
   it("propagates missing and invalid messages to host rendering", async () => {

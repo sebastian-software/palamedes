@@ -1,0 +1,19 @@
+{
+  "targets": [
+    {
+      "id": {
+        "catalog": "locales/{locale}",
+        "locale": "de",
+        "message": "Hello {name}"
+      },
+      "translation": {
+        "kind": "singular",
+        "value": " Hallo {name} #@ ferrocat-mt model=test "
+      }
+    }
+  ],
+  "checks": {
+    "boundaryWhitespace": true,
+    "metadataLeakage": true
+  }
+}

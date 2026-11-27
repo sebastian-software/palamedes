@@ -265,7 +265,6 @@ export function createRemixI18nServer<TLocale extends string>(
   assertNoRemovedRemixServerOptions(options);
   const failureMessage = options.failureMessage ?? DEFAULT_FAILURE_MESSAGE;
   const scope = createServerI18nScope<PalamedesI18n>();
-  const catalogCache = new Map<TLocale, CompiledCatalogMessages>();
   const clientCatalogAssetCache = new Map<TLocale, CachedRemixClientCatalogAsset<TLocale>>();
   const scopedContexts = new WeakMap<
     PalamedesI18n,
@@ -312,25 +311,13 @@ export function createRemixI18nServer<TLocale extends string>(
       return;
     }
     serverRegistryGeneration = next;
-    catalogCache.clear();
     serverCatalogStore.invalidate();
     clientCatalogAssetCache.clear();
   };
 
   const getMessages = async (locale: TLocale): Promise<CompiledCatalogMessages> => {
     refreshRegistryGeneration();
-    const cached = catalogCache.get(locale);
-    if (cached) {
-      return cached;
-    }
-    const ready = serverCatalogStore.getReady(locale);
-    if (ready) {
-      catalogCache.set(locale, ready);
-      return ready;
-    }
-    const messages = await serverCatalogStore.load(locale);
-    catalogCache.set(locale, messages);
-    return messages;
+    return serverCatalogStore.getReady(locale) ?? (await serverCatalogStore.load(locale));
   };
 
   const createScopedContext = async (
@@ -498,8 +485,13 @@ export function createRemixI18nServer<TLocale extends string>(
         },
       });
     } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      const diagnostic = `Palamedes Remix executable catalog asset failed for locale "${locale}": ${detail}`;
+      console.error(diagnostic, error);
       return new Response(
-        `Palamedes Remix executable catalog asset failed for locale "${locale}": ${error instanceof Error ? error.message : String(error)}`,
+        process.env.NODE_ENV === "development"
+          ? diagnostic
+          : "Palamedes Remix executable catalog asset failed.",
         { status: 500 },
       );
     }

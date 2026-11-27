@@ -1,0 +1,14 @@
+<script module lang="ts">
+import { t } from "@palamedes/core/macro";
+export const title = t`Module title`;
+</script>
+<script lang="ts">
+import { t as tr } from "@palamedes/core/macro";
+let items = [1, 2];
+const label = tr`Count: ${items.length}`;
+</script>
+{#each items as item}
+  {#snippet row(val)}
+    <span>{label}: {val}</span>
+  {/snippet}
+{/each}
