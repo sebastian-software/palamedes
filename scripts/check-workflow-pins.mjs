@@ -37,6 +37,7 @@ const STEP_OUTPUT_KEY_PREFIX = "\0step_output:";
 const STEP_OUTPUT_EXPRESSION_PATTERN =
   /\$\{\{\s*steps(?:\.(?<stepDot>[A-Za-z0-9_-]+)|\[(?:'(?<stepSq>[^']+)'|"(?<stepDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])\s*\}\}/giu;
 const JOB_OUTPUT_KEY_PREFIX = "\0job_output:";
+const ARRAY_ELEM_KEY_PREFIX = "\0arr:";
 const NEEDS_OUTPUT_EXPRESSION_PATTERN =
   /\$\{\{\s*(?:needs|jobs)(?:\.(?<jobDot>[A-Za-z0-9_-]+)|\[(?:'(?<jobSq>[^']+)'|"(?<jobDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])\s*\}\}/giu;
 const ACTIONS_EXPRESSION_BLOCK_PATTERN = /\$\{\{(?<expr>(?:'(?:''|[^'])*'|\}(?!\})|[^'}])*)\}\}/gu;
@@ -2205,7 +2206,7 @@ function findNextShellParamExpansion(text, startIndex = 0) {
       if (depth === 0) {
         const inner = text.slice(index + 2, cursor - 1);
         const exprMatch =
-          /^(?<name>[A-Za-z_][A-Za-z0-9_]*|[1-9][0-9]*)(?:(?<op>:-|:=|:\+|-|=|\+)(?<word>.*))?$/su.exec(
+          /^(?<name>[A-Za-z_][A-Za-z0-9_]*|[1-9][0-9]*)(?:\[(?<idx>\d+)\])?(?:(?<op>:-|:=|:\+|-|=|\+)(?<word>.*))?$/su.exec(
             inner,
           );
         if (exprMatch) {
@@ -2213,6 +2214,7 @@ function findNextShellParamExpansion(text, startIndex = 0) {
             start: index,
             end: cursor,
             name: exprMatch.groups.name,
+            arrayIndex: exprMatch.groups.idx !== undefined ? Number(exprMatch.groups.idx) : null,
             op: exprMatch.groups.op ?? null,
             word: exprMatch.groups.word ?? "",
           };
@@ -2227,6 +2229,7 @@ function findNextShellParamExpansion(text, startIndex = 0) {
         start: index,
         end: index + 1 + name.length,
         name,
+        arrayIndex: null,
         op: null,
         word: "",
       };
@@ -2266,7 +2269,23 @@ function expandShellParamCandidates(candidates, shellVars, caseInsensitive, init
         const literal = candidate.text.slice(cursor, expr.start);
         const rawMatch = candidate.text.slice(expr.start, expr.end);
         cursor = expr.end;
-        const entries = lookupVarEntries(shellVars, expr.name, caseInsensitive);
+        let entries = null;
+        if (expr.arrayIndex !== null) {
+          const elemKey = `${ARRAY_ELEM_KEY_PREFIX}${expr.name}\0${expr.arrayIndex}`;
+          entries = shellVars.get(elemKey) ?? null;
+          if (!entries && shellVars.has(`${ARRAY_ELEM_KEY_PREFIX}${expr.name}\0has`)) {
+            entries = [{ value: "", line: 0, unset: true }];
+          } else if (!entries && expr.arrayIndex === 0) {
+            entries = lookupVarEntries(shellVars, expr.name, caseInsensitive);
+          }
+        } else {
+          entries = lookupVarEntries(shellVars, expr.name, caseInsensitive);
+          if (!entries && shellVars.has(`${ARRAY_ELEM_KEY_PREFIX}${expr.name}\0has`)) {
+            entries = shellVars.get(`${ARRAY_ELEM_KEY_PREFIX}${expr.name}\u00000`) ?? [
+              { value: "", line: 0, unset: true },
+            ];
+          }
+        }
         const isWholeToken = expr.start === 0 && expr.end === candidate.text.length;
 
         const appendToBuilders = (alternatives) => {
@@ -5420,19 +5439,19 @@ function extractRedirectedWriteLines(tokens, startIndex, targetPredicate = isGit
   let targetsFile = false;
   for (let index = startIndex; index < tokens.length; index += 1) {
     const token = tokens[index];
-    if (token === ">" || token === ">>" || token === ">&" || token === "<") {
-      if ((token === ">" || token === ">>") && targetPredicate(tokens[index + 1])) {
+    if (isRedirectionOperator(token)) {
+      if (
+        (token === ">" || token === ">>" || token === ">|") &&
+        targetPredicate(tokens[index + 1])
+      ) {
         targetsFile = true;
       }
       index += 1;
       continue;
     }
-    if (
-      /^\d+$/u.test(token) &&
-      (tokens[index + 1] === ">" || tokens[index + 1] === ">>" || tokens[index + 1] === ">&")
-    ) {
+    if (/^\d+$/u.test(token) && isRedirectionOperator(tokens[index + 1])) {
       if (
-        (tokens[index + 1] === ">" || tokens[index + 1] === ">>") &&
+        (tokens[index + 1] === ">" || tokens[index + 1] === ">>" || tokens[index + 1] === ">|") &&
         targetPredicate(tokens[index + 2])
       ) {
         targetsFile = true;
@@ -5521,7 +5540,32 @@ function peelControlKeywords(tokens, frame, lineNumber, stepEnv, shellMode) {
       const varName = tokens[start + 1];
       if (varName && /^[A-Za-z_][A-Za-z0-9_]*$/u.test(varName) && tokens[start + 2] === "in") {
         let entries = [];
+        const arrayExpPattern = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
         for (const operand of tokens.slice(start + 3)) {
+          const arrMatch = shellMode === "posix" ? arrayExpPattern.exec(operand) : null;
+          if (arrMatch) {
+            const arrAllEntries = frame.vars.get(
+              `${ARRAY_ELEM_KEY_PREFIX}${arrMatch.groups.name}\0@`,
+            );
+            if (arrAllEntries && arrAllEntries.length > 0) {
+              entries = mergeVarEntries(entries, arrAllEntries);
+              continue;
+            }
+            const arrObj = frame.arrays?.get(arrMatch.groups.name);
+            if (arrObj && arrObj.variants.length > 0) {
+              const elemEntries = [];
+              for (const variant of arrObj.variants) {
+                for (const item of variant) {
+                  elemEntries.push({ value: item.text, line: item.line });
+                }
+              }
+              if (arrObj.truncated) {
+                elemEntries.push({ value: "", line: lineNumber, truncated: true });
+              }
+              entries = mergeVarEntries(entries, elemEntries);
+              continue;
+            }
+          }
           const expanded = resolveImageTokenCandidates(
             operand,
             stepEnv,
@@ -5533,6 +5577,13 @@ function peelControlKeywords(tokens, frame, lineNumber, stepEnv, shellMode) {
         }
         if (entries.length > 0) {
           frame.vars.set(varName, entries);
+          frame.arrays?.delete(varName);
+          const arrPrefix = `${ARRAY_ELEM_KEY_PREFIX}${varName}\0`;
+          for (const key of frame.vars.keys()) {
+            if (key.startsWith(arrPrefix)) {
+              frame.vars.delete(key);
+            }
+          }
         }
         return [];
       }
@@ -6528,6 +6579,50 @@ function inspectShellText(
   ];
   const isWindowsShell = shellMode === "pwsh" || shellMode === "cmd";
   const calledFnDefs = new Set();
+  const clearArrayMirrorInVars = (varsMap, name) => {
+    const prefix = `${ARRAY_ELEM_KEY_PREFIX}${name}\0`;
+    for (const key of varsMap.keys()) {
+      if (key.startsWith(prefix)) {
+        varsMap.delete(key);
+      }
+    }
+  };
+  const syncArrayMirrorToVars = (varsMap, name, arrayEntry, fallbackLine = 0) => {
+    clearArrayMirrorInVars(varsMap, name);
+    if (!arrayEntry) {
+      return;
+    }
+    const prefix = `${ARRAY_ELEM_KEY_PREFIX}${name}\0`;
+    varsMap.set(`${prefix}has`, [{ value: "1", line: fallbackLine }]);
+    let allElems = [];
+    const byIndex = new Map();
+    const maxLen = arrayEntry.variants.reduce((acc, v) => Math.max(acc, v.length), 0);
+    for (const variant of arrayEntry.variants) {
+      for (let i = 0; i < variant.length; i += 1) {
+        const item = variant[i];
+        const entry = { value: item.text, line: item.line };
+        allElems = mergeVarEntries(allElems, [entry]);
+        byIndex.set(i, mergeVarEntries(byIndex.get(i) ?? [], [entry]));
+      }
+      for (let i = variant.length; i < maxLen; i += 1) {
+        byIndex.set(
+          i,
+          mergeVarEntries(byIndex.get(i) ?? [], [{ value: "", line: 0, unset: true }]),
+        );
+      }
+    }
+    if (arrayEntry.truncated) {
+      const truncEntry = { value: "", line: fallbackLine, truncated: true };
+      allElems = mergeVarEntries(allElems, [truncEntry]);
+      for (const [i, idxEntries] of byIndex) {
+        byIndex.set(i, mergeVarEntries(idxEntries, [truncEntry]));
+      }
+    }
+    varsMap.set(`${prefix}@`, allElems);
+    for (const [i, idxEntries] of byIndex) {
+      varsMap.set(`${prefix}${i}`, idxEntries);
+    }
+  };
   const foldedLineSpans = (() => {
     if (!sourceLines || sourceLines.length === 0) {
       return null;
@@ -6920,10 +7015,20 @@ function inspectShellText(
                 name,
                 mergeVarEntries(existing, [{ value: "", line: 0, unset: true }]),
               );
+              const arrPrefix = `${ARRAY_ELEM_KEY_PREFIX}${name}\0`;
+              for (const key of frame.vars.keys()) {
+                if (key.startsWith(arrPrefix) && !key.endsWith("\0has")) {
+                  frame.vars.set(
+                    key,
+                    mergeVarEntries(frame.vars.get(key), [{ value: "", line: 0, unset: true }]),
+                  );
+                }
+              }
             } else {
               frame.vars.set(name, [{ value: "", line: 0, unset: true }]);
               frame.exportedVars.delete(name);
               frame.arrays.delete(name);
+              clearArrayMirrorInVars(frame.vars, name);
             }
           }
         }
@@ -7140,10 +7245,15 @@ function inspectShellText(
             if (merged.length > MAX_VAR_VALUES) {
               arrayTruncated = true;
             }
-            frame.arrays.set(name, {
+            const nextArrayEntry = {
               variants: merged.slice(0, MAX_VAR_VALUES),
               truncated: arrayTruncated,
-            });
+            };
+            if (!(conditional || frame.branches.length > 0)) {
+              frame.vars.delete(name);
+            }
+            frame.arrays.set(name, nextArrayEntry);
+            syncArrayMirrorToVars(frame.vars, name, nextArrayEntry, lineNumber);
           } else {
             const merged =
               conditional || frame.branches.length > 0
@@ -7152,10 +7262,15 @@ function inspectShellText(
             if (merged.length > MAX_VAR_VALUES) {
               arrayTruncated = true;
             }
-            frame.arrays.set(name, {
+            const nextArrayEntry = {
               variants: merged.slice(0, MAX_VAR_VALUES),
               truncated: arrayTruncated,
-            });
+            };
+            if (!(conditional || frame.branches.length > 0)) {
+              frame.vars.delete(name);
+            }
+            frame.arrays.set(name, nextArrayEntry);
+            syncArrayMirrorToVars(frame.vars, name, nextArrayEntry, lineNumber);
           }
         }
         continue;
@@ -7240,6 +7355,7 @@ function inspectShellText(
               } else {
                 frame.vars.set(match.groups.name, nextEntries);
                 frame.arrays.delete(match.groups.name);
+                clearArrayMirrorInVars(frame.vars, match.groups.name);
               }
             } else {
               if (declIsLocal) {
@@ -7247,6 +7363,7 @@ function inspectShellText(
                 if (!conditional) {
                   frame.vars.set(token, [{ value: "", line: 0, unset: true }]);
                   frame.arrays.delete(token);
+                  clearArrayMirrorInVars(frame.vars, token);
                 }
               }
               if (marksExported) {
@@ -7288,6 +7405,7 @@ function inspectShellText(
             } else {
               frame.vars.set(match.groups.name, nextEntries);
               frame.arrays.delete(match.groups.name);
+              clearArrayMirrorInVars(frame.vars, match.groups.name);
             }
           }
         }
@@ -7494,8 +7612,10 @@ function inspectShellText(
               }
               if (saved.hadArray) {
                 frame.arrays.set(vName, saved.arrayEntry);
+                syncArrayMirrorToVars(frame.vars, vName, saved.arrayEntry, lineNumber);
               } else {
                 frame.arrays.delete(vName);
+                clearArrayMirrorInVars(frame.vars, vName);
               }
               if (saved.wasExported) {
                 frame.exportedVars.add(vName);
@@ -7520,17 +7640,133 @@ function inspectShellText(
                   const preArr = beforeArrays.get(aKey) ?? { variants: [[]], truncated: false };
                   const postArr = frame.arrays.get(aKey) ?? { variants: [[]], truncated: false };
                   const combined = [...preArr.variants, ...postArr.variants];
-                  frame.arrays.set(aKey, {
+                  const mergedArr = {
                     variants: combined.slice(0, MAX_VAR_VALUES),
                     truncated:
                       preArr.truncated || postArr.truncated || combined.length > MAX_VAR_VALUES,
-                  });
+                  };
+                  frame.arrays.set(aKey, mergedArr);
+                  syncArrayMirrorToVars(frame.vars, aKey, mergedArr, lineNumber);
                 }
               }
             }
           }
         }
         continue;
+      }
+
+      // Bash `printf -v VAR format [args...]` assigns formatted text directly
+      // into shell variable `VAR` (rather than stdout).
+      if (shellMode === "posix" && path.basename(cli) === "printf") {
+        let printfTargetVar = null;
+        let printfFormatIdx = -1;
+        const printfArgIdxs = [];
+        let afterDoubleDash = false;
+        for (let pIdx = cursor + 1; pIdx < tokens.length; pIdx += 1) {
+          const redirSkip = consumeShellRedirection(tokens, pIdx, []);
+          if (redirSkip > 0) {
+            pIdx += redirSkip - 1;
+            continue;
+          }
+          const pTok = tokens[pIdx];
+          if (!afterDoubleDash && printfFormatIdx === -1) {
+            if (pTok === "--") {
+              afterDoubleDash = true;
+              continue;
+            }
+            if (pTok === "-v") {
+              if (tokens[pIdx + 1] !== undefined) {
+                printfTargetVar = tokens[pIdx + 1];
+              }
+              pIdx += 1;
+              continue;
+            }
+            if (pTok.startsWith("-v") && pTok.length > 2) {
+              printfTargetVar = pTok.slice(2);
+              continue;
+            }
+          }
+          if (printfFormatIdx === -1) {
+            printfFormatIdx = pIdx;
+          } else {
+            printfArgIdxs.push(pIdx);
+          }
+        }
+        if (
+          printfTargetVar &&
+          /^[A-Za-z_][A-Za-z0-9_]*$/u.test(printfTargetVar) &&
+          printfFormatIdx !== -1
+        ) {
+          const expandPrintfToken = (tokIdx) => {
+            const rawTok = tokens[tokIdx];
+            if (peeledSingleQuoted[tokIdx]) {
+              return { candidates: [{ text: rawTok, line: lineNumber }], truncated: false };
+            }
+            return resolveImageTokenCandidates(rawTok, stepEnv, frame.vars, lineNumber, shellMode);
+          };
+          const fmtExpanded = expandPrintfToken(printfFormatIdx);
+          const argsExpanded = printfArgIdxs.map((idx) => expandPrintfToken(idx));
+          let printfTruncated = Boolean(
+            fmtExpanded.truncated || argsExpanded.some((a) => a.truncated),
+          );
+          let argCombos = [[]];
+          for (const argExp of argsExpanded) {
+            const nextCombos = [];
+            for (const combo of argCombos) {
+              for (const cand of argExp.candidates) {
+                if (nextCombos.length >= MAX_VAR_VALUES) {
+                  printfTruncated = true;
+                  break;
+                }
+                nextCombos.push([...combo, cand.text]);
+              }
+              if (printfTruncated && nextCombos.length >= MAX_VAR_VALUES) {
+                break;
+              }
+            }
+            argCombos = nextCombos;
+          }
+          const formattedEntries = [];
+          const seenFormatted = new Set();
+          let hadUnsupportedSpec = false;
+          for (const fmtCand of fmtExpanded.candidates) {
+            for (const combo of argCombos) {
+              const linesOut = formatPrintfLines(fmtCand.text, combo);
+              if (linesOut === null) {
+                hadUnsupportedSpec = true;
+                continue;
+              }
+              const joined = linesOut.join("\n");
+              if (!seenFormatted.has(joined)) {
+                if (formattedEntries.length >= MAX_VAR_VALUES) {
+                  printfTruncated = true;
+                  break;
+                }
+                seenFormatted.add(joined);
+                formattedEntries.push({ value: joined, line: lineNumber });
+              }
+            }
+          }
+          if (hadUnsupportedSpec) {
+            formattedEntries.push({ value: "${{ dynamic }}", line: lineNumber });
+          }
+          if (printfTruncated) {
+            formattedEntries.push({ value: "", line: lineNumber, truncated: true });
+          }
+          if (formattedEntries.length > 0) {
+            if (conditional) {
+              const existing = frame.vars.has(printfTargetVar)
+                ? frame.vars.get(printfTargetVar)
+                : [{ value: "", line: 0, unset: true }];
+              frame.vars.set(printfTargetVar, mergeVarEntries(existing, formattedEntries));
+            } else {
+              frame.vars.set(printfTargetVar, formattedEntries);
+              frame.arrays.delete(printfTargetVar);
+              clearArrayMirrorInVars(frame.vars, printfTargetVar);
+            }
+          }
+          continue;
+        }
       }
 
       const githubEnvLines = extractRedirectedWriteLines(tokens, cursor, isGithubEnvTarget);
@@ -9035,16 +9271,11 @@ function inspectShellText(
               }
               continue;
             }
-            if (tok === ">" || tok === ">>" || tok === ">&" || tok === "<") {
+            if (isRedirectionOperator(tok)) {
               next.expectingRedirTarget = true;
               continue;
             }
-            if (
-              /^\d+$/u.test(tok) &&
-              (slice[sIdx + 1]?.text === ">" ||
-                slice[sIdx + 1]?.text === ">>" ||
-                slice[sIdx + 1]?.text === ">&")
-            ) {
+            if (/^\d+$/u.test(tok) && isRedirectionOperator(slice[sIdx + 1]?.text)) {
               next.tokens.push(slice[sIdx + 1]);
               sIdx += 1;
               next.expectingRedirTarget = true;
@@ -9107,9 +9338,7 @@ function inspectShellText(
           Boolean(arrayExpMatch) ||
           (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]")));
         const fallbackLine = resolveFoldedLine(peeledTokenOffsets[index], token, lineNumber);
-        const isRawFdRedirPrefix =
-          /^\d+$/u.test(token) &&
-          (tokens[index + 1] === ">" || tokens[index + 1] === ">>" || tokens[index + 1] === ">&");
+        const isRawFdRedirPrefix = /^\d+$/u.test(token) && isRedirectionOperator(tokens[index + 1]);
         if (isRawFdRedirPrefix) {
           const nextLine = resolveFoldedLine(
             peeledTokenOffsets[index + 1],
@@ -9257,13 +9486,15 @@ function inspectShellText(
             if (allowMultipleImages) {
               for (let restIndex = index + 1; restIndex < argList.length; restIndex += 1) {
                 const restToken = argList[restIndex].text;
-                if (
-                  restToken === ">" ||
-                  restToken === ">>" ||
-                  restToken === ">&" ||
-                  restToken === "<"
-                ) {
+                if (isRedirectionOperator(restToken)) {
                   restIndex += 1;
+                  continue;
+                }
+                if (
+                  /^\d+$/u.test(restToken) &&
+                  isRedirectionOperator(argList[restIndex + 1]?.text)
+                ) {
+                  restIndex += 2;
                   continue;
                 }
                 pushImageEntry(argList[restIndex]);
@@ -9273,16 +9504,11 @@ function inspectShellText(
             }
             break;
           }
-          if (token === ">" || token === ">>" || token === ">&" || token === "<") {
+          if (isRedirectionOperator(token)) {
             index += 1;
             continue;
           }
-          if (
-            /^\d+$/u.test(token) &&
-            (argList[index + 1]?.text === ">" ||
-              argList[index + 1]?.text === ">>" ||
-              argList[index + 1]?.text === ">&")
-          ) {
+          if (/^\d+$/u.test(token) && isRedirectionOperator(argList[index + 1]?.text)) {
             index += 2;
             continue;
           }

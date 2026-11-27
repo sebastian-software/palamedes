@@ -4567,6 +4567,43 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:4: alpine:3.20 is not pinned to a sha256 digest"]);
+    // Bash arrays resolve in `for ... in "${images[@]}"` loops and indexed
+    // `${images[0]}` reads, `printf -v` updates tracked shell variables, and
+    // shell redirections like `<&0` / `3<> /tmp/fd` before the image operand
+    // are skipped consistently.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r61:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: |",
+          `          loop_images=(node:24@${digest} alpine:3.20)`,
+          '          for img in "${loop_images[@]}"; do',
+          '            docker pull "$img"',
+          "          done",
+          `          indexed_images=(node:24@${digest} debian:12)`,
+          '          docker pull "${indexed_images[0]}"',
+          '          docker pull "${indexed_images[1]}"',
+          "          image=busybox:1.36",
+          `          digest=${digest}`,
+          '          printf -v image "%s@%s" "$image" "$digest"',
+          '          docker pull "$image"',
+          '          printf -v unpinned_img "%s:%s" ubuntu 24.04',
+          '          docker pull "$unpinned_img"',
+          `          docker run --rm <&0 3<> /tmp/fd node:24@${digest} echo ok`,
+          "          docker run --rm <&0 nginx:1.27 echo bad",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:7: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:11: debian:12 is not pinned to a sha256 digest",
+      "<memory>:18: ubuntu:24.04 is not pinned to a sha256 digest",
+      "<memory>:21: nginx:1.27 is not pinned to a sha256 digest",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
