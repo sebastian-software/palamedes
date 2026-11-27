@@ -122,9 +122,7 @@ pub(crate) fn exceeds_icu_nesting_depth(pattern: &str, max_depth: usize) -> bool
                     index += 2;
                     continue;
                 }
-                if matches!(bytes.get(index + 1), Some(b'{' | b'}')) {
-                    in_quote = true;
-                }
+                in_quote = true;
                 index += 1;
             }
             b'{' => {
@@ -170,19 +168,18 @@ fn scan_icu_tag(bytes: &[u8], start: usize) -> Option<(usize, i8)> {
     let closing = bytes.get(cursor) == Some(&b'/');
     if closing {
         cursor += 1;
+    } else if !bytes.get(cursor).is_some_and(u8::is_ascii_alphanumeric) {
+        return None;
     }
     let name_start = cursor;
     while bytes
         .get(cursor)
-        .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
     {
         cursor += 1;
     }
     if cursor == name_start {
         return None;
-    }
-    while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
-        cursor += 1;
     }
     if !closing && bytes.get(cursor) == Some(&b'/') && bytes.get(cursor + 1) == Some(&b'>') {
         return Some((cursor + 2, 0));
@@ -484,5 +481,15 @@ mod tests {
 
         let huge_tags = format!("{}leaf{}", "<a>".repeat(10_000), "</a>".repeat(10_000));
         assert_eq!(compile(&huge_tags), Some(RuntimeCompiledMessage::Lazy));
+
+        let huge_dotted_tags = format!(
+            "{}leaf{}",
+            "<ui.label>".repeat(10_000),
+            "</ui.label>".repeat(10_000)
+        );
+        assert_eq!(
+            compile(&huge_dotted_tags),
+            Some(RuntimeCompiledMessage::Lazy)
+        );
     }
 }

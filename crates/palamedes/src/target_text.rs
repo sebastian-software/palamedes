@@ -5,8 +5,7 @@ use std::collections::BTreeMap;
 use ferrocat_icu::IcuNode;
 use serde::{Deserialize, Serialize};
 
-use crate::icu_text::parse_runtime_icu;
-use crate::runtime_message::{MAX_NESTING_DEPTH, exceeds_icu_nesting_depth};
+use crate::icu_text::parse_runtime_icu_bounded;
 use crate::{CatalogDiagnosticSeverity, TranslationCandidateId, TranslationValue};
 
 /// Optional target-text review checks. Both checks default to disabled.
@@ -134,14 +133,10 @@ pub(crate) fn check_target_text(
     if !checks.boundary_whitespace && !checks.metadata_leakage {
         return Vec::new();
     }
-    if exceeds_icu_nesting_depth(source, MAX_NESTING_DEPTH)
-        || exceeds_icu_nesting_depth(target, MAX_NESTING_DEPTH)
-    {
-        return Vec::new();
-    }
-    let (Ok(source_message), Ok(target_message)) =
-        (parse_runtime_icu(source), parse_runtime_icu(target))
-    else {
+    let (Some(source_message), Some(target_message)) = (
+        parse_runtime_icu_bounded(source),
+        parse_runtime_icu_bounded(target),
+    ) else {
         return Vec::new();
     };
     let mut warnings = Vec::new();
@@ -283,7 +278,7 @@ fn literal_markers(value: &str, nodes: &[IcuNode]) -> Vec<(String, TargetTextSpa
             end_probe,
             &value[end..]
         );
-        let Ok(parsed_message) = parse_runtime_icu(&probed) else {
+        let Some(parsed_message) = parse_runtime_icu_bounded(&probed) else {
             continue;
         };
         let Some(marker) = probed_marker(&parsed_message.nodes, &start_probe, &end_probe) else {
@@ -491,5 +486,12 @@ mod tests {
             "}}".repeat(10_000)
         );
         assert!(check_target_text(&huge_choices, &huge_choices, CHECKS).is_empty());
+
+        let huge_dotted_tags = format!(
+            "{}leaf{}",
+            "<ui.label>".repeat(10_000),
+            "</ui.label>".repeat(10_000)
+        );
+        assert!(check_target_text(&huge_dotted_tags, &huge_dotted_tags, CHECKS).is_empty());
     }
 }

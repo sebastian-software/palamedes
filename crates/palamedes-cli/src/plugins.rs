@@ -15,7 +15,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
 #[cfg(unix)]
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Once};
 #[cfg(unix)]
@@ -1003,7 +1003,11 @@ fn invoke_binary(
     loop {
         #[cfg(unix)]
         if signal_guard.was_escalated() {
-            failure = Some(terminated_failure(resolved));
+            failure = Some(terminated_failure(
+                resolved,
+                signal_guard.received_signal().unwrap_or(libc::SIGTERM),
+                true,
+            ));
             break;
         }
         let message = match policy.deadline {
@@ -1021,7 +1025,11 @@ fn invoke_binary(
                     Err(mpsc::RecvTimeoutError::Timeout) => {
                         #[cfg(unix)]
                         if signal_guard.was_escalated() {
-                            failure = Some(terminated_failure(resolved));
+                            failure = Some(terminated_failure(
+                                resolved,
+                                signal_guard.received_signal().unwrap_or(libc::SIGTERM),
+                                true,
+                            ));
                             break;
                         }
                         if started.elapsed() >= deadline {
@@ -1132,12 +1140,16 @@ fn invoke_binary(
         }
     }
     #[cfg(unix)]
-    if signal_guard.was_signaled()
+    if let Some(signal) = signal_guard.received_signal()
         && failure
             .as_ref()
             .is_none_or(|err| err.code != "PLUGIN_BINARY_TERMINATED")
     {
-        failure = Some(terminated_failure(resolved));
+        failure = Some(terminated_failure(
+            resolved,
+            signal,
+            signal_guard.was_escalated(),
+        ));
     }
     drop(stdout_rx);
     if let Some(failure) = failure {
@@ -1161,15 +1173,17 @@ fn invoke_binary(
     ) {
         Ok(Ok(())) => {}
         Ok(Err(_)) => {
+            terminate_plugin_tree(&mut child);
             join_or_detach(writer, &writer_done_rx, PLUGIN_IO_SHUTDOWN_GRACE);
             return Err(reader_failure(resolved));
         }
         Err(error) => {
+            terminate_plugin_tree(&mut child);
             join_or_detach(writer, &writer_done_rx, PLUGIN_IO_SHUTDOWN_GRACE);
             return Err(error);
         }
     }
-    match wait_for_io_thread(
+    let writer_result = match wait_for_io_thread(
         writer,
         &writer_done_rx,
         resolved,
@@ -1177,7 +1191,23 @@ fn invoke_binary(
         started,
         #[cfg(unix)]
         &signal_guard,
-    )? {
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            terminate_plugin_tree(&mut child);
+            return Err(error);
+        }
+    };
+    #[cfg(unix)]
+    if let Some(signal) = signal_guard.received_signal() {
+        terminate_plugin_tree(&mut child);
+        return Err(terminated_failure(
+            resolved,
+            signal,
+            signal_guard.was_escalated(),
+        ));
+    }
+    match writer_result {
         Ok(Ok(())) => {}
         Ok(Err(error)) => {
             return Err(PluginFailure::new(
@@ -4042,14 +4072,24 @@ fn reader_failure(resolved: &ResolvedPlugin) -> PluginFailure {
 }
 
 #[cfg(unix)]
-fn terminated_failure(resolved: &ResolvedPlugin) -> PluginFailure {
-    PluginFailure::new(
-        "PLUGIN_BINARY_TERMINATED",
+fn terminated_failure(resolved: &ResolvedPlugin, signal: i32, escalated: bool) -> PluginFailure {
+    let exit_code = match signal {
+        libc::SIGINT => 130,
+        libc::SIGTERM => 143,
+        other => u8::try_from(128 + other).unwrap_or(1),
+    };
+    let message = if escalated {
         format!(
             "Binary plugin \"{}\" was forcibly terminated after ignoring an interrupt signal.",
             resolved.specifier
-        ),
-    )
+        )
+    } else {
+        format!(
+            "Binary plugin \"{}\" was terminated by signal {signal}.",
+            resolved.specifier
+        )
+    };
+    PluginFailure::with_exit_code("PLUGIN_BINARY_TERMINATED", message, exit_code)
 }
 
 fn join_or_detach<T>(handle: thread::JoinHandle<T>, done_rx: &mpsc::Receiver<()>, grace: Duration) {
@@ -4073,9 +4113,13 @@ fn wait_for_io_thread<T>(
 ) -> Result<thread::Result<T>, PluginFailure> {
     loop {
         #[cfg(unix)]
-        if signal_guard.was_escalated() {
+        if let Some(signal) = signal_guard.received_signal() {
             drop(handle);
-            return Err(terminated_failure(resolved));
+            return Err(terminated_failure(
+                resolved,
+                signal,
+                signal_guard.was_escalated(),
+            ));
         }
         let wait = match policy.deadline {
             Some(deadline) => {
@@ -4259,7 +4303,7 @@ fn parse_event_line(line: &str, resolved: &ResolvedPlugin) -> Result<PluginEvent
 struct ActivePluginTarget {
     group: i32,
     generation: u64,
-    signaled: Arc<AtomicBool>,
+    received_signal: Arc<AtomicI32>,
     escalated: Arc<AtomicBool>,
 }
 
@@ -4291,7 +4335,11 @@ fn forward_signal_to_active_plugin(signal: i32, grace: Duration) -> ForwardedSig
     };
     let group = target.group;
     let generation = target.generation;
-    if target.signaled.swap(true, Ordering::SeqCst) {
+    if target
+        .received_signal
+        .compare_exchange(0, signal, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         target.escalated.store(true, Ordering::SeqCst);
         drop(guard);
         if group > 0 {
@@ -4341,7 +4389,7 @@ fn forward_signal_to_active_plugin(signal: i32, grace: Duration) -> ForwardedSig
 #[cfg(unix)]
 struct ChildSignalGuard {
     generation: u64,
-    signaled: Arc<AtomicBool>,
+    received_signal: Arc<AtomicI32>,
     escalated: Arc<AtomicBool>,
 }
 
@@ -4374,7 +4422,7 @@ impl ChildSignalGuard {
 
     fn arm_group(group: i32) -> Self {
         let generation = NEXT_PLUGIN_GENERATION.fetch_add(1, Ordering::SeqCst);
-        let signaled = Arc::new(AtomicBool::new(false));
+        let received_signal = Arc::new(AtomicI32::new(0));
         let escalated = Arc::new(AtomicBool::new(false));
         let (lock, condvar) = active_plugin_signal_state();
         let mut guard = lock
@@ -4383,19 +4431,20 @@ impl ChildSignalGuard {
         *guard = (group > 0).then(|| ActivePluginTarget {
             group,
             generation,
-            signaled: Arc::clone(&signaled),
+            received_signal: Arc::clone(&received_signal),
             escalated: Arc::clone(&escalated),
         });
         condvar.notify_all();
         Self {
             generation,
-            signaled,
+            received_signal,
             escalated,
         }
     }
 
-    fn was_signaled(&self) -> bool {
-        self.signaled.load(Ordering::SeqCst)
+    fn received_signal(&self) -> Option<i32> {
+        let signal = self.received_signal.load(Ordering::SeqCst);
+        (signal > 0).then_some(signal)
     }
 
     fn was_escalated(&self) -> bool {
@@ -7720,9 +7769,162 @@ catalogs:
         signaler.join().expect("signaler thread");
 
         assert_eq!(error.code, "PLUGIN_BINARY_TERMINATED");
+        assert_eq!(error.exit_code, 143);
         assert!(
             !second_ran.exists(),
             "subsequent plugin must not be described after signal termination"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writer_timeout_terminates_same_group_descendants_and_signals_preserve_exit_codes() {
+        use std::thread;
+
+        use super::{forward_signal_to_active_plugin, invoke_binary};
+
+        let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        // 1. Writer timeout kills surviving descendants in the same process group.
+        let root = temp_dir("writer-timeout-kills-group");
+        let pid_file = root.join("child.pid");
+        let script = root.join("plugin");
+        let body = format!(
+            "#!/bin/sh\n\
+             exec 3<&0\n\
+             /usr/bin/perl -e 'close STDOUT; open my $f, \">\", $ARGV[0]; print $f $$; close $f; sleep 15;' '{}' <&3 &\n\
+             while [ ! -s '{}' ]; do sleep 0.01; done\n\
+             printf '%s\\n' '{{\"event\":\"result\",\"exitCode\":0}}'\n\
+             exit 0\n",
+            pid_file.display(),
+            pid_file.display()
+        );
+        write_executable_fixture(&script, &body);
+        let resolved = ResolvedPlugin {
+            specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
+            binary_path: script,
+            pinned_binary: None,
+        };
+        let large_payload = "x".repeat(512 * 1024);
+        let error = invoke_binary(
+            &resolved,
+            &json!({
+                "palamedesBinaryPluginProtocol": 1,
+                "kind": "run",
+                "payload": large_payload,
+            }),
+            &root,
+            Path::new("pmds"),
+            None,
+            InvocationPolicy::new(Some(Duration::from_millis(200)), "run"),
+        )
+        .expect_err("writer timeout must fail");
+        assert_eq!(error.code, "PLUGIN_BINARY_TIMEOUT");
+
+        let child_pid: i32 = fs::read_to_string(&pid_file)
+            .expect("child pid recorded")
+            .trim()
+            .parse()
+            .expect("valid pid");
+        let kill_deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < kill_deadline {
+            // SAFETY: signal 0 only checks whether the fixture PID still exists.
+            if unsafe { libc::kill(child_pid, 0) } != 0 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        // SAFETY: signal 0 only checks whether the fixture PID still exists.
+        assert_ne!(
+            unsafe { libc::kill(child_pid, 0) },
+            0,
+            "same-group descendant must be killed on writer timeout"
+        );
+
+        // 2. SIGINT during normal run preserves exit code 130.
+        let sigint_ready = root.join("sigint.ready");
+        let sigint_script = root.join("sigint-plugin");
+        write_executable_fixture(
+            &sigint_script,
+            format!(
+                "#!/bin/sh\nread _request\n: > '{}'\nwhile :; do sleep 1; done\n",
+                sigint_ready.display()
+            ),
+        );
+        let sigint_resolved = ResolvedPlugin {
+            specifier: "./sigint-plugin".to_owned(),
+            invocation_path: sigint_script.clone(),
+            binary_path: sigint_script,
+            pinned_binary: None,
+        };
+        let signaler = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while !sigint_ready.exists() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(10));
+            }
+            let _ = forward_signal_to_active_plugin(libc::SIGINT, Duration::from_secs(10));
+        });
+        let sigint_error = invoke_binary(
+            &sigint_resolved,
+            &json!({ "palamedesBinaryPluginProtocol": 1, "kind": "run" }),
+            &root,
+            Path::new("pmds"),
+            None,
+            InvocationPolicy::run(None),
+        )
+        .expect_err("SIGINT must fail plugin invocation");
+        signaler.join().expect("signaler");
+        assert_eq!(sigint_error.code, "PLUGIN_BINARY_TERMINATED");
+        assert_eq!(sigint_error.exit_code, 130);
+
+        // 3. SIGTERM while waiting on the request writer preserves exit code 143.
+        let writer_ready = root.join("writer-sig.ready");
+        let writer_script = root.join("writer-sig-plugin");
+        write_executable_fixture(
+            &writer_script,
+            format!(
+                "#!/bin/sh\n\
+                 exec 3<&0\n\
+                 /usr/bin/perl -e 'close STDOUT; open my $f, \">\", $ARGV[0]; print $f $$; close $f; sleep 15;' '{}' <&3 &\n\
+                 while [ ! -s '{}' ]; do sleep 0.01; done\n\
+                 printf '%s\\n' '{{\"event\":\"result\",\"exitCode\":0}}'\n\
+                 exit 0\n",
+                writer_ready.display(),
+                writer_ready.display()
+            ),
+        );
+        let writer_resolved = ResolvedPlugin {
+            specifier: "./writer-sig-plugin".to_owned(),
+            invocation_path: writer_script.clone(),
+            binary_path: writer_script,
+            pinned_binary: None,
+        };
+        let signaler = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while !writer_ready.exists() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(10));
+            }
+            thread::sleep(Duration::from_millis(50));
+            let _ = forward_signal_to_active_plugin(libc::SIGTERM, Duration::from_secs(10));
+        });
+        let sigterm_error = invoke_binary(
+            &writer_resolved,
+            &json!({
+                "palamedesBinaryPluginProtocol": 1,
+                "kind": "run",
+                "payload": large_payload,
+            }),
+            &root,
+            Path::new("pmds"),
+            None,
+            InvocationPolicy::run(None),
+        )
+        .expect_err("SIGTERM while waiting on writer must fail");
+        signaler.join().expect("signaler");
+        assert_eq!(sigterm_error.code, "PLUGIN_BINARY_TERMINATED");
+        assert_eq!(sigterm_error.exit_code, 143);
     }
 }
