@@ -430,6 +430,7 @@ const DOCKER_IMAGETOOLS_CREATE_VALUE_FLAGS = new Set([
   "--tag",
 ]);
 const DOCKER_MANIFEST_CREATE_VALUE_FLAGS = new Set();
+const PODMAN_MANIFEST_CREATE_VALUE_FLAGS = new Set(["--annotation"]);
 const PODMAN_MANIFEST_ADD_VALUE_FLAGS = new Set([
   "--annotation",
   "--arch",
@@ -447,6 +448,58 @@ const PODMAN_MANIFEST_ADD_VALUE_FLAGS = new Set([
   "--os-features",
   "--os-version",
   "--variant",
+]);
+const PODMAN_POD_CREATE_VALUE_FLAGS = new Set([
+  "--add-host",
+  "--blkio-weight",
+  "--blkio-weight-device",
+  "--cgroup-parent",
+  "--cpu-shares",
+  "--cpus",
+  "--cpuset-cpus",
+  "--cpuset-mems",
+  "--device",
+  "--device-read-bps",
+  "--dns",
+  "--dns-option",
+  "--dns-search",
+  "--gidmap",
+  "--gpus",
+  "--hostname",
+  "--infra-command",
+  "--infra-conmon-pidfile",
+  "--infra-image",
+  "--infra-name",
+  "--ip",
+  "--ip6",
+  "-l",
+  "--label",
+  "--label-file",
+  "--mac-address",
+  "--memory",
+  "--memory-swap",
+  "--name",
+  "--net",
+  "--network",
+  "--network-alias",
+  "--pid",
+  "--pod-id-file",
+  "-p",
+  "--publish",
+  "--restart",
+  "--security-opt",
+  "--share",
+  "--shm-size",
+  "--shm-size-systemd",
+  "--subgidname",
+  "--subuidname",
+  "--sysctl",
+  "--uidmap",
+  "--userns",
+  "--uts",
+  "-v",
+  "--volume",
+  "--volumes-from",
 ]);
 const DOCKER_SERVICE_UPDATE_VALUE_FLAGS = new Set([
   ...DOCKER_SERVICE_CREATE_VALUE_FLAGS,
@@ -13255,6 +13308,12 @@ function inspectShellText(
           subcommand = "run";
           allowScratchOperand = true;
           argIndex += 1;
+        } else if (
+          subcommand === "manifest" &&
+          (tokens[argIndex + 1] === "create" || tokens[argIndex + 1] === "add")
+        ) {
+          subcommand = tokens[argIndex + 1] === "add" ? "manifest-add" : "manifest-create";
+          argIndex += 2;
         } else {
           continue;
         }
@@ -13295,6 +13354,13 @@ function inspectShellText(
         }
         continue;
       } else if (
+        normalizedCli === "podman" &&
+        subcommand === "pod" &&
+        tokens[argIndex + 1] === "create"
+      ) {
+        subcommand = "pod-create";
+        argIndex += 2;
+      } else if (
         normalizedCli === "docker" &&
         subcommand === "service" &&
         (tokens[argIndex + 1] === "create" || tokens[argIndex + 1] === "update")
@@ -13309,12 +13375,18 @@ function inspectShellText(
         subcommand = tokens[argIndex + 1] === "install" ? "plugin-install" : "plugin-upgrade";
         argIndex += 2;
       } else if (
-        (normalizedCli === "docker" &&
-          subcommand === "manifest" &&
-          tokens[argIndex + 1] === "create") ||
-        (normalizedCli === "podman" && subcommand === "manifest" && tokens[argIndex + 1] === "add")
+        normalizedCli === "docker" &&
+        subcommand === "manifest" &&
+        tokens[argIndex + 1] === "create"
       ) {
         subcommand = "manifest-create";
+        argIndex += 2;
+      } else if (
+        normalizedCli === "podman" &&
+        subcommand === "manifest" &&
+        (tokens[argIndex + 1] === "create" || tokens[argIndex + 1] === "add")
+      ) {
+        subcommand = tokens[argIndex + 1] === "add" ? "manifest-add" : "manifest-create";
         argIndex += 2;
       } else if (normalizedCli === "docker" && subcommand === "buildx") {
         let bxIdx = argIndex + 1;
@@ -13338,13 +13410,21 @@ function inspectShellText(
         normalizedCli === "buildah"
           ? subcommand === "pull"
             ? BUILDAH_PULL_VALUE_FLAGS
-            : BUILDAH_FROM_VALUE_FLAGS
+            : subcommand === "manifest-add"
+              ? PODMAN_MANIFEST_ADD_VALUE_FLAGS
+              : subcommand === "manifest-create"
+                ? PODMAN_MANIFEST_CREATE_VALUE_FLAGS
+                : BUILDAH_FROM_VALUE_FLAGS
           : normalizedCli === "podman"
             ? subcommand === "pull"
               ? PODMAN_PULL_VALUE_FLAGS
-              : subcommand === "manifest-create"
+              : subcommand === "manifest-add"
                 ? PODMAN_MANIFEST_ADD_VALUE_FLAGS
-                : PODMAN_RUN_VALUE_FLAGS
+                : subcommand === "manifest-create"
+                  ? PODMAN_MANIFEST_CREATE_VALUE_FLAGS
+                  : subcommand === "pod-create"
+                    ? PODMAN_POD_CREATE_VALUE_FLAGS
+                    : PODMAN_RUN_VALUE_FLAGS
             : subcommand === "pull"
               ? DOCKER_PULL_VALUE_FLAGS
               : subcommand === "service-create"
@@ -13363,8 +13443,9 @@ function inspectShellText(
       const allowMultipleImages =
         (normalizedCli === "podman" && subcommand === "pull") ||
         subcommand === "imagetools-create" ||
-        subcommand === "manifest-create";
-      const skipFirstPositional = subcommand === "manifest-create";
+        subcommand === "manifest-create" ||
+        subcommand === "manifest-add";
+      const skipFirstPositional = subcommand === "manifest-create" || subcommand === "manifest-add";
       const seenProblems = new Set();
 
       // Expand statically known shell option variables (e.g. `opts="--rm"` or
@@ -13376,7 +13457,10 @@ function inspectShellText(
       // its image operand has been identified so container application
       // arguments cannot trigger the expansion cap.
       const stopAfterFirstImage =
-        !allowMultipleImages && subcommand !== "service-update" && subcommand !== "plugin-upgrade";
+        !allowMultipleImages &&
+        subcommand !== "service-update" &&
+        subcommand !== "plugin-upgrade" &&
+        subcommand !== "pod-create";
       const advanceBranchWithSlice = (branch, slice) => {
         const next = {
           tokens: [...branch.tokens],
@@ -13652,16 +13736,18 @@ function inspectShellText(
       for (const argList of argTokenVariants) {
         let usesPodmanRootfs = false;
         let usesPodmanArtifact = false;
+        let podInfraEnabled = true;
         let positionalCount = 0;
         const upgradePositionals = [];
         const podmanManifestPositionals = [];
-        const isPodmanManifestAdd = normalizedCli === "podman" && subcommand === "manifest-create";
+        const podInfraImages = [];
+        const isArtifactCapableManifestAdd = subcommand === "manifest-add";
         const recordPositional = (posEntry) => {
           if (subcommand === "plugin-upgrade") {
             upgradePositionals.push(posEntry);
             return false;
           }
-          if (isPodmanManifestAdd) {
+          if (isArtifactCapableManifestAdd) {
             podmanManifestPositionals.push(posEntry);
             return false;
           }
@@ -13677,7 +13763,11 @@ function inspectShellText(
           const entry = argList[index];
           const token = entry.text;
           if (token === "--") {
-            if (usesPodmanRootfs || subcommand === "service-update") {
+            if (
+              usesPodmanRootfs ||
+              subcommand === "service-update" ||
+              subcommand === "pod-create"
+            ) {
               break;
             }
             for (let restIndex = index + 1; restIndex < argList.length; restIndex += 1) {
@@ -13705,6 +13795,35 @@ function inspectShellText(
             continue;
           }
           if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
+            continue;
+          }
+          if (subcommand === "pod-create") {
+            if (token === "--infra" || token.toLowerCase() === "--infra=true") {
+              podInfraEnabled = true;
+              continue;
+            }
+            if (token.toLowerCase() === "--infra=false") {
+              podInfraEnabled = false;
+              continue;
+            }
+            if (token === "--infra-image") {
+              if (argList[index + 1] !== undefined) {
+                podInfraImages.push(argList[index + 1]);
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--infra-image=")) {
+              podInfraImages.push({
+                text: token.slice("--infra-image=".length),
+                line: entry.line,
+                preExpanded: entry.preExpanded,
+              });
+              continue;
+            }
+            if (token.startsWith("-") && flagConsumesNextArg(token, valueFlags)) {
+              index += 1;
+            }
             continue;
           }
           if (subcommand === "service-update") {
@@ -13745,7 +13864,7 @@ function inspectShellText(
             }
             continue;
           }
-          if (isPodmanManifestAdd) {
+          if (isArtifactCapableManifestAdd) {
             if (token === "--artifact" || token.toLowerCase() === "--artifact=true") {
               usesPodmanArtifact = true;
               continue;
@@ -13803,9 +13922,18 @@ function inspectShellText(
             upgradePositionals.length >= 2 ? upgradePositionals[1] : upgradePositionals[0],
           );
         }
-        if (isPodmanManifestAdd && !usesPodmanArtifact && podmanManifestPositionals.length > 1) {
+        if (
+          isArtifactCapableManifestAdd &&
+          !usesPodmanArtifact &&
+          podmanManifestPositionals.length > 1
+        ) {
           for (const manifestInput of podmanManifestPositionals.slice(1)) {
             pushImageEntry(manifestInput);
+          }
+        }
+        if (subcommand === "pod-create" && podInfraEnabled) {
+          for (const infraImage of podInfraImages) {
+            pushImageEntry(infraImage);
           }
         }
       }

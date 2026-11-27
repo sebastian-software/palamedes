@@ -1122,9 +1122,9 @@ describe("workflow contracts", () => {
     expect(report.text).toContain("scripts/open-or-refresh-issue.mjs");
     expect(report.text).toContain("const failures = [];");
     expect(report.text).toContain("if (failures.length > 0)");
-    expect(report.text).toContain(
-      '(contractOutcome === "skipped" || contractOutcome === "success")',
-    );
+    expect(report.text).toContain('contractOutcome === ""');
+    expect(report.text).toContain('contractOutcome === "skipped"');
+    expect(report.text).toContain('contractOutcome === "success"');
     expect(report.text).toContain("Unexpected upstream state");
   });
 
@@ -5516,6 +5516,13 @@ describe("workflow contracts", () => {
           `          docker manifest create ghcr.io/org/app:v3 ghcr.io/org/app@${digest} ghcr.io/org/app:amd64`,
           "          podman manifest add --artifact ghcr.io/org/app:v3 sbom.json",
           "          podman manifest add ghcr.io/org/app:v3 ghcr.io/org/app:arm64",
+          `          podman manifest create ghcr.io/org/app:v4 ghcr.io/org/app@${digest} ghcr.io/org/app:s390x`,
+          `          buildah manifest create ghcr.io/org/app:v5 ghcr.io/org/app@${digest} ghcr.io/org/app:ppc64le`,
+          "          buildah manifest add --artifact ghcr.io/org/app:v5 sbom.json",
+          "          buildah manifest add ghcr.io/org/app:v5 ghcr.io/org/app:riscv64",
+          `          podman pod create --name ok --infra-image k8s.gcr.io/pause@${digest}`,
+          "          podman pod create --name noinfra --infra=false --infra-image k8s.gcr.io/pause:3.9",
+          "          podman pod create --name bad --infra-image k8s.gcr.io/pause:3.9",
           `          docker service create --memory-swap 1G --memory-swappiness 0 node:24@${digest}`,
           "          docker service create --memory-swap 1G --memory-swappiness 0 alpine:3.20",
           "",
@@ -5527,7 +5534,11 @@ describe("workflow contracts", () => {
       "<memory>:12: ghcr.io/org/app:arm64 is not pinned to a sha256 digest",
       "<memory>:13: ghcr.io/org/app:amd64 is not pinned to a sha256 digest",
       "<memory>:15: ghcr.io/org/app:arm64 is not pinned to a sha256 digest",
-      "<memory>:17: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:16: ghcr.io/org/app:s390x is not pinned to a sha256 digest",
+      "<memory>:17: ghcr.io/org/app:ppc64le is not pinned to a sha256 digest",
+      "<memory>:19: ghcr.io/org/app:riscv64 is not pinned to a sha256 digest",
+      "<memory>:22: k8s.gcr.io/pause:3.9 is not pinned to a sha256 digest",
+      "<memory>:24: alpine:3.20 is not pinned to a sha256 digest",
     ]);
   });
 

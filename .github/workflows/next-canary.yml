@@ -195,12 +195,14 @@ jobs:
 
               if (
                 jobResult === "failure" &&
-                (contractOutcome === "skipped" || contractOutcome === "success")
+                (contractOutcome === "" ||
+                  contractOutcome === "skipped" ||
+                  contractOutcome === "success")
               ) {
-                // Setup failed before the contract step ran, or a post-job action
-                // failed after the contract step succeeded; leave tracking issues
-                // unchanged so the upstream job failure stands without falsely
-                // failing issue reporting.
+                // Setup or runner failed before the contract step published an
+                // outcome, or a post-job action failed after the contract step
+                // succeeded; leave tracking issues unchanged so the upstream
+                // job failure stands without falsely failing issue reporting.
                 continue;
               }
 
