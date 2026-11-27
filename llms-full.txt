@@ -822,6 +822,14 @@ Use the verified examples as the source of truth for framework-specific wiring. 
 
 React Router Framework Mode uses `@palamedes/react-router` next to `@palamedes/vite-plugin`: create `createReactRouterI18n({ resolveLocale })` once in a server-only module, export `middleware = [i18n.middleware]` from `app/root.tsx`, and use `i18n.handleRequest` as the default export of `app/entry.server.tsx`. Loaders and actions need no wrapping. Locale selection stays application policy. React Router's RSC mode is not supported. See `/docs/api/react-router.md`.
 
+## Security and deployment hardening
+
+- **Host allowlisting:** Validate `Host` against an explicit allowlist of canonical application hosts before passing `requestHost` to `resolve()`, `canonicalUrl()`, `seoLinks()`, or `suggest()`. Only read `X-Forwarded-Host` / `X-Forwarded-Proto` behind a trusted reverse proxy that strips and replaces client-sent headers. Set `protocol: "https"` for production SEO URLs and pass a fixed canonical build host when prerendering `subdomain` or `tld` sites.
+- **Cookies:** `locales.serializeChoice()` emits `Path=/; Max-Age=31536000; SameSite=Lax` without `Secure` or `HttpOnly` for `document.cookie` and local HTTP compatibility. Append `; Secure` on HTTPS client writes, and set `SameSite=Lax; Secure` (plus `HttpOnly` when client scripts do not read it) on server-managed locale cookies.
+- **CSP nonces and `errorHtml`:** Always generate a fresh cryptographic CSP nonce per request on the server (e.g., `randomBytes(16).toString("base64")` stored in request-scoped context) and share it between the Palamedes adapter and the host framework renderer (`unstable_setNonce` in Waku, `event.nonce`/`HydrationScript` in Solid, `ssr.nonce` in TanStack Start, etc.). Never derive a CSP nonce from an arbitrary client-supplied header such as `x-csp-nonce`. Keep custom `errorHtml` static and trusted because delivery probes render it via `<template>.innerHTML`.
+- **Catalog and CLI plugin trust boundaries:** `.po` and `.fcl` catalogs compile to executable JavaScript modules, so review and audit translation commits like source code and serve precompiled `.mjs` catalogs from immutable build-controlled directories. `<Trans>` does not parse raw HTML from catalogs (unknown tags render only text children; plain strings are escaped by framework bindings, not safe for `dangerouslySetInnerHTML`). Rust `.pmd.json` catalogs are declarative and strictly validated (`#[serde(deny_unknown_fields)]`, version, locale, inventory, fingerprint), but still require trusted directories and allowlisted locale names to avoid path traversal. Configured `pmds` binary plugins (`plugins:` in `palamedes.yaml`) run as trusted local executables with the same permissions as `pmds` — the binary plugin protocol is a compatibility boundary, not a sandbox.
+- See `/docs/security.md` for the full checklist and `/SECURITY.md` for vulnerability reporting and GHSA/CVE/RUSTSEC disclosure scope.
+
 ## Migration from Lingui-shaped code
 
 When migrating Lingui-style code:
@@ -853,7 +861,9 @@ Read these first:
 - `/docs/first-working-translation.md`
 - `/docs/nextjs-first-run.md`
 - `/docs/platform-support.md`
+- `/docs/security.md`
 - `/docs/principles.md`
+- `/SECURITY.md`
 - `/examples/README.md`
 
 Architecture and positioning:

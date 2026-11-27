@@ -52,7 +52,7 @@ const DOC_GROUPS = [
     title: "Integrate and operate",
     description: "Connect a host, choose locale behavior, and keep day-to-day work predictable.",
     match:
-      /\/(locale-strategies|framework-example-notes|demo-deployments|shared-demo-rollout|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
+      /\/(locale-strategies|security|framework-example-notes|demo-deployments|shared-demo-rollout|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
   },
   {
     title: "Evaluate and migrate",
@@ -77,7 +77,7 @@ const DOC_INDEX_GROUPS = [
     title: "Guides",
     description: "Start a translation workflow, connect a host, and operate it day to day.",
     match:
-      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|agent-skill|locale-strategies|framework-example-notes|demo-deployments|shared-demo-rollout|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
+      /\/(first-working-translation|nextjs-first-run|platform-support|configuration|cli|catalog-formats|mdx|agent-skill|locale-strategies|security|framework-example-notes|demo-deployments|shared-demo-rollout|backend-servers|rust-applications|pseudo-localization|translation-candidate-patches|troubleshooting)/u,
   },
   {
     title: "References",
@@ -312,6 +312,7 @@ async function collectDocs() {
     ["mdx.md", 45],
     ["agent-skill.md", 47],
     ["locale-strategies.md", 50],
+    ["security.md", 52],
     ["framework-example-notes.md", 55],
     ["demo-deployments.md", 56],
     ["shared-demo-rollout.md", 57],

@@ -133,8 +133,11 @@ namespaces. Validated manifests are cached under `.palamedes`; changed binaries
 are described again, while cache failures fall back to the normal handshake.
 `--refresh-plugin-manifests` ignores the cached entries once and replaces them
 after describing every configured plugin again.
-See the [configuration field](./configuration.md#cli-plugins) and the
-[binary plugin protocol](./api/cli-binary-plugin.md).
+Configured plugins run as trusted local executables with the same permissions as
+`pmds`; the binary protocol is a compatibility boundary, not a sandbox.
+See the [configuration field](./configuration.md#cli-plugins), the
+[binary plugin protocol](./api/cli-binary-plugin.md), and the
+[CLI plugin trust boundary](./security.md#cli-plugin-execution-trust-boundary).
 
 ## `pmds extract`
 
@@ -617,7 +620,11 @@ that runs without a bundler:
 pmds catalog compile --target js --output .palamedes/catalogs
 ```
 
-Each module exports `messages` for `i18n.load()`. Configured catalogs of the
+Each module exports `messages` for `i18n.load()`. Because compiled JavaScript
+catalogs execute as code at runtime, treat source `.po`/`.fcl` catalogs as
+code-equivalent build inputs and serve emitted `.mjs` files from immutable,
+build-controlled directories; see [Catalog Trust Model](./security.md#catalog-trust-model).
+Configured catalogs of the
 same locale are merged, and `--locale` limits the output; naming a locale twice
 is an error. Fallbacks follow the
 configuration; `--fallback-locale` replaces the configured `fallback-locales`

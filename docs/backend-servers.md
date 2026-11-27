@@ -208,6 +208,9 @@ async function createRequestI18n(locale: "en" | "de") {
   registration the macros keep throwing, so a bundled app that is missing its
   plugin still fails loudly. Bundled code must not register runtime macros.
 - JSX macros need the compiler.
+- Compiled `<locale>.mjs` catalogs execute as JavaScript modules; deploy them
+  from immutable build-controlled directories and allowlist locale inputs. See
+  [Catalog Trust Model](./security.md#catalog-trust-model).
 
 ## One Setup For Every Build
 
@@ -379,5 +382,6 @@ render trees. It also fits classic request/response servers.
 
 - [Root README](https://github.com/sebastian-software/palamedes/blob/main/README.md)
 - [First working translation in 5 minutes](./first-working-translation.md)
+- [Security and deployment hardening](./security.md)
 - [Migration from Lingui](./migrate-from-lingui.md)
 - [Example matrix](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)

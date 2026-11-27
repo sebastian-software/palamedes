@@ -46,6 +46,7 @@ IDs to source text plus context in every locale before extraction or removal.
 - Do not recommend the reserved top-level `palamedes` or `create-palamedes` packages as the main install path yet.
 - The reserved `palamedes` and `create-palamedes` bins do not perform work: both print `https://palamedes.dev/docs/first-working-translation` to stderr, exit 1 when invoked without arguments, and exit 2 when arguments are supplied.
 - Waku is Stable for `waku@^1.0.0-rc.4`, verified with Waku 1.0.0-rc.4 and React/React DOM/react-server-dom-webpack 19.3.1. The adapter uses Waku's unstable_getRequest and host CSP unstable_setNonce APIs, so a new tested Waku version must pass the request/action/stream/catalog recovery/CSP proofs before the peer range moves. See `/docs/stability.md#waku-contract`.
+- SSR deployment security: allowlist `Host` / `X-Forwarded-Host` before passing `requestHost` to `resolve()`, `canonicalUrl()`, `seoLinks()`, or `suggest()`, and read forwarding headers only behind a stripping reverse proxy. Generate CSP nonces per request on the server (never from arbitrary client headers like `x-csp-nonce`), keep custom `errorHtml` static and trusted, append `; Secure` to `locales.serializeChoice()` on HTTPS (and use `HttpOnly; Secure` for server-managed locale cookies), and treat `.po`/`.fcl` catalogs (compiled to executable JS modules) and configured `pmds` binary plugins (`plugins:` in `palamedes.yaml`) as trusted code. See `/docs/security.md` and `/SECURITY.md`.
 
 ## Install patterns
 
@@ -261,6 +262,7 @@ changes; cache failures are non-fatal. See `/docs/cli.md` and
 - `/docs/nextjs-first-run.md`: App Router server first run and its client/action boundaries
 - `/docs/configuration.md`: YAML-first config reference
 - `/docs/cli.md`: full CLI reference
+- `/docs/security.md`: SSR deployment security checklist, host allowlisting, cookies, CSP nonces, and catalog/plugin threat model
 - `/docs/platform-support.md`: published native targets and unsupported Node processes
 - `/docs/catalog-formats.md`: PO default and opt-in FCL
 - MDX ships with v2 and uses Ferromark 4.1 strict JavaScript/JSX parsing with structured alt provenance and public callout metadata. Image alt messages include the complete accessible text. Parse failures return typed diagnostics using the shared SourceRange type with bounded recovery.
