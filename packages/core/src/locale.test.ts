@@ -705,9 +705,12 @@ describe("security hardening", () => {
       "de.example.test evil",
       "de.example.test\r\nX-Injected: 1",
       "de..example.test",
+      "de.example.test..",
+      ".",
+      ".example.test",
       "-de.example.test",
       "de.example.test:0",
-      "de.example.test:080",
+      "de.example.test:00000",
       "de.example.test:65536",
       "de.example.test:99999",
       "de.example.test:abc",
@@ -817,6 +820,37 @@ describe("security hardening", () => {
           requestHost: "localhost:3000",
         }),
       ).toBe("//de.localhost:3000/docs");
+    });
+
+    it("preserves fully qualified DNS hosts with a single trailing root dot and leading-zero ports", () => {
+      expect(
+        subdomained.resolve({ strategy: "subdomain", requestHost: "de.example.test." }),
+      ).toStrictEqual({ locale: "de", source: "subdomain" });
+
+      expect(
+        subdomained.canonicalUrl({
+          locale: "es",
+          pathname: "/docs",
+          requestHost: "de.example.test.",
+        }),
+      ).toBe("//es.example.test./docs");
+
+      expect(
+        subdomained.canonicalUrl({
+          locale: "es",
+          pathname: "/docs",
+          requestHost: "de.example.test.:04012",
+        }),
+      ).toBe("//es.example.test.:4012/docs");
+
+      const leadingZeroConfigured = defineLocaleControls({
+        locales: ["en", "de"] as const,
+        defaultLocale: "en",
+        hosts: { locales: { de: "de.example.test:08443" } },
+      });
+      expect(leadingZeroConfigured.canonicalUrl({ locale: "de", pathname: "/docs" })).toBe(
+        "//de.example.test:08443/de/docs",
+      );
     });
 
     it("falls back to a bare path if subdomain or tld substitution would exceed DNS limits", () => {
@@ -952,11 +986,31 @@ describe("security hardening", () => {
       expect(controls.preferredLocale(`${longTag}, de;q=0.8`)).toBe("de");
     });
 
-    it("does not turn a truncated q=0 exclusion at the 2 KiB boundary into an accepted tag", () => {
-      // Place "de;q=0" straddling the 2048-character boundary so naive slicing would leave "de".
-      const prefix = `${"xx,".repeat(682)}`; // 2046 chars
-      const header = `${prefix}de;q=0`;
-      expect(controls.preferredLocale(header)).toBe("en");
+    it("does not negotiate from truncated headers when an exclusion appears past either cap", () => {
+      // Entry cap: 33 entries where de-AT precedes a dropped de;q=0 exclusion.
+      const overEntryCap = `de-AT,${Array.from({ length: 31 }, () => "xx").join(",")},de;q=0`;
+      expect(controls.preferredLocale(overEntryCap)).toBe("en");
+      expect(parseAcceptLanguage(overEntryCap)).toStrictEqual([]);
+
+      // Length cap: >2048 chars where de-AT precedes a late de;q=0 exclusion.
+      const overLengthCap = `de-AT,${"xx,".repeat(700)}de;q=0`;
+      expect(controls.preferredLocale(overLengthCap)).toBe("en");
+      expect(parseAcceptLanguage(overLengthCap)).toStrictEqual([]);
+
+      // Overlong exclusion tag (>64 chars) cannot be silently dropped either.
+      const overlongExclusion = `de-AT,de-u-ca-${"a".repeat(60)};q=0`;
+      expect(controls.preferredLocale(overlongExclusion)).toBe("en");
+    });
+
+    it("keeps extension-insensitive matching working for valid configured locales longer than 64 chars", () => {
+      const longLocale = "de-DE-abcdefg-bcdefgh-cdefghi-defghij-efghijk-fghijkl-ghijklm-hijklmn";
+      const custom = defineLocaleControls({
+        locales: ["en", longLocale] as const,
+        defaultLocale: "en",
+        labels: { [longLocale]: "Deutsch (Custom)" },
+      });
+
+      expect(custom.preferredLocale("de-DE")).toBe(longLocale);
     });
 
     it("handles adversarial exclusion combinations in bounded time", () => {
