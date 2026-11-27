@@ -3575,7 +3575,18 @@ function inspectNonShellScript(
     "help",
   ]);
   const DOCKER_MANAGEMENT_IMAGE_FREE = {
-    image: new Set(["ls", "inspect", "history", "rm", "prune", "tag", "push", "save", "help"]),
+    image: new Set([
+      "ls",
+      "inspect",
+      "history",
+      "rm",
+      "prune",
+      "tag",
+      "push",
+      "save",
+      "load",
+      "help",
+    ]),
     container: new Set([
       "ls",
       "inspect",
@@ -12770,173 +12781,6 @@ function inspectShellText(
       }
       if (buildCommand?.kind === "build") {
         const buildArgStart = buildCommand.argStart;
-        const rawFiles = [];
-        const rawBuildContexts = [];
-        const rawBuildArgs = [];
-        const rawPlatforms = [];
-        const rawBuildImageOverrides = [];
-        const rawAttestSpecs = [];
-        const rawPodmanSbomPresets = [];
-        let hasPodmanSbomScanner = false;
-        let isBuildHelpRequest = false;
-        let contextArg = null;
-        for (let index = buildArgStart; index < tokens.length; index += 1) {
-          const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
-          if (redirConsumed > 0) {
-            index += redirConsumed - 1;
-            continue;
-          }
-          const token = tokens[index];
-          if (token === "--") {
-            for (let restIndex = index + 1; restIndex < tokens.length; restIndex += 1) {
-              const restRedir = consumeShellRedirection(tokens, restIndex, stdinRedirectTargets);
-              if (restRedir > 0) {
-                restIndex += restRedir - 1;
-                continue;
-              }
-              if (contextArg === null) {
-                contextArg = tokens[restIndex];
-              }
-            }
-            break;
-          }
-          if (token === "--help" || token === "-h") {
-            isBuildHelpRequest = true;
-            break;
-          }
-          if (token === "-f" || token === "--file") {
-            if (tokens[index + 1]) {
-              rawFiles.push(tokens[index + 1]);
-            }
-            index += 1;
-            continue;
-          }
-          if (token.startsWith("--file=")) {
-            rawFiles.push(token.slice("--file=".length));
-            continue;
-          }
-          const shortBundle = parseShortBuildFlagBundle(token, tokens[index + 1]);
-          if (shortBundle) {
-            if (shortBundle.file) {
-              rawFiles.push(shortBundle.file);
-            }
-            if (shortBundle.consumedNext) {
-              index += 1;
-            }
-            continue;
-          }
-          if (token === "--build-context") {
-            if (tokens[index + 1] !== undefined) {
-              rawBuildContexts.push(tokens[index + 1]);
-            }
-            index += 1;
-            continue;
-          }
-          if (token.startsWith("--build-context=")) {
-            rawBuildContexts.push(token.slice("--build-context=".length));
-            continue;
-          }
-          if (token === "--build-arg") {
-            if (tokens[index + 1] !== undefined) {
-              rawBuildArgs.push(tokens[index + 1]);
-            }
-            index += 1;
-            continue;
-          }
-          if (token.startsWith("--build-arg=")) {
-            rawBuildArgs.push(token.slice("--build-arg=".length));
-            continue;
-          }
-          if (token === "--platform") {
-            if (tokens[index + 1] !== undefined) {
-              rawPlatforms.push(tokens[index + 1]);
-            }
-            index += 1;
-            continue;
-          }
-          if (token.startsWith("--platform=")) {
-            rawPlatforms.push(token.slice("--platform=".length));
-            continue;
-          }
-          if (token === "--sbom") {
-            if (tokens[index + 1] !== undefined) {
-              if (normalizedCli === "podman" || normalizedCli === "buildah") {
-                rawPodmanSbomPresets.push(tokens[index + 1]);
-              } else {
-                rawAttestSpecs.push({ requireSbomType: false, rawValue: tokens[index + 1] });
-              }
-            }
-            index += 1;
-            continue;
-          }
-          if (token.startsWith("--sbom=")) {
-            const sbomVal = token.slice("--sbom=".length);
-            if (normalizedCli === "podman" || normalizedCli === "buildah") {
-              rawPodmanSbomPresets.push(sbomVal);
-            } else {
-              rawAttestSpecs.push({ requireSbomType: false, rawValue: sbomVal });
-            }
-            continue;
-          }
-          if (token === "--attest") {
-            if (tokens[index + 1] !== undefined) {
-              rawAttestSpecs.push({ requireSbomType: true, rawValue: tokens[index + 1] });
-            }
-            index += 1;
-            continue;
-          }
-          if (token.startsWith("--attest=")) {
-            rawAttestSpecs.push({
-              requireSbomType: true,
-              rawValue: token.slice("--attest=".length),
-            });
-            continue;
-          }
-          if (normalizedCli === "podman" || normalizedCli === "buildah") {
-            if (token === "--from" || token === "--sbom-scanner-image") {
-              if (token === "--sbom-scanner-image") {
-                hasPodmanSbomScanner = true;
-              }
-              if (tokens[index + 1] !== undefined) {
-                rawBuildImageOverrides.push({ flag: token, rawValue: tokens[index + 1] });
-              }
-              index += 1;
-              continue;
-            }
-            if (token.startsWith("--from=")) {
-              rawBuildImageOverrides.push({
-                flag: "--from",
-                rawValue: token.slice("--from=".length),
-              });
-              continue;
-            }
-            if (token.startsWith("--sbom-scanner-image=")) {
-              hasPodmanSbomScanner = true;
-              rawBuildImageOverrides.push({
-                flag: "--sbom-scanner-image",
-                rawValue: token.slice("--sbom-scanner-image=".length),
-              });
-              continue;
-            }
-          }
-          if (token.startsWith("-") && token !== "-") {
-            const buildValueFlags =
-              normalizedCli === "podman" || normalizedCli === "buildah"
-                ? PODMAN_BUILD_VALUE_FLAGS
-                : DOCKER_BUILD_VALUE_FLAGS;
-            if (flagConsumesNextArg(token, buildValueFlags)) {
-              index += 1;
-            }
-            continue;
-          }
-          if (contextArg === null) {
-            contextArg = token;
-          }
-        }
-        if (isBuildHelpRequest) {
-          continue;
-        }
-
         const buildRows = matrixRows.length > 0 ? matrixRows : [null];
         const seenContextProblems = new Set();
         const seenSyntaxProblems = new Set();
@@ -12947,131 +12791,374 @@ function inspectShellText(
             problems.push(message);
           }
         };
-        const hasExplicitNonStdinFile = rawFiles.some((file) => file !== "-");
-        const usesStdinFile = rawFiles.includes("-");
-        const usesStdinContextArchive =
-          contextArg === "-" && hasExplicitNonStdinFile && !usesStdinFile;
-        const usesStdinDockerfile =
-          usesStdinFile || (contextArg === "-" && !hasExplicitNonStdinFile);
-        const hasStdinHeredoc = Boolean(event.hasStdinHeredoc);
-        const hasStdinRedirect = stdinRedirectTargets.length > 0;
-        const stdinInvocations = [];
 
-        if (usesStdinContextArchive) {
-          pushStdinProblem(
-            `${filePath}:${lineNumber}: stdin build context archive cannot be verified statically`,
-          );
+        // Expand known Bash argument arrays (`"${args[@]}"`, `"$@"`) and
+        // unquoted option variables before parsing build flags and context.
+        const BUILD_ARRAY_EXPANSION_PATTERN =
+          /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
+        let buildTokenVariants = [[]];
+        let buildArgExpansionTruncated = false;
+        for (let rawIdx = buildArgStart; rawIdx < tokens.length; rawIdx += 1) {
+          const rawToken = tokens[rawIdx];
+          const isSingleQuoted = Boolean(peeledSingleQuoted[rawIdx]);
+          const isAnyQuoted = Boolean(peeledQuoted[rawIdx]);
+          const arrayExpMatch = !isSingleQuoted
+            ? BUILD_ARRAY_EXPANSION_PATTERN.exec(rawToken)
+            : null;
+          const isPosForward =
+            shellMode === "posix" &&
+            !isSingleQuoted &&
+            (rawToken === "$@" || rawToken === "${@}" || rawToken === "$*" || rawToken === "${*}");
+          let slices = null;
+          if (arrayExpMatch || isPosForward) {
+            const arrName = arrayExpMatch ? arrayExpMatch.groups.name : "@";
+            const knownArr = frame.arrays.get(arrName);
+            if (knownArr && knownArr.variants.length > 0) {
+              if (knownArr.truncated) {
+                const limitMsg = `${filePath}:${lineNumber}: ${rawToken} exceeds expansion limit and cannot be verified exhaustively`;
+                if (!seenContextProblems.has(limitMsg)) {
+                  seenContextProblems.add(limitMsg);
+                  problems.push(limitMsg);
+                }
+              }
+              const joinsAsSingleWord =
+                isAnyQuoted &&
+                (rawToken === "$*" || rawToken === "${*}" || rawToken.endsWith("[*]}"));
+              if (joinsAsSingleWord) {
+                slices = knownArr.variants.map((variant) => [
+                  variant.map((item) => item.text).join(" "),
+                ]);
+              } else if (!isAnyQuoted && shellMode === "posix") {
+                slices = knownArr.variants.map((variant) =>
+                  variant.flatMap((item) => {
+                    const trimmed = item.text.trim();
+                    return trimmed.length > 0 ? trimmed.split(/\s+/u) : [];
+                  }),
+                );
+              } else {
+                slices = knownArr.variants.map((variant) => variant.map((item) => item.text));
+              }
+            }
+          } else if (
+            !isSingleQuoted &&
+            !isAnyQuoted &&
+            shellMode === "posix" &&
+            rawToken.includes("$")
+          ) {
+            const varExpanded = resolveImageTokenCandidates(
+              rawToken,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            const affectsOptionParsing = varExpanded.candidates.some(
+              (candidate) =>
+                !isDynamicReference(candidate.text, shellMode) &&
+                (candidate.text.startsWith("-") ||
+                  candidate.text.length === 0 ||
+                  /\s/u.test(candidate.text)),
+            );
+            if (affectsOptionParsing) {
+              if (varExpanded.truncated) {
+                const limitMsg = `${filePath}:${lineNumber}: ${rawToken} exceeds expansion limit and cannot be verified exhaustively`;
+                if (!seenContextProblems.has(limitMsg)) {
+                  seenContextProblems.add(limitMsg);
+                  problems.push(limitMsg);
+                }
+              }
+              slices = varExpanded.candidates.map((candidate) => {
+                const trimmed = candidate.text.trim();
+                return trimmed.length > 0 ? trimmed.split(/\s+/u) : [];
+              });
+            }
+          }
+          if (slices) {
+            const nextVariants = [];
+            for (const base of buildTokenVariants) {
+              for (const slice of slices) {
+                if (nextVariants.length >= MAX_TOKEN_EXPANSIONS) {
+                  buildArgExpansionTruncated = true;
+                  break;
+                }
+                nextVariants.push([...base, ...slice]);
+              }
+              if (buildArgExpansionTruncated) {
+                break;
+              }
+            }
+            buildTokenVariants = nextVariants;
+          } else {
+            for (const variant of buildTokenVariants) {
+              variant.push(rawToken);
+            }
+          }
+        }
+        if (buildArgExpansionTruncated) {
+          const limitMsg = `${filePath}:${lineNumber}: container build arguments exceed expansion limit and cannot be verified exhaustively`;
+          if (!seenContextProblems.has(limitMsg)) {
+            seenContextProblems.add(limitMsg);
+            problems.push(limitMsg);
+          }
         }
 
-        for (const row of buildRows) {
-          const rowList = row ? [row] : [];
-          const namedContexts = new Set();
-          const rowContextProblems = [];
-          for (const rawBuildContext of rawBuildContexts) {
-            inspectBuildContextSpec(
-              rawBuildContext,
-              stepEnv,
-              frame.vars,
-              rowList,
-              filePath,
-              lineNumber,
-              shellMode,
-              rowContextProblems,
-              namedContexts,
-            );
-          }
-          for (const message of rowContextProblems) {
-            if (!seenContextProblems.has(message)) {
-              seenContextProblems.add(message);
-              problems.push(message);
-            }
-          }
+        const stdinInvocations = [];
+        let anyUsesStdinDockerfile = false;
+        const hasStdinHeredoc = Boolean(event.hasStdinHeredoc);
+        const hasStdinRedirect = stdinRedirectTargets.length > 0;
 
-          for (const { flag, rawValue } of rawBuildImageOverrides) {
-            const expandedOverride = resolveImageTokenCandidates(
-              rawValue,
-              stepEnv,
-              frame.vars,
-              lineNumber,
-              shellMode,
-            );
-            if (expandedOverride.truncated) {
-              const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
-              if (!seenContextProblems.has(limitMsg)) {
-                seenContextProblems.add(limitMsg);
-                problems.push(limitMsg);
-              }
+        for (const buildTokens of buildTokenVariants) {
+          const rawFiles = [];
+          const rawBuildContexts = [];
+          const rawBuildArgs = [];
+          const rawPlatforms = [];
+          const rawBuildImageOverrides = [];
+          const rawAttestSpecs = [];
+          const rawPodmanSbomPresets = [];
+          let hasPodmanSbomScanner = false;
+          let isBuildHelpRequest = false;
+          let contextArg = null;
+          for (let index = 0; index < buildTokens.length; index += 1) {
+            const redirConsumed = consumeShellRedirection(buildTokens, index, stdinRedirectTargets);
+            if (redirConsumed > 0) {
+              index += redirConsumed - 1;
+              continue;
             }
-            for (const varCandidate of expandedOverride.candidates) {
-              for (const candidate of expandMatrixReferences(
-                varCandidate.text,
-                rowList,
-                varCandidate.line,
-              )) {
-                const imageRef = candidate.text.trim();
-                if (
-                  !imageRef ||
-                  (isDynamicReference(imageRef, shellMode) &&
-                    !hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode))
-                ) {
+            const token = buildTokens[index];
+            if (token === "--") {
+              for (let restIndex = index + 1; restIndex < buildTokens.length; restIndex += 1) {
+                const restRedir = consumeShellRedirection(
+                  buildTokens,
+                  restIndex,
+                  stdinRedirectTargets,
+                );
+                if (restRedir > 0) {
+                  restIndex += restRedir - 1;
                   continue;
                 }
-                if (flag === "--from" && imageRef.toLowerCase() === "scratch") {
-                  continue;
-                }
-                if (!isPinnedDigest(imageRef)) {
-                  const msg = `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`;
-                  if (!seenContextProblems.has(msg)) {
-                    seenContextProblems.add(msg);
-                    problems.push(msg);
-                  }
+                if (contextArg === null) {
+                  contextArg = buildTokens[restIndex];
                 }
               }
+              break;
             }
-          }
-
-          for (const { requireSbomType, rawValue } of rawAttestSpecs) {
-            const expandedAttest = resolveImageTokenCandidates(
-              rawValue,
-              stepEnv,
-              frame.vars,
-              lineNumber,
-              shellMode,
-            );
-            if (expandedAttest.truncated) {
-              const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
-              if (!seenContextProblems.has(limitMsg)) {
-                seenContextProblems.add(limitMsg);
-                problems.push(limitMsg);
+            if (token === "--help" || token === "-h") {
+              isBuildHelpRequest = true;
+              break;
+            }
+            if (token === "-f" || token === "--file") {
+              if (buildTokens[index + 1]) {
+                rawFiles.push(buildTokens[index + 1]);
               }
+              index += 1;
+              continue;
             }
-            for (const varCandidate of expandedAttest.candidates) {
-              for (const candidate of expandMatrixReferences(
-                varCandidate.text,
-                rowList,
-                varCandidate.line,
-              )) {
-                const attestInspection = inspectAttestSbomSpec(candidate.text, {
-                  requireSbomType,
-                  shellMode,
+            if (token.startsWith("--file=")) {
+              rawFiles.push(token.slice("--file=".length));
+              continue;
+            }
+            const shortBundle = parseShortBuildFlagBundle(token, buildTokens[index + 1]);
+            if (shortBundle) {
+              if (shortBundle.file) {
+                rawFiles.push(shortBundle.file);
+              }
+              if (shortBundle.consumedNext) {
+                index += 1;
+              }
+              continue;
+            }
+            if (token === "--build-context") {
+              if (buildTokens[index + 1] !== undefined) {
+                rawBuildContexts.push(buildTokens[index + 1]);
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--build-context=")) {
+              rawBuildContexts.push(token.slice("--build-context=".length));
+              continue;
+            }
+            if (token === "--build-arg") {
+              if (buildTokens[index + 1] !== undefined) {
+                rawBuildArgs.push(buildTokens[index + 1]);
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--build-arg=")) {
+              rawBuildArgs.push(token.slice("--build-arg=".length));
+              continue;
+            }
+            if (token === "--platform") {
+              if (buildTokens[index + 1] !== undefined) {
+                rawPlatforms.push(buildTokens[index + 1]);
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--platform=")) {
+              rawPlatforms.push(token.slice("--platform=".length));
+              continue;
+            }
+            if (token === "--sbom") {
+              if (buildTokens[index + 1] !== undefined) {
+                if (normalizedCli === "podman" || normalizedCli === "buildah") {
+                  rawPodmanSbomPresets.push(buildTokens[index + 1]);
+                } else {
+                  rawAttestSpecs.push({
+                    requireSbomType: false,
+                    rawValue: buildTokens[index + 1],
+                  });
+                }
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--sbom=")) {
+              const sbomVal = token.slice("--sbom=".length);
+              if (normalizedCli === "podman" || normalizedCli === "buildah") {
+                rawPodmanSbomPresets.push(sbomVal);
+              } else {
+                rawAttestSpecs.push({ requireSbomType: false, rawValue: sbomVal });
+              }
+              continue;
+            }
+            if (token === "--attest") {
+              if (buildTokens[index + 1] !== undefined) {
+                rawAttestSpecs.push({
+                  requireSbomType: true,
+                  rawValue: buildTokens[index + 1],
                 });
-                if (attestInspection.usesDefaultScanner) {
-                  const msg = `${filePath}:${candidate.line}: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)`;
-                  if (!seenContextProblems.has(msg)) {
-                    seenContextProblems.add(msg);
-                    problems.push(msg);
-                  }
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--attest=")) {
+              rawAttestSpecs.push({
+                requireSbomType: true,
+                rawValue: token.slice("--attest=".length),
+              });
+              continue;
+            }
+            if (normalizedCli === "podman" || normalizedCli === "buildah") {
+              if (token === "--from" || token === "--sbom-scanner-image") {
+                if (token === "--sbom-scanner-image") {
+                  hasPodmanSbomScanner = true;
                 }
-                for (const generatorImage of attestInspection.images) {
+                if (buildTokens[index + 1] !== undefined) {
+                  rawBuildImageOverrides.push({ flag: token, rawValue: buildTokens[index + 1] });
+                }
+                index += 1;
+                continue;
+              }
+              if (token.startsWith("--from=")) {
+                rawBuildImageOverrides.push({
+                  flag: "--from",
+                  rawValue: token.slice("--from=".length),
+                });
+                continue;
+              }
+              if (token.startsWith("--sbom-scanner-image=")) {
+                hasPodmanSbomScanner = true;
+                rawBuildImageOverrides.push({
+                  flag: "--sbom-scanner-image",
+                  rawValue: token.slice("--sbom-scanner-image=".length),
+                });
+                continue;
+              }
+            }
+            if (token.startsWith("-") && token !== "-") {
+              const buildValueFlags =
+                normalizedCli === "podman" || normalizedCli === "buildah"
+                  ? PODMAN_BUILD_VALUE_FLAGS
+                  : DOCKER_BUILD_VALUE_FLAGS;
+              if (flagConsumesNextArg(token, buildValueFlags)) {
+                index += 1;
+              }
+              continue;
+            }
+            if (contextArg === null) {
+              contextArg = token;
+            }
+          }
+          if (isBuildHelpRequest) {
+            continue;
+          }
+
+          const hasExplicitNonStdinFile = rawFiles.some((file) => file !== "-");
+          const usesStdinFile = rawFiles.includes("-");
+          const usesStdinContextArchive =
+            contextArg === "-" && hasExplicitNonStdinFile && !usesStdinFile;
+          const usesStdinDockerfile =
+            usesStdinFile || (contextArg === "-" && !hasExplicitNonStdinFile);
+          if (usesStdinDockerfile) {
+            anyUsesStdinDockerfile = true;
+          }
+
+          if (usesStdinContextArchive) {
+            pushStdinProblem(
+              `${filePath}:${lineNumber}: stdin build context archive cannot be verified statically`,
+            );
+          }
+
+          for (const row of buildRows) {
+            const rowList = row ? [row] : [];
+            const namedContexts = new Set();
+            const rowContextProblems = [];
+            for (const rawBuildContext of rawBuildContexts) {
+              inspectBuildContextSpec(
+                rawBuildContext,
+                stepEnv,
+                frame.vars,
+                rowList,
+                filePath,
+                lineNumber,
+                shellMode,
+                rowContextProblems,
+                namedContexts,
+              );
+            }
+            for (const message of rowContextProblems) {
+              if (!seenContextProblems.has(message)) {
+                seenContextProblems.add(message);
+                problems.push(message);
+              }
+            }
+
+            for (const { flag, rawValue } of rawBuildImageOverrides) {
+              const expandedOverride = resolveImageTokenCandidates(
+                rawValue,
+                stepEnv,
+                frame.vars,
+                lineNumber,
+                shellMode,
+              );
+              if (expandedOverride.truncated) {
+                const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
+                if (!seenContextProblems.has(limitMsg)) {
+                  seenContextProblems.add(limitMsg);
+                  problems.push(limitMsg);
+                }
+              }
+              for (const varCandidate of expandedOverride.candidates) {
+                for (const candidate of expandMatrixReferences(
+                  varCandidate.text,
+                  rowList,
+                  varCandidate.line,
+                )) {
+                  const imageRef = candidate.text.trim();
                   if (
-                    !generatorImage ||
-                    (isDynamicReference(generatorImage, shellMode) &&
-                      !hasProvablyUnpinnedLiteralSuffix(generatorImage, shellMode))
+                    !imageRef ||
+                    (isDynamicReference(imageRef, shellMode) &&
+                      !hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode))
                   ) {
                     continue;
                   }
-                  if (!isPinnedDigest(generatorImage)) {
-                    const msg = `${filePath}:${candidate.line}: ${generatorImage} is not pinned to a sha256 digest`;
+                  if (flag === "--from" && imageRef.toLowerCase() === "scratch") {
+                    continue;
+                  }
+                  if (!isPinnedDigest(imageRef)) {
+                    const msg = `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`;
                     if (!seenContextProblems.has(msg)) {
                       seenContextProblems.add(msg);
                       problems.push(msg);
@@ -13080,333 +13167,52 @@ function inspectShellText(
                 }
               }
             }
-          }
 
-          if (rawPodmanSbomPresets.length > 0 && !hasPodmanSbomScanner) {
-            for (const rawPreset of rawPodmanSbomPresets) {
-              const expandedPreset = resolveImageTokenCandidates(
-                rawPreset,
+            for (const { requireSbomType, rawValue } of rawAttestSpecs) {
+              const expandedAttest = resolveImageTokenCandidates(
+                rawValue,
                 stepEnv,
                 frame.vars,
                 lineNumber,
                 shellMode,
               );
-              for (const varCandidate of expandedPreset.candidates) {
-                for (const candidate of expandMatrixReferences(
-                  varCandidate.text,
-                  rowList,
-                  varCandidate.line,
-                )) {
-                  const preset = candidate.text.trim();
-                  if (
-                    !preset ||
-                    preset.toLowerCase() === "false" ||
-                    isDynamicReference(preset, shellMode)
-                  ) {
-                    continue;
-                  }
-                  const msg = `${filePath}:${candidate.line}: ${normalizedCli} build --sbom preset uses unpinned default scanner image (pass --sbom-scanner-image ...@sha256:...)`;
-                  if (!seenContextProblems.has(msg)) {
-                    seenContextProblems.add(msg);
-                    problems.push(msg);
-                  }
-                }
-              }
-            }
-          }
-
-          const buildArgsMap = new Map();
-          for (const rawBuildArg of rawBuildArgs) {
-            const parsedArg = expandBuildArgSpec(
-              rawBuildArg,
-              stepEnv,
-              frame.vars,
-              exportedCommandVars,
-              rowList,
-              lineNumber,
-              shellMode,
-            );
-            if (parsedArg) {
-              buildArgsMap.set(parsedArg.name, {
-                values: parsedArg.values,
-                truncated: parsedArg.truncated,
-              });
-            }
-          }
-
-          if (buildArgsMap.has("BUILDKIT_SYNTAX")) {
-            const rowSyntaxProblems = [];
-            checkBuildkitSyntaxOverride(
-              buildArgsMap.get("BUILDKIT_SYNTAX"),
-              filePath,
-              lineNumber,
-              rowSyntaxProblems,
-            );
-            for (const message of rowSyntaxProblems) {
-              if (!seenSyntaxProblems.has(message)) {
-                seenSyntaxProblems.add(message);
-                problems.push(message);
-              }
-            }
-          }
-
-          const buildPlatforms = [];
-          const seenBuildPlatforms = new Set();
-          for (const rawPlatform of rawPlatforms) {
-            const expandedPlatform = resolveImageTokenCandidates(
-              rawPlatform,
-              stepEnv,
-              frame.vars,
-              lineNumber,
-              shellMode,
-            );
-            for (const varCandidate of expandedPlatform.candidates) {
-              for (const candidate of expandMatrixReferences(
-                varCandidate.text,
-                rowList,
-                varCandidate.line,
-              )) {
-                for (const platformEntry of splitPlatformEntries(candidate.text)) {
-                  if (!seenBuildPlatforms.has(platformEntry)) {
-                    seenBuildPlatforms.add(platformEntry);
-                    buildPlatforms.push(platformEntry);
-                  }
-                }
-              }
-            }
-          }
-
-          if (usesStdinContextArchive) {
-            continue;
-          }
-
-          const { dirs: activeWorkingDirs, truncated: activeWorkingDirsTruncated } =
-            resolveCommandWorkingDirs(row);
-
-          if (usesStdinDockerfile) {
-            if (hasStdinHeredoc) {
-              stdinInvocations.push({
-                buildArgs: buildArgsMap,
-                namedContexts,
-                platforms: buildPlatforms,
-                rowList,
-              });
-            }
-            if (hasStdinRedirect) {
-              const rawStdinTarget = stdinRedirectTargets.at(-1);
-              if (!buildFileContext || activeWorkingDirs.length === 0) {
-                pushStdinProblem(
-                  `${filePath}:${lineNumber}: stdin containerfile input ${rawStdinTarget} cannot be verified statically`,
-                );
-              } else {
-                if (activeWorkingDirsTruncated) {
-                  pushStdinProblem(
-                    `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
-                  );
-                }
-                const expandedStdin = resolveImageTokenCandidates(
-                  rawStdinTarget,
-                  stepEnv,
-                  frame.vars,
-                  lineNumber,
-                  shellMode,
-                );
-                if (expandedStdin.truncated) {
-                  pushStdinProblem(
-                    `${filePath}:${lineNumber}: ${rawStdinTarget} exceeds expansion limit and cannot be verified exhaustively`,
-                  );
-                }
-                const resolvedStdinFiles = [];
-                const seenStdinFiles = new Set();
-                for (const activeWorkingDir of activeWorkingDirs) {
-                  for (const varCandidate of expandedStdin.candidates) {
-                    for (const candidate of expandMatrixReferences(
-                      varCandidate.text,
-                      rowList,
-                      varCandidate.line,
-                    )) {
-                      const wsRel = resolveWorkspaceRelativePath(candidate.text, activeWorkingDir, {
-                        windowsPath: isWindowsShell,
-                        actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
-                      });
-                      const mappedTargets = resolveWorkspaceTargetsInRepo(
-                        wsRel,
-                        buildFileContext.root,
-                        buildFileContext.checkoutPrefixes,
-                        buildFileContext.foreignCheckoutPrefixes,
-                      ).filter((target) => target !== path.resolve(buildFileContext.root));
-                      if (mappedTargets.length === 0) {
-                        if (
-                          buildFileContext.deferUnresolvedInputs &&
-                          referencesUnresolvedInput(candidate.text)
-                        ) {
-                          continue;
-                        }
-                        pushStdinProblem(
-                          `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
-                        );
-                        continue;
-                      }
-                      for (const resolvedPath of mappedTargets) {
-                        const targetProblems = [];
-                        const safeFile = resolveSafeContainerFile(
-                          resolvedPath,
-                          buildFileContext.root,
-                          targetProblems,
-                        );
-                        if (safeFile) {
-                          if (isArchiveOrBinaryFile(safeFile)) {
-                            pushStdinProblem(
-                              `${filePath}:${lineNumber}: stdin build context archive ${candidate.text} cannot be verified statically`,
-                            );
-                            continue;
-                          }
-                          buildFileContext.explicitBuildFiles.add(resolvedPath);
-                          if (!seenStdinFiles.has(resolvedPath)) {
-                            seenStdinFiles.add(resolvedPath);
-                            resolvedStdinFiles.push(resolvedPath);
-                          }
-                        } else if (targetProblems.length > 0) {
-                          buildFileContext.explicitBuildFiles.add(resolvedPath);
-                        } else {
-                          pushStdinProblem(
-                            `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
-                          );
-                        }
-                      }
-                    }
-                  }
-                }
-                for (const targetFile of resolvedStdinFiles) {
-                  recordBuildInvocation(
-                    targetFile,
-                    buildArgsMap,
-                    namedContexts,
-                    filePath,
-                    lineNumber,
-                    buildFileContext.buildInvocations,
-                    buildPlatforms,
-                  );
-                }
-              }
-            } else if (!hasStdinHeredoc) {
-              pushStdinProblem(
-                `${filePath}:${lineNumber}: stdin containerfile input cannot be verified statically`,
-              );
-            }
-            continue;
-          }
-
-          if (rawFiles.length === 0 && contextArg) {
-            const expandedRemoteCheck = resolveImageTokenCandidates(
-              contextArg,
-              stepEnv,
-              frame.vars,
-              lineNumber,
-              shellMode,
-            );
-            for (const varCandidate of expandedRemoteCheck.candidates) {
-              for (const candidate of expandMatrixReferences(
-                varCandidate.text,
-                rowList,
-                varCandidate.line,
-              )) {
-                const ctxText = candidate.text.trim();
-                if (isRemoteBuildContext(ctxText)) {
-                  const remoteMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
-                  if (!seenContextProblems.has(remoteMsg)) {
-                    seenContextProblems.add(remoteMsg);
-                    problems.push(remoteMsg);
-                  }
-                }
-              }
-            }
-          }
-
-          if (!buildFileContext || activeWorkingDirs.length === 0) {
-            continue;
-          }
-
-          if (activeWorkingDirsTruncated) {
-            problems.push(
-              `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
-            );
-          }
-
-          const resolvedBuildFiles = [];
-          const seenResolvedFiles = new Set();
-          const pushResolvedFile = (resolved) => {
-            if (resolved && !seenResolvedFiles.has(resolved)) {
-              seenResolvedFiles.add(resolved);
-              resolvedBuildFiles.push(resolved);
-            }
-          };
-
-          for (const activeWorkingDir of activeWorkingDirs) {
-            const dirResolvedFiles = [];
-            for (const rawFile of rawFiles) {
-              const expanded = resolveImageTokenCandidates(
-                rawFile,
-                stepEnv,
-                frame.vars,
-                lineNumber,
-                shellMode,
-              );
-              if (expanded.truncated) {
-                const limitMsg = `${filePath}:${lineNumber}: ${rawFile} exceeds expansion limit and cannot be verified exhaustively`;
+              if (expandedAttest.truncated) {
+                const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
                 if (!seenContextProblems.has(limitMsg)) {
                   seenContextProblems.add(limitMsg);
                   problems.push(limitMsg);
                 }
               }
-              for (const varCandidate of expanded.candidates) {
+              for (const varCandidate of expandedAttest.candidates) {
                 for (const candidate of expandMatrixReferences(
                   varCandidate.text,
                   rowList,
                   varCandidate.line,
                 )) {
-                  const wsRel = resolveWorkspaceRelativePath(candidate.text, activeWorkingDir, {
-                    windowsPath: isWindowsShell,
-                    actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                  const attestInspection = inspectAttestSbomSpec(candidate.text, {
+                    requireSbomType,
+                    shellMode,
                   });
-                  const mappedTargets = resolveWorkspaceTargetsInRepo(
-                    wsRel,
-                    buildFileContext.root,
-                    buildFileContext.checkoutPrefixes,
-                    buildFileContext.foreignCheckoutPrefixes,
-                  ).filter((target) => target !== path.resolve(buildFileContext.root));
-                  if (mappedTargets.length === 0) {
+                  if (attestInspection.usesDefaultScanner) {
+                    const msg = `${filePath}:${candidate.line}: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)`;
+                    if (!seenContextProblems.has(msg)) {
+                      seenContextProblems.add(msg);
+                      problems.push(msg);
+                    }
+                  }
+                  for (const generatorImage of attestInspection.images) {
                     if (
-                      buildFileContext.deferUnresolvedInputs &&
-                      referencesUnresolvedInput(candidate.text)
+                      !generatorImage ||
+                      (isDynamicReference(generatorImage, shellMode) &&
+                        !hasProvablyUnpinnedLiteralSuffix(generatorImage, shellMode))
                     ) {
                       continue;
                     }
-                    const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
-                    if (!seenContextProblems.has(unverifiableMsg)) {
-                      seenContextProblems.add(unverifiableMsg);
-                      problems.push(unverifiableMsg);
-                    }
-                    continue;
-                  }
-                  for (const resolvedPath of mappedTargets) {
-                    const targetProblems = [];
-                    const safeFile = resolveSafeContainerFile(
-                      resolvedPath,
-                      buildFileContext.root,
-                      targetProblems,
-                    );
-                    if (safeFile) {
-                      buildFileContext.explicitBuildFiles.add(resolvedPath);
-                      dirResolvedFiles.push(resolvedPath);
-                      pushResolvedFile(resolvedPath);
-                    } else if (targetProblems.length > 0) {
-                      buildFileContext.explicitBuildFiles.add(resolvedPath);
-                    } else {
-                      const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
-                      if (!seenContextProblems.has(unverifiableMsg)) {
-                        seenContextProblems.add(unverifiableMsg);
-                        problems.push(unverifiableMsg);
+                    if (!isPinnedDigest(generatorImage)) {
+                      const msg = `${filePath}:${candidate.line}: ${generatorImage} is not pinned to a sha256 digest`;
+                      if (!seenContextProblems.has(msg)) {
+                        seenContextProblems.add(msg);
+                        problems.push(msg);
                       }
                     }
                   }
@@ -13414,140 +13220,477 @@ function inspectShellText(
               }
             }
 
-            if (rawFiles.length === 0 && dirResolvedFiles.length === 0) {
-              const contextDirs = [];
-              const seenContextDirs = new Set();
-              let hadRemoteContext = false;
-              let hadUnresolvableContext = false;
-              if (contextArg) {
-                const expandedCtx = resolveImageTokenCandidates(
-                  contextArg,
+            if (rawPodmanSbomPresets.length > 0 && !hasPodmanSbomScanner) {
+              for (const rawPreset of rawPodmanSbomPresets) {
+                const expandedPreset = resolveImageTokenCandidates(
+                  rawPreset,
                   stepEnv,
                   frame.vars,
                   lineNumber,
                   shellMode,
                 );
-                if (expandedCtx.truncated) {
-                  const limitMsg = `${filePath}:${lineNumber}: ${contextArg} exceeds expansion limit and cannot be verified exhaustively`;
-                  if (!seenContextProblems.has(limitMsg)) {
-                    seenContextProblems.add(limitMsg);
-                    problems.push(limitMsg);
-                  }
-                }
-                for (const varCandidate of expandedCtx.candidates) {
+                for (const varCandidate of expandedPreset.candidates) {
                   for (const candidate of expandMatrixReferences(
                     varCandidate.text,
                     rowList,
                     varCandidate.line,
                   )) {
-                    const ctxText = candidate.text.trim();
-                    if (isRemoteBuildContext(ctxText)) {
-                      hadRemoteContext = true;
+                    const preset = candidate.text.trim();
+                    if (
+                      !preset ||
+                      preset.toLowerCase() === "false" ||
+                      isDynamicReference(preset, shellMode)
+                    ) {
                       continue;
                     }
-                    const wsCtx = resolveWorkspaceRelativePath(ctxText, activeWorkingDir, {
-                      windowsPath: isWindowsShell,
-                      actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
-                    });
-                    const mappedCtxs = resolveWorkspaceTargetsInRepo(
-                      wsCtx,
-                      buildFileContext.root,
-                      buildFileContext.checkoutPrefixes,
-                      buildFileContext.foreignCheckoutPrefixes,
-                    );
-                    if (mappedCtxs.length > 0) {
-                      for (const resolvedCtx of mappedCtxs) {
-                        if (!seenContextDirs.has(resolvedCtx)) {
-                          seenContextDirs.add(resolvedCtx);
-                          contextDirs.push(resolvedCtx);
-                        }
-                      }
-                    } else if (ctxText) {
-                      hadUnresolvableContext = true;
-                      if (
-                        buildFileContext.deferUnresolvedInputs &&
-                        referencesUnresolvedInput(ctxText)
-                      ) {
-                        continue;
-                      }
-                      const unverifiableMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
-                      if (!seenContextProblems.has(unverifiableMsg)) {
-                        seenContextProblems.add(unverifiableMsg);
-                        problems.push(unverifiableMsg);
-                      }
+                    const msg = `${filePath}:${candidate.line}: ${normalizedCli} build --sbom preset uses unpinned default scanner image (pass --sbom-scanner-image ...@sha256:...)`;
+                    if (!seenContextProblems.has(msg)) {
+                      seenContextProblems.add(msg);
+                      problems.push(msg);
                     }
-                  }
-                }
-              }
-              if (
-                !contextArg &&
-                !hadRemoteContext &&
-                !hadUnresolvableContext &&
-                contextDirs.length === 0
-              ) {
-                for (const resolvedCtx of resolveWorkspaceTargetsInRepo(
-                  activeWorkingDir,
-                  buildFileContext.root,
-                  buildFileContext.checkoutPrefixes,
-                  buildFileContext.foreignCheckoutPrefixes,
-                )) {
-                  if (!seenContextDirs.has(resolvedCtx)) {
-                    seenContextDirs.add(resolvedCtx);
-                    contextDirs.push(resolvedCtx);
-                  }
-                }
-              }
-              const defaultNames =
-                normalizedCli === "podman" || normalizedCli === "buildah"
-                  ? ["Containerfile", "Dockerfile", "dockerfile"]
-                  : ["Dockerfile", "dockerfile"];
-              for (const baseContext of contextDirs) {
-                const candidateFile = findDefaultBuildFile(baseContext, defaultNames);
-                let foundDefault = false;
-                if (candidateFile) {
-                  const targetProblems = [];
-                  const safeFile = resolveSafeContainerFile(
-                    candidateFile,
-                    buildFileContext.root,
-                    targetProblems,
-                  );
-                  if (safeFile) {
-                    buildFileContext.explicitBuildFiles.add(candidateFile);
-                    pushResolvedFile(candidateFile);
-                    foundDefault = true;
-                  } else if (targetProblems.length > 0) {
-                    buildFileContext.explicitBuildFiles.add(candidateFile);
-                    foundDefault = true;
-                  }
-                }
-                if (!foundDefault) {
-                  const expectedPath = formatPortableRelativePath(
-                    buildFileContext.root,
-                    path.join(baseContext, defaultNames[0]),
-                  );
-                  const unverifiableMsg = `${filePath}:${lineNumber}: default build file ${expectedPath} cannot be verified statically`;
-                  if (!seenContextProblems.has(unverifiableMsg)) {
-                    seenContextProblems.add(unverifiableMsg);
-                    problems.push(unverifiableMsg);
                   }
                 }
               }
             }
-          }
 
-          for (const targetFile of resolvedBuildFiles) {
-            recordBuildInvocation(
-              targetFile,
-              buildArgsMap,
-              namedContexts,
-              filePath,
-              lineNumber,
-              buildFileContext.buildInvocations,
-              buildPlatforms,
-            );
+            const buildArgsMap = new Map();
+            for (const rawBuildArg of rawBuildArgs) {
+              const parsedArg = expandBuildArgSpec(
+                rawBuildArg,
+                stepEnv,
+                frame.vars,
+                exportedCommandVars,
+                rowList,
+                lineNumber,
+                shellMode,
+              );
+              if (parsedArg) {
+                buildArgsMap.set(parsedArg.name, {
+                  values: parsedArg.values,
+                  truncated: parsedArg.truncated,
+                });
+              }
+            }
+
+            if (buildArgsMap.has("BUILDKIT_SYNTAX")) {
+              const rowSyntaxProblems = [];
+              checkBuildkitSyntaxOverride(
+                buildArgsMap.get("BUILDKIT_SYNTAX"),
+                filePath,
+                lineNumber,
+                rowSyntaxProblems,
+              );
+              for (const message of rowSyntaxProblems) {
+                if (!seenSyntaxProblems.has(message)) {
+                  seenSyntaxProblems.add(message);
+                  problems.push(message);
+                }
+              }
+            }
+
+            const buildPlatforms = [];
+            const seenBuildPlatforms = new Set();
+            for (const rawPlatform of rawPlatforms) {
+              const expandedPlatform = resolveImageTokenCandidates(
+                rawPlatform,
+                stepEnv,
+                frame.vars,
+                lineNumber,
+                shellMode,
+              );
+              for (const varCandidate of expandedPlatform.candidates) {
+                for (const candidate of expandMatrixReferences(
+                  varCandidate.text,
+                  rowList,
+                  varCandidate.line,
+                )) {
+                  for (const platformEntry of splitPlatformEntries(candidate.text)) {
+                    if (!seenBuildPlatforms.has(platformEntry)) {
+                      seenBuildPlatforms.add(platformEntry);
+                      buildPlatforms.push(platformEntry);
+                    }
+                  }
+                }
+              }
+            }
+
+            if (usesStdinContextArchive) {
+              continue;
+            }
+
+            const { dirs: activeWorkingDirs, truncated: activeWorkingDirsTruncated } =
+              resolveCommandWorkingDirs(row);
+
+            if (usesStdinDockerfile) {
+              if (hasStdinHeredoc) {
+                stdinInvocations.push({
+                  buildArgs: buildArgsMap,
+                  namedContexts,
+                  platforms: buildPlatforms,
+                  rowList,
+                });
+              }
+              if (hasStdinRedirect) {
+                const rawStdinTarget = stdinRedirectTargets.at(-1);
+                if (!buildFileContext || activeWorkingDirs.length === 0) {
+                  pushStdinProblem(
+                    `${filePath}:${lineNumber}: stdin containerfile input ${rawStdinTarget} cannot be verified statically`,
+                  );
+                } else {
+                  if (activeWorkingDirsTruncated) {
+                    pushStdinProblem(
+                      `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
+                    );
+                  }
+                  const expandedStdin = resolveImageTokenCandidates(
+                    rawStdinTarget,
+                    stepEnv,
+                    frame.vars,
+                    lineNumber,
+                    shellMode,
+                  );
+                  if (expandedStdin.truncated) {
+                    pushStdinProblem(
+                      `${filePath}:${lineNumber}: ${rawStdinTarget} exceeds expansion limit and cannot be verified exhaustively`,
+                    );
+                  }
+                  const resolvedStdinFiles = [];
+                  const seenStdinFiles = new Set();
+                  for (const activeWorkingDir of activeWorkingDirs) {
+                    for (const varCandidate of expandedStdin.candidates) {
+                      for (const candidate of expandMatrixReferences(
+                        varCandidate.text,
+                        rowList,
+                        varCandidate.line,
+                      )) {
+                        const wsRel = resolveWorkspaceRelativePath(
+                          candidate.text,
+                          activeWorkingDir,
+                          {
+                            windowsPath: isWindowsShell,
+                            actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                          },
+                        );
+                        const mappedTargets = resolveWorkspaceTargetsInRepo(
+                          wsRel,
+                          buildFileContext.root,
+                          buildFileContext.checkoutPrefixes,
+                          buildFileContext.foreignCheckoutPrefixes,
+                        ).filter((target) => target !== path.resolve(buildFileContext.root));
+                        if (mappedTargets.length === 0) {
+                          if (
+                            buildFileContext.deferUnresolvedInputs &&
+                            referencesUnresolvedInput(candidate.text)
+                          ) {
+                            continue;
+                          }
+                          pushStdinProblem(
+                            `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
+                          );
+                          continue;
+                        }
+                        for (const resolvedPath of mappedTargets) {
+                          const targetProblems = [];
+                          const safeFile = resolveSafeContainerFile(
+                            resolvedPath,
+                            buildFileContext.root,
+                            targetProblems,
+                          );
+                          if (safeFile) {
+                            if (isArchiveOrBinaryFile(safeFile)) {
+                              pushStdinProblem(
+                                `${filePath}:${lineNumber}: stdin build context archive ${candidate.text} cannot be verified statically`,
+                              );
+                              continue;
+                            }
+                            buildFileContext.explicitBuildFiles.add(resolvedPath);
+                            if (!seenStdinFiles.has(resolvedPath)) {
+                              seenStdinFiles.add(resolvedPath);
+                              resolvedStdinFiles.push(resolvedPath);
+                            }
+                          } else if (targetProblems.length > 0) {
+                            buildFileContext.explicitBuildFiles.add(resolvedPath);
+                          } else {
+                            pushStdinProblem(
+                              `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
+                            );
+                          }
+                        }
+                      }
+                    }
+                  }
+                  for (const targetFile of resolvedStdinFiles) {
+                    recordBuildInvocation(
+                      targetFile,
+                      buildArgsMap,
+                      namedContexts,
+                      filePath,
+                      lineNumber,
+                      buildFileContext.buildInvocations,
+                      buildPlatforms,
+                    );
+                  }
+                }
+              } else if (!hasStdinHeredoc) {
+                pushStdinProblem(
+                  `${filePath}:${lineNumber}: stdin containerfile input cannot be verified statically`,
+                );
+              }
+              continue;
+            }
+
+            if (rawFiles.length === 0 && contextArg) {
+              const expandedRemoteCheck = resolveImageTokenCandidates(
+                contextArg,
+                stepEnv,
+                frame.vars,
+                lineNumber,
+                shellMode,
+              );
+              for (const varCandidate of expandedRemoteCheck.candidates) {
+                for (const candidate of expandMatrixReferences(
+                  varCandidate.text,
+                  rowList,
+                  varCandidate.line,
+                )) {
+                  const ctxText = candidate.text.trim();
+                  if (isRemoteBuildContext(ctxText)) {
+                    const remoteMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
+                    if (!seenContextProblems.has(remoteMsg)) {
+                      seenContextProblems.add(remoteMsg);
+                      problems.push(remoteMsg);
+                    }
+                  }
+                }
+              }
+            }
+
+            if (!buildFileContext || activeWorkingDirs.length === 0) {
+              continue;
+            }
+
+            if (activeWorkingDirsTruncated) {
+              problems.push(
+                `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
+              );
+            }
+
+            const resolvedBuildFiles = [];
+            const seenResolvedFiles = new Set();
+            const pushResolvedFile = (resolved) => {
+              if (resolved && !seenResolvedFiles.has(resolved)) {
+                seenResolvedFiles.add(resolved);
+                resolvedBuildFiles.push(resolved);
+              }
+            };
+
+            for (const activeWorkingDir of activeWorkingDirs) {
+              const dirResolvedFiles = [];
+              for (const rawFile of rawFiles) {
+                const expanded = resolveImageTokenCandidates(
+                  rawFile,
+                  stepEnv,
+                  frame.vars,
+                  lineNumber,
+                  shellMode,
+                );
+                if (expanded.truncated) {
+                  const limitMsg = `${filePath}:${lineNumber}: ${rawFile} exceeds expansion limit and cannot be verified exhaustively`;
+                  if (!seenContextProblems.has(limitMsg)) {
+                    seenContextProblems.add(limitMsg);
+                    problems.push(limitMsg);
+                  }
+                }
+                for (const varCandidate of expanded.candidates) {
+                  for (const candidate of expandMatrixReferences(
+                    varCandidate.text,
+                    rowList,
+                    varCandidate.line,
+                  )) {
+                    const wsRel = resolveWorkspaceRelativePath(candidate.text, activeWorkingDir, {
+                      windowsPath: isWindowsShell,
+                      actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                    });
+                    const mappedTargets = resolveWorkspaceTargetsInRepo(
+                      wsRel,
+                      buildFileContext.root,
+                      buildFileContext.checkoutPrefixes,
+                      buildFileContext.foreignCheckoutPrefixes,
+                    ).filter((target) => target !== path.resolve(buildFileContext.root));
+                    if (mappedTargets.length === 0) {
+                      if (
+                        buildFileContext.deferUnresolvedInputs &&
+                        referencesUnresolvedInput(candidate.text)
+                      ) {
+                        continue;
+                      }
+                      const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
+                      if (!seenContextProblems.has(unverifiableMsg)) {
+                        seenContextProblems.add(unverifiableMsg);
+                        problems.push(unverifiableMsg);
+                      }
+                      continue;
+                    }
+                    for (const resolvedPath of mappedTargets) {
+                      const targetProblems = [];
+                      const safeFile = resolveSafeContainerFile(
+                        resolvedPath,
+                        buildFileContext.root,
+                        targetProblems,
+                      );
+                      if (safeFile) {
+                        buildFileContext.explicitBuildFiles.add(resolvedPath);
+                        dirResolvedFiles.push(resolvedPath);
+                        pushResolvedFile(resolvedPath);
+                      } else if (targetProblems.length > 0) {
+                        buildFileContext.explicitBuildFiles.add(resolvedPath);
+                      } else {
+                        const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
+                        if (!seenContextProblems.has(unverifiableMsg)) {
+                          seenContextProblems.add(unverifiableMsg);
+                          problems.push(unverifiableMsg);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+
+              if (rawFiles.length === 0 && dirResolvedFiles.length === 0) {
+                const contextDirs = [];
+                const seenContextDirs = new Set();
+                let hadRemoteContext = false;
+                let hadUnresolvableContext = false;
+                if (contextArg) {
+                  const expandedCtx = resolveImageTokenCandidates(
+                    contextArg,
+                    stepEnv,
+                    frame.vars,
+                    lineNumber,
+                    shellMode,
+                  );
+                  if (expandedCtx.truncated) {
+                    const limitMsg = `${filePath}:${lineNumber}: ${contextArg} exceeds expansion limit and cannot be verified exhaustively`;
+                    if (!seenContextProblems.has(limitMsg)) {
+                      seenContextProblems.add(limitMsg);
+                      problems.push(limitMsg);
+                    }
+                  }
+                  for (const varCandidate of expandedCtx.candidates) {
+                    for (const candidate of expandMatrixReferences(
+                      varCandidate.text,
+                      rowList,
+                      varCandidate.line,
+                    )) {
+                      const ctxText = candidate.text.trim();
+                      if (isRemoteBuildContext(ctxText)) {
+                        hadRemoteContext = true;
+                        continue;
+                      }
+                      const wsCtx = resolveWorkspaceRelativePath(ctxText, activeWorkingDir, {
+                        windowsPath: isWindowsShell,
+                        actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                      });
+                      const mappedCtxs = resolveWorkspaceTargetsInRepo(
+                        wsCtx,
+                        buildFileContext.root,
+                        buildFileContext.checkoutPrefixes,
+                        buildFileContext.foreignCheckoutPrefixes,
+                      );
+                      if (mappedCtxs.length > 0) {
+                        for (const resolvedCtx of mappedCtxs) {
+                          if (!seenContextDirs.has(resolvedCtx)) {
+                            seenContextDirs.add(resolvedCtx);
+                            contextDirs.push(resolvedCtx);
+                          }
+                        }
+                      } else if (ctxText) {
+                        hadUnresolvableContext = true;
+                        if (
+                          buildFileContext.deferUnresolvedInputs &&
+                          referencesUnresolvedInput(ctxText)
+                        ) {
+                          continue;
+                        }
+                        const unverifiableMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
+                        if (!seenContextProblems.has(unverifiableMsg)) {
+                          seenContextProblems.add(unverifiableMsg);
+                          problems.push(unverifiableMsg);
+                        }
+                      }
+                    }
+                  }
+                }
+                if (
+                  !contextArg &&
+                  !hadRemoteContext &&
+                  !hadUnresolvableContext &&
+                  contextDirs.length === 0
+                ) {
+                  for (const resolvedCtx of resolveWorkspaceTargetsInRepo(
+                    activeWorkingDir,
+                    buildFileContext.root,
+                    buildFileContext.checkoutPrefixes,
+                    buildFileContext.foreignCheckoutPrefixes,
+                  )) {
+                    if (!seenContextDirs.has(resolvedCtx)) {
+                      seenContextDirs.add(resolvedCtx);
+                      contextDirs.push(resolvedCtx);
+                    }
+                  }
+                }
+                const defaultNames =
+                  normalizedCli === "podman" || normalizedCli === "buildah"
+                    ? ["Containerfile", "Dockerfile", "dockerfile"]
+                    : ["Dockerfile", "dockerfile"];
+                for (const baseContext of contextDirs) {
+                  const candidateFile = findDefaultBuildFile(baseContext, defaultNames);
+                  let foundDefault = false;
+                  if (candidateFile) {
+                    const targetProblems = [];
+                    const safeFile = resolveSafeContainerFile(
+                      candidateFile,
+                      buildFileContext.root,
+                      targetProblems,
+                    );
+                    if (safeFile) {
+                      buildFileContext.explicitBuildFiles.add(candidateFile);
+                      pushResolvedFile(candidateFile);
+                      foundDefault = true;
+                    } else if (targetProblems.length > 0) {
+                      buildFileContext.explicitBuildFiles.add(candidateFile);
+                      foundDefault = true;
+                    }
+                  }
+                  if (!foundDefault) {
+                    const expectedPath = formatPortableRelativePath(
+                      buildFileContext.root,
+                      path.join(baseContext, defaultNames[0]),
+                    );
+                    const unverifiableMsg = `${filePath}:${lineNumber}: default build file ${expectedPath} cannot be verified statically`;
+                    if (!seenContextProblems.has(unverifiableMsg)) {
+                      seenContextProblems.add(unverifiableMsg);
+                      problems.push(unverifiableMsg);
+                    }
+                  }
+                }
+              }
+            }
+
+            for (const targetFile of resolvedBuildFiles) {
+              recordBuildInvocation(
+                targetFile,
+                buildArgsMap,
+                namedContexts,
+                filePath,
+                lineNumber,
+                buildFileContext.buildInvocations,
+                buildPlatforms,
+              );
+            }
           }
         }
-        if (usesStdinDockerfile && hasStdinHeredoc) {
+        if (anyUsesStdinDockerfile && hasStdinHeredoc) {
           frame.pendingStdinBuilds.push({ lineNumber, invocations: stdinInvocations });
         }
         continue;

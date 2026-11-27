@@ -5654,6 +5654,66 @@ describe("workflow contracts", () => {
     ).toEqual([
       "<memory>:5: docker compose scale target definitions cannot be verified statically for container image digests",
     ]);
+    // Local `docker load` archive loads pass in non-shell steps, and Bash
+    // argument arrays expand before Docker build file/context resolution.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "steps:",
+          "  - shell: python",
+          "    run: |",
+          "      import subprocess",
+          '      subprocess.run(["docker", "load", "--input", "artifact.tar"], check=True)',
+          '      subprocess.run(["docker", "image", "load", "-i", "artifact.tar"], check=True)',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([]);
+    const r86Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r86-"));
+    try {
+      await mkdir(join(r86Fixture, ".github", "workflows"), { recursive: true });
+      await mkdir(join(r86Fixture, "ci"), { recursive: true });
+      await writeFile(join(r86Fixture, "ci", "app.recipe"), "FROM scratch\n");
+      await writeFile(join(r86Fixture, "ci", "bad.recipe"), "FROM alpine:3.20\n");
+      await writeFile(
+        join(r86Fixture, ".github", "workflows", "build.yml"),
+        [
+          "on: push",
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          `      - uses: actions/checkout@${"b".repeat(40)} # v4`,
+          "      - shell: bash",
+          "        run: |",
+          "          args=(-f ci/app.recipe)",
+          '          docker build "${args[@]}" .',
+          "",
+        ].join("\n"),
+      );
+      expect(checkWorkflowPins(r86Fixture).problems).toEqual([]);
+      await writeFile(
+        join(r86Fixture, ".github", "workflows", "build.yml"),
+        [
+          "on: push",
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          `      - uses: actions/checkout@${"b".repeat(40)} # v4`,
+          "      - shell: bash",
+          "        run: |",
+          "          args=(-f ci/bad.recipe)",
+          '          docker build "${args[@]}" .',
+          "",
+        ].join("\n"),
+      );
+      expect(checkWorkflowPins(r86Fixture).problems).toEqual([
+        "ci/bad.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r86Fixture, { recursive: true, force: true });
+    }
 
     const r83Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r83-"));
     try {
