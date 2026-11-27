@@ -151,10 +151,11 @@ const cspInterceptor: HandlerInterceptor = async (next) => {
   const nonce = getRequestNonce();
   if (nonce) unstable_setNonce(nonce);
   const result = await next();
-  // Mark the nonce as applied only when Waku's page renderer produced an HTML
-  // Response: `_api` routes return without setting an RSC path (leaving raw
-  // HTML handlers in charge of their own CSP), and unmatched `/` returns null
-  // before Waku's unnonced root fallback shell runs.
+  // Scope this example to SSR-rendered dynamic pages: Waku sets an RSC path
+  // for SSR pages, leaves it unset for `_api` handlers (so raw HTML handlers
+  // own their own CSP), and returns null for unmatched `/` before its unnonced
+  // root fallback shell runs. Routes with `unstable_disableSSR: true` render a
+  // nonced shell without setting an RSC path and need explicit CSP handling.
   if (
     nonce &&
     unstable_getRscPath() !== undefined &&
@@ -169,9 +170,13 @@ const cspInterceptor: HandlerInterceptor = async (next) => {
 export default cspInterceptor;
 ```
 
-Because Waku's `fsRouter()` defaults pages to static rendering, opt routes that
-rely on request-time catalog delivery and per-request CSP nonces into dynamic
-rendering (as in `examples/waku-cookie/src/pages/_root.tsx` and `index.tsx`):
+Because Waku's `fsRouter()` defaults pages to static rendering, opt SSR routes
+that rely on request-time catalog delivery and per-request CSP nonces into
+dynamic rendering (as in `examples/waku-cookie/src/pages/_root.tsx` and
+`index.tsx`). This guard targets SSR-enabled dynamic routes; if your app also
+uses `unstable_disableSSR: true`, attach the same per-request CSP and
+`Cache-Control: private, no-store` headers on those routes explicitly instead of
+gating on `unstable_getRscPath()`:
 
 ```ts
 export async function getConfig() {
