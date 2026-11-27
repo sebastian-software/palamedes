@@ -269,13 +269,27 @@ function stripBlockquotePrefix(line) {
   return { content: rest, quoteDepth };
 }
 
+function leadingIndentColumns(line) {
+  let columns = 0;
+  for (const ch of line) {
+    if (ch === " ") {
+      columns += 1;
+    } else if (ch === "\t") {
+      columns += 4 - (columns % 4);
+    } else {
+      break;
+    }
+  }
+  return columns;
+}
+
 export function findParentRelativeLinks(text) {
   const findings = [];
   let openFence = null;
   let prevBlank = true;
   let prevQuoteDepth = 0;
   let inIndentedCode = false;
-  let inList = false;
+  let listContentIndent = 0;
   let pendingRefQuoteDepth = null;
 
   for (const [index, rawLine] of text.split(/\r?\n/u).entries()) {
@@ -286,9 +300,11 @@ export function findParentRelativeLinks(text) {
         openFence = null;
       } else {
         if (quoteDepth === openFence.quoteDepth) {
-          const closing = /^ {0,3}(`+|~+)[ \t]*$/u.exec(content);
+          const closingIndent = leadingIndentColumns(content);
+          const closing = /^[ \t]*(`+|~+)[ \t]*$/u.exec(content);
           if (
             closing &&
+            closingIndent <= openFence.maxCloseIndent &&
             closing[1][0] === openFence.marker &&
             closing[1].length >= openFence.length
           ) {
@@ -303,7 +319,7 @@ export function findParentRelativeLinks(text) {
     if (quoteDepth !== prevQuoteDepth) {
       prevBlank = true;
       inIndentedCode = false;
-      inList = false;
+      listContentIndent = 0;
       prevQuoteDepth = quoteDepth;
     }
 
@@ -316,34 +332,50 @@ export function findParentRelativeLinks(text) {
 
     if (pendingRefQuoteDepth !== null && quoteDepth === pendingRefQuoteDepth) {
       pendingRefQuoteDepth = null;
-      const wrappedRef = /^\s*(?:<([^>\r\n]+)>|(\S+))(?:\s|$)/u.exec(content);
-      const target = wrappedRef?.[1] ?? wrappedRef?.[2];
-      if (target && escapesPackageRoot(target)) {
-        findings.push({ line: index + 1, target });
+      const wrappedRef =
+        /^\s*(?:<([^>\r\n]+)>|([^\s<>]+))(?:\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^)\r\n]*\)))?\s*$/u.exec(
+          content,
+        );
+      if (wrappedRef && (wrappedRef[1] || !wrappedRef[2].includes("]("))) {
+        const target = wrappedRef[1] ?? wrappedRef[2];
+        if (escapesPackageRoot(target)) {
+          findings.push({ line: index + 1, target });
+        }
+        prevBlank = false;
+        continue;
       }
-      prevBlank = false;
-      continue;
     }
     pendingRefQuoteDepth = null;
 
-    if (!inList && (prevBlank || inIndentedCode) && /^(?: {4}|\t)/u.test(content)) {
+    const indent = leadingIndentColumns(content);
+    if ((prevBlank || inIndentedCode) && indent >= listContentIndent + 4) {
       inIndentedCode = true;
       prevBlank = false;
       continue;
     }
     inIndentedCode = false;
 
-    const opener = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(content);
-    if (opener && (opener[1][0] !== "`" || !opener[2].includes("`"))) {
-      openFence = { marker: opener[1][0], length: opener[1].length, quoteDepth };
+    const fenceOpener = /^[ \t]*(`{3,}|~{3,})(.*)$/u.exec(content);
+    if (
+      fenceOpener &&
+      indent <= listContentIndent + 3 &&
+      (fenceOpener[1][0] !== "`" || !fenceOpener[2].includes("`"))
+    ) {
+      openFence = {
+        marker: fenceOpener[1][0],
+        length: fenceOpener[1].length,
+        quoteDepth,
+        maxCloseIndent: listContentIndent + 3,
+      };
       prevBlank = false;
       continue;
     }
 
-    if (/^ {0,3}(?:[-*+]|\d+[.)])\s+/u.test(content)) {
-      inList = true;
-    } else if (!/^(?: {2}|\t)/u.test(content)) {
-      inList = false;
+    const listMarker = /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+)/u.exec(content);
+    if (listMarker && indent <= listContentIndent + 3) {
+      listContentIndent = leadingIndentColumns(listMarker[1].replace(/[^\t]/gu, " "));
+    } else if (indent < listContentIndent) {
+      listContentIndent = 0;
     }
     prevBlank = false;
 
@@ -356,13 +388,16 @@ export function findParentRelativeLinks(text) {
         findings.push({ line: index + 1, target });
       }
     }
-    const refMatch = /^ {0,3}\[[^\]]+\]:\s*(?:<([^>\r\n]+)>|(\S+))(?:\s|$)/u.exec(prose);
-    if (refMatch) {
+    const refMatch =
+      /^[ \t]*\[[^\]]+\]:\s*(?:<([^>\r\n]+)>|([^\s<>]+))(?:\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^)\r\n]*\)))?\s*$/u.exec(
+        prose,
+      );
+    if (refMatch && indent <= listContentIndent + 3) {
       const target = refMatch[1] ?? refMatch[2];
       if (escapesPackageRoot(target)) {
         findings.push({ line: index + 1, target });
       }
-    } else if (/^ {0,3}\[[^\]]+\]:\s*$/u.test(prose)) {
+    } else if (indent <= listContentIndent + 3 && /^[ \t]*\[[^\]]+\]:\s*$/u.test(prose)) {
       pendingRefQuoteDepth = quoteDepth;
     }
   }

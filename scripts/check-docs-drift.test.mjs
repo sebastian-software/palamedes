@@ -171,6 +171,15 @@ test("flags parent-relative links in published package READMEs while ignoring co
     "> [quoted-ref]: ../../docs/cli.md",
     "[wrapped-ref]:",
     "  ./../../docs/cli.md",
+    "[not-a-ref]:",
+    "See [following-link](../../docs/cli.md).",
+    "[not-a-ref-inline]:",
+    "[inline-next-line](../../docs/cli.md)",
+    "- List item with code:",
+    "",
+    "      [list-indented-code](../../docs/cli.md)",
+    "",
+    "  [list-prose-link](../../docs/cli.md)",
     "Inline code `[ignored](../../docs/cli.md)` and ``[also](../ignored.md)`` stay allowed.",
     "",
     "    [indented-code](../../docs/cli.md)",
@@ -194,6 +203,9 @@ test("flags parent-relative links in published package READMEs while ignoring co
     { line: 5, target: "../../docs/stability.md#waku-contract" },
     { line: 8, target: "../../docs/cli.md" },
     { line: 10, target: "./../../docs/cli.md" },
+    { line: 12, target: "../../docs/cli.md" },
+    { line: 14, target: "../../docs/cli.md" },
+    { line: 19, target: "../../docs/cli.md" },
   ]);
 });
 
