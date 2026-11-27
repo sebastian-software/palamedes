@@ -6,12 +6,101 @@ const MAP_ELEMENT_ID = "palamedes-client-catalogs";
 const MARKER_PREFIX = "pmds-next:";
 const KEY_LENGTH = 12;
 const RETRY_PARAM = "pmds-retry";
+const STATIC_CATALOG_DIRECTORY_SUFFIX = "/_next/static/palamedes/";
+const DEFAULT_MAP_PATH_PATTERN = /^\/_next\/static\/palamedes\/(catalogs\.[^/]+)$/u;
+const SAFE_ASSET_FILE_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/u;
 
 let catalogMap;
 
+function isHttpUrl(url) {
+  return url.protocol === "http:" || url.protocol === "https:";
+}
+
+function isSafeAssetFileName(fileName) {
+  return (
+    typeof fileName === "string" && SAFE_ASSET_FILE_NAME.test(fileName) && !fileName.includes("..")
+  );
+}
+
+function configuredCatalogBase() {
+  try {
+    // Next.js inlines nextConfig.env values into client bundles when referenced
+    // directly as `process.env.<NAME>`.
+    return process.env.PALAMEDES_NEXT_CATALOG_BASE;
+  } catch {
+    return;
+  }
+}
+
+function pageLocationUrl() {
+  const href = globalThis.location?.href;
+  if (typeof href !== "string" || !href) return;
+  try {
+    const parsed = new URL(href);
+    return isHttpUrl(parsed) ? parsed : undefined;
+  } catch {
+    return;
+  }
+}
+
+function validateMapUrl(rawHref) {
+  if (typeof rawHref !== "string" || !rawHref) return;
+  const pageUrl = pageLocationUrl();
+  if (!pageUrl) return;
+
+  let parsed;
+  try {
+    parsed = new URL(rawHref, pageUrl);
+  } catch {
+    return;
+  }
+  if (!isHttpUrl(parsed) || parsed.username || parsed.password) return;
+
+  const base = configuredCatalogBase();
+  if (typeof base === "string" && base.length > 0) {
+    let expectedBase;
+    try {
+      expectedBase = new URL(base, pageUrl);
+    } catch {
+      return;
+    }
+    if (
+      !isHttpUrl(expectedBase) ||
+      !expectedBase.pathname.endsWith(STATIC_CATALOG_DIRECTORY_SUFFIX) ||
+      parsed.origin !== expectedBase.origin ||
+      !parsed.pathname.startsWith(expectedBase.pathname)
+    ) {
+      return;
+    }
+    const fileName = parsed.pathname.slice(expectedBase.pathname.length);
+    if (!fileName.startsWith("catalogs.") || !isSafeAssetFileName(fileName)) return;
+    return parsed.href;
+  }
+
+  if (parsed.origin !== pageUrl.origin) return;
+  const match = DEFAULT_MAP_PATH_PATTERN.exec(parsed.pathname);
+  if (!match || !isSafeAssetFileName(match[1])) return;
+  return parsed.href;
+}
+
 function mapUrl() {
-  // The resolved href of the <link>, so a relative URL also works.
-  return document.getElementById(MAP_ELEMENT_ID)?.href || undefined;
+  // Require the real <link rel="modulepreload"> rendered inside <head> so
+  // user-supplied markup or <base href> cannot clobber the catalog map URL.
+  const el = document.getElementById(MAP_ELEMENT_ID);
+  if (
+    typeof HTMLLinkElement !== "function" ||
+    !(el instanceof HTMLLinkElement) ||
+    el.rel !== "modulepreload" ||
+    !document.head ||
+    el.parentElement !== document.head ||
+    typeof el.getAttribute !== "function"
+  ) {
+    return;
+  }
+  // Read the raw `href` attribute instead of `el.href` so a `<base href>`
+  // element cannot rewrite a root-relative link to another origin before
+  // `validateMapUrl()` resolves it against `globalThis.location.href`.
+  return validateMapUrl(el.getAttribute("href"));
 }
 
 function waitForMapUrl() {
@@ -45,7 +134,7 @@ function importAsset(url) {
 // retry of the same URL would fail without a request. The query gives the
 // retry its own module map entry; the static file server ignores it.
 function retryUrl(url) {
-  const retry = new URL(url, document.baseURI);
+  const retry = new URL(url);
   retry.searchParams.set(RETRY_PARAM, "1");
   return retry.href;
 }
@@ -71,11 +160,35 @@ async function loadCatalogMap() {
       { cause: error },
     );
   }
+  if (
+    !map ||
+    typeof map !== "object" ||
+    !map.assets ||
+    typeof map.assets !== "object" ||
+    Array.isArray(map.assets)
+  ) {
+    throw new Error(`${url} is not a Palamedes client catalog map: it exports no assets.`);
+  }
+  const mapParsedUrl = new URL(url);
+  const mapDirectory = mapParsedUrl.pathname.slice(0, mapParsedUrl.pathname.lastIndexOf("/") + 1);
   const modules = new Map();
   for (const [fileName, keys] of Object.entries(map.assets)) {
-    const assetUrl = new URL(fileName, url).href;
+    if (!isSafeAssetFileName(fileName) || typeof keys !== "string") {
+      throw new Error(
+        `The Palamedes client catalog map from ${url} contains an invalid asset entry "${fileName}".`,
+      );
+    }
+    const assetUrl = new URL(fileName, mapParsedUrl);
+    if (
+      assetUrl.origin !== mapParsedUrl.origin ||
+      assetUrl.pathname !== `${mapDirectory}${fileName}`
+    ) {
+      throw new Error(
+        `The Palamedes client catalog map from ${url} resolves "${fileName}" outside its static directory.`,
+      );
+    }
     for (let index = 0; index < keys.length; index += KEY_LENGTH) {
-      modules.set(keys.slice(index, index + KEY_LENGTH), assetUrl);
+      modules.set(keys.slice(index, index + KEY_LENGTH), assetUrl.href);
     }
   }
   return { locale: map.locale, modules };

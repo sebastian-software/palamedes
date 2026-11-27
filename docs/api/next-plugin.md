@@ -350,28 +350,167 @@ It looks for the build output under `process.cwd()` and the configured
 supported. A render in a process without a binding throws instead of serving
 locale-neutral chunks.
 
-The server picks the locale before any layout runs, in this order:
+The server picks the locale before any layout runs, in this order by default
+(`localeSource: "route-first"`):
 
-1. the `x-palamedes-locale` request header, which the app's Proxy sets from
-   its own strategy (cookie, subdomain, domain, or anything else), overwriting
-   whatever the client sent;
-2. otherwise the root route param named `locale`, so an app under
-   `app/[locale]/` needs no Proxy;
+1. the root route param named `locale` (when `[locale]` is at or above the root
+   layout, such as `app/[locale]/layout.tsx`), so an app with a root `[locale]`
+   layout needs no Proxy and an untrusted incoming `x-palamedes-locale` request
+   header cannot override that route-segment locale or poison route-keyed
+   caches;
+2. otherwise — on routes without a root `locale` segment — the
+   `x-palamedes-locale` request header, which the app's Proxy sets from its own
+   strategy (cookie, subdomain, domain, or anything else);
 3. otherwise the source locale from `palamedes.yaml`.
 
-Other param names are not guessed at: name the segment `[locale]` or set the
-header. Setting the header takes two lines in `proxy.ts`, optionally together
-with a rewrite to an internal route:
+Next.js populates `rootParams` only up to the root layout: if your app places
+`app/[locale]/page.tsx` beneath a top-level `app/layout.tsx`, `rootParams.locale`
+is absent, so default `route-first` mode still consults `x-palamedes-locale` and
+`localeSource: "route"` always falls back to the source locale. Other param
+names are not guessed at: put `[locale]` at or above the root layout, or set the
+header from `proxy.ts`.
+
+Catch-all root segments (`[...locale]` and optional `[[...locale]]`) are also
+treated as route-owned in default `route-first` mode and never fall back to
+`x-palamedes-locale`:
+
+- When a root optional catch-all `[[...locale]]` segment is omitted (leaving
+  `rootParams.locale` absent), `route-first` ignores `x-palamedes-locale` and
+  selects the source locale so an untrusted header cannot override the
+  unprefixed root route.
+- When a catch-all `[...locale]` or `[[...locale]]` segment is populated,
+  Next.js provides `rootParams.locale` as an array rather than a single locale
+  string, so `route-first` also selects the source locale instead of consulting
+  `x-palamedes-locale`.
+
+Apps with a catch-all root `locale` segment that want their Proxy to decide the
+locale instead must opt in with `bindClientCatalogPermutations({ localeSource: "header" })`.
+
+Apps whose routes all live under a root `[locale]` layout can pass
+`bindClientCatalogPermutations({ localeSource: "route" })` to ignore
+`x-palamedes-locale` on every route (including routes outside `[locale]`). Apps
+whose Proxy should take precedence over route params can opt in with
+`bindClientCatalogPermutations({ localeSource: "header" })`. Whenever the header
+can select different locales for the same URL (for example, overriding `/en`
+with German via `localeSource: "header"`), the document shell itself must not be
+prerendered for that URL:
+
+- **Without `cacheComponents`:** export `export const dynamic = "force-dynamic"`
+  (or use another request-time dynamic API in the layout/page) so the route
+  renders dynamically on every request.
+- **With `cacheComponents: true`:** Next.js 16 rejects
+  `export const dynamic = "force-dynamic"`, and reading a dynamic API inside a
+  `<Suspense>` child still leaves the prerendered shell bound to the route
+  locale's chunk URLs. Routes that retain a prerendered shell must select chunks
+  by `[locale]` route param rather than overriding the locale via header.
+
+Any shared response cache (CDN, reverse proxy, or ISR) must also distinguish
+locales or be bypassed for header-varying URLs; signing the header does not
+change either rendering or caching requirement.
+
+If your app can consult an unsigned `x-palamedes-locale` header — either in
+`localeSource: "header"` mode, or in `route-first` mode on any route without a
+`locale` root param — your Proxy matcher must cover **every** route that can
+render and strip or overwrite any client-supplied `x-palamedes-locale` value.
+Otherwise, disable header reading with `localeSource: "route"` or require
+HMAC-SHA256 verification by signing the header in `proxy.ts` with
+`signClientCatalogLocaleHeader()` and passing `headerSecret` to
+`bindClientCatalogPermutations()` (passing an explicitly `undefined` or empty
+`headerSecret` throws at binding time instead of disabling verification):
 
 ```ts
+// proxy.ts
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  CLIENT_CATALOG_LOCALE_HEADER,
+  signClientCatalogLocaleHeader,
+} from "@palamedes/next-plugin/server";
 
 export function proxy(request: NextRequest) {
+  const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
+  if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
   const headers = new Headers(request.headers);
-  headers.set("x-palamedes-locale", resolveLocale(request));
+  headers.delete(CLIENT_CATALOG_LOCALE_HEADER);
+  headers.set(
+    CLIENT_CATALOG_LOCALE_HEADER,
+    signClientCatalogLocaleHeader(resolveLocale(request), localeSecret),
+  );
   return NextResponse.next({ request: { headers } });
 }
 ```
+
+And pass the matching secret in `instrumentation.ts`:
+
+```ts
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
+    if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
+    const { bindClientCatalogPermutations } = await import("@palamedes/next-plugin/server");
+    bindClientCatalogPermutations({
+      localeSource: "header",
+      headerSecret: localeSecret,
+    });
+  }
+}
+```
+
+When a header-only top-level layout (`app/layout.tsx`, with no `[locale]` root
+param) also reads `x-palamedes-locale` to load its server catalog, verify and
+unwrap the signed header value with `verifyClientCatalogLocaleHeader()`, check
+that the verified locale is one of your configured locales, and fall back to the
+same `source-locale` configured in `palamedes.yaml` so HTML and client chunks
+always agree:
+
+```ts
+// app/layout.tsx (header-only layout without a root [locale] segment)
+import { headers } from "next/headers";
+import {
+  CLIENT_CATALOG_LOCALE_HEADER,
+  createNextServerI18n,
+  verifyClientCatalogLocaleHeader,
+} from "@palamedes/next-plugin/server";
+
+// Keep these aligned with `locales` and `source-locale` in palamedes.yaml.
+const SUPPORTED_LOCALES = ["en", "de"] as const;
+const SOURCE_LOCALE = "en";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const localeSecret = process.env.PALAMEDES_LOCALE_SECRET;
+  if (!localeSecret) throw new Error("Missing PALAMEDES_LOCALE_SECRET");
+  const requestHeaders = await headers();
+  const verified = verifyClientCatalogLocaleHeader(
+    requestHeaders.get(CLIENT_CATALOG_LOCALE_HEADER),
+    localeSecret,
+  );
+  const locale =
+    verified && (SUPPORTED_LOCALES as readonly string[]).includes(verified)
+      ? verified
+      : SOURCE_LOCALE;
+  await createNextServerI18n({ locale });
+  return (
+    <html lang={locale}>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+In a root `[locale]` layout (`app/[locale]/layout.tsx`) using
+`localeSource: "header"`, `bindClientCatalogPermutations()` handles the two
+header fallback cases differently:
+
+- **Missing or invalid signature:** the header is ignored, and chunk selection
+  falls back to a supported `[locale]` route param before `source-locale`.
+- **Valid signature with an unsupported locale:** the verified header wins
+  without consulting `[locale]`, and chunk selection falls back directly to
+  `source-locale` (for example, a `/de` request carrying a validly signed `fr`
+  header on a build that only ships `en` and `de` selects `en` chunks).
+
+Mirror both cases in the layout—use `verified` when supported, fall back to
+`SOURCE_LOCALE` when `verified` is present but unsupported, and only fall back
+to a supported `params.locale` (then `SOURCE_LOCALE`) when `verified` is
+`undefined`—so server HTML and client chunks stay aligned on every request.
 
 A route that gets its locale from the header alone, such as a cookie strategy
 on fixed paths, has to render dynamically: declare

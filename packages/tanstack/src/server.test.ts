@@ -462,5 +462,44 @@ describe("TanStack server catalog adapter", () => {
       expect(message).toContain("flash untranslated");
       expect(message).toContain("please report");
     });
+
+    it("rejects unsafe characters in matched TanStack entry sources without warning or rewriting", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const unsafeSources = [
+        "/assets/index-abc.js?x=</script><script>evil()</script>",
+        "/assets/index-abc.js?x=<",
+        "/assets/index-abc.js?x=>",
+        "/assets/index-abc.js?x=\u0000",
+        "/assets/index-abc.js?x=\u001f",
+        "/assets/index-abc.js?x=\u007f",
+        "/assets/index-abc.js?x=\u0085",
+        "/assets/index-a\nb.js",
+        "/assets/index-a\rb.js",
+      ];
+
+      for (const source of unsafeSources) {
+        const html = `<html><head></head><body><script type="module" nonce="req-nonce" src="${source}"></script></body></html>`;
+        const response = await deliverDocument(html, false);
+        const rendered = await response.text();
+        expect(rendered).toContain(
+          `<script type="module" nonce="req-nonce" src="${source}"></script>`,
+        );
+        expect(rendered).not.toContain('<script type="module" nonce="req-nonce">');
+      }
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("escapes Unicode line and paragraph separators in inline TanStack bootstrap scripts", async () => {
+      const source = "/assets/index-a\u2028b\u2029c.js";
+      const response = await deliverDocument(
+        `<html><head></head><body><script type="module" src="${source}"></script></body></html>`,
+        false,
+      );
+      const rendered = await response.text();
+
+      expect(rendered).toContain('import("/assets/index-a\\u2028b\\u2029c.js")');
+      expect(rendered).not.toContain("\u2028");
+      expect(rendered).not.toContain("\u2029");
+    });
   });
 });
