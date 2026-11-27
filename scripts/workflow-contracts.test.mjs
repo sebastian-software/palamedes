@@ -4259,6 +4259,79 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r54Fixture, { recursive: true, force: true });
     }
+    // Step `env:` resolves against enclosing env before installing overrides;
+    // wrapped `if: ${{ inputs.feature }}` preserves string input types (so
+    // choice `"false"` is truthy); matrix `if:` equality applies Actions loose
+    // coercion (`24 == '24.0'`); separate aliased matrix trees memoize pair
+    // comparisons; `docker service create` / `update --image` are checked; and
+    // local Podman archive transports (`oci-archive:`) are not treated as
+    // registry tags.
+    const r55Lines = [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      feature:",
+      "        type: choice",
+      "        required: true",
+      "        options:",
+      '          - "false"',
+      "env:",
+      "  BASE: node:24",
+      "x-a0: &a0",
+      "  leaf: ok",
+      ...Array.from(
+        { length: 22 },
+        (_, idx) => `x-a${idx + 1}: &a${idx + 1}\n  l: *a${idx}\n  r: *a${idx}`,
+      ),
+      "x-b0: &b0",
+      "  leaf: ok",
+      ...Array.from(
+        { length: 22 },
+        (_, idx) => `x-b${idx + 1}: &b${idx + 1}\n  l: *b${idx}\n  r: *b${idx}`,
+      ),
+      "jobs:",
+      "  env-override:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - env:",
+      "          IMAGE: ${{ env.BASE }}",
+      `          BASE: node:24@${digest}`,
+      '        run: docker pull "$IMAGE"',
+      "  wrapped-if:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - if: ${{ inputs.feature }}",
+      "        run: docker pull alpine:3.20",
+      "  loose-matrix-eq:",
+      "    runs-on: ubuntu-latest",
+      "    strategy:",
+      "      matrix:",
+      "        node: [24]",
+      "        tree: [*a22]",
+      "        exclude:",
+      "          - tree: *b22",
+      "            node: 99",
+      "    steps:",
+      "      - if: matrix.node == '24.0'",
+      "        run: docker pull busybox:1.36",
+      "  swarm-and-podman:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: |",
+      "          docker service create --name web nginx:1.27",
+      "          docker service update --image redis:7 web",
+      `          docker service update --image redis:7@${digest} web`,
+      "          podman pull oci-archive:/tmp/image.tar",
+      "          podman pull docker-archive:/tmp/image.tar",
+      "",
+    ];
+    expect(unpinnedWorkflowContainerReferences(r55Lines.join("\n"))).toEqual([
+      "<memory>:152: node:24 is not pinned to a sha256 digest",
+      "<memory>:159: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:171: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:176: nginx:1.27 is not pinned to a sha256 digest",
+      "<memory>:177: redis:7 is not pinned to a sha256 digest",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

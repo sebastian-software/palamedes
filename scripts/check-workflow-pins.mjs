@@ -342,6 +342,121 @@ const PODMAN_RUN_VALUE_FLAGS = new Set([
   "--unsetenv",
   "--variant",
 ]);
+const DOCKER_SERVICE_CREATE_VALUE_FLAGS = new Set([
+  "--cap-add",
+  "--cap-drop",
+  "--config",
+  "--constraint",
+  "--container-label",
+  "--credential-spec",
+  "--dns",
+  "--dns-option",
+  "--dns-search",
+  "--endpoint-mode",
+  "--entrypoint",
+  "-e",
+  "--env",
+  "--env-file",
+  "--generic-resource",
+  "--group",
+  "--health-cmd",
+  "--health-interval",
+  "--health-retries",
+  "--health-start-interval",
+  "--health-start-period",
+  "--health-timeout",
+  "--host",
+  "--hostname",
+  "--isolation",
+  "-l",
+  "--label",
+  "--limit-cpu",
+  "--limit-memory",
+  "--limit-pids",
+  "--log-driver",
+  "--log-opt",
+  "--max-concurrent",
+  "--mode",
+  "--mount",
+  "--name",
+  "--network",
+  "--oom-score-adj",
+  "--placement-pref",
+  "-p",
+  "--publish",
+  "--replicas",
+  "--replicas-max-per-node",
+  "--reserve-cpu",
+  "--reserve-memory",
+  "--restart-condition",
+  "--restart-delay",
+  "--restart-max-attempts",
+  "--restart-window",
+  "--rollback-delay",
+  "--rollback-failure-action",
+  "--rollback-max-failure-ratio",
+  "--rollback-monitor",
+  "--rollback-order",
+  "--rollback-parallelism",
+  "--secret",
+  "--stop-grace-period",
+  "--stop-signal",
+  "--sysctl",
+  "--ulimit",
+  "--update-delay",
+  "--update-failure-action",
+  "--update-max-failure-ratio",
+  "--update-monitor",
+  "--update-order",
+  "--update-parallelism",
+  "-u",
+  "--user",
+  "-w",
+  "--workdir",
+]);
+const DOCKER_SERVICE_UPDATE_VALUE_FLAGS = new Set([
+  ...DOCKER_SERVICE_CREATE_VALUE_FLAGS,
+  "--args",
+  "--config-add",
+  "--config-rm",
+  "--constraint-add",
+  "--constraint-rm",
+  "--container-label-add",
+  "--container-label-rm",
+  "--dns-add",
+  "--dns-rm",
+  "--dns-option-add",
+  "--dns-option-rm",
+  "--dns-search-add",
+  "--dns-search-rm",
+  "--env-add",
+  "--env-rm",
+  "--generic-resource-add",
+  "--generic-resource-rm",
+  "--group-add",
+  "--group-rm",
+  "--host-add",
+  "--host-rm",
+  "--image",
+  "--label-add",
+  "--label-rm",
+  "--mount-add",
+  "--mount-rm",
+  "--network-add",
+  "--network-rm",
+  "--placement-pref-add",
+  "--placement-pref-rm",
+  "--publish-add",
+  "--publish-rm",
+  "--secret-add",
+  "--secret-rm",
+  "--sysctl-add",
+  "--sysctl-rm",
+  "--ulimit-add",
+  "--ulimit-rm",
+]);
+const PODMAN_LOCAL_TRANSPORT_PATTERN =
+  /^(?:oci-archive|docker-archive|dir|oci|containers-storage|docker-daemon):/iu;
 
 function stripQuotes(value) {
   const trimmed = value.trim();
@@ -642,6 +757,64 @@ function resolveRunnerShellContexts(jobNode, jobEnv, jobMatrixRows) {
   });
 }
 
+function toActionsNumber(scalar) {
+  if (scalar.scalarType === "null") {
+    return 0;
+  }
+  if (scalar.scalarType === "boolean") {
+    return String(scalar.value).toLowerCase() === "true" ? 1 : 0;
+  }
+  if (scalar.scalarType === "number") {
+    return Number(scalar.value);
+  }
+  const trimmed = String(scalar.value).trim();
+  if (trimmed === "") {
+    return 0;
+  }
+  return Number(trimmed);
+}
+
+function actionsScalarsEqual(lhs, rhs) {
+  const lType = lhs.scalarType ?? "string";
+  const rType = rhs.scalarType ?? "string";
+  if (lType === rType) {
+    if (lType === "null") {
+      return true;
+    }
+    if (lType === "boolean") {
+      return String(lhs.value).toLowerCase() === String(rhs.value).toLowerCase();
+    }
+    if (lType === "number") {
+      return Number(lhs.value) === Number(rhs.value);
+    }
+    return String(lhs.value).toLowerCase() === String(rhs.value).toLowerCase();
+  }
+  const lNum = toActionsNumber(lhs);
+  const rNum = toActionsNumber(rhs);
+  return !Number.isNaN(lNum) && !Number.isNaN(rNum) && lNum === rNum;
+}
+
+function parseActionsGuardLiteral(raw) {
+  const sq = parseActionsSingleQuotedLiteral(raw);
+  if (sq !== null) {
+    return { value: sq, scalarType: "string" };
+  }
+  if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
+    return { value: raw.slice(1, -1), scalarType: "string" };
+  }
+  const lower = raw.toLowerCase();
+  if (lower === "true" || lower === "false") {
+    return { value: lower, scalarType: "boolean" };
+  }
+  if (lower === "null") {
+    return { value: "", scalarType: "null" };
+  }
+  if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(raw)) {
+    return { value: raw, scalarType: "number" };
+  }
+  return null;
+}
+
 function evaluateStepIfClause(clause, context) {
   const trimmed = clause
     .trim()
@@ -650,22 +823,31 @@ function evaluateStepIfClause(clause, context) {
     .trim();
 
   const eqMatch =
-    /^(?<lhs>runner\.os|matrix(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*(?<op>==|!=)\s*(?:'(?<sq>[^']*)'|"(?<dq>[^"]*)")$/iu.exec(
+    /^(?<lhs>runner\.os|matrix(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*(?<op>==|!=)\s*(?<rhs>'(?:[^']|'')*'|"(?:[^"]|"")*"|true|false|null|-?(?:\d+(?:\.\d+)?|\.\d+))$/iu.exec(
       trimmed,
     );
   if (eqMatch) {
-    const expected = (eqMatch.groups.sq ?? eqMatch.groups.dq ?? "").toLowerCase();
-    let actual = null;
-    if (eqMatch.groups.lhs.toLowerCase() === "runner.os") {
-      actual = context.runnerOs;
-    } else if (context.row) {
-      const pathSuffix = eqMatch.groups.lhs.slice("matrix".length);
-      actual = resolveMatrixPath(context.row, parseMatrixPathSegments(pathSuffix))?.value ?? null;
-    }
-    if (actual === null) {
+    const expectedScalar = parseActionsGuardLiteral(eqMatch.groups.rhs);
+    if (!expectedScalar) {
       return null;
     }
-    const equal = actual.toLowerCase() === expected;
+    let actualScalar = null;
+    if (eqMatch.groups.lhs.toLowerCase() === "runner.os") {
+      actualScalar =
+        context.runnerOs !== null ? { value: context.runnerOs, scalarType: "string" } : null;
+    } else if (context.row) {
+      const pathSuffix = eqMatch.groups.lhs.slice("matrix".length);
+      const resolved = resolveMatrixPath(context.row, parseMatrixPathSegments(pathSuffix));
+      actualScalar = resolved
+        ? { value: resolved.value, scalarType: resolved.scalarType ?? "string" }
+        : context.row.hasUnknownProperties
+          ? null
+          : { value: "", scalarType: "null" };
+    }
+    if (actualScalar === null) {
+      return null;
+    }
+    const equal = actionsScalarsEqual(actualScalar, expectedScalar);
     return eqMatch.groups.op === "==" ? equal : !equal;
   }
 
@@ -998,24 +1180,10 @@ function evaluateGuardForEventAndContext(rawExpr, eventName, runnerContext) {
       expr,
     );
   if (litEqMatch) {
-    const parseGuardLit = (raw) => {
-      const sq = parseActionsSingleQuotedLiteral(raw);
-      if (sq !== null) {
-        return { kind: "string", val: sq.toLowerCase() };
-      }
-      const lo = raw.toLowerCase();
-      if (lo === "true" || lo === "false") {
-        return { kind: "boolean", val: lo === "true" };
-      }
-      if (lo === "null") {
-        return { kind: "null", val: null };
-      }
-      return { kind: "number", val: Number(raw) };
-    };
-    const l = parseGuardLit(litEqMatch.groups.lhs);
-    const r = parseGuardLit(litEqMatch.groups.rhs);
-    if (l.kind === r.kind) {
-      const eq = l.val === r.val;
+    const l = parseActionsGuardLiteral(litEqMatch.groups.lhs);
+    const r = parseActionsGuardLiteral(litEqMatch.groups.rhs);
+    if (l && r) {
+      const eq = actionsScalarsEqual(l, r);
       return litEqMatch.groups.op === "==" ? eq : !eq;
     }
   }
@@ -4208,48 +4376,74 @@ function resolveMatrixPath(rowMap, segments) {
   return null;
 }
 
-function matrixNodesEqual(left, right) {
+const MAX_MATRIX_COMPARE_WORK = 8192;
+
+function matrixNodesEqual(left, right, memo = null, budget = null) {
   if (left === right) {
     return true;
   }
   if (!left || !right || left.kind !== right.kind) {
     return false;
   }
-  if (left.kind === "scalar") {
-    return (
-      (left.scalarType ?? "string") === (right.scalarType ?? "string") &&
-      String(left.value) === String(right.value)
-    );
+  if (memo) {
+    const leftMemo = memo.get(left);
+    if (leftMemo?.has(right)) {
+      return leftMemo.get(right);
+    }
   }
-  if (left.kind === "seq") {
-    return (
-      left.value.length === right.value.length &&
-      left.value.every((item, idx) => matrixNodesEqual(item, right.value[idx]))
-    );
-  }
-  if (left.kind === "map") {
-    if (left.value.size !== right.value.size) {
+  if (budget) {
+    budget.steps += 1;
+    if (budget.steps > MAX_MATRIX_COMPARE_WORK) {
+      budget.exceeded = true;
       return false;
     }
-    for (const [k, v] of left.value) {
-      const rightEntry = lookupCaseInsensitiveMapEntry(right.value, k);
-      if (!rightEntry || !matrixNodesEqual(v, rightEntry.value)) {
-        return false;
+  }
+  let result = false;
+  if (left.kind === "scalar") {
+    result =
+      (left.scalarType ?? "string") === (right.scalarType ?? "string") &&
+      String(left.value) === String(right.value);
+  } else if (left.kind === "seq") {
+    if (left.value.length === right.value.length) {
+      result = true;
+      for (let idx = 0; idx < left.value.length; idx += 1) {
+        if (!matrixNodesEqual(left.value[idx], right.value[idx], memo, budget)) {
+          result = false;
+          break;
+        }
       }
     }
-    return true;
+  } else if (left.kind === "map") {
+    if (left.value.size === right.value.size) {
+      result = true;
+      for (const [k, v] of left.value) {
+        const rightEntry = lookupCaseInsensitiveMapEntry(right.value, k);
+        if (!rightEntry || !matrixNodesEqual(v, rightEntry.value, memo, budget)) {
+          result = false;
+          break;
+        }
+      }
+    }
   }
-  return false;
+  if (memo && !budget?.exceeded) {
+    let leftMemo = memo.get(left);
+    if (!leftMemo) {
+      leftMemo = new Map();
+      memo.set(left, leftMemo);
+    }
+    leftMemo.set(right, result);
+  }
+  return result;
 }
 
-function matchesExcludePartial(row, excludeRows) {
+function matchesExcludePartial(row, excludeRows, memo = null, budget = null) {
   return excludeRows.some((excludeMap) => {
     if (excludeMap.size === 0) {
       return false;
     }
     for (const [k, v] of excludeMap) {
       const found = lookupCaseInsensitiveMapEntry(row, k);
-      if (!found || !matrixNodesEqual(found.value, v)) {
+      if (!found || !matrixNodesEqual(found.value, v, memo, budget)) {
         return false;
       }
     }
@@ -4376,6 +4570,8 @@ function expandResolvedMatrixMap(matrixNode, filePath, problems, extraUnknown = 
   const rows = [];
   let work = 0;
   let truncated = false;
+  const compareMemo = new Map();
+  const compareBudget = { steps: 0, exceeded: false };
 
   if (axes.length > 0) {
     const expandAxis = (axisIndex, partialRow) => {
@@ -4389,8 +4585,15 @@ function expandResolvedMatrixMap(matrixNode, filePath, problems, extraUnknown = 
         }
         const nextRow = new Map(partialRow);
         nextRow.set(axisKey, valueNode);
-        if (excludeRows.length > 0 && matchesExcludePartial(nextRow, excludeRows)) {
+        if (
+          excludeRows.length > 0 &&
+          matchesExcludePartial(nextRow, excludeRows, compareMemo, compareBudget)
+        ) {
           continue;
+        }
+        if (compareBudget.exceeded) {
+          truncated = true;
+          return;
         }
         if (isLast) {
           if (rows.length >= MAX_MATRIX_ROWS) {
@@ -4424,7 +4627,10 @@ function expandResolvedMatrixMap(matrixNode, filePath, problems, extraUnknown = 
         if (
           sharedAxisKeys.every((k) => {
             const found = lookupCaseInsensitiveMapEntry(row, k);
-            return found !== null && matrixNodesEqual(found.value, includeMap.get(k));
+            return (
+              found !== null &&
+              matrixNodesEqual(found.value, includeMap.get(k), compareMemo, compareBudget)
+            );
           })
         ) {
           matchedBase = true;
@@ -4434,6 +4640,10 @@ function expandResolvedMatrixMap(matrixNode, filePath, problems, extraUnknown = 
               row.set(existing ? existing.key : k, v);
             }
           }
+        }
+        if (compareBudget.exceeded) {
+          truncated = true;
+          break;
         }
       }
     }
@@ -4448,7 +4658,7 @@ function expandResolvedMatrixMap(matrixNode, filePath, problems, extraUnknown = 
       row.hasUnknownProperties = true;
     }
   }
-  if (truncated || allRows.length > MAX_MATRIX_ROWS) {
+  if (truncated || compareBudget.exceeded || allRows.length > MAX_MATRIX_ROWS) {
     problems.push(
       `${filePath}:${matrixNode.line}: matrix exceeds ${MAX_MATRIX_ROWS} combinations and cannot be verified exhaustively`,
     );
@@ -8435,6 +8645,13 @@ function inspectShellText(
       ) {
         subcommand = "run";
         argIndex += 2;
+      } else if (
+        normalizedCli === "docker" &&
+        subcommand === "service" &&
+        (tokens[argIndex + 1] === "create" || tokens[argIndex + 1] === "update")
+      ) {
+        subcommand = tokens[argIndex + 1] === "create" ? "service-create" : "service-update";
+        argIndex += 2;
       } else if (subcommand === "pull" || subcommand === "run" || subcommand === "create") {
         subcommand = subcommand === "create" ? "run" : subcommand;
         argIndex += 1;
@@ -8453,7 +8670,11 @@ function inspectShellText(
               : PODMAN_RUN_VALUE_FLAGS
             : subcommand === "pull"
               ? DOCKER_PULL_VALUE_FLAGS
-              : DOCKER_RUN_VALUE_FLAGS;
+              : subcommand === "service-create"
+                ? DOCKER_SERVICE_CREATE_VALUE_FLAGS
+                : subcommand === "service-update"
+                  ? DOCKER_SERVICE_UPDATE_VALUE_FLAGS
+                  : DOCKER_RUN_VALUE_FLAGS;
       const allowMultipleImages = normalizedCli === "podman" && subcommand === "pull";
       const seenProblems = new Set();
 
@@ -8595,7 +8816,7 @@ function inspectShellText(
           const entry = argList[index];
           const token = entry.text;
           if (token === "--") {
-            if (usesPodmanRootfs) {
+            if (usesPodmanRootfs || subcommand === "service-update") {
               break;
             }
             if (allowMultipleImages) {
@@ -8633,6 +8854,44 @@ function inspectShellText(
           if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
             continue;
           }
+          if (subcommand === "service-update") {
+            if (token === "--image") {
+              if (argList[index + 1] !== undefined) {
+                pushImageEntry(argList[index + 1]);
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--image=")) {
+              pushImageEntry({
+                text: token.slice("--image=".length),
+                line: entry.line,
+                preExpanded: entry.preExpanded,
+              });
+              continue;
+            }
+            if (token === "--mount-add") {
+              if (argList[index + 1] !== undefined) {
+                pushMountEntry(argList[index + 1]);
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--mount-add=")) {
+              pushMountEntry({
+                text: token.slice("--mount-add=".length),
+                line: entry.line,
+                preExpanded: entry.preExpanded,
+              });
+              continue;
+            }
+            if (token.startsWith("-")) {
+              if (flagConsumesNextArg(token, valueFlags)) {
+                index += 1;
+              }
+            }
+            continue;
+          }
           if (subcommand === "run" && normalizedCli === "podman") {
             if (token === "--rootfs" || token.toLowerCase() === "--rootfs=true") {
               usesPodmanRootfs = true;
@@ -8643,7 +8902,10 @@ function inspectShellText(
               continue;
             }
           }
-          if (subcommand === "run" && normalizedCli !== "buildah") {
+          if (
+            (subcommand === "run" || subcommand === "service-create") &&
+            normalizedCli !== "buildah"
+          ) {
             if (token === "--mount") {
               if (argList[index + 1] !== undefined) {
                 pushMountEntry(argList[index + 1]);
@@ -8756,6 +9018,12 @@ function inspectShellText(
               continue;
             }
             if (allowScratchOperand && candidate.text.toLowerCase() === "scratch") {
+              continue;
+            }
+            if (
+              (normalizedCli === "podman" || normalizedCli === "buildah") &&
+              PODMAN_LOCAL_TRANSPORT_PATTERN.test(candidate.text)
+            ) {
               continue;
             }
             const isValid =
@@ -8942,8 +9210,15 @@ function extractEnvMap(envNode, baseEnv) {
     return merged;
   }
   for (const [key, valueNode] of envNode.value) {
-    if (valueNode?.kind === "scalar") {
-      merged.set(key, [{ value: String(valueNode.value), line: valueNode.line }]);
+    if (valueNode?.kind !== "scalar") {
+      continue;
+    }
+    const rawValue = String(valueNode.value);
+    if (rawValue.includes("${{")) {
+      const resolved = resolveEnvExpressionCandidates(rawValue, baseEnv, valueNode.line);
+      merged.set(key, candidatesToVarEntries(resolved, valueNode.line));
+    } else {
+      merged.set(key, [{ value: rawValue, line: valueNode.line }]);
     }
   }
   return merged;
@@ -10874,17 +11149,24 @@ function substituteInputsInAstNode(
     const result = { ...node, value: nextMap };
     memo.set(node, result);
     for (const [key, val] of node.value) {
-      if (
-        key.toLowerCase() === "if" &&
-        val?.kind === "scalar" &&
-        !String(val.value).includes("${{")
-      ) {
+      if (key.toLowerCase() === "if" && val?.kind === "scalar") {
         const rawIf = String(val.value);
-        const nextIf = substituteInputsInsideExpression(rawIf, inputValues, options);
-        nextMap.set(key, nextIf === rawIf ? val : { ...val, value: nextIf, scalarType: "string" });
-      } else {
-        nextMap.set(key, substituteInputsInAstNode(val, inputValues, memo, options));
+        const trimmed = rawIf.trim();
+        const unwrapped = stripOuterExpressionWrapper(trimmed);
+        const isSingleWrapped =
+          trimmed.startsWith("${{") && trimmed.endsWith("}}") && unwrapped !== trimmed;
+        if (!rawIf.includes("${{") || isSingleWrapped) {
+          const exprBody = isSingleWrapped ? unwrapped : rawIf;
+          const nextExpr = substituteInputsInsideExpression(exprBody, inputValues, options);
+          const nextIf = isSingleWrapped ? `\${{ ${nextExpr.trim()} }}` : nextExpr;
+          nextMap.set(
+            key,
+            nextIf === rawIf ? val : { ...val, value: nextIf, scalarType: "string" },
+          );
+          continue;
+        }
       }
+      nextMap.set(key, substituteInputsInAstNode(val, inputValues, memo, options));
     }
     return result;
   }
