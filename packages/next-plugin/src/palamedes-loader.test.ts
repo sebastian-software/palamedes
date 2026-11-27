@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import fs from "node:fs";
+import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import Module from "node:module";
 import os from "node:os";
@@ -1143,6 +1144,205 @@ describe("palamedes-loader.cjs", () => {
     await expect(runLoader({ serverMessageSplitting: true })).rejects.toThrow(
       "Palamedes Next message splitting currently supports PO catalogs only",
     );
+  });
+
+  it("caches source filters by object identity and memoizes canonical config.rootDir", async () => {
+    const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-loader-cache-"));
+    const rootDir = path.join(fixtureDirectory, "app");
+    const firstSource = path.join(rootDir, "src", "first.tsx");
+    const secondSource = path.join(rootDir, "src", "second.tsx");
+
+    try {
+      await mkdir(path.dirname(firstSource), { recursive: true });
+      await Promise.all([writeFile(firstSource, ""), writeFile(secondSource, "")]);
+      transformPalamedesMacros.mockReturnValue({
+        code: "export const translated = true",
+        map: null,
+        compiledIds: [],
+      });
+      loadPalamedesConfigSync.mockReturnValue({
+        configPath: path.join(rootDir, "palamedes.yaml"),
+        rootDir,
+        locales: ["en"],
+        sourceLocale: "en",
+        catalogs: [],
+      });
+
+      const sourceFilter = {
+        include: ["src/**/*.tsx"],
+        exclude: ["src/ignored/**"],
+        projectRoot: rootDir,
+      };
+      const options = { serverMessageSplitting: true, sourceFilter };
+
+      delete require.cache[require.resolve(loaderPath)];
+      const loader = require(loaderPath) as (this: unknown, source: string) => void;
+      const invokeLoader = (
+        loaderOptions: Record<string, unknown>,
+        resourcePath: string,
+      ): Promise<string> =>
+        new Promise<string>((resolve, reject) => {
+          loader.call(
+            {
+              resourcePath,
+              sourceMap: false,
+              addDependency() {},
+              getOptions() {
+                return loaderOptions;
+              },
+              async() {
+                return (error: Error | null, output?: string) => {
+                  if (error) {
+                    reject(error);
+                    return;
+                  }
+                  resolve(output ?? "");
+                };
+              },
+            },
+            'import { t } from "@palamedes/core/macro"; export const a = t`Hello`;',
+          );
+        });
+
+      const stringifySpy = vi.spyOn(JSON, "stringify");
+      const realpathSpy = vi.spyOn(fs.realpathSync, "native");
+      try {
+        await invokeLoader(options, firstSource);
+        await invokeLoader(options, secondSource);
+
+        const filterStringifyCalls = stringifySpy.mock.calls.filter(
+          ([value]) => value === sourceFilter,
+        );
+        expect(filterStringifyCalls).toHaveLength(1);
+
+        const rootRealpathCalls = realpathSpy.mock.calls.filter(([value]) => value === rootDir);
+        expect(rootRealpathCalls).toHaveLength(1);
+
+        // Passing a cloned sourceFilter object identity still matches identically via key cache.
+        const clonedFilter = {
+          include: [...sourceFilter.include],
+          exclude: [...sourceFilter.exclude],
+          projectRoot: sourceFilter.projectRoot,
+        };
+        const clonedOutput = await invokeLoader(
+          { serverMessageSplitting: true, sourceFilter: clonedFilter },
+          secondSource,
+        );
+        expect(clonedOutput).toContain("registerMessageLoaderGroup");
+      } finally {
+        stringifySpy.mockRestore();
+        realpathSpy.mockRestore();
+      }
+    } finally {
+      await rm(fixtureDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it("invalidates the canonical rootDir cache when a symlinked project root retargets", async () => {
+    const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), "palamedes-next-loader-link-"));
+    const firstRoot = path.join(fixtureDirectory, "first");
+    const secondRoot = path.join(fixtureDirectory, "second");
+    const linkedRoot = path.join(fixtureDirectory, "current");
+    const firstPage = path.join(firstRoot, "src", "page.tsx");
+    const secondPage = path.join(secondRoot, "src", "page.tsx");
+
+    try {
+      await mkdir(path.dirname(firstPage), { recursive: true });
+      await mkdir(path.dirname(secondPage), { recursive: true });
+      await Promise.all([writeFile(firstPage, ""), writeFile(secondPage, "")]);
+      await symlink(firstRoot, linkedRoot, process.platform === "win32" ? "junction" : "dir");
+
+      transformPalamedesMacros.mockReturnValue({
+        code: "export const translated = true",
+        map: null,
+        compiledIds: ["id-a"],
+      });
+      loadPalamedesConfigSync.mockReturnValue({
+        configPath: path.join(linkedRoot, "palamedes.yaml"),
+        rootDir: linkedRoot,
+        locales: ["en"],
+        sourceLocale: "en",
+        catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*.tsx"] }],
+      });
+
+      delete require.cache[require.resolve(loaderPath)];
+      const loader = require(loaderPath) as (this: unknown, source: string) => void;
+      const runWithLoader = (resourcePath: string) =>
+        new Promise<string>((resolve, reject) => {
+          loader.call(
+            {
+              resourcePath,
+              sourceMap: false,
+              addDependency() {},
+              getOptions() {
+                return { clientMessageSplitting: true, clientCatalogDelivery: "assets" };
+              },
+              async() {
+                return (error: Error | null, output?: string) => {
+                  if (error) {
+                    reject(error);
+                    return;
+                  }
+                  resolve(output ?? "");
+                };
+              },
+            },
+            'import { t } from "@palamedes/core/macro"; export const a = t`Hello`;',
+          );
+        });
+
+      const firstOutput = await runWithLoader(path.join(linkedRoot, "src", "page.tsx"));
+      const firstMarker = /"pmds-next:[0-9a-f]{12}:([\w-]+)"/u.exec(firstOutput);
+      expect(firstMarker).not.toBeNull();
+      expect(JSON.parse(Buffer.from(firstMarker![1]!, "base64url").toString("utf8")).source).toBe(
+        "src/page.tsx",
+      );
+
+      // Swap the symlink target in a long-lived worker.
+      await rm(linkedRoot, { force: true, recursive: true });
+      await symlink(secondRoot, linkedRoot, process.platform === "win32" ? "junction" : "dir");
+
+      const secondOutput = await runWithLoader(path.join(linkedRoot, "src", "page.tsx"));
+      const secondMarker = /"pmds-next:[0-9a-f]{12}:([\w-]+)"/u.exec(secondOutput);
+      expect(secondMarker).not.toBeNull();
+      expect(JSON.parse(Buffer.from(secondMarker![1]!, "base64url").toString("utf8")).source).toBe(
+        "src/page.tsx",
+      );
+
+      // Rename an ancestor release directory while keeping the nested app inode unchanged.
+      const stagingRelease = path.join(fixtureDirectory, "staging");
+      const renamedRelease = path.join(fixtureDirectory, "release");
+      const nestedApp = path.join(stagingRelease, "apps", "web");
+      const nestedPage = path.join(nestedApp, "src", "page.tsx");
+      await mkdir(path.dirname(nestedPage), { recursive: true });
+      await writeFile(nestedPage, "");
+      await rm(linkedRoot, { force: true, recursive: true });
+      await symlink(nestedApp, linkedRoot, process.platform === "win32" ? "junction" : "dir");
+
+      const stagingOutput = await runWithLoader(path.join(linkedRoot, "src", "page.tsx"));
+      const stagingMarker = /"pmds-next:[0-9a-f]{12}:([\w-]+)"/u.exec(stagingOutput);
+      expect(stagingMarker).not.toBeNull();
+      expect(JSON.parse(Buffer.from(stagingMarker![1]!, "base64url").toString("utf8")).source).toBe(
+        "src/page.tsx",
+      );
+
+      await rename(stagingRelease, renamedRelease);
+      await rm(linkedRoot, { force: true, recursive: true });
+      await symlink(
+        path.join(renamedRelease, "apps", "web"),
+        linkedRoot,
+        process.platform === "win32" ? "junction" : "dir",
+      );
+
+      const renamedOutput = await runWithLoader(path.join(linkedRoot, "src", "page.tsx"));
+      const renamedMarker = /"pmds-next:[0-9a-f]{12}:([\w-]+)"/u.exec(renamedOutput);
+      expect(renamedMarker).not.toBeNull();
+      expect(JSON.parse(Buffer.from(renamedMarker![1]!, "base64url").toString("utf8")).source).toBe(
+        "src/page.tsx",
+      );
+    } finally {
+      await rm(fixtureDirectory, { force: true, recursive: true });
+    }
   });
 });
 

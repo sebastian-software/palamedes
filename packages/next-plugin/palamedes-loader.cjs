@@ -1,7 +1,7 @@
 "use strict";
 
 const { createHash } = require("node:crypto");
-const { readFileSync, realpathSync } = require("node:fs");
+const { lstatSync, realpathSync, statSync } = require("node:fs");
 const path = require("node:path");
 const { decode, encode } = require("@jridgewell/sourcemap-codec");
 const {
@@ -15,7 +15,12 @@ const { loadConfigCachedSync } = require("./palamedes-config-cache.cjs");
 const { warnMissingAddDependency } = require("./palamedes-dev-warning.cjs");
 
 const SELECTED_MESSAGES_QUERY = "palamedes-selected";
-const sourceFilters = new Map();
+const MAX_SOURCE_FILTER_CACHE_ENTRIES = 64;
+const MAX_CANONICAL_ROOT_DIR_CACHE_ENTRIES = 64;
+const sourceFiltersByIdentity = new WeakMap();
+const sourceFiltersByKey = new Map();
+const canonicalRootDirs = new Map();
+let catalogFragmentPath;
 
 function deserializeFilterPattern(pattern) {
   return typeof pattern === "string" ? pattern : new RegExp(pattern.regexp, pattern.flags);
@@ -31,15 +36,25 @@ function matchesSourceFilter(options, resourcePath) {
   if (!serialized || typeof serialized !== "object") {
     return true;
   }
-  const key = JSON.stringify(serialized);
-  let filter = sourceFilters.get(key);
+  let filter = sourceFiltersByIdentity.get(serialized);
   if (!filter) {
-    filter = createPalamedesSourceFilter(
-      serialized.include.map(deserializeFilterPattern),
-      serialized.exclude.map(deserializeFilterPattern),
-      { projectRoot: serialized.projectRoot },
-    );
-    sourceFilters.set(key, filter);
+    const key = JSON.stringify(serialized);
+    filter = sourceFiltersByKey.get(key);
+    if (!filter) {
+      filter = createPalamedesSourceFilter(
+        serialized.include.map(deserializeFilterPattern),
+        serialized.exclude.map(deserializeFilterPattern),
+        { projectRoot: serialized.projectRoot },
+      );
+      if (sourceFiltersByKey.size >= MAX_SOURCE_FILTER_CACHE_ENTRIES) {
+        const oldestKey = sourceFiltersByKey.keys().next().value;
+        if (oldestKey !== undefined) {
+          sourceFiltersByKey.delete(oldestKey);
+        }
+      }
+      sourceFiltersByKey.set(key, filter);
+    }
+    sourceFiltersByIdentity.set(serialized, filter);
   }
   return filter(path.resolve(resourcePath));
 }
@@ -59,6 +74,65 @@ function canonicalPath(value) {
   } catch {
     return path.resolve(value);
   }
+}
+
+function statFingerprintMatches(stat, cached) {
+  return stat.dev === cached.dev && stat.ino === cached.ino && stat.ctimeMs === cached.ctimeMs;
+}
+
+function canonicalRootDir(rootDir, forceRefresh = false) {
+  let stat;
+  let linkStat;
+  try {
+    stat = statSync(rootDir);
+    linkStat = lstatSync(rootDir);
+  } catch {
+    return { resolved: path.resolve(rootDir), fromCache: false };
+  }
+  const cached = forceRefresh ? undefined : canonicalRootDirs.get(rootDir);
+  if (
+    cached !== undefined &&
+    statFingerprintMatches(stat, cached.stat) &&
+    statFingerprintMatches(linkStat, cached.linkStat)
+  ) {
+    return { resolved: cached.resolved, fromCache: true };
+  }
+  const resolved = canonicalPath(rootDir);
+  if (canonicalRootDirs.size >= MAX_CANONICAL_ROOT_DIR_CACHE_ENTRIES) {
+    const oldestKey = canonicalRootDirs.keys().next().value;
+    if (oldestKey !== undefined) {
+      canonicalRootDirs.delete(oldestKey);
+    }
+  }
+  canonicalRootDirs.set(rootDir, {
+    stat: { dev: stat.dev, ino: stat.ino, ctimeMs: stat.ctimeMs },
+    linkStat: { dev: linkStat.dev, ino: linkStat.ino, ctimeMs: linkStat.ctimeMs },
+    resolved,
+  });
+  return { resolved, fromCache: false };
+}
+
+function relativeModulePath(rootDir, sourcePath) {
+  const canonicalSource = canonicalPath(sourcePath);
+  const root = canonicalRootDir(rootDir);
+  let relative = path.relative(root.resolved, canonicalSource);
+  // If an ancestor directory was renamed and a symlink retargeted to the same
+  // nested directory inode, the relative path escapes the stale cached root.
+  if (
+    root.fromCache &&
+    (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+  ) {
+    const refreshed = canonicalRootDir(rootDir, true);
+    relative = path.relative(refreshed.resolved, canonicalSource);
+  }
+  return normalizePath(relative);
+}
+
+function getCatalogFragmentPath() {
+  if (catalogFragmentPath === undefined) {
+    catalogFragmentPath = require.resolve("@palamedes/next-plugin/catalog-fragment");
+  }
+  return catalogFragmentPath;
 }
 
 function normalizePath(value) {
@@ -85,6 +159,7 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
 
   const selection = Buffer.from(JSON.stringify(compiledIds)).toString("base64url");
   const source = encodeURIComponent(normalizePath(path.relative(config.rootDir, sourcePath)));
+  const fragmentImport = relativeImport(sourcePath, getCatalogFragmentPath());
   return catalogs.map((catalog) =>
     config.locales.map((locale) => {
       const resourcePath = nextCatalogResourcePath(config, catalog, locale);
@@ -92,7 +167,7 @@ function selectedMessageImports(config, sourcePath, compiledIds) {
         locale,
         // A query creates a separate bundler module. Using the full PO file as
         // its resource repeats that large loader input for every selection.
-        specifier: `${relativeImport(sourcePath, require.resolve("@palamedes/next-plugin/catalog-fragment"))}?palamedes-catalog=${encodeURIComponent(normalizePath(path.relative(config.rootDir, resourcePath)))}&${SELECTED_MESSAGES_QUERY}=${selection}&palamedes-source=${source}`,
+        specifier: `${fragmentImport}?palamedes-catalog=${encodeURIComponent(normalizePath(path.relative(config.rootDir, resourcePath)))}&${SELECTED_MESSAGES_QUERY}=${selection}&palamedes-source=${source}`,
       };
     }),
   );
@@ -107,9 +182,7 @@ function clientCatalogMarker(config, sourcePath, compiledIds) {
   if (!config.catalogs.some((catalog) => catalogMatchesSource(config, catalog, sourcePath))) {
     return null;
   }
-  const modulePath = normalizePath(
-    path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath)),
-  );
+  const modulePath = relativeModulePath(config.rootDir, sourcePath);
   const key = createHash("sha256").update(modulePath).digest("hex").slice(0, 12);
   const payload = Buffer.from(JSON.stringify({ source: modulePath, ids: compiledIds })).toString(
     "base64url",
@@ -187,9 +260,7 @@ function clientMessageBootstrap(config, sourcePath, compiledIds, delivery) {
       .join(", ");
     return `{ ${loaders} }`;
   });
-  const modulePath = normalizePath(
-    path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath)),
-  );
+  const modulePath = relativeModulePath(config.rootDir, sourcePath);
   const identifier = `__pmds_${createHash("sha256").update(modulePath).digest("hex").slice(0, 12)}`;
   return `const ${identifier}_loaderGroups = [${loaderGroups.join(", ")}];
 const ${identifier}_modules = await Promise.all([
@@ -470,9 +541,7 @@ function relativeImport(fromFile, targetFile) {
 
 function messageLoaderRegistration(config, sourcePath, compiledIds, clearUnmatchedRegistration) {
   const importsByCatalog = selectedMessageImports(config, sourcePath, compiledIds);
-  const modulePath = normalizePath(
-    path.relative(canonicalPath(config.rootDir), canonicalPath(sourcePath)),
-  );
+  const modulePath = relativeModulePath(config.rootDir, sourcePath);
   const moduleKey = createHash("sha256").update(modulePath).digest("hex").slice(0, 12);
   if (!importsByCatalog) {
     if (!clearUnmatchedRegistration) {
