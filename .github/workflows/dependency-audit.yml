@@ -8,7 +8,7 @@ on:
     - cron: "23 6 * * 1"
   workflow_dispatch:
 
-# The audit job installs npm dependencies and compiles cargo-audit, so it stays
+# The audit job installs npm dependencies and cargo-audit, so it stays
 # read-only; only the downstream reporting job opts into `issues: write`.
 permissions:
   contents: read
@@ -33,16 +33,22 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          rust-cache: "false"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       # The curated `overrides` block in pnpm-workspace.yaml is the repository's
       # mechanism for pinning patched transitive versions. This report is what
-      # tells maintainers when that list has fallen behind.
+      # tells maintainers when that list has fallen behind. The four standalone
+      # proof/* lockfiles ship inside the palamedes-examples container, so audit
+      # them alongside the root workspace lockfile.
       # The audit exit code is the signal that decides whether the tracking issue
       # is opened, so it has to survive into the step outcome. `continue-on-error`
       # keeps the job going; swallowing the code here with `|| true` would make
@@ -62,10 +68,30 @@ jobs:
           pnpm audit --audit-level=high >> audit-report.md 2>&1 || status=$?
 
           echo '```' >> audit-report.md
+
+          for dir in proof/nuxt-ssr proof/svelte-vite proof/sveltekit-ssr proof/vue-vite; do
+            {
+              echo
+              echo "### npm advisories ($dir)"
+              echo
+              echo '```'
+            } >> audit-report.md
+
+            dir_status=0
+            pnpm --dir "$dir" audit --audit-level=high >> audit-report.md 2>&1 || dir_status=$?
+            if [ "$dir_status" -ne 0 ] && [ "$status" -eq 0 ]; then
+              status=$dir_status
+            fi
+
+            echo '```' >> audit-report.md
+          done
+
           exit "$status"
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+      - name: Install pinned cargo-audit
+        uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2
+        with:
+          tool: cargo-audit@0.22.2
 
       - name: Audit Rust dependencies
         id: cargo-audit
@@ -132,8 +158,8 @@ jobs:
             echo "The scheduled dependency audit reported findings."
             echo
             echo "Triage each entry against the curated \`overrides\` block in"
-            echo "\`pnpm-workspace.yaml\`, and pin the patched version where the parent"
-            echo "dependency line permits it."
+            echo "\`pnpm-workspace.yaml\` or the standalone \`proof/*\` lockfiles,"
+            echo "and pin the patched version where the parent dependency line permits it."
             echo
             cat audit-report/audit-report.md
             echo

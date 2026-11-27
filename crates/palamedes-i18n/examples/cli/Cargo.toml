@@ -10,11 +10,11 @@ publish = false
 workspace = true
 
 [dependencies]
-palamedes-i18n = { path = "../.." }
+palamedes-i18n = { version = "2.2.0", path = "../.." }
 
 [build-dependencies]
-palamedes-build = { path = "../../../palamedes-build" }
+palamedes-build = { version = "2.2.0", path = "../../../palamedes-build" }
 
 [dev-dependencies]
-palamedes-build = { path = "../../../palamedes-build" }
+palamedes-build = { version = "2.2.0", path = "../../../palamedes-build" }
 tempfile = "3.27.0"
