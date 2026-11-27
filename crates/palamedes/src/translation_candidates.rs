@@ -2685,7 +2685,7 @@ fn validate_translation_icu(value: &TranslationValue) -> Vec<String> {
             values,
             ..
         } => {
-            if let Err(source) = validate_plural_variable(variable) {
+            if let Err(source) = validate_plural_variable(variable, *plural_kind) {
                 return vec![format!(
                     "Plural translation variable `translation.variable` is not valid ICU: {source}"
                 )];
@@ -2804,7 +2804,7 @@ pub(crate) fn render_translation_value(value: &TranslationValue) -> PalamedesRes
             offset,
             values,
         } => {
-            validate_plural_variable(variable)?;
+            validate_plural_variable(variable, *plural_kind)?;
             let options = values
                 .iter()
                 .map(|(selector, value)| {
@@ -2830,7 +2830,10 @@ pub(crate) fn render_translation_value(value: &TranslationValue) -> PalamedesRes
     }
 }
 
-fn validate_plural_variable(variable: &str) -> Result<(), ferrocat_icu::IcuParseError> {
+fn validate_plural_variable(
+    variable: &str,
+    plural_kind: TranslationPluralKind,
+) -> Result<(), ferrocat_icu::IcuParseError> {
     if variable.is_empty() {
         return Err(ferrocat_icu::IcuParseError::syntax(
             "plural variable must be a valid ICU argument identifier",
@@ -2838,19 +2841,11 @@ fn validate_plural_variable(variable: &str) -> Result<(), ferrocat_icu::IcuParse
             0,
         ));
     }
-    let arg_wrapped = format!("{{{variable}}}");
-    let arg_parsed = parse_runtime_icu(&arg_wrapped)?;
-    if !matches!(
-        arg_parsed.nodes.as_slice(),
-        [IcuNode::Argument { name }] if name == variable
-    ) {
-        return Err(ferrocat_icu::IcuParseError::syntax(
-            "plural variable must be a valid ICU argument identifier",
-            variable,
-            0,
-        ));
-    }
-    let plural_wrapped = format!("{{{variable}, plural, other {{#}}}}");
+    let formatter = match plural_kind {
+        TranslationPluralKind::Cardinal => "plural",
+        TranslationPluralKind::Ordinal => "selectordinal",
+    };
+    let plural_wrapped = format!("{{{variable}, {formatter}, other {{#}}}}");
     let plural_parsed = parse_runtime_icu(&plural_wrapped)?;
     match plural_parsed.nodes.as_slice() {
         [IcuNode::Plural { name, options, .. }]
@@ -2872,7 +2867,7 @@ fn parse_plural_branch(
     plural_kind: TranslationPluralKind,
     value: &str,
 ) -> Result<Vec<IcuNode>, ferrocat_icu::IcuParseError> {
-    validate_plural_variable(variable)?;
+    validate_plural_variable(variable, plural_kind)?;
     let formatter = match plural_kind {
         TranslationPluralKind::Cardinal => "plural",
         TranslationPluralKind::Ordinal => "selectordinal",
@@ -4716,12 +4711,16 @@ mod tests {
             );
         }
 
-        // Valid ICU argument names accepted by Ferrocat (including `#` inside the name)
-        // must remain accepted and round-trip cleanly.
-        for valid_var in ["count", "0", "file#count"] {
+        // Valid ICU argument names accepted by Ferrocat in plural context (including `#` and
+        // apostrophes around `#`) must remain accepted and round-trip cleanly.
+        for valid_var in ["count", "0", "file#count", "files'#'count"] {
             assert!(
                 parse_plural_branch(valid_var, TranslationPluralKind::Cardinal, "# files").is_ok(),
                 "expected parse_plural_branch to accept Ferrocat variable {valid_var:?}"
+            );
+            assert!(
+                parse_plural_branch(valid_var, TranslationPluralKind::Ordinal, "#th").is_ok(),
+                "expected ordinal parse_plural_branch to accept Ferrocat variable {valid_var:?}"
             );
         }
 
