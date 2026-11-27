@@ -4115,6 +4115,150 @@ describe("workflow contracts", () => {
       "<memory>:73: ${{ needs.trunc-producer.outputs.ref }} exceeds expansion limit and cannot be verified exhaustively",
       "<memory>:19: busybox:1.36 is not pinned to a sha256 digest",
     ]);
+    // Bounded matrix fingerprinting handles shared YAML aliases without OOM,
+    // typed matrix exclude/include keeps boolean `false` distinct from `'false'`,
+    // truncated `fromJSON(...)` matrices fail closed, shell functions bind
+    // positional args (`$1`) and fail closed at depth limit, and false guards
+    // (including substituted boolean dispatch inputs) skip dead branches.
+    const deepAliasMatrixLines = [
+      "x-m0: &m0",
+      "  leaf: ok",
+      ...Array.from(
+        { length: 24 },
+        (_, idx) => `x-m${idx + 1}: &m${idx + 1}\n  a: *m${idx}\n  b: *m${idx}`,
+      ),
+      "jobs:",
+      "  aliased-matrix:",
+      "    runs-on: ubuntu-latest",
+      "    strategy:",
+      "      matrix:",
+      "        cfg: [*m24]",
+      `    container: node:24@${digest}`,
+      "    steps:",
+      "      - run: echo ok",
+      "  typed-exclude:",
+      "    runs-on: ubuntu-latest",
+      "    strategy:",
+      "      matrix:",
+      "        flag:",
+      "          - false",
+      '          - "false"',
+      "        exclude:",
+      "          - flag: false",
+      `    container: \${{ matrix.flag && 'alpine:3.20' || 'node:24@${digest}' }}`,
+      "    steps:",
+      "      - run: echo ok",
+      "  trunc-matrix-src:",
+      "    runs-on: ubuntu-latest",
+      "    outputs:",
+      `      mat: \${{ format('{"image":["{0}/{1}@${digest}"]}', steps.gen.outputs.x, steps.gen.outputs.y) }}`,
+      "    steps:",
+      "      - id: gen",
+      "        run: |",
+      ...truncatedBranches("x"),
+      ...truncatedBranches("y"),
+      "  trunc-matrix-use:",
+      "    needs: trunc-matrix-src",
+      "    runs-on: ubuntu-latest",
+      "    strategy:",
+      "      matrix: ${{ fromJSON(needs.trunc-matrix-src.outputs.mat) }}",
+      "    container: ${{ matrix.image }}",
+      "    steps:",
+      "      - run: echo ok",
+      "  fn-args-and-depth:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: |",
+      '          pull_it() { docker pull "$1"; }',
+      '          pull_it "busybox:1.36"',
+      "          f0() { f1; }",
+      "          f1() { f2; }",
+      "          f2() { f3; }",
+      "          f3() { f4; }",
+      "          f4() { f5; }",
+      "          f5() { f6; }",
+      "          f6() { f7; }",
+      "          f7() { f8; }",
+      "          f8() { docker pull redis:7; }",
+      "          f0",
+      "  false-guard:",
+      "    if: false",
+      "    runs-on: ubuntu-latest",
+      "    container: ignored-dead-job:latest",
+      "    steps:",
+      "      - run: docker pull ignored-dead-step:latest",
+      "",
+    ];
+    const r54Diagnostics = unpinnedWorkflowContainerReferences(deepAliasMatrixLines.join("\n"));
+    expect(r54Diagnostics).toEqual([
+      "<memory>:90: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:127: ${{ fromJSON(needs.trunc-matrix-src.outputs.mat) }} exceeds expansion limit and cannot be verified exhaustively",
+      "<memory>:136: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:144: shell function call f8 exceeds maximum nesting depth (8) and cannot be verified",
+      "<memory>:145: redis:7 is not pinned to a sha256 digest",
+    ]);
+    // Reusable workflow receives caller's `github.event.inputs.*` independently
+    // from its own `workflow_call` `inputs.*`, and false substituted boolean
+    // guards skip disabled branches cleanly.
+    const r54Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r54-"));
+    try {
+      await mkdir(join(r54Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(join(r54Fixture, "Containerfile"), `FROM node:24@${digest}\n`);
+      await writeFile(
+        join(r54Fixture, ".github", "workflows", "callee.yml"),
+        [
+          "on:",
+          "  workflow_call:",
+          "jobs:",
+          "  run:",
+          "    runs-on: ubuntu-latest",
+          "    container: ${{ github.event.inputs.choice_img || 'unreachable:latest' }}",
+          "    steps:",
+          "      - run: echo ok",
+          "",
+        ].join("\n"),
+      );
+      const callerPinned = [
+        "on:",
+        "  workflow_dispatch:",
+        "    inputs:",
+        "      choice_img:",
+        "        type: choice",
+        "        required: true",
+        "        options:",
+        `          - node:24@${digest}`,
+        "      use_custom:",
+        "        type: boolean",
+        "        default: false",
+        "jobs:",
+        "  delegate:",
+        "    uses: ./.github/workflows/callee.yml",
+        "  guarded-build:",
+        "    if: inputs.use_custom",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - if: false",
+        "        run: docker build -f missing.Containerfile .",
+        "      - run: docker build -f Containerfile .",
+        "",
+      ].join("\n");
+      expect(
+        unpinnedWorkflowContainerReferences(callerPinned, ".github/workflows/caller.yml", {
+          root: r54Fixture,
+        }),
+      ).toEqual([]);
+      const callerUnpinned = callerPinned.replace(
+        `          - node:24@${digest}`,
+        `          - node:24@${digest}\n          - alpine:3.20`,
+      );
+      expect(
+        unpinnedWorkflowContainerReferences(callerUnpinned, ".github/workflows/caller.yml", {
+          root: r54Fixture,
+        }),
+      ).toEqual([".github/workflows/callee.yml:6: alpine:3.20 is not pinned to a sha256 digest"]);
+    } finally {
+      await rm(r54Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

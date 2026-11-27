@@ -982,8 +982,42 @@ function evaluateGuardForEventAndContext(rawExpr, eventName, runnerContext) {
   if (lowerExpr === "true" || lowerExpr === "always()") {
     return true;
   }
-  if (lowerExpr === "false") {
+  if (lowerExpr === "false" || lowerExpr === "null") {
     return false;
+  }
+  const quotedLit = parseActionsSingleQuotedLiteral(expr);
+  if (quotedLit !== null) {
+    return quotedLit.length > 0;
+  }
+  if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(expr)) {
+    const numVal = Number(expr);
+    return numVal !== 0 && !Number.isNaN(numVal);
+  }
+  const litEqMatch =
+    /^(?<lhs>'(?:[^']|'')*'|true|false|null|-?(?:\d+(?:\.\d+)?|\.\d+))\s*(?<op>==|!=)\s*(?<rhs>'(?:[^']|'')*'|true|false|null|-?(?:\d+(?:\.\d+)?|\.\d+))$/iu.exec(
+      expr,
+    );
+  if (litEqMatch) {
+    const parseGuardLit = (raw) => {
+      const sq = parseActionsSingleQuotedLiteral(raw);
+      if (sq !== null) {
+        return { kind: "string", val: sq.toLowerCase() };
+      }
+      const lo = raw.toLowerCase();
+      if (lo === "true" || lo === "false") {
+        return { kind: "boolean", val: lo === "true" };
+      }
+      if (lo === "null") {
+        return { kind: "null", val: null };
+      }
+      return { kind: "number", val: Number(raw) };
+    };
+    const l = parseGuardLit(litEqMatch.groups.lhs);
+    const r = parseGuardLit(litEqMatch.groups.rhs);
+    if (l.kind === r.kind) {
+      const eq = l.val === r.val;
+      return litEqMatch.groups.op === "==" ? eq : !eq;
+    }
   }
   if (typeof eventName === "string" && eventName.length > 0) {
     const eventVerdict = evaluateEventExprForName(expr, eventName);
@@ -1025,19 +1059,17 @@ function isStepGuardAlwaysTrue(stepIfNode, eventNames, rowRunnerContexts) {
 }
 
 function isEventGuardSatisfiable(ifNode, eventNames) {
-  if (
-    !ifNode ||
-    ifNode.kind !== "scalar" ||
-    !Array.isArray(eventNames) ||
-    eventNames.length === 0
-  ) {
+  if (!ifNode || ifNode.kind !== "scalar") {
     return true;
   }
   const rawIf = String(ifNode.value).trim();
   if (!rawIf) {
     return true;
   }
-  return eventNames.some((eventName) => evaluateEventExprForName(rawIf, eventName) !== false);
+  const eventsToCheck = Array.isArray(eventNames) && eventNames.length > 0 ? eventNames : [null];
+  return eventsToCheck.some(
+    (eventName) => evaluateGuardForEventAndContext(rawIf, eventName, null) !== false,
+  );
 }
 
 function lookupVarEntries(varMap, name, caseInsensitive = false) {
@@ -1854,7 +1886,9 @@ function findNextShellParamExpansion(text, startIndex = 0) {
       if (depth === 0) {
         const inner = text.slice(index + 2, cursor - 1);
         const exprMatch =
-          /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:(?<op>:-|:=|:\+|-|=|\+)(?<word>.*))?$/su.exec(inner);
+          /^(?<name>[A-Za-z_][A-Za-z0-9_]*|[1-9][0-9]*)(?:(?<op>:-|:=|:\+|-|=|\+)(?<word>.*))?$/su.exec(
+            inner,
+          );
         if (exprMatch) {
           return {
             start: index,
@@ -1867,7 +1901,7 @@ function findNextShellParamExpansion(text, startIndex = 0) {
       }
       continue;
     }
-    const bareMatch = /^(?<bare>[A-Za-z_][A-Za-z0-9_]*)/u.exec(text.slice(index + 1));
+    const bareMatch = /^(?<bare>[A-Za-z_][A-Za-z0-9_]*|[1-9])/u.exec(text.slice(index + 1));
     if (bareMatch) {
       const name = bareMatch.groups.bare;
       return {
@@ -4175,11 +4209,17 @@ function resolveMatrixPath(rowMap, segments) {
 }
 
 function matrixNodesEqual(left, right) {
+  if (left === right) {
+    return true;
+  }
   if (!left || !right || left.kind !== right.kind) {
     return false;
   }
   if (left.kind === "scalar") {
-    return String(left.value) === String(right.value);
+    return (
+      (left.scalarType ?? "string") === (right.scalarType ?? "string") &&
+      String(left.value) === String(right.value)
+    );
   }
   if (left.kind === "seq") {
     return (
@@ -4260,8 +4300,12 @@ function decodeFromJsonScalarNodes(scalarNode, envMap) {
   }
   const innerArg = expr.slice(prefix[0].length, -1).trim();
   const argEval = evaluateActionsValueVariants(innerArg, envMap ?? new Map());
-  if (!argEval || argEval.values.length === 0) {
+  if (!argEval) {
     return null;
+  }
+  const truncated = Boolean(argEval.truncated);
+  if (argEval.values.length === 0) {
+    return truncated ? { nodes: [], hasInvalidAlternative: true, truncated: true } : null;
   }
   const decoded = [];
   let hasInvalidAlternative = false;
@@ -4276,7 +4320,9 @@ function decodeFromJsonScalarNodes(scalarNode, envMap) {
       hasInvalidAlternative = true;
     }
   }
-  return decoded.length > 0 ? { nodes: decoded, hasInvalidAlternative } : null;
+  return decoded.length > 0 || truncated
+    ? { nodes: decoded, hasInvalidAlternative, truncated }
+    : null;
 }
 
 function expandResolvedMatrixMap(matrixNode, filePath, problems, extraUnknown = false) {
@@ -4411,25 +4457,53 @@ function expandResolvedMatrixMap(matrixNode, filePath, problems, extraUnknown = 
   return allRows;
 }
 
-function serializeMatrixNode(node) {
+const MAX_MATRIX_SERIALIZE_WORK = 4096;
+
+function fingerprintMatrixNode(node, nodeIds, canonicalIds, budget) {
   if (!node) {
-    return null;
+    return "null";
   }
+  if (nodeIds.has(node)) {
+    return nodeIds.get(node);
+  }
+  budget.steps += 1;
+  if (budget.steps > MAX_MATRIX_SERIALIZE_WORK) {
+    budget.exceeded = true;
+    return "!";
+  }
+  let rawKey;
   if (node.kind === "scalar") {
-    return ["s", node.scalarType ?? "string", String(node.value)];
+    rawKey = `s:${node.scalarType ?? "string"}:${String(node.value)}`;
+  } else if (node.kind === "seq") {
+    const childIds = [];
+    for (const item of node.value) {
+      childIds.push(fingerprintMatrixNode(item, nodeIds, canonicalIds, budget));
+      if (budget.exceeded) {
+        return "!";
+      }
+    }
+    rawKey = `q:${childIds.join(",")}`;
+  } else if (node.kind === "map") {
+    const entries = [];
+    const sortedKeys = [...node.value.keys()].sort((a, b) => a.localeCompare(b));
+    for (const key of sortedKeys) {
+      const childId = fingerprintMatrixNode(node.value.get(key), nodeIds, canonicalIds, budget);
+      if (budget.exceeded) {
+        return "!";
+      }
+      entries.push(`${JSON.stringify(key)}=${childId}`);
+    }
+    rawKey = `m:${entries.join(",")}`;
+  } else {
+    rawKey = `u:${node.kind ?? "u"}`;
   }
-  if (node.kind === "seq") {
-    return ["q", node.value.map((item) => serializeMatrixNode(item))];
+  let id = canonicalIds.get(rawKey);
+  if (id === undefined) {
+    id = `@${canonicalIds.size}`;
+    canonicalIds.set(rawKey, id);
   }
-  if (node.kind === "map") {
-    return [
-      "m",
-      [...node.value.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => [k, serializeMatrixNode(v)]),
-    ];
-  }
-  return [node.kind ?? "u"];
+  nodeIds.set(node, id);
+  return id;
 }
 
 function expandSingleMatrixMap(matrixNode, filePath, problems, envMap, extraUnknown = false) {
@@ -4444,6 +4518,11 @@ function expandSingleMatrixMap(matrixNode, filePath, problems, envMap, extraUnkn
     if (rawEntryNode?.kind === "scalar") {
       const decoded = decodeFromJsonScalarNodes(rawEntryNode, envMap);
       if (decoded) {
+        if (decoded.truncated) {
+          problems.push(
+            `${filePath}:${rawEntryNode.line}: ${String(rawEntryNode.value).trim()} exceeds expansion limit and cannot be verified exhaustively`,
+          );
+        }
         const seqNodes = decoded.nodes.filter((n) => n.kind === "seq");
         if (seqNodes.length > 0) {
           options = seqNodes.map((seqNode) => ({
@@ -4479,12 +4558,21 @@ function expandSingleMatrixMap(matrixNode, filePath, problems, envMap, extraUnkn
 
   const combinedRows = [];
   const seenRowKeys = new Set();
-  const serializeRow = (row) =>
-    JSON.stringify(
-      [...row.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => [k, serializeMatrixNode(v)]),
-    );
+  const nodeIds = new Map();
+  const canonicalIds = new Map();
+  const budget = { steps: 0, exceeded: false };
+  const serializeRow = (row) => {
+    const parts = [];
+    const sortedKeys = [...row.keys()].sort((a, b) => a.localeCompare(b));
+    for (const key of sortedKeys) {
+      const valId = fingerprintMatrixNode(row.get(key), nodeIds, canonicalIds, budget);
+      if (budget.exceeded) {
+        return null;
+      }
+      parts.push(`${JSON.stringify(key)}=${valId}`);
+    }
+    return parts.join(",");
+  };
 
   for (const variant of mapVariants) {
     const variantRows = expandResolvedMatrixMap(
@@ -4494,12 +4582,30 @@ function expandSingleMatrixMap(matrixNode, filePath, problems, envMap, extraUnkn
       variant.unknown,
     );
     for (const row of variantRows) {
-      const rowKey = `${row.hasUnknownProperties ? "1" : "0"}:${serializeRow(row)}`;
+      if (budget.exceeded) {
+        if (combinedRows.length < MAX_MATRIX_ROWS) {
+          combinedRows.push(row);
+        }
+        continue;
+      }
+      const fingerprint = serializeRow(row);
+      if (fingerprint === null) {
+        if (combinedRows.length < MAX_MATRIX_ROWS) {
+          combinedRows.push(row);
+        }
+        continue;
+      }
+      const rowKey = `${row.hasUnknownProperties ? "1" : "0"}:${fingerprint}`;
       if (!seenRowKeys.has(rowKey)) {
         seenRowKeys.add(rowKey);
         combinedRows.push(row);
       }
     }
+  }
+  if (budget.exceeded) {
+    problems.push(
+      `${filePath}:${matrixNode.line}: matrix exceeds ${MAX_MATRIX_ROWS} combinations and cannot be verified exhaustively`,
+    );
   }
   return combinedRows;
 }
@@ -4517,6 +4623,11 @@ function extractJobMatrixRows(jobNode, filePath, problems, envMap = null) {
     const decoded = decodeFromJsonScalarNodes(matrixNode, envMap);
     if (!decoded) {
       return [];
+    }
+    if (decoded.truncated) {
+      problems.push(
+        `${filePath}:${matrixNode.line}: ${String(matrixNode.value).trim()} exceeds expansion limit and cannot be verified exhaustively`,
+      );
     }
     const allRows = [];
     for (const candidate of decoded.nodes) {
@@ -6755,19 +6866,54 @@ function inspectShellText(
 
       if (shellMode === "posix" && frame.functions.has(cli)) {
         const fnDef = frame.functions.get(cli);
-        calledFnDefs.add(fnDef);
         const activeFns = fnContext?.activeFunctions ?? new Set();
         const curFnDepth = fnContext?.fnDepth ?? 0;
-        if (!activeFns.has(cli) && curFnDepth < 8) {
+        if (curFnDepth >= 8) {
+          problems.push(
+            `${filePath}:${lineNumber}: shell function call ${cli} exceeds maximum nesting depth (8) and cannot be verified`,
+          );
+          continue;
+        }
+        calledFnDefs.add(fnDef);
+        if (!activeFns.has(cli)) {
           const nextActive = new Set(activeFns);
           nextActive.add(cli);
           const isCallConditional = conditional || frame.branches.length > 0 || fnDef.conditional;
+          // Extract and expand positional arguments passed to the function call,
+          // skipping redirections like `>/dev/null`.
+          const positionalArgEntries = [];
+          for (let argIdx = cursor + 1; argIdx < tokens.length;) {
+            const redirSkip = consumeShellRedirection(tokens, argIdx, []);
+            if (redirSkip > 0) {
+              argIdx += redirSkip;
+              continue;
+            }
+            const rawArg = tokens[argIdx];
+            const isSingleQuotedArg = Boolean(peeledSingleQuoted[argIdx]);
+            const resolvedArg = isSingleQuotedArg
+              ? [{ value: rawArg, line: lineNumber }]
+              : candidatesToVarEntries(
+                  resolveImageTokenCandidates(rawArg, stepEnv, frame.vars, lineNumber, shellMode),
+                  lineNumber,
+                );
+            positionalArgEntries.push(resolvedArg);
+            argIdx += 1;
+          }
+          const existingPositionalKeys = [...frame.vars.keys()].filter((k) =>
+            /^[1-9][0-9]*$/u.test(k),
+          );
           if (fnDef.subshellBody) {
             const subVars = cloneVarMap(frame.vars);
             const subExported = new Set(frame.exportedVars);
             for (const [pName, pEntries] of prefixAssignEntries) {
               subVars.set(pName, pEntries);
               subExported.add(pName);
+            }
+            for (const posKey of existingPositionalKeys) {
+              subVars.delete(posKey);
+            }
+            for (let pIdx = 0; pIdx < positionalArgEntries.length; pIdx += 1) {
+              subVars.set(String(pIdx + 1), positionalArgEntries[pIdx]);
             }
             scopeStack.push({
               vars: subVars,
@@ -6792,24 +6938,37 @@ function inspectShellText(
             const beforeVars = isCallConditional ? cloneVarMap(frame.vars) : null;
             const beforeArrays = isCallConditional ? cloneArrayMap(frame.arrays) : null;
             const callLocalVars = new Map();
-            for (const [pName, pEntries] of prefixAssignEntries) {
-              if (!callLocalVars.has(pName)) {
-                const arrayEntry = frame.arrays.get(pName);
-                callLocalVars.set(pName, {
-                  hadVar: frame.vars.has(pName),
-                  entries: frame.vars.has(pName) ? [...frame.vars.get(pName)] : null,
-                  hadArray: Boolean(arrayEntry),
-                  arrayEntry: arrayEntry
-                    ? {
-                        variants: arrayEntry.variants.map((v) => v.map((item) => ({ ...item }))),
-                        truncated: arrayEntry.truncated,
-                      }
-                    : null,
-                  wasExported: frame.exportedVars.has(pName),
-                });
+            const saveCallLocal = (vName) => {
+              if (callLocalVars.has(vName)) {
+                return;
               }
+              const arrayEntry = frame.arrays.get(vName);
+              callLocalVars.set(vName, {
+                hadVar: frame.vars.has(vName),
+                entries: frame.vars.has(vName) ? [...frame.vars.get(vName)] : null,
+                hadArray: Boolean(arrayEntry),
+                arrayEntry: arrayEntry
+                  ? {
+                      variants: arrayEntry.variants.map((v) => v.map((item) => ({ ...item }))),
+                      truncated: arrayEntry.truncated,
+                    }
+                  : null,
+                wasExported: frame.exportedVars.has(vName),
+              });
+            };
+            for (const [pName, pEntries] of prefixAssignEntries) {
+              saveCallLocal(pName);
               frame.vars.set(pName, pEntries);
               frame.exportedVars.add(pName);
+            }
+            for (const posKey of existingPositionalKeys) {
+              saveCallLocal(posKey);
+              frame.vars.delete(posKey);
+            }
+            for (let pIdx = 0; pIdx < positionalArgEntries.length; pIdx += 1) {
+              const posKey = String(pIdx + 1);
+              saveCallLocal(posKey);
+              frame.vars.set(posKey, positionalArgEntries[pIdx]);
             }
             processEvents(fnDef.bodyEvents, {
               localVars: callLocalVars,
@@ -10564,7 +10723,12 @@ function extractActionInputDefaults(doc) {
   return defaults;
 }
 
-function substituteInputsInsideExpression(expr, inputValues, { includeEventInputs = false } = {}) {
+function substituteInputsInsideExpression(
+  expr,
+  inputValues,
+  { includeEventInputs = false, eventInputValues = null } = {},
+) {
+  const effectiveEventInputs = eventInputValues ?? (includeEventInputs ? inputValues : null);
   const quoteActionsString = (value) => `'${String(value).replaceAll("'", "''")}'`;
   const formatActionsInputLiteral = (entry) => {
     if (entry.type === "boolean") {
@@ -10602,14 +10766,16 @@ function substituteInputsInsideExpression(expr, inputValues, { includeEventInput
       continue;
     }
     const rest = expr.slice(i);
-    if (includeEventInputs) {
+    if (effectiveEventInputs) {
       const evMatch =
         /^github\.event\.inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])/iu.exec(
           rest,
         );
       if (evMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
         const name = (evMatch.groups.dot ?? evMatch.groups.sq ?? evMatch.groups.dq).toLowerCase();
-        out += inputValues.has(name) ? quoteActionsString(inputValues.get(name).value) : evMatch[0];
+        out += effectiveEventInputs.has(name)
+          ? quoteActionsString(effectiveEventInputs.get(name).value)
+          : evMatch[0];
         i += evMatch[0].length;
         continue;
       }
@@ -10628,7 +10794,12 @@ function substituteInputsInsideExpression(expr, inputValues, { includeEventInput
   return out;
 }
 
-function substituteInputsInText(text, inputValues, { includeEventInputs = false } = {}) {
+function substituteInputsInText(
+  text,
+  inputValues,
+  { includeEventInputs = false, eventInputValues = null } = {},
+) {
+  const effectiveEventInputs = eventInputValues ?? (includeEventInputs ? inputValues : null);
   let replaced = String(text).replace(
     INPUTS_EXPRESSION_PATTERN,
     (match, _p1, _p2, _p3, _offset, _str, groups) => {
@@ -10636,12 +10807,12 @@ function substituteInputsInText(text, inputValues, { includeEventInputs = false 
       return inputValues.has(name) ? inputValues.get(name).value : match;
     },
   );
-  if (includeEventInputs) {
+  if (effectiveEventInputs) {
     replaced = replaced.replace(
       EVENT_INPUTS_EXPRESSION_PATTERN,
       (match, _p1, _p2, _p3, _offset, _str, groups) => {
         const name = (groups.dot ?? groups.sq ?? groups.dq).toLowerCase();
-        return inputValues.has(name) ? inputValues.get(name).value : match;
+        return effectiveEventInputs.has(name) ? effectiveEventInputs.get(name).value : match;
       },
     );
   }
@@ -10651,6 +10822,7 @@ function substituteInputsInText(text, inputValues, { includeEventInputs = false 
       (match, _p1, _offset, _str, groups) => {
         const nextExpr = substituteInputsInsideExpression(groups.expr, inputValues, {
           includeEventInputs,
+          eventInputValues: effectiveEventInputs,
         });
         return nextExpr === groups.expr ? match : `\${{ ${nextExpr.trim()} }}`;
       },
@@ -10663,9 +10835,10 @@ function substituteInputsInAstNode(
   node,
   inputValues,
   memo = new Map(),
-  options = { includeEventInputs: false },
+  options = { includeEventInputs: false, eventInputValues: null },
 ) {
-  if (!node || inputValues.size === 0) {
+  const hasEventInputs = Boolean(options?.eventInputValues && options.eventInputValues.size > 0);
+  if (!node || (inputValues.size === 0 && !hasEventInputs)) {
     return node;
   }
   if (memo.has(node)) {
@@ -10701,7 +10874,17 @@ function substituteInputsInAstNode(
     const result = { ...node, value: nextMap };
     memo.set(node, result);
     for (const [key, val] of node.value) {
-      nextMap.set(key, substituteInputsInAstNode(val, inputValues, memo, options));
+      if (
+        key.toLowerCase() === "if" &&
+        val?.kind === "scalar" &&
+        !String(val.value).includes("${{")
+      ) {
+        const rawIf = String(val.value);
+        const nextIf = substituteInputsInsideExpression(rawIf, inputValues, options);
+        nextMap.set(key, nextIf === rawIf ? val : { ...val, value: nextIf, scalarType: "string" });
+      } else {
+        nextMap.set(key, substituteInputsInAstNode(val, inputValues, memo, options));
+      }
     }
     return result;
   }
@@ -10712,48 +10895,44 @@ function collectReferencedInputNames(
   node,
   found = new Set(),
   seen = new Set(),
-  { includeEventInputs = false } = {},
+  { includeEventInputs = false, onlyEventInputs = false, bareExpression = false } = {},
 ) {
   if (!node || seen.has(node)) {
     return found;
   }
   seen.add(node);
-  if (node.kind === "scalar") {
-    const text = String(node.value);
-    for (const blockMatch of text.matchAll(
-      new RegExp(ACTIONS_EXPRESSION_BLOCK_PATTERN.source, "gu"),
-    )) {
-      const expr = blockMatch.groups.expr;
-      let i = 0;
-      while (i < expr.length) {
-        if (expr[i] === "'") {
-          let end = i + 1;
-          while (end < expr.length) {
-            if (expr[end] === "'") {
-              if (expr[end + 1] === "'") {
-                end += 2;
-                continue;
-              }
-              end += 1;
-              break;
+  const scanExpr = (expr) => {
+    let i = 0;
+    while (i < expr.length) {
+      if (expr[i] === "'") {
+        let end = i + 1;
+        while (end < expr.length) {
+          if (expr[end] === "'") {
+            if (expr[end + 1] === "'") {
+              end += 2;
+              continue;
             }
             end += 1;
+            break;
           }
-          i = end;
+          end += 1;
+        }
+        i = end;
+        continue;
+      }
+      const rest = expr.slice(i);
+      if (includeEventInputs) {
+        const evMatch =
+          /^github\.event\.inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])/iu.exec(
+            rest,
+          );
+        if (evMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
+          found.add((evMatch.groups.dot ?? evMatch.groups.sq ?? evMatch.groups.dq).toLowerCase());
+          i += evMatch[0].length;
           continue;
         }
-        const rest = expr.slice(i);
-        if (includeEventInputs) {
-          const evMatch =
-            /^github\.event\.inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])/iu.exec(
-              rest,
-            );
-          if (evMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
-            found.add((evMatch.groups.dot ?? evMatch.groups.sq ?? evMatch.groups.dq).toLowerCase());
-            i += evMatch[0].length;
-            continue;
-          }
-        }
+      }
+      if (!onlyEventInputs) {
         const inMatch =
           /^inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])/iu.exec(rest);
         if (inMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
@@ -10761,20 +10940,36 @@ function collectReferencedInputNames(
           i += inMatch[0].length;
           continue;
         }
-        i += 1;
+      }
+      i += 1;
+    }
+  };
+  if (node.kind === "scalar") {
+    const text = String(node.value);
+    if (bareExpression && !text.includes("${{")) {
+      scanExpr(text);
+    } else {
+      for (const blockMatch of text.matchAll(
+        new RegExp(ACTIONS_EXPRESSION_BLOCK_PATTERN.source, "gu"),
+      )) {
+        scanExpr(blockMatch.groups.expr);
       }
     }
     return found;
   }
   if (node.kind === "seq") {
     for (const item of node.value) {
-      collectReferencedInputNames(item, found, seen, { includeEventInputs });
+      collectReferencedInputNames(item, found, seen, { includeEventInputs, onlyEventInputs });
     }
     return found;
   }
   if (node.kind === "map") {
-    for (const val of node.value.values()) {
-      collectReferencedInputNames(val, found, seen, { includeEventInputs });
+    for (const [k, val] of node.value) {
+      collectReferencedInputNames(val, found, seen, {
+        includeEventInputs,
+        onlyEventInputs,
+        bareExpression: k.toLowerCase() === "if",
+      });
     }
   }
   return found;
@@ -10844,10 +11039,53 @@ function nodeReferencesMatrix(node, seen = new Set()) {
   return false;
 }
 
-function collectPinRelevantDispatchInputNames(doc) {
+function collectPinRelevantDispatchInputNames(doc, root = null) {
   const referenced = new Set();
-  const addFromNode = (node) => {
-    collectReferencedInputNames(node, referenced, new Set(), { includeEventInputs: true });
+  const addFromNode = (node, { bareExpression = false } = {}) => {
+    collectReferencedInputNames(node, referenced, new Set(), {
+      includeEventInputs: true,
+      bareExpression,
+    });
+  };
+  const scanReusableCalleeEventInputs = (rawUses, visited = new Set(), depth = 0) => {
+    if (!root || depth >= MAX_LOCAL_CALL_DEPTH || !rawUses.startsWith("./")) {
+      return;
+    }
+    const resolvedPath = resolveContainedPath(rawUses, root, root);
+    if (!resolvedPath) {
+      return;
+    }
+    const safeFile = resolveSafeContainerFile(resolvedPath, root, []);
+    if (!safeFile || visited.has(safeFile)) {
+      return;
+    }
+    visited.add(safeFile);
+    let calleeSource;
+    try {
+      calleeSource = readFileSync(safeFile, "utf8");
+    } catch {
+      return;
+    }
+    const { doc: calleeDoc } = parseWorkflowYaml(calleeSource);
+    if (calleeDoc?.kind !== "map") {
+      return;
+    }
+    collectReferencedInputNames(calleeDoc, referenced, new Set(), {
+      includeEventInputs: true,
+      onlyEventInputs: true,
+    });
+    const calleeJobs = getMapField(calleeDoc, "jobs");
+    if (calleeJobs?.kind === "map") {
+      for (const calleeJob of calleeJobs.value.values()) {
+        if (calleeJob?.kind !== "map") {
+          continue;
+        }
+        const nestedUses = getMapField(calleeJob, "uses");
+        if (nestedUses?.kind === "scalar") {
+          scanReusableCalleeEventInputs(String(nestedUses.value).trim(), visited, depth + 1);
+        }
+      }
+    }
   };
 
   const traceEnvMaps = (envNodes, envNames, matrixNeeded) => {
@@ -11027,6 +11265,7 @@ function collectPinRelevantDispatchInputNames(doc) {
       const isCheckout = /^actions\/checkout@/iu.test(usesText);
       const isLocalOrDockerAction = isPinRelevantContainerActionUses(usesText);
       if (isLocalOrDockerAction || isCheckout) {
+        addFromNode(getMapField(stepNode, "if"), { bareExpression: true });
         collectFromPinNode(usesNode);
         collectFromPinNode(getMapField(stepNode, "with"));
         const stepEnv = getMapField(stepNode, "env");
@@ -11044,6 +11283,7 @@ function collectPinRelevantDispatchInputNames(doc) {
       if (runNode?.kind === "scalar") {
         const runText = String(runNode.value);
         if (CONTAINER_CLI_HINT_PATTERN.test(runText) || /GITHUB_(?:ENV|OUTPUT)/iu.test(runText)) {
+          addFromNode(getMapField(stepNode, "if"), { bareExpression: true });
           collectFromPinNode(runNode);
           collectFromPinNode(getMapField(stepNode, "working-directory"));
           collectFromPinNode(getMapField(stepNode, "shell"));
@@ -11084,6 +11324,10 @@ function collectPinRelevantDispatchInputNames(doc) {
       if (jobNode?.kind !== "map") {
         continue;
       }
+      const jobIfNode = getMapField(jobNode, "if");
+      if (jobIfNode) {
+        addFromNode(jobIfNode, { bareExpression: true });
+      }
       const jobEnvNode = getMapField(jobNode, "env");
       const jobStrategyNode = getMapField(jobNode, "strategy");
       const jobDefaultsNode = getMapField(jobNode, "defaults");
@@ -11117,6 +11361,7 @@ function collectPinRelevantDispatchInputNames(doc) {
       }
       const jobUsesNode = getMapField(jobNode, "uses");
       if (jobUsesNode?.kind === "scalar" && String(jobUsesNode.value).trim().startsWith("./")) {
+        scanReusableCalleeEventInputs(String(jobUsesNode.value).trim());
         const envNames = new Set();
         const matrixNeeded = { needed: false };
         const jobWithNode = getMapField(jobNode, "with");
@@ -11234,7 +11479,7 @@ function collectPinRelevantDispatchInputNames(doc) {
   return referenced;
 }
 
-function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
+function extractWorkflowDispatchInputContexts(doc, filePath, problems, root = null) {
   const onNode = getMapField(doc, "on");
   if (onNode?.kind !== "map") {
     return [];
@@ -11248,7 +11493,7 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
     return [];
   }
 
-  const referenced = collectPinRelevantDispatchInputNames(doc);
+  const referenced = collectPinRelevantDispatchInputNames(doc, root);
   const allReferenced = new Set();
   for (const fieldName of ["env", "container", "services", "image", "steps", "jobs"]) {
     collectReferencedInputNames(getMapField(doc, fieldName), allReferenced, new Set(), {
@@ -11495,6 +11740,7 @@ export function unpinnedWorkflowContainerReferences(
     emittedActionOutputs = null,
     emittedWorkflowOutputs = null,
     callerEventNames = null,
+    callerEventInputs = null,
   } = {},
 ) {
   const problems = [];
@@ -11585,6 +11831,7 @@ export function unpinnedWorkflowContainerReferences(
     }
     workflowInputContexts.push({
       inputs: mergedCallInputs,
+      eventInputs: callerEventInputs,
       deferUnresolvedInputs: false,
       includeEventInputs: false,
       eventNames: callerEventNames,
@@ -11626,7 +11873,7 @@ export function unpinnedWorkflowContainerReferences(
     );
     const hasNonInputTrigger = nonInputTriggers.length > 0;
     const wfCallDefaults = extractTriggerInputDefaults(doc, "workflow_call");
-    const wfDispatchContexts = extractWorkflowDispatchInputContexts(doc, filePath, problems);
+    const wfDispatchContexts = extractWorkflowDispatchInputContexts(doc, filePath, problems, root);
     if (wfCallDefaults.size > 0 || hasWorkflowCallTrigger) {
       workflowInputContexts.push({
         inputs: wfCallDefaults,
@@ -11719,18 +11966,23 @@ export function unpinnedWorkflowContainerReferences(
   for (let ctxIndex = 0; ctxIndex < workflowInputContexts.length; ctxIndex += 1) {
     const {
       inputs: effectiveWorkflowInputs,
+      eventInputs: explicitEventInputs = null,
       deferUnresolvedInputs,
       includeEventInputs,
       eventNames,
     } = workflowInputContexts[ctxIndex];
+    const effectiveCallerEventInputs =
+      explicitEventInputs ?? (includeEventInputs ? effectiveWorkflowInputs : null);
     const ctxBuildFileContext = buildFileContext
       ? { ...buildFileContext, deferUnresolvedInputs, eventNames }
       : null;
     const substitutionMemo = new Map();
     const applyWorkflowInputs = (node) =>
-      effectiveWorkflowInputs.size > 0
+      effectiveWorkflowInputs.size > 0 ||
+      (effectiveCallerEventInputs !== null && effectiveCallerEventInputs.size > 0)
         ? substituteInputsInAstNode(node, effectiveWorkflowInputs, substitutionMemo, {
             includeEventInputs,
+            eventInputValues: effectiveCallerEventInputs,
           })
         : node;
 
@@ -12123,7 +12375,14 @@ export function unpinnedWorkflowContainerReferences(
               const serializedEvents = Array.isArray(eventNames)
                 ? JSON.stringify([...eventNames].sort())
                 : "any";
-              const cacheKey = `wf\0${safeWorkflowFile}\0${serializedEvents}\0${serializedInputs}`;
+              const serializedEventInputs = effectiveCallerEventInputs
+                ? JSON.stringify(
+                    [...effectiveCallerEventInputs.entries()]
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([k, v]) => [k, v.value]),
+                  )
+                : "none";
+              const cacheKey = `wf\0${safeWorkflowFile}\0${serializedEvents}\0${serializedEventInputs}\0${serializedInputs}`;
               let cachedEntry = sharedCalleeCache.get(cacheKey);
               if (!cachedEntry) {
                 const calleeOutputs = new Map();
@@ -12140,6 +12399,7 @@ export function unpinnedWorkflowContainerReferences(
                     calleeResultCache: sharedCalleeCache,
                     emittedWorkflowOutputs: calleeOutputs,
                     callerEventNames: eventNames,
+                    callerEventInputs: effectiveCallerEventInputs,
                   },
                 );
                 cachedEntry = { problems: calleeProblems, outputs: calleeOutputs };
