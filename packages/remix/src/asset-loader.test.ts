@@ -1,8 +1,10 @@
 import {
   copyFileSync,
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   realpathSync,
   symlinkSync,
   rmSync,
@@ -939,22 +941,26 @@ describe("createPalamedesRemixAssetLoader", () => {
     );
 
     const registry = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir });
-    const [first, second] = await Promise.all([registry.load?.("de"), registry.load?.("de")]);
-    expect(first).toBeDefined();
-    expect(first).toBe(second);
-    expect(isCompiledCatalog(first)).toBe(true);
-    expect(Object.values(first ?? {})).toEqual([expect.any(Function)]);
+    try {
+      const [first, second] = await Promise.all([registry.load?.("de"), registry.load?.("de")]);
+      expect(first).toBeDefined();
+      expect(first).toBe(second);
+      expect(isCompiledCatalog(first)).toBe(true);
+      expect(Object.values(first ?? {})).toEqual([expect.any(Function)]);
 
-    const generationBefore = registry.generation?.();
-    writeFileSync(
-      path.join(rootDir, "app", "locales", "de.po"),
-      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag {name}"\n',
-    );
-    registry.invalidate();
-    const next = await registry.load?.("de");
-    expect(registry.generation?.()).not.toBe(generationBefore);
-    expect(next).not.toBe(first);
-    expect(Object.values(next ?? {})).toEqual([expect.any(Function)]);
+      const generationBefore = registry.generation?.();
+      writeFileSync(
+        path.join(rootDir, "app", "locales", "de.po"),
+        'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag {name}"\n',
+      );
+      registry.invalidate();
+      const next = await registry.load?.("de");
+      expect(registry.generation?.()).not.toBe(generationBefore);
+      expect(next).not.toBe(first);
+      expect(Object.values(next ?? {})).toEqual([expect.any(Function)]);
+    } finally {
+      registry.close?.();
+    }
   });
 
   it("loads every configured server catalog in declaration order", async () => {
@@ -975,12 +981,16 @@ describe("createPalamedesRemixAssetLoader", () => {
       }
     }
     const registry = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir });
-    const messages = await registry.load?.("de");
-    expect(Object.values(messages ?? {}).sort()).toEqual([
-      "de-first",
-      "de-second",
-      "de-second-shared",
-    ]);
+    try {
+      const messages = await registry.load?.("de");
+      expect(Object.values(messages ?? {}).sort()).toEqual([
+        "de-first",
+        "de-second",
+        "de-second-shared",
+      ]);
+    } finally {
+      registry.close?.();
+    }
   });
 
   it("watches catalog edits without invalidating cached browser module URLs", async () => {
@@ -1085,31 +1095,35 @@ describe("createPalamedesRemixAssetLoader", () => {
     );
 
     const registry = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir });
-    const first = await registry.load?.("de");
-    const generation = registry.generation?.();
+    try {
+      const first = await registry.load?.("de");
+      const generation = registry.generation?.();
 
-    for (let index = 0; index < 100; index += 1) {
+      for (let index = 0; index < 100; index += 1) {
+        expect(await registry.load?.("de")).toBe(first);
+      }
+
+      expect(registry.generation?.()).toBe(generation);
+
+      writeFileSync(
+        path.join(rootDir, "app", "locales", "de.po"),
+        'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag"\n',
+      );
       expect(await registry.load?.("de")).toBe(first);
+      const sourcePath = path.join(rootDir, "app", "warm.tsx");
+      const source =
+        'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+      writeFileSync(sourcePath, source);
+      const ids = transformPalamedesMacros(source, sourcePath).compiledIds;
+      for (let index = 0; index < 100; index += 1) registry.register(sourcePath, ids);
+      expect(registry.generation?.()).toBe(generation);
+      expect(await registry.load?.("de")).toBe(first);
+
+      registry.invalidate();
+      expect(await registry.load?.("de")).not.toBe(first);
+    } finally {
+      registry.close?.();
     }
-
-    expect(registry.generation?.()).toBe(generation);
-
-    writeFileSync(
-      path.join(rootDir, "app", "locales", "de.po"),
-      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Guten Tag"\n',
-    );
-    expect(await registry.load?.("de")).toBe(first);
-    const sourcePath = path.join(rootDir, "app", "warm.tsx");
-    const source =
-      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
-    writeFileSync(sourcePath, source);
-    const ids = transformPalamedesMacros(source, sourcePath).compiledIds;
-    for (let index = 0; index < 100; index += 1) registry.register(sourcePath, ids);
-    expect(registry.generation?.()).toBe(generation);
-    expect(await registry.load?.("de")).toBe(first);
-
-    registry.invalidate();
-    expect(await registry.load?.("de")).not.toBe(first);
   });
 
   it("honors browser-specific include and exclude filters", () => {
@@ -1130,6 +1144,115 @@ describe("createPalamedesRemixAssetLoader", () => {
     expect(String(load("/repo/app/public/included.js").source)).toContain("getI18n()._(");
     expect(load("/repo/app/private/not-included.js").source).toBe(source);
     expect(load("/repo/app/public/excluded/skip.js").source).toBe(source);
+  });
+
+  it("cleans up temporary server module directories on close without leaking exit listeners", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-tmpdir-cleanup-"));
+    tempDirectories.push(rootDir);
+    mkdirSync(path.join(rootDir, "app", "locales"), { recursive: true });
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      [
+        "locales: [en, de]",
+        "source-locale: en",
+        "catalogs:",
+        "  - path: app/locales/{locale}",
+        "    include: [app/**/*.tsx]",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hello"\n',
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo"\n',
+    );
+
+    const beforeDirs = new Set(
+      readdirSync(tmpdir()).filter((name) => name.startsWith("palamedes-remix-modules-")),
+    );
+    const exitListenersBefore = process.listenerCount("exit");
+
+    const first = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir, watch: false });
+    const second = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir, watch: false });
+    try {
+      const firstMessages = await first.load?.("de");
+      const secondMessages = await second.load?.("de");
+      expect(secondMessages).toStrictEqual(firstMessages);
+
+      const createdDirs = readdirSync(tmpdir())
+        .filter((name) => name.startsWith("palamedes-remix-modules-") && !beforeDirs.has(name))
+        .map((name) => path.join(tmpdir(), name));
+      expect(createdDirs).toHaveLength(1);
+      // Identical compiled catalogs across active registries share one module file & URL.
+      expect(readdirSync(createdDirs[0]!)).toHaveLength(1);
+      // Only one shared exit listener is registered regardless of registry count.
+      expect(process.listenerCount("exit")).toBe(exitListenersBefore + 1);
+
+      // Closing the first registry keeps the shared directory alive for the second.
+      first.close?.();
+      expect(createdDirs.filter((directory) => existsSync(directory))).toHaveLength(1);
+
+      // Closing the last active registry removes the shared directory and exit listener.
+      second.close?.();
+      expect(createdDirs.filter((directory) => existsSync(directory))).toHaveLength(0);
+      expect(process.listenerCount("exit")).toBe(exitListenersBefore);
+
+      // Loading after close fails cleanly without creating an orphaned temp directory.
+      await expect(first.load?.("en")).rejects.toThrow("closed");
+      const leakedAfterClose = readdirSync(tmpdir()).filter(
+        (name) => name.startsWith("palamedes-remix-modules-") && !beforeDirs.has(name),
+      );
+      expect(leakedAfterClose).toHaveLength(0);
+    } finally {
+      first.close?.();
+      second.close?.();
+    }
+  });
+
+  it("sanitizes HTTP 500 fragment responses outside development while logging full diagnostics", async () => {
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    const fixture = createAssetFixture("message.ts", source);
+    writeFragmentCatalogFixture(fixture.rootDir);
+    // Remove the de.po catalog so fragment compilation throws an error containing filesystem paths.
+    rmSync(path.join(fixture.rootDir, "locales", "de.po"));
+
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const ids = transformPalamedesMacros(source, fixture.modulePath).compiledIds;
+      const key = registry.register(fixture.modulePath, ids);
+      const fragmentRequest = new Request(
+        `https://example.test${registry.sidecarUrl(key)}?fragment=1&locale=de`,
+      );
+
+      vi.stubEnv("NODE_ENV", "production");
+      const prodResponse = registry.serve(fragmentRequest);
+      expect(prodResponse?.status).toBe(500);
+      const prodBody = await prodResponse?.text();
+      expect(prodBody).toBe("Palamedes catalog fragment failed.");
+      expect(prodBody).not.toContain(fixture.modulePath);
+      expect(prodBody).not.toContain(fixture.rootDir);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(fixture.modulePath),
+        expect.any(Error),
+      );
+
+      errorSpy.mockClear();
+      vi.stubEnv("NODE_ENV", "development");
+      const devResponse = registry.serve(fragmentRequest);
+      expect(devResponse?.status).toBe(500);
+      expect(await devResponse?.text()).toContain(fixture.modulePath);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.close?.();
+      errorSpy.mockRestore();
+    }
   });
 });
 

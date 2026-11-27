@@ -1,7 +1,15 @@
 import { createHash } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { existsSync, readFileSync, realpathSync, statSync, watch, type FSWatcher } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  watch,
+  type FSWatcher,
+} from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { createRequire, type registerHooks } from "node:module";
@@ -168,6 +176,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
   const defaultSourceFilter = createPalamedesSourceFilter(DEFAULT_INCLUDE, DEFAULT_EXCLUDE, {
     projectRoot,
   });
+  const serverModuleLoader = createServerCatalogModuleLoader();
   const serverCatalogStore = createServerCatalogStore({
     async load({ locale }) {
       const catalogs = config.catalogs;
@@ -191,7 +200,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
             },
           );
           result.warnings.forEach((warning) => console.warn(warning));
-          return await importCompiledCatalogModule(result.code);
+          return await serverModuleLoader.importModule(result.code);
         }),
       );
     },
@@ -476,8 +485,12 @@ export function createPalamedesRemixCatalogAssetRegistry(
           catalogMatchesSource(config, candidate, entry.sourcePath),
         );
         if (catalogs.length === 0) {
+          const diagnostic = `Palamedes source module "${entry.sourcePath}" is not included in a configured catalog.`;
+          console.error(diagnostic);
           return new Response(
-            `Palamedes source module "${entry.sourcePath}" is not included in a configured catalog.`,
+            process.env.NODE_ENV === "development"
+              ? diagnostic
+              : "Palamedes catalog fragment is unavailable.",
             { status: 500 },
           );
         }
@@ -515,8 +528,13 @@ export function createPalamedesRemixCatalogAssetRegistry(
         fragmentAssets.set(cacheKey, asset);
         return serveFragment(asset, request);
       } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        const diagnostic = `Palamedes catalog fragment failed for "${entry.sourcePath}" (${locale}): ${detail}`;
+        console.error(diagnostic, error);
         return new Response(
-          `Palamedes catalog fragment failed for "${entry.sourcePath}" (${locale}): ${error instanceof Error ? error.message : String(error)}`,
+          process.env.NODE_ENV === "development"
+            ? diagnostic
+            : "Palamedes catalog fragment failed.",
           { status: 500 },
         );
       }
@@ -525,6 +543,7 @@ export function createPalamedesRemixCatalogAssetRegistry(
     close() {
       closed = true;
       watchers.splice(0).forEach((watcher) => watcher.close());
+      serverModuleLoader.close();
     },
 
     invalidate(sourcePath) {
@@ -681,37 +700,184 @@ function toCatalogArtifactConfig(config: LoadedPalamedesConfig) {
 
 // Emit native compiler output as ordinary ESM. Node owns module evaluation;
 // neither authored ICU nor generated function bodies pass through eval/vm.
-let serverModuleDirectory: Promise<string> | undefined;
-const serverModuleWrites = new Map<string, Promise<string>>();
-async function importCompiledCatalogModule(source: string): Promise<CompiledCatalogMessages> {
-  const code = source.replace(
-    'from"@palamedes/core/compiled"',
-    `from${JSON.stringify(pathToFileURL(createRequire(import.meta.url).resolve("@palamedes/core/compiled")).href)}`,
-  );
-  const digest = createHash("sha256").update(code).digest("hex");
-  let moduleUrl = serverModuleWrites.get(digest);
-  if (!moduleUrl) {
-    serverModuleDirectory ??= mkdtemp(path.join(tmpdir(), "palamedes-remix-modules-")).catch(
-      (error: unknown) => {
-        serverModuleDirectory = undefined;
-        throw error;
-      },
-    );
-    moduleUrl = serverModuleDirectory.then(async (directory) => {
-      const filename = path.join(directory, `${digest}.mjs`);
-      await writeFile(filename, code, "utf8");
-      return pathToFileURL(filename).href;
-    });
-    serverModuleWrites.set(digest, moduleUrl);
-    void moduleUrl.catch(() => serverModuleWrites.delete(digest));
+const MAX_SERVER_MODULE_WRITES = 256;
+
+type CachedServerModuleEntry = {
+  filename: string;
+  urlPromise: Promise<string>;
+  inFlight: number;
+};
+
+const activeServerModuleRegistries = new Set<symbol>();
+const serverModuleWrites = new Map<string, CachedServerModuleEntry>();
+let sharedServerModuleDirectoryPromise: Promise<string> | undefined;
+let sharedServerModuleDirectory: string | undefined;
+let sharedServerModuleEpoch = 0;
+let serverModuleCleanupRegistered = false;
+
+function removeDirectoryBestEffort(directory: string): void {
+  try {
+    rmSync(directory, { recursive: true, force: true });
+  } catch {
+    // Best-effort cleanup on close or process exit.
   }
-  const { messages } = await import(/* @vite-ignore */ await moduleUrl);
-  if (!isCompiledCatalogObject(messages)) {
-    throw new TypeError(
-      "Palamedes generated server catalog did not produce an executable catalog.",
-    );
+}
+
+function cleanupSharedServerModuleDirectory(): void {
+  sharedServerModuleEpoch += 1;
+  serverModuleWrites.clear();
+  const directory = sharedServerModuleDirectory;
+  sharedServerModuleDirectory = undefined;
+  sharedServerModuleDirectoryPromise = undefined;
+  if (directory) {
+    removeDirectoryBestEffort(directory);
   }
-  return messages;
+}
+
+function unregisterServerModuleCleanup(): void {
+  if (!serverModuleCleanupRegistered) return;
+  serverModuleCleanupRegistered = false;
+  process.off("exit", onServerModuleProcessExit);
+}
+
+function onServerModuleProcessExit(): void {
+  cleanupSharedServerModuleDirectory();
+  unregisterServerModuleCleanup();
+}
+
+function registerServerModuleCleanup(): void {
+  if (serverModuleCleanupRegistered) return;
+  serverModuleCleanupRegistered = true;
+  process.once("exit", onServerModuleProcessExit);
+}
+
+function evictIdleServerModuleWrites(): void {
+  if (serverModuleWrites.size < MAX_SERVER_MODULE_WRITES) {
+    return;
+  }
+  for (const [digest, candidate] of serverModuleWrites) {
+    // Never evict an entry whose write/import is still in flight; synchronous
+    // unlink once idle prevents concurrent write/unlink races on the same path.
+    if (candidate.inFlight > 0) {
+      continue;
+    }
+    serverModuleWrites.delete(digest);
+    if (candidate.filename) {
+      try {
+        rmSync(candidate.filename, { force: true });
+      } catch {
+        // Best-effort file cleanup on cache eviction.
+      }
+    }
+    if (serverModuleWrites.size < MAX_SERVER_MODULE_WRITES) {
+      break;
+    }
+  }
+}
+
+function createServerCatalogModuleLoader(): {
+  importModule(source: string): Promise<CompiledCatalogMessages>;
+  close(): void;
+} {
+  const token = Symbol("palamedes-remix-registry");
+  let loaderClosed = false;
+
+  return {
+    async importModule(source: string): Promise<CompiledCatalogMessages> {
+      if (loaderClosed) {
+        throw new Error("Palamedes Remix catalog registry has been closed.");
+      }
+      activeServerModuleRegistries.add(token);
+      registerServerModuleCleanup();
+
+      const code = source.replace(
+        'from"@palamedes/core/compiled"',
+        `from${JSON.stringify(pathToFileURL(createRequire(import.meta.url).resolve("@palamedes/core/compiled")).href)}`,
+      );
+      const digest = createHash("sha256").update(code).digest("hex");
+      let entry = serverModuleWrites.get(digest);
+      if (entry) {
+        // Refresh insertion order so active digests stay warm under eviction.
+        serverModuleWrites.delete(digest);
+        serverModuleWrites.set(digest, entry);
+      } else {
+        if (!sharedServerModuleDirectoryPromise) {
+          const epoch = sharedServerModuleEpoch;
+          sharedServerModuleDirectoryPromise = mkdtemp(
+            path.join(tmpdir(), "palamedes-remix-modules-"),
+          )
+            .then((directory) => {
+              if (epoch !== sharedServerModuleEpoch || activeServerModuleRegistries.size === 0) {
+                removeDirectoryBestEffort(directory);
+                throw new Error("Palamedes Remix catalog registry has been closed.");
+              }
+              sharedServerModuleDirectory = directory;
+              return directory;
+            })
+            .catch((error: unknown) => {
+              if (epoch === sharedServerModuleEpoch) {
+                sharedServerModuleDirectoryPromise = undefined;
+              }
+              throw error;
+            });
+        }
+        const currentEpoch = sharedServerModuleEpoch;
+        const currentDirPromise = sharedServerModuleDirectoryPromise;
+        const created: CachedServerModuleEntry = {
+          filename: "",
+          inFlight: 0,
+          urlPromise: currentDirPromise.then(async (directory) => {
+            // Check only shared epoch/ref-count so closing one registry cannot
+            // abort a concurrent load shared with another active registry.
+            if (
+              currentEpoch !== sharedServerModuleEpoch ||
+              activeServerModuleRegistries.size === 0
+            ) {
+              throw new Error("Palamedes Remix catalog registry has been closed.");
+            }
+            const filename = path.join(directory, `${digest}.mjs`);
+            created.filename = filename;
+            await writeFile(filename, code, "utf8");
+            return pathToFileURL(filename).href;
+          }),
+        };
+        evictIdleServerModuleWrites();
+        serverModuleWrites.set(digest, created);
+        void created.urlPromise.catch(() => {
+          if (serverModuleWrites.get(digest) === created) {
+            serverModuleWrites.delete(digest);
+          }
+        });
+        entry = created;
+      }
+
+      entry.inFlight += 1;
+      try {
+        const { messages } = await import(/* @vite-ignore */ await entry.urlPromise);
+        if (!isCompiledCatalogObject(messages)) {
+          throw new TypeError(
+            "Palamedes generated server catalog did not produce an executable catalog.",
+          );
+        }
+        return messages;
+      } finally {
+        entry.inFlight -= 1;
+        if (entry.inFlight === 0 && serverModuleWrites.size > MAX_SERVER_MODULE_WRITES) {
+          evictIdleServerModuleWrites();
+        }
+      }
+    },
+
+    close(): void {
+      if (loaderClosed) return;
+      loaderClosed = true;
+      activeServerModuleRegistries.delete(token);
+      if (activeServerModuleRegistries.size === 0) {
+        cleanupSharedServerModuleDirectory();
+        unregisterServerModuleCleanup();
+      }
+    },
+  };
 }
 
 function isCompiledCatalogObject(value: unknown): value is CompiledCatalogMessages {

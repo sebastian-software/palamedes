@@ -687,6 +687,103 @@ describe("createRemixI18nServer", () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
+  it("does not cache stale generation catalogs when invalidation occurs during an in-flight load", async () => {
+    let generation = "gen-1";
+    let resolveGen1!: (messages: ReturnType<typeof defineCompiledCatalog>) => void;
+    const gen1Promise = new Promise<ReturnType<typeof defineCompiledCatalog>>((resolve) => {
+      resolveGen1 = resolve;
+    });
+    const load = vi.fn(async (locale: string) => {
+      if (generation === "gen-1") {
+        return await gen1Promise;
+      }
+      return defineCompiledCatalog({ greeting: `${locale}:fresh-gen-2` });
+    });
+
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      catalogAssets: {
+        registry: {
+          generation: () => generation,
+          load,
+          register: () => "test",
+          sidecarUrl: () => "/test.js",
+          serve() {},
+          invalidate() {},
+        },
+      },
+    });
+    const request = new Request("https://example.test/", {
+      headers: { cookie: "locale=de" },
+    });
+
+    // Start request 1 under gen-1; its load stays pending.
+    const staleRequest = remixI18n.run(request, ({ i18n }) => i18n._("greeting"));
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+
+    // Invalidate to gen-2 and run request 2 while request 1 is still in flight.
+    generation = "gen-2";
+    await expect(remixI18n.run(request, ({ i18n }) => i18n._("greeting"))).resolves.toBe(
+      "de:fresh-gen-2",
+    );
+
+    // Now the stale gen-1 load settles after gen-2 is already active.
+    resolveGen1(defineCompiledCatalog({ greeting: "de:stale-gen-1" }));
+    await expect(staleRequest).resolves.toBe("de:stale-gen-1");
+
+    // Subsequent requests must keep serving gen-2, never the stale gen-1 result.
+    await expect(remixI18n.run(request, ({ i18n }) => i18n._("greeting"))).resolves.toBe(
+      "de:fresh-gen-2",
+    );
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("sanitizes HTTP 500 executable catalog asset responses outside development while logging full diagnostics", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const remixI18n = createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({}),
+        catalogAssets: {
+          config: {
+            rootDir: "/srv/secret-app",
+            locales: ["en", "de"],
+            sourceLocale: "en",
+            catalogs: [{ path: "locales/{locale}", include: ["app"] }],
+          },
+          resolvePath() {
+            throw new Error("ENOENT: /srv/secret-app/locales/de.po missing");
+          },
+        },
+      });
+      const request = new Request("https://example.test/assets/__palamedes/catalog/de.js");
+
+      vi.stubEnv("NODE_ENV", "production");
+      const prodResponse = remixI18n.serveClientCatalogAsset(request);
+      expect(prodResponse?.status).toBe(500);
+      const prodBody = await prodResponse?.text();
+      expect(prodBody).toBe("Palamedes Remix executable catalog asset failed.");
+      expect(prodBody).not.toContain("/srv/secret-app");
+      expect(prodBody).not.toContain("ENOENT");
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("/srv/secret-app/locales/de.po"),
+        expect.any(Error),
+      );
+
+      errorSpy.mockClear();
+      vi.stubEnv("NODE_ENV", "development");
+      const devResponse = remixI18n.serveClientCatalogAsset(request);
+      expect(devResponse?.status).toBe(500);
+      expect(await devResponse?.text()).toContain("/srv/secret-app/locales/de.po");
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("reloads the shared server catalog after a catalog generation changes", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-server-generation-"));
     const localesRoot = path.join(root, "locales");

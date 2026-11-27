@@ -1,9 +1,9 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-11-27T16:20:44.295Z",
-  "sourceCommit": "6ff7b4c14205472b80d467077666a4a6732c569a",
+  "measuredAt": "2026-11-27T17:06:08.387Z",
+  "sourceCommit": "a6a00746fc66b9462a877113120a97c6d7b14f73",
   "worktreeDirty": true,
-  "sourceSha256": "b42676109121fa488becacb3759909fa0ac635161cd66db5f1c555b9917e93cd",
+  "sourceSha256": "9b6cd995237c4e3fa859c307a04195e406223acb689bd481359af17051666d9d",
   "environment": {
     "node": "v24.22.3",
     "vite": "8.2.4",
@@ -234,11 +234,11 @@
     {
       "id": "remix",
       "bytes": {
-        "raw": 16751,
-        "gzip": 5594,
-        "brotli": 4953
+        "raw": 16796,
+        "gzip": 5607,
+        "brotli": 4966
       },
-      "sha256": "734aaeaa17f3e014ef4e4b7f70b321c9089e760052c7820835f4042312b8b008",
+      "sha256": "9e961d4a1c3c96e097d599321bfe064336d9cd1ff436c6b537b8eb919903985e",
       "exports": [
         "DEFAULT_LOCALE",
         "Fragment",
@@ -281,7 +281,7 @@
         },
         {
           "path": "packages/remix/dist/compiled.mjs",
-          "sha256": "85bf522d8a07c3d53ec191ddaa1fd4d6175adfcf6e43d7630c7b5ca31f164441"
+          "sha256": "0884366ac07c69bd416963fce495465838bd68f192c6a3e2d53cb91d432b9775"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
@@ -444,11 +444,11 @@
     {
       "id": "remix",
       "bytes": {
-        "raw": 12953,
-        "gzip": 4482,
-        "brotli": 3976
+        "raw": 12998,
+        "gzip": 4508,
+        "brotli": 3993
       },
-      "sha256": "a9afbfb0bdd58b3f01bc5bbeee9a8c60f154972b0e9a4bca4c6b848c07284b6b",
+      "sha256": "8dee11fe735f3a9d4b4c9cc8a463bbcc41958279236acc6685e4262f8d9eb72b",
       "exports": [
         "Trans",
         "createI18n",
@@ -473,7 +473,7 @@
         },
         {
           "path": "packages/remix/dist/compiled.mjs",
-          "sha256": "85bf522d8a07c3d53ec191ddaa1fd4d6175adfcf6e43d7630c7b5ca31f164441"
+          "sha256": "0884366ac07c69bd416963fce495465838bd68f192c6a3e2d53cb91d432b9775"
         },
         {
           "path": "packages/runtime/dist/index.mjs",
