@@ -146,7 +146,9 @@ export default adapter(fsRouter(modules), {
           // Content-Security-Policy using `getRequestNonce()`; otherwise this runs
           // after `middlewareModules` and replaces that header. Always keep Cache-Control.
           context.header("content-security-policy", buildAppCsp(nonce));
-          // Nonce-bearing HTML must never be replayed across visitors by a shared cache.
+          // Nonce-bearing HTML must never be replayed across visitors by a shared or
+          // in-app cache: exclude these SSR routes from any `src/middleware/*` cache
+          // (or keep cache middleware outside both CSP and catalog delivery so it honors no-store).
           context.header("cache-control", "private, no-store");
         }
       }),
@@ -212,9 +214,11 @@ export async function getConfig() {
 ```
 
 Always generate the nonce per request on the server (or strip and regenerate it
-in a trusted edge proxy), and ensure any CDN or reverse proxy respects
-`Cache-Control: private, no-store` so nonce-bearing HTML is never cached across
-visitors. Note that in Waku `1.0.0-rc.4`'s default Node adapter, Waku's default
+in a trusted edge proxy), exclude nonce-bearing SSR routes from any in-app
+`src/middleware/*` cache (which runs before `Cache-Control: private, no-store`,
+CSP, and catalog delivery are applied), and ensure any outer cache middleware,
+CDN, or reverse proxy respects `Cache-Control: private, no-store` so
+nonce-bearing HTML is never cached across visitors. Note that in Waku `1.0.0-rc.4`'s default Node adapter, Waku's default
 HTML fallback shell (served for an unmatched `/` route or a handler returning
 `"fallback"`) renders outside router handler interceptors without
 `unstable_setNonce` and omits `</head>`, so it receives neither the nonce CSP
