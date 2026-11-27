@@ -1286,7 +1286,12 @@ fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirFilenameEquivalenc
                 DirFilenameEquivalence::Exact => text.to_owned(),
                 DirFilenameEquivalence::UnicodeNfd => text.nfd().collect(),
                 DirFilenameEquivalence::UnicodeHfsPlus => hfs_plus_nfd(text),
-                DirFilenameEquivalence::CaseInsensitiveNtfs => ntfs_casefold(text),
+                DirFilenameEquivalence::CaseInsensitiveNtfs => {
+                    ntfs_casefold(text.trim_end_matches(['.', ' ']))
+                }
+                DirFilenameEquivalence::CaseInsensitiveVfat => {
+                    ntfs_casefold(text.trim_end_matches('.'))
+                }
                 DirFilenameEquivalence::CaseInsensitiveUnicodeNfd => {
                     unicode_full_casefold_nfd(text, false)
                 }
@@ -1296,6 +1301,29 @@ fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirFilenameEquivalenc
                 }
             };
             OsString::from(normalized)
+        },
+    )
+}
+
+fn fold_os_segment_for_bucket(
+    segment: &std::ffi::OsStr,
+    equivalence: DirFilenameEquivalence,
+    equivalence_confirmed: bool,
+) -> OsString {
+    if equivalence_confirmed {
+        return fold_os_segment(segment, equivalence);
+    }
+    // When the directory's policy is unknown (for example, an unqueriable mount
+    // that could be VFAT, SMB, NTFS, APFS, or ext4-casefold), also strip
+    // trailing dots/spaces in the bucket key so potential aliases such as
+    // `locales` and `locales.` always land in the same bucket for live probing.
+    segment.to_str().map_or_else(
+        || segment.to_os_string(),
+        |text| {
+            OsString::from(unicode_full_casefold_nfd(
+                text.trim_end_matches(['.', ' ']),
+                true,
+            ))
         },
     )
 }
@@ -1340,6 +1368,7 @@ fn segment_pair_collides_on_dir(
     let is_ascii_ci = matches!(
         equivalence,
         DirFilenameEquivalence::CaseInsensitiveNtfs
+            | DirFilenameEquivalence::CaseInsensitiveVfat
             | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
             | DirFilenameEquivalence::CaseInsensitiveHfsPlus
             | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
@@ -1349,9 +1378,19 @@ fn segment_pair_collides_on_dir(
         && let (Some(l_str), Some(r_str)) = (left.to_str(), right.to_str())
         && l_str.is_ascii()
         && r_str.is_ascii()
-        && l_str.eq_ignore_ascii_case(r_str)
     {
-        return true;
+        let ascii_equiv = match equivalence {
+            DirFilenameEquivalence::CaseInsensitiveVfat => l_str
+                .trim_end_matches('.')
+                .eq_ignore_ascii_case(r_str.trim_end_matches('.')),
+            DirFilenameEquivalence::CaseInsensitiveNtfs => l_str
+                .trim_end_matches(['.', ' '])
+                .eq_ignore_ascii_case(r_str.trim_end_matches(['.', ' '])),
+            _ => l_str.eq_ignore_ascii_case(r_str),
+        };
+        if ascii_equiv {
+            return true;
+        }
     }
     // When equivalence is unconfirmed (for example, a read-only share or
     // search-only directory where filesystem metadata queries are unsupported)
@@ -1561,7 +1600,10 @@ const fn can_have_ntfs_short_names(
     equivalence: DirFilenameEquivalence,
     equivalence_confirmed: bool,
 ) -> bool {
-    matches!(equivalence, DirFilenameEquivalence::CaseInsensitiveNtfs) || !equivalence_confirmed
+    matches!(
+        equivalence,
+        DirFilenameEquivalence::CaseInsensitiveNtfs | DirFilenameEquivalence::CaseInsensitiveVfat
+    ) || !equivalence_confirmed
 }
 
 fn dir_generates_ntfs_short_names(
@@ -1701,6 +1743,15 @@ pub(crate) fn reject_colliding_catalog_targets(
     targets: &[(&str, PathBuf)],
     allow_mutating_probe: bool,
 ) -> Result<(), CliError> {
+    reject_colliding_catalog_targets_with_equivalence(root_dir, targets, allow_mutating_probe, None)
+}
+
+fn reject_colliding_catalog_targets_with_equivalence(
+    root_dir: &Path,
+    targets: &[(&str, PathBuf)],
+    allow_mutating_probe: bool,
+    equivalence_override: Option<(DirFilenameEquivalence, bool)>,
+) -> Result<(), CliError> {
     if targets.len() <= 1 {
         return Ok(());
     }
@@ -1726,7 +1777,9 @@ pub(crate) fn reject_colliding_catalog_targets(
             source: error.into_io_error(),
         })?;
         let (mut current_eq, mut current_eq_confirmed) =
-            resolve_directory_equivalence(&current, current_id, &mut dir_eq_cache);
+            equivalence_override.unwrap_or_else(|| {
+                resolve_directory_equivalence(&current, current_id, &mut dir_eq_cache)
+            });
         let mut existing_prefix = PathBuf::new();
         let mut folded_segments: Vec<OsString> = Vec::new();
         let mut raw_segments: Vec<OsString> = Vec::new();
@@ -1738,7 +1791,11 @@ pub(crate) fn reject_colliding_catalog_targets(
             };
             if hit_missing {
                 raw_segments.push(segment.to_os_string());
-                folded_segments.push(fold_os_segment(segment, current_eq));
+                folded_segments.push(fold_os_segment_for_bucket(
+                    segment,
+                    current_eq,
+                    current_eq_confirmed,
+                ));
                 continue;
             }
             match current
@@ -1767,7 +1824,9 @@ pub(crate) fn reject_colliding_catalog_targets(
                         needed_existing_dirs.entry(id).or_insert(*scope);
                     }
                     let (child_eq, child_eq_confirmed) =
-                        resolve_directory_equivalence(&child, child_id, &mut dir_eq_cache);
+                        equivalence_override.unwrap_or_else(|| {
+                            resolve_directory_equivalence(&child, child_id, &mut dir_eq_cache)
+                        });
                     current = child;
                     current_id = child_id;
                     current_eq = child_eq;
@@ -1777,7 +1836,11 @@ pub(crate) fn reject_colliding_catalog_targets(
                 None => {
                     hit_missing = true;
                     raw_segments.push(segment.to_os_string());
-                    folded_segments.push(fold_os_segment(segment, current_eq));
+                    folded_segments.push(fold_os_segment_for_bucket(
+                        segment,
+                        current_eq,
+                        current_eq_confirmed,
+                    ));
                 }
             }
         }
@@ -1796,7 +1859,11 @@ pub(crate) fn reject_colliding_catalog_targets(
         } else {
             None
         };
-        folded_segments.push(fold_os_segment(&file_name, current_eq));
+        folded_segments.push(fold_os_segment_for_bucket(
+            &file_name,
+            current_eq,
+            current_eq_confirmed,
+        ));
         raw_segments.push(file_name.clone());
 
         // Walk/insert this target's anchor-relative segments into a shared
@@ -3182,6 +3249,53 @@ catalogs:
         ];
         super::reject_colliding_catalog_targets(&root, &targets, false)
             .expect("distinct existing long and short files must not be rejected");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reject_colliding_catalog_targets_catches_vfat_trailing_dot_missing_directory_alias() {
+        use palamedes::DirFilenameEquivalence;
+        use std::ffi::OsStr;
+
+        let vfat = DirFilenameEquivalence::CaseInsensitiveVfat;
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("locales."), vfat),
+            super::fold_os_segment(OsStr::new("locales"), vfat),
+            "VFAT folding must strip trailing dots"
+        );
+        assert_eq!(
+            super::fold_os_segment(OsStr::new("Locales.."), vfat),
+            super::fold_os_segment(OsStr::new("locales"), vfat),
+            "VFAT folding must strip multiple trailing dots and fold case"
+        );
+
+        // Missing-directory case: neither `locales` nor `locales.` exists yet
+        // on disk, so inode checks cannot help. Confirmed VFAT must reject the
+        // trailing-dot alias before any directory or catalog file is created.
+        let root = temp_dir("extract-vfat-trailing-dot-missing-dir");
+        let targets = [
+            ("locales/{locale}", root.join("locales/en.po")),
+            ("locales./{locale}", root.join("locales./en.po")),
+        ];
+        let err = super::reject_colliding_catalog_targets_with_equivalence(
+            &root,
+            &targets,
+            false,
+            Some((vfat, true)),
+        )
+        .expect_err("VFAT trailing-dot missing directory alias must be rejected");
+        assert!(
+            matches!(
+                err,
+                CliError::Io { ref source, .. }
+                    if source.kind() == std::io::ErrorKind::AlreadyExists
+            ),
+            "expected AlreadyExists error, got {err:?}"
+        );
+        assert!(
+            !root.join("locales").exists() && !root.join("locales.").exists(),
+            "no directories should be created on VFAT alias conflict"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }

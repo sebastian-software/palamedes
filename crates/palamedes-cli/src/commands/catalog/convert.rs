@@ -99,8 +99,17 @@ impl Command for ConvertOptions {
                 }
 
                 let mut planned = Vec::new();
+                let mut protected_fcl_targets = Vec::new();
                 for catalog in &config.catalogs {
                     if catalog.format != palamedes::PalamedesCatalogFormat::Po {
+                        for locale in &config.locales {
+                            let protected = config.resolve_contained_catalog_path(
+                                &catalog.path,
+                                locale,
+                                catalog.format,
+                            )?;
+                            protected_fcl_targets.push((catalog.path.as_str(), protected));
+                        }
                         skipped += config.locales.len();
                         continue;
                     }
@@ -156,15 +165,18 @@ impl Command for ConvertOptions {
                     }
                 }
 
-                let planned_outputs: Vec<(&str, PathBuf)> = planned
-                    .iter()
-                    .map(|job| (job.scope, job.output.clone()))
-                    .collect();
-                crate::commands::extract::reject_colliding_catalog_targets(
-                    &config.root_dir,
-                    &planned_outputs,
-                    true,
-                )?;
+                if !planned.is_empty() {
+                    let all_targets: Vec<(&str, PathBuf)> = planned
+                        .iter()
+                        .map(|job| (job.scope, job.output.clone()))
+                        .chain(protected_fcl_targets)
+                        .collect();
+                    crate::commands::extract::reject_colliding_catalog_targets(
+                        &config.root_dir,
+                        &all_targets,
+                        true,
+                    )?;
+                }
 
                 for job in planned {
                     let Some(input_dir) =
@@ -888,6 +900,53 @@ catalogs:
         assert!(
             !fcl.contains("Old"),
             "converted FCL must not contain stale pre-lock PO content, got:\n{fcl}"
+        );
+    }
+
+    #[test]
+    fn configured_convert_rejects_overwriting_existing_configured_fcl_catalog() {
+        let fixture = temp_dir("convert-protect-configured-fcl");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        fs::write(
+            catalog_dir.join("messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"FromPo\"\nmsgstr \"From PO\"\n",
+        )
+        .expect("write po");
+        let original_fcl =
+            "---\nformat: fcl/1\nlocale: en\n---\n\n# Existing FCL\n@FromFcl\n\"From FCL\"\n";
+        fs::write(catalog_dir.join("messages.fcl"), original_fcl).expect("write fcl");
+
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            "locales:\n  - en\nsource-locale: en\ncatalogs:\n  - path: locales\\{locale}\\messages\n    format: po\n    include:\n      - src/a\n  - path: locales/{locale}/messages\n    format: fcl\n    include:\n      - src/b\n",
+        )
+        .expect("write config");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+        let err = options
+            .run(&Context::with_cwd(&fixture))
+            .expect_err("converting PO into a configured FCL catalog path must fail");
+        assert!(
+            matches!(
+                err,
+                crate::error::CliError::Io { ref source, .. }
+                    if source.kind() == std::io::ErrorKind::AlreadyExists
+            ),
+            "expected AlreadyExists conflict error, got {err:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(catalog_dir.join("messages.fcl")).expect("read untouched fcl"),
+            original_fcl,
+            "existing configured FCL catalog must remain untouched"
         );
     }
 }

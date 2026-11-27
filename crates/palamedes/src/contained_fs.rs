@@ -120,8 +120,11 @@ pub enum DirFilenameEquivalence {
     /// (`U+2000..=U+2FFF`, `U+F900..=U+FAFF`, `U+2F800..=U+2FA1F` stay distinct).
     UnicodeHfsPlus,
     /// Case-insensitive 1-to-1 uppercase without Unicode normalization
-    /// (Windows NTFS, FAT/exFAT, SMB/CIFS).
+    /// (Windows NTFS, SMB/CIFS).
     CaseInsensitiveNtfs,
+    /// Case-insensitive 1-to-1 uppercase with trailing-dot stripping
+    /// (Linux VFAT/FAT and exFAT mounts where `locales.` aliases `locales`).
+    CaseInsensitiveVfat,
     /// Case-insensitive full Unicode casefold + NFD preserving default-ignorable
     /// code points (default macOS/iOS APFS).
     CaseInsensitiveUnicodeNfd,
@@ -1041,6 +1044,7 @@ mod platform {
                 matches!(
                     eq,
                     DirFilenameEquivalence::CaseInsensitiveNtfs
+                        | DirFilenameEquivalence::CaseInsensitiveVfat
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
                         | DirFilenameEquivalence::CaseInsensitiveHfsPlus
                         | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
@@ -6167,7 +6171,7 @@ const fn classify_linux_fs_magic(
     const BTRFS_SUPER_MAGIC: u32 = 0x9123_683e;
     const F2FS_SUPER_MAGIC: u32 = 0xf2f5_2010;
     if matches!(f_type, MSDOS_SUPER_MAGIC | EXFAT_SUPER_MAGIC) {
-        return Some(DirFilenameEquivalence::CaseInsensitiveNtfs);
+        return Some(DirFilenameEquivalence::CaseInsensitiveVfat);
     }
     if f_type == BTRFS_SUPER_MAGIC
         || (checked_casefold_flag
@@ -7554,73 +7558,113 @@ mod platform {
         }
 
         /// Writes `bytes` to `file_name` through this verified Windows
-        /// directory handle without following reparse points, overwriting
-        /// hard-linked files, or truncating an existing file object in place.
+        /// directory handle without following reparse points or overwriting
+        /// pre-existing hard-linked files.
         ///
-        /// Rejects reserved lock filenames, reparse points, and existing
-        /// hard-linked targets (`number_of_links > 1`), then publishes a
-        /// replacement file atomically so concurrent hard links to the
-        /// previous file cannot be mutated while preserving DACL/owner
-        /// metadata.
+        /// When `file_name` already exists as a single-link regular file
+        /// (`number_of_links == 1`), opens it directly with exclusive sharing
+        /// (`share_access = 0`) and `FILE_OPEN_REPARSE_POINT` (without creating
+        /// a sibling `.pmds-lock` entry, so updates succeed even when the
+        /// caller has write access to the file without `FILE_ADD_FILE` on the
+        /// containing directory), verifies reparse-point, link-count, and
+        /// directory-entry identity checks on the exclusive handle, and
+        /// truncates/writes in place while preserving all existing security
+        /// descriptors, audit SACLs, named streams, extended attributes, and
+        /// storage attributes.
+        ///
+        /// When `file_name` does not exist yet, acquires the directory lock and
+        /// creates it atomically with no-replace semantics.
         ///
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
-        /// reserved, refers to a reparse point, or has multiple hard links, or
-        /// [`ContainedFsError::Io`] on OS errors.
+        /// reserved, refers to a reparse point, or already has multiple hard
+        /// links, or [`ContainedFsError::Io`] on OS errors.
         pub fn write_file_in_place(
             &self,
             file_name: &OsStr,
             bytes: &[u8],
         ) -> Result<(), ContainedFsError> {
             super::validate_writable_file_name(file_name)?;
-            self.reject_symlink_or_hard_link(file_name)?;
-            let _target_lock = self.lock_target(file_name)?;
-            if let Some((expected_identity, existing_security)) =
-                self.inspect_entry(file_name, true)?
-            {
-                let has_security_descriptors = existing_security.as_ref().is_some_and(|security| {
-                    security.owner_sd.is_some()
-                        || security.group_sd.is_some()
-                        || security.dacl_sd.is_some()
-                        || security.label_sd.is_some()
-                });
-                let can_atomic_replace = existing_security.as_ref().is_none_or(|security| {
-                    (!has_security_descriptors || security.sacl_accessible)
-                        && !security.is_encrypted
-                        && !security.has_named_streams
-                        && !security.has_extended_attributes
-                        && (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) == 0
-                });
-                if !can_atomic_replace {
-                    if matches!(
-                        self.try_overwrite_existing_transacted(
-                            file_name,
-                            expected_identity,
-                            bytes,
-                            ContainedWriteDurability::Rename,
-                        )?,
-                        TransactedOverwriteOutcome::Committed
+            for _ in 0..8 {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+                let mut backoff_ms: u64 = 2;
+                let existing_handle = loop {
+                    match nt_create_relative(
+                        self.handle.as_raw_handle(),
+                        file_name,
+                        FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                        FILE_ATTRIBUTE_NORMAL,
+                        0,
+                        FILE_OPEN,
+                        FILE_NON_DIRECTORY_FILE
+                            | FILE_OPEN_REPARSE_POINT
+                            | FILE_SYNCHRONOUS_IO_NONALERT,
+                        std::ptr::null_mut(),
                     ) {
-                        return Ok(());
+                        Ok(handle) => break Some(handle),
+                        Err(status) if is_not_found_status(status) => break None,
+                        Err(STATUS_SHARING_VIOLATION) => {
+                            if std::time::Instant::now() >= deadline {
+                                return Err(ContainedFsError::Io(nt_status_to_io_error(
+                                    STATUS_SHARING_VIOLATION,
+                                )));
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                            backoff_ms = (backoff_ms * 2).min(50);
+                        }
+                        Err(status) => {
+                            return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
+                        }
                     }
-                    return self
-                        .overwrite_existing_exclusively(
-                            file_name,
-                            expected_identity,
-                            bytes,
-                            ContainedWriteDurability::Rename,
-                        )
-                        .map(|_| ());
+                };
+                if let Some(handle) = existing_handle {
+                    let info = file_information(handle.as_raw_handle())?;
+                    if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                        return Err(ContainedFsError::Containment(format!(
+                            "refusing to write through symlink \"{}\"",
+                            file_name.to_string_lossy()
+                        )));
+                    }
+                    if info.number_of_links > 1 {
+                        return Err(ContainedFsError::Containment(format!(
+                            "refusing to overwrite hard-linked file \"{}\"",
+                            file_name.to_string_lossy()
+                        )));
+                    }
+                    let live_identity = handle_file_identity(handle.as_raw_handle())?;
+                    let dir_entry_identity = self.file_identity(file_name)?;
+                    if dir_entry_identity.is_none()
+                        || (live_identity.is_some() && dir_entry_identity != live_identity)
+                    {
+                        continue;
+                    }
+                    let mut file = File::from(handle);
+                    file.set_len(0)?;
+                    file.write_all(bytes)?;
+                    file.flush()?;
+                    return Ok(());
+                }
+                match self.write_file_atomically_inner(
+                    file_name,
+                    bytes,
+                    ContainedNewFileMode::RespectUmask,
+                    ContainedWriteDurability::Rename,
+                    false,
+                ) {
+                    Ok(_) => return Ok(()),
+                    Err(ContainedFsError::Io(io_err))
+                        if io_err.kind() == io::ErrorKind::AlreadyExists =>
+                    {
+                        continue;
+                    }
+                    Err(err) => return Err(err),
                 }
             }
-            self.write_file_atomically(
-                file_name,
-                bytes,
-                ContainedNewFileMode::RespectUmask,
-                ContainedWriteDurability::Rename,
-            )
-            .map(|_| ())
+            Err(ContainedFsError::Io(io::Error::other(format!(
+                "target \"{}\" changed repeatedly during in-place write",
+                file_name.to_string_lossy()
+            ))))
         }
 
         /// Atomically writes `bytes` to `file_name` inside this directory
@@ -7645,14 +7689,34 @@ mod platform {
             &self,
             file_name: &OsStr,
             bytes: &[u8],
+            new_file_mode: ContainedNewFileMode,
+            durability: ContainedWriteDurability,
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
+            self.write_file_atomically_inner(file_name, bytes, new_file_mode, durability, true)
+        }
+
+        fn write_file_atomically_inner(
+            &self,
+            file_name: &OsStr,
+            bytes: &[u8],
             _new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
+            allow_replace: bool,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             super::validate_writable_file_name(file_name)?;
             let _target_lock = self.lock_target(file_name)?;
             for _ in 0..8 {
                 let existing_entry = self.inspect_entry(file_name, true)?;
                 let target_existed = existing_entry.is_some();
+                if !allow_replace && target_existed {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "destination \"{}\" was created concurrently",
+                            file_name.to_string_lossy()
+                        ),
+                    )));
+                }
                 let existing_identity = existing_entry.as_ref().and_then(|(identity, _)| *identity);
                 let mut existing_security = existing_entry.and_then(|(_, security)| security);
                 let has_security_descriptors = existing_security.as_ref().is_some_and(|security| {
@@ -8074,87 +8138,6 @@ mod platform {
             }
             tx_guard.committed = true;
             Ok(TransactedOverwriteOutcome::Committed)
-        }
-
-        fn overwrite_existing_exclusively(
-            &self,
-            file_name: &OsStr,
-            expected_identity: Option<FileIdentity>,
-            bytes: &[u8],
-            durability: ContainedWriteDurability,
-        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-            let mut backoff_ms: u64 = 2;
-            let handle = loop {
-                match nt_create_relative(
-                    self.handle.as_raw_handle(),
-                    file_name,
-                    FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-                    FILE_ATTRIBUTE_NORMAL,
-                    0,
-                    FILE_OPEN,
-                    FILE_NON_DIRECTORY_FILE
-                        | FILE_OPEN_REPARSE_POINT
-                        | FILE_SYNCHRONOUS_IO_NONALERT,
-                    std::ptr::null_mut(),
-                ) {
-                    Ok(handle) => break handle,
-                    Err(status) if is_not_found_status(status) => {
-                        return Err(ContainedFsError::Io(io::Error::new(
-                            io::ErrorKind::AlreadyExists,
-                            format!(
-                                "destination \"{}\" was removed concurrently before update",
-                                file_name.to_string_lossy()
-                            ),
-                        )));
-                    }
-                    Err(STATUS_SHARING_VIOLATION) => {
-                        if std::time::Instant::now() >= deadline {
-                            return Err(ContainedFsError::Io(nt_status_to_io_error(
-                                STATUS_SHARING_VIOLATION,
-                            )));
-                        }
-                        std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
-                        backoff_ms = (backoff_ms * 2).min(50);
-                    }
-                    Err(status) => {
-                        return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
-                    }
-                }
-            };
-            let info = file_information(handle.as_raw_handle())?;
-            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
-                return Err(ContainedFsError::Containment(format!(
-                    "refusing to write through symlink \"{}\"",
-                    file_name.to_string_lossy()
-                )));
-            }
-            if info.number_of_links > 1 {
-                return Err(ContainedFsError::Containment(format!(
-                    "refusing to overwrite hard-linked file \"{}\"",
-                    file_name.to_string_lossy()
-                )));
-            }
-            let live_identity = handle_file_identity(handle.as_raw_handle())?;
-            if let Some(expected_identity) = expected_identity
-                && live_identity != Some(expected_identity)
-            {
-                return Err(ContainedFsError::Io(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!(
-                        "destination \"{}\" was replaced concurrently before update",
-                        file_name.to_string_lossy()
-                    ),
-                )));
-            }
-            let mut file = File::from(handle);
-            file.set_len(0)?;
-            file.write_all(bytes)?;
-            file.flush()?;
-            if durability.syncs_file() {
-                file.sync_all()?;
-            }
-            Ok(ContainedWriteOutcome::Committed)
         }
 
         fn create_temp_file(
@@ -11233,6 +11216,14 @@ mod cross_platform_tests {
                 Some(DirFilenameEquivalence::Exact)
             );
             assert_eq!(classify_linux_fs_magic(f2fs_i32 as u32, false), None);
+            assert_eq!(
+                classify_linux_fs_magic(0x4d44, false),
+                Some(DirFilenameEquivalence::CaseInsensitiveVfat)
+            );
+            assert_eq!(
+                classify_linux_fs_magic(0x2011_bab0, false),
+                Some(DirFilenameEquivalence::CaseInsensitiveVfat)
+            );
         }
     }
 }
