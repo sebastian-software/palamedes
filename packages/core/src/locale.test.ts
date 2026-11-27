@@ -874,6 +874,7 @@ describe("security hardening", () => {
       ["\\\\evil.example/path", "/evil.example/path"],
       ["/\\/evil.example", "/evil.example"],
       ["  //evil.example", "/evil.example"],
+      ["/ about", "/ about"],
       ["@evil.example", "/@evil.example"],
       ["/@evil.example", "/@evil.example"],
       [":8080/evil", "/:8080/evil"],
@@ -1002,7 +1003,7 @@ describe("security hardening", () => {
       expect(controls.preferredLocale(overlongExclusion)).toBe("en");
     });
 
-    it("keeps extension-insensitive matching working for valid configured locales longer than 64 chars", () => {
+    it("keeps exact and extension-insensitive matching working for valid configured locales longer than 64 chars", () => {
       const longLocale = "de-DE-abcdefg-bcdefgh-cdefghi-defghij-efghijk-fghijkl-ghijklm-hijklmn";
       const custom = defineLocaleControls({
         locales: ["en", longLocale] as const,
@@ -1011,6 +1012,9 @@ describe("security hardening", () => {
       });
 
       expect(custom.preferredLocale("de-DE")).toBe(longLocale);
+      expect(custom.preferredLocale(longLocale)).toBe(longLocale);
+      expect(custom.preferredLocale(longLocale.toUpperCase())).toBe(longLocale);
+      expect(custom.preferredLocale(`${longLocale};q=0, de-DE`)).toBe("en");
     });
 
     it("handles adversarial exclusion combinations in bounded time", () => {

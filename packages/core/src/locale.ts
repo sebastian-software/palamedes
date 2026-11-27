@@ -135,7 +135,10 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   return null;
 }
 
-function languagePreferences(header: string | null | undefined) {
+function languagePreferences(
+  header: string | null | undefined,
+  knownLongTags?: ReadonlySet<string>,
+) {
   if (!header || header.length > MAX_ACCEPT_LANGUAGE_LENGTH) {
     return [];
   }
@@ -179,7 +182,8 @@ function languagePreferences(header: string | null | undefined) {
       }
     }
 
-    if (rawTag.length > MAX_LANGUAGE_TAG_LENGTH) {
+    const lowerTag = rawTag.toLowerCase();
+    if (rawTag.length > MAX_LANGUAGE_TAG_LENGTH && !knownLongTags?.has(lowerTag)) {
       if (quality === 0) {
         return [];
       }
@@ -188,7 +192,7 @@ function languagePreferences(header: string | null | undefined) {
 
     preferences.push({
       quality,
-      tag: rawTag.toLowerCase(),
+      tag: lowerTag,
     });
   }
 
@@ -352,7 +356,7 @@ function normalizeCanonicalPath(pathname: string): string {
     throw new TypeError("defineLocaleControls: pathname must not contain control characters.");
   }
 
-  const trimmed = pathname.replace(/^[\s/\\]+/, "");
+  const trimmed = pathname.trimStart().replace(/^[/\\]+/, "");
   return `/${trimmed}`;
 }
 
@@ -691,18 +695,37 @@ export function defineLocaleControls<TLocale extends string>(
       maximized: parsed?.maximize(),
     };
   });
+  const configuredLocalesByLower = new Map(
+    languageLocales.map((entry) => [entry.locale.toLowerCase(), entry]),
+  );
+  const configuredLongTags = new Set(
+    languageLocales
+      .map((entry) => entry.locale.toLowerCase())
+      .filter((tag) => tag.length > MAX_LANGUAGE_TAG_LENGTH),
+  );
+  const parseRequestLanguageTag = (tag: string) => {
+    const configured = configuredLocalesByLower.get(tag);
+    if (configured) {
+      return { parsed: configured.parsed, maximized: configured.maximized };
+    }
+    const parsed = languageTag(tag, MAX_LANGUAGE_TAG_LENGTH);
+    return { parsed, maximized: parsed?.maximize() };
+  };
 
   const preferredLocale = (header: string | null | undefined): TLocale => {
-    const preferences = languagePreferences(header);
+    const preferences = languagePreferences(
+      header,
+      configuredLongTags.size > 0 ? configuredLongTags : undefined,
+    );
     const exclusions = preferences
       .filter(({ quality }) => quality === 0)
       .map(({ tag }) => {
-        const parsed = languageTag(tag, MAX_LANGUAGE_TAG_LENGTH);
+        const { parsed, maximized } = parseRequestLanguageTag(tag);
         const excludedTag = parsed?.baseName.toLowerCase() ?? tag;
         return {
           tag: excludedTag,
           specificity: excludedTag.split("-").length,
-          maximized: parsed?.maximize(),
+          maximized,
         };
       });
     const unique = (matches: typeof languageLocales): TLocale | undefined =>
@@ -710,7 +733,7 @@ export function defineLocaleControls<TLocale extends string>(
 
     for (const { tag, quality } of preferences) {
       if (quality <= 0) continue;
-      const parsed = languageTag(tag, MAX_LANGUAGE_TAG_LENGTH);
+      const { parsed, maximized } = parseRequestLanguageTag(tag);
       const canonicalTag = parsed?.baseName.toLowerCase() ?? tag;
       const canonicalSpecificity = canonicalTag.split("-").length;
       const available = languageLocales.filter(({ lower, maximized: supported }) => {
@@ -732,7 +755,7 @@ export function defineLocaleControls<TLocale extends string>(
       const exact = unique(available.filter(({ locale }) => locale.toLowerCase() === tag));
       if (exact) return exact;
 
-      if (!parsed) continue;
+      if (!parsed || !maximized) continue;
       const canonical = unique(
         available.filter((candidate) => candidate.parsed?.baseName === parsed.baseName),
       );
@@ -740,7 +763,6 @@ export function defineLocaleControls<TLocale extends string>(
 
       // Likely subtags supply missing fields, but never replace an explicit
       // script. Use the host's CLDR data rather than a regional alias table.
-      const maximized = parsed.maximize();
       const compatible = available.filter(
         (candidate) =>
           candidate.maximized?.language === maximized.language &&
