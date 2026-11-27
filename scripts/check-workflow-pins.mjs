@@ -378,6 +378,8 @@ const DOCKER_SERVICE_CREATE_VALUE_FLAGS = new Set([
   "--log-driver",
   "--log-opt",
   "--max-concurrent",
+  "--memory-swap",
+  "--memory-swappiness",
   "--mode",
   "--mount",
   "--name",
@@ -415,6 +417,35 @@ const DOCKER_SERVICE_CREATE_VALUE_FLAGS = new Set([
   "--user",
   "-w",
   "--workdir",
+]);
+const DOCKER_PLUGIN_INSTALL_VALUE_FLAGS = new Set(["--alias"]);
+const DOCKER_IMAGETOOLS_CREATE_VALUE_FLAGS = new Set([
+  "--annotation",
+  "--builder",
+  "-f",
+  "--file",
+  "--progress",
+  "-t",
+  "--tag",
+]);
+const DOCKER_MANIFEST_CREATE_VALUE_FLAGS = new Set();
+const PODMAN_MANIFEST_ADD_VALUE_FLAGS = new Set([
+  "--annotation",
+  "--arch",
+  "--artifact-config",
+  "--artifact-config-type",
+  "--artifact-exclude-titles",
+  "--artifact-layer-type",
+  "--artifact-subject",
+  "--artifact-type",
+  "--authfile",
+  "--cert-dir",
+  "--creds",
+  "--features",
+  "--os",
+  "--os-features",
+  "--os-version",
+  "--variant",
 ]);
 const DOCKER_SERVICE_UPDATE_VALUE_FLAGS = new Set([
   ...DOCKER_SERVICE_CREATE_VALUE_FLAGS,
@@ -13269,6 +13300,32 @@ function inspectShellText(
       ) {
         subcommand = tokens[argIndex + 1] === "create" ? "service-create" : "service-update";
         argIndex += 2;
+      } else if (
+        normalizedCli === "docker" &&
+        subcommand === "plugin" &&
+        (tokens[argIndex + 1] === "install" || tokens[argIndex + 1] === "upgrade")
+      ) {
+        subcommand = tokens[argIndex + 1] === "install" ? "plugin-install" : "plugin-upgrade";
+        argIndex += 2;
+      } else if (
+        (normalizedCli === "docker" &&
+          subcommand === "manifest" &&
+          tokens[argIndex + 1] === "create") ||
+        (normalizedCli === "podman" && subcommand === "manifest" && tokens[argIndex + 1] === "add")
+      ) {
+        subcommand = "manifest-create";
+        argIndex += 2;
+      } else if (normalizedCli === "docker" && subcommand === "buildx") {
+        let bxIdx = argIndex + 1;
+        while (bxIdx < tokens.length && tokens[bxIdx].startsWith("-")) {
+          bxIdx += flagConsumesNextArg(tokens[bxIdx], DOCKER_BUILDX_GLOBAL_VALUE_FLAGS) ? 2 : 1;
+        }
+        if (tokens[bxIdx] === "imagetools" && tokens[bxIdx + 1] === "create") {
+          subcommand = "imagetools-create";
+          argIndex = bxIdx + 2;
+        } else {
+          continue;
+        }
       } else if (subcommand === "pull" || subcommand === "run" || subcommand === "create") {
         subcommand = subcommand === "create" ? "run" : subcommand;
         argIndex += 1;
@@ -13284,26 +13341,41 @@ function inspectShellText(
           : normalizedCli === "podman"
             ? subcommand === "pull"
               ? PODMAN_PULL_VALUE_FLAGS
-              : PODMAN_RUN_VALUE_FLAGS
+              : subcommand === "manifest-create"
+                ? PODMAN_MANIFEST_ADD_VALUE_FLAGS
+                : PODMAN_RUN_VALUE_FLAGS
             : subcommand === "pull"
               ? DOCKER_PULL_VALUE_FLAGS
               : subcommand === "service-create"
                 ? DOCKER_SERVICE_CREATE_VALUE_FLAGS
                 : subcommand === "service-update"
                   ? DOCKER_SERVICE_UPDATE_VALUE_FLAGS
-                  : DOCKER_RUN_VALUE_FLAGS;
-      const allowMultipleImages = normalizedCli === "podman" && subcommand === "pull";
+                  : subcommand === "plugin-install"
+                    ? DOCKER_PLUGIN_INSTALL_VALUE_FLAGS
+                    : subcommand === "plugin-upgrade"
+                      ? new Set()
+                      : subcommand === "imagetools-create"
+                        ? DOCKER_IMAGETOOLS_CREATE_VALUE_FLAGS
+                        : subcommand === "manifest-create"
+                          ? DOCKER_MANIFEST_CREATE_VALUE_FLAGS
+                          : DOCKER_RUN_VALUE_FLAGS;
+      const allowMultipleImages =
+        (normalizedCli === "podman" && subcommand === "pull") ||
+        subcommand === "imagetools-create" ||
+        subcommand === "manifest-create";
+      const skipFirstPositional = subcommand === "manifest-create";
       const seenProblems = new Set();
 
       // Expand statically known shell option variables (e.g. `opts="--rm"` or
       // `opts="--platform linux/amd64"`) and Bash arrays (`"${args[@]}"`) before
       // scanning flags so option tokens are consumed and array-supplied images
       // are validated rather than skipped. For single-image commands (`docker
-      // run`/`create`/`pull`/`service create`, `podman run`/`create`, `buildah
-      // from`/`pull`), stop expanding each branch once its image operand has
-      // been identified so container application arguments cannot trigger the
-      // expansion cap.
-      const stopAfterFirstImage = !allowMultipleImages && subcommand !== "service-update";
+      // run`/`create`/`pull`/`service create`/`plugin install`, `podman
+      // run`/`create`, `buildah from`/`pull`), stop expanding each branch once
+      // its image operand has been identified so container application
+      // arguments cannot trigger the expansion cap.
+      const stopAfterFirstImage =
+        !allowMultipleImages && subcommand !== "service-update" && subcommand !== "plugin-upgrade";
       const advanceBranchWithSlice = (branch, slice) => {
         const next = {
           tokens: [...branch.tokens],
@@ -13578,6 +13650,21 @@ function inspectShellText(
 
       for (const argList of argTokenVariants) {
         let usesPodmanRootfs = false;
+        let positionalCount = 0;
+        const upgradePositionals = [];
+        const recordPositional = (posEntry) => {
+          if (subcommand === "plugin-upgrade") {
+            upgradePositionals.push(posEntry);
+            return false;
+          }
+          if (skipFirstPositional && positionalCount === 0) {
+            positionalCount += 1;
+            return false;
+          }
+          positionalCount += 1;
+          pushImageEntry(posEntry);
+          return !allowMultipleImages;
+        };
         for (let index = 0; index < argList.length; index += 1) {
           const entry = argList[index];
           const token = entry.text;
@@ -13585,24 +13672,19 @@ function inspectShellText(
             if (usesPodmanRootfs || subcommand === "service-update") {
               break;
             }
-            if (allowMultipleImages) {
-              for (let restIndex = index + 1; restIndex < argList.length; restIndex += 1) {
-                const restToken = argList[restIndex].text;
-                if (isRedirectionOperator(restToken)) {
-                  restIndex += 1;
-                  continue;
-                }
-                if (
-                  /^\d+$/u.test(restToken) &&
-                  isRedirectionOperator(argList[restIndex + 1]?.text)
-                ) {
-                  restIndex += 2;
-                  continue;
-                }
-                pushImageEntry(argList[restIndex]);
+            for (let restIndex = index + 1; restIndex < argList.length; restIndex += 1) {
+              const restToken = argList[restIndex].text;
+              if (isRedirectionOperator(restToken)) {
+                restIndex += 1;
+                continue;
               }
-            } else if (argList[index + 1] !== undefined) {
-              pushImageEntry(argList[index + 1]);
+              if (/^\d+$/u.test(restToken) && isRedirectionOperator(argList[restIndex + 1]?.text)) {
+                restIndex += 2;
+                continue;
+              }
+              if (recordPositional(argList[restIndex])) {
+                break;
+              }
             }
             break;
           }
@@ -13694,10 +13776,14 @@ function inspectShellText(
           if (usesPodmanRootfs) {
             break;
           }
-          pushImageEntry(entry);
-          if (!allowMultipleImages) {
+          if (recordPositional(entry)) {
             break;
           }
+        }
+        if (subcommand === "plugin-upgrade" && upgradePositionals.length > 0) {
+          pushImageEntry(
+            upgradePositionals.length >= 2 ? upgradePositionals[1] : upgradePositionals[0],
+          );
         }
       }
 
