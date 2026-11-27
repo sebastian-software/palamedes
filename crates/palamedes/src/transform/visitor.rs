@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use oxc_ast::ast::{
-    CallExpression, Expression, JSXChild, JSXElement, JSXOpeningElement, TaggedTemplateExpression,
+    Argument, CallExpression, Expression, JSXAttributeItem, JSXAttributeValue, JSXChild,
+    JSXElement, JSXOpeningElement, ObjectPropertyKind, TaggedTemplateExpression,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_semantic::Semantic;
@@ -32,7 +33,8 @@ pub(super) struct TransformVisitor<'a> {
     pub trans_imports: HashSet<(String, String)>,
     pub reused_trans_imports: HashSet<String>,
     trans_replacements: Vec<TransReplacement>,
-    pub consumed_binding_ranges: Vec<(SymbolId, usize, usize)>,
+    next_trans_placeholder: usize,
+    pub consumed_binding_ranges: Vec<(Option<SymbolId>, usize, usize)>,
     pub error: Option<PalamedesError>,
     jsx_child_element_spans: Vec<(usize, usize)>,
 }
@@ -43,6 +45,7 @@ struct TransReplacement {
     macro_symbol_id: SymbolId,
     reference_span: (u32, u32),
     replacement_index: usize,
+    placeholder: String,
     style: TransReplacementStyle,
 }
 
@@ -71,9 +74,21 @@ impl<'a> TransformVisitor<'a> {
             trans_imports: HashSet::new(),
             reused_trans_imports: HashSet::new(),
             trans_replacements: Vec::new(),
+            next_trans_placeholder: 0,
             consumed_binding_ranges: Vec::new(),
             error: None,
             jsx_child_element_spans: Vec::new(),
+        }
+    }
+
+    fn next_trans_placeholder(&mut self, text: &str) -> String {
+        loop {
+            let id = self.next_trans_placeholder;
+            self.next_trans_placeholder += 1;
+            let candidate = format!("\0__palamedesTransSlot{id}__\0");
+            if !self.source.contains(&candidate) && !text.contains(&candidate) {
+                return candidate;
+            }
         }
     }
 
@@ -102,13 +117,61 @@ impl<'a> TransformVisitor<'a> {
         });
     }
 
+    fn fail_nested_macro_in_value(
+        &mut self,
+        outer_macro: &str,
+        nested_macro: &str,
+        nested_start: usize,
+    ) {
+        let location = self
+            .source_locator
+            .indexed_location(self.filename, nested_start);
+        self.fail(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: outer_macro.to_string(),
+            location: location.format(),
+            detail: format!(
+                "nested `{nested_macro}` macro inside a value expression cannot be transformed; extract it into a variable before passing it or write complete messages in each branch"
+            ),
+        });
+    }
+
     fn record_consumed_binding(&mut self, symbol_id: SymbolId, start: usize, end: usize) {
-        self.consumed_binding_ranges.push((symbol_id, start, end));
+        self.consumed_binding_ranges
+            .push((Some(symbol_id), start, end));
+    }
+
+    fn record_discarded_outside_retained(
+        &mut self,
+        outer_start: usize,
+        outer_end: usize,
+        mut retained: Vec<(usize, usize)>,
+    ) {
+        retained.sort_unstable();
+        let mut cursor = outer_start;
+        for (start, end) in retained {
+            let start = start.clamp(outer_start, outer_end);
+            let end = end.clamp(outer_start, outer_end);
+            if start > cursor {
+                self.consumed_binding_ranges.push((None, cursor, start));
+            }
+            cursor = cursor.max(end);
+        }
+        if cursor < outer_end {
+            self.consumed_binding_ranges.push((None, cursor, outer_end));
+        }
     }
 
     pub(super) fn rebind_surviving_trans(&mut self, semantic: &Semantic<'_>) {
-        let mut aliases = HashMap::<SymbolId, String>::new();
+        let mut aliases = HashMap::<(String, SymbolId), String>::new();
         let mut reserved = self.imports.used_identifier_names.clone();
+        let runtime_import_name = self
+            .needs_runtime_import
+            .then_some(self.options.runtime_import_name.as_deref())
+            .flatten();
+        if let Some(name) = runtime_import_name {
+            reserved.insert(name.to_string());
+        }
+        let mut plain_trans_module: Option<String> = None;
         for replacement in self.trans_replacements.clone() {
             let symbol_id = replacement.macro_symbol_id;
             let module = replacement.import_module;
@@ -117,38 +180,48 @@ impl<'a> TransformVisitor<'a> {
             let reuses_trans_import =
                 self.imports
                     .can_reuse_trans_import_at(semantic, &module, reference_span);
-            let needs_alias = self.imports.has_surviving_reference(
-                semantic,
-                symbol_id,
-                &self.consumed_binding_ranges,
-            ) || (!reuses_trans_import
-                && !self.imports.can_use_generated_trans_import_at(
+            let can_use_plain_trans = runtime_import_name != Some("Trans")
+                && plain_trans_module
+                    .as_deref()
+                    .is_none_or(|existing| existing == module);
+            let needs_alias = !can_use_plain_trans
+                || self.imports.has_surviving_reference(
                     semantic,
                     symbol_id,
-                    reference_span,
-                ));
+                    &self.consumed_binding_ranges,
+                )
+                || (!reuses_trans_import
+                    && !self.imports.can_use_generated_trans_import_at(
+                        semantic,
+                        symbol_id,
+                        reference_span,
+                    ));
             let local_name = if needs_alias {
                 aliases
-                    .entry(symbol_id)
+                    .entry((module.clone(), symbol_id))
                     .or_insert_with(|| unique_identifier("__palamedesTrans", &mut reserved))
                     .clone()
             } else {
+                plain_trans_module = Some(module.clone());
+                reserved.insert("Trans".to_string());
                 "Trans".to_string()
             };
-            match replacement.style {
-                TransReplacementStyle::Jsx if local_name != "Trans" => {
-                    self.replacements[replacement_index].text = self.replacements
-                        [replacement_index]
-                        .text
-                        .replacen("<Trans ", &format!("<{local_name} "), 1);
-                }
-                TransReplacementStyle::Identifier => {
-                    self.replacements[replacement_index].text = self.replacements
-                        [replacement_index]
-                        .text
-                        .replacen("__palamedesTrans", &local_name, 1);
-                }
-                TransReplacementStyle::Jsx => {}
+            let (needle, rendered) = match replacement.style {
+                TransReplacementStyle::Jsx => (
+                    format!("<{} id=", replacement.placeholder),
+                    format!("<{local_name} id="),
+                ),
+                TransReplacementStyle::Identifier => (
+                    format!("({}, {{ id:", replacement.placeholder),
+                    format!("({local_name}, {{ id:"),
+                ),
+            };
+            if let Some(target) = self.replacements.get_mut(replacement_index)
+                && let Some(pos) = target.text.rfind(&needle)
+            {
+                target
+                    .text
+                    .replace_range(pos..pos + needle.len(), &rendered);
             }
             if local_name == "Trans" && reuses_trans_import {
                 self.reused_trans_imports.insert(module.clone());
@@ -178,9 +251,6 @@ impl<'a> TransformVisitor<'a> {
                 }
                 JSXChild::Fragment(fragment) => {
                     self.visit_preserved_attribute_macros(&fragment.children);
-                }
-                JSXChild::ExpressionContainer(container) => {
-                    walk::walk_jsx_expression_container(self, container);
                 }
                 _ => {}
             }
@@ -227,9 +297,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         }
 
         let attribute_replacement_start = self.replacements.len();
+        let trans_replacement_start = self.trans_replacements.len();
         if macro_info.imported_name == "Trans" {
             self.visit_preserved_attribute_macros(&it.children);
             if self.error.is_some() {
+                self.trans_replacements.truncate(trans_replacement_start);
                 return;
             }
         }
@@ -268,35 +340,85 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
         match replacement {
             Ok(Some((text, compiled_id))) => {
-                let text = if macro_info.imported_name != "Trans"
+                let is_plural = matches!(
+                    macro_info.imported_name.as_str(),
+                    "Plural" | "SelectOrdinal"
+                );
+                let nested = if macro_info.imported_name == "Trans" {
+                    nested_macro_use_in_trans_expressions(&it.children, self.imports)
+                } else {
+                    nested_macro_use_in_choice_jsx_attributes(
+                        &it.opening_element.attributes,
+                        is_plural,
+                        self.imports,
+                    )
+                };
+                if let Some((nested_macro, nested_start)) = nested {
+                    self.trans_replacements.truncate(trans_replacement_start);
+                    self.fail_nested_macro_in_value(
+                        &macro_info.imported_name,
+                        &nested_macro,
+                        nested_start,
+                    );
+                    return;
+                }
+                let mut text = if macro_info.imported_name != "Trans"
                     && self.is_current_jsx_child_element(it)
                 {
                     format!("{{{text}}}")
                 } else {
                     text
                 };
+                let trans_placeholder = if macro_info.imported_name == "Trans"
+                    && macro_info.source.strip_suffix("/macro").is_some()
+                {
+                    let placeholder = self.next_trans_placeholder(&text);
+                    text = text.replacen("<Trans id=", &format!("<{placeholder} id="), 1);
+                    Some(placeholder)
+                } else {
+                    None
+                };
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,
                     end: it.span.end as usize,
                     text,
                 });
+                let parent_index = self.replacements.len() - 1;
+                for nested_trans in &mut self.trans_replacements[trans_replacement_start..] {
+                    nested_trans.replacement_index = parent_index;
+                }
                 self.push_compiled_id(&compiled_id);
-                self.record_consumed_binding(
-                    macro_symbol_id,
-                    it.span.start as usize,
-                    it.span.end as usize,
-                );
+                if macro_info.imported_name == "Trans" {
+                    self.record_consumed_binding(
+                        macro_symbol_id,
+                        it.span.start as usize,
+                        it.span.end as usize,
+                    );
+                } else {
+                    let retained = retained_choice_jsx_attribute_spans(
+                        &it.opening_element.attributes,
+                        is_plural,
+                    );
+                    self.record_discarded_outside_retained(
+                        it.span.start as usize,
+                        it.span.end as usize,
+                        retained,
+                    );
+                }
 
                 if macro_info.imported_name == "Trans" {
-                    if let Some(module) = macro_info.source.strip_suffix("/macro") {
+                    if let (Some(module), Some(placeholder)) =
+                        (macro_info.source.strip_suffix("/macro"), trans_placeholder)
+                    {
                         self.trans_replacements.push(TransReplacement {
                             macro_symbol_id,
                             import_module: format!("{module}/compiled"),
-                            replacement_index: self.replacements.len() - 1,
+                            replacement_index: parent_index,
                             reference_span: (
                                 it.opening_element.name.span().start,
                                 it.opening_element.name.span().end,
                             ),
+                            placeholder,
                             style: TransReplacementStyle::Jsx,
                         });
                     }
@@ -305,9 +427,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 }
             }
             Ok(None) => {
+                self.trans_replacements.truncate(trans_replacement_start);
                 self.fail_unsupported_macro(&macro_info.imported_name, it.span.start as usize);
             }
             Err(error) => {
+                self.trans_replacements.truncate(trans_replacement_start);
                 self.fail(error);
             }
         }
@@ -334,8 +458,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         };
 
-        let Some((macro_info, macro_symbol_id)) = self.imports.macro_at(local_name, tag_span)
-        else {
+        let Some((macro_info, _)) = self.imports.macro_at(local_name, tag_span) else {
             walk::walk_tagged_template_expression(self, it);
             return;
         };
@@ -356,30 +479,45 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             self.options,
         ) {
             Ok(Some((text, compiled_id))) => {
+                if let Some((nested_macro, nested_start)) =
+                    nested_macro_use_in_expressions(&it.quasi.expressions, self.imports)
+                {
+                    self.fail_nested_macro_in_value(
+                        &macro_info.imported_name,
+                        &nested_macro,
+                        nested_start,
+                    );
+                    return;
+                }
+                let retained = it
+                    .quasi
+                    .expressions
+                    .iter()
+                    .map(|expression| {
+                        let span = expression.span();
+                        (span.start as usize, span.end as usize)
+                    })
+                    .collect();
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,
                     end: it.span.end as usize,
                     text,
                 });
                 self.push_compiled_id(&compiled_id);
-                self.record_consumed_binding(
-                    macro_symbol_id,
+                self.record_discarded_outside_retained(
                     it.span.start as usize,
                     it.span.end as usize,
+                    retained,
                 );
                 self.needs_runtime_import = true;
             }
             Ok(None) => {
                 self.fail_unsupported_macro(&macro_info.imported_name, it.span.start as usize);
-                return;
             }
             Err(error) => {
                 self.fail(error);
-                return;
             }
         }
-
-        walk::walk_tagged_template_expression(self, it);
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
@@ -417,8 +555,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         }
 
-        let Some((macro_info, macro_symbol_id)) = self.imports.macro_at(local_name, callee_span)
-        else {
+        let Some((macro_info, _)) = self.imports.macro_at(local_name, callee_span) else {
             walk::walk_call_expression(self, it);
             return;
         };
@@ -437,16 +574,27 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     self.options,
                 ) {
                     Ok(Some((text, compiled_id))) => {
+                        if let Some((nested_macro, nested_start)) =
+                            nested_macro_use_in_descriptor_call(it, self.imports)
+                        {
+                            self.fail_nested_macro_in_value(
+                                &macro_info.imported_name,
+                                &nested_macro,
+                                nested_start,
+                            );
+                            return;
+                        }
+                        let retained = retained_descriptor_call_spans(it);
                         self.replacements.push(Replacement {
                             start: it.span.start as usize,
                             end: it.span.end as usize,
                             text,
                         });
                         self.push_compiled_id(&compiled_id);
-                        self.record_consumed_binding(
-                            macro_symbol_id,
+                        self.record_discarded_outside_retained(
                             it.span.start as usize,
                             it.span.end as usize,
+                            retained,
                         );
                         self.needs_runtime_import = true;
                     }
@@ -455,11 +603,9 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             &macro_info.imported_name,
                             it.span.start as usize,
                         );
-                        return;
                     }
                     Err(error) => {
                         self.fail(error);
-                        return;
                     }
                 }
             }
@@ -473,16 +619,35 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     self.options,
                 ) {
                     Ok(Some((text, compiled_id))) => {
+                        if let Some((nested_macro, nested_start)) =
+                            nested_macro_use_in_choice_call(it, self.imports)
+                        {
+                            self.fail_nested_macro_in_value(
+                                &macro_info.imported_name,
+                                &nested_macro,
+                                nested_start,
+                            );
+                            return;
+                        }
+                        let retained = it
+                            .arguments
+                            .iter()
+                            .take(2)
+                            .map(|argument| {
+                                let span = argument.span();
+                                (span.start as usize, span.end as usize)
+                            })
+                            .collect();
                         self.replacements.push(Replacement {
                             start: it.span.start as usize,
                             end: it.span.end as usize,
                             text,
                         });
                         self.push_compiled_id(&compiled_id);
-                        self.record_consumed_binding(
-                            macro_symbol_id,
+                        self.record_discarded_outside_retained(
                             it.span.start as usize,
                             it.span.end as usize,
+                            retained,
                         );
                         self.needs_runtime_import = true;
                     }
@@ -491,21 +656,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             &macro_info.imported_name,
                             it.span.start as usize,
                         );
-                        return;
                     }
                     Err(error) => {
                         self.fail(error);
-                        return;
                     }
                 }
             }
             _ => {
                 walk::walk_call_expression(self, it);
-                return;
             }
         }
-
-        walk::walk_call_expression(self, it);
     }
 }
 
@@ -557,24 +717,65 @@ impl TransformVisitor<'_> {
 
         match replacement {
             Ok(Some((text, compiled_id))) => {
+                let is_plural = matches!(
+                    macro_info.imported_name.as_str(),
+                    "Plural" | "SelectOrdinal"
+                );
+                if macro_info.imported_name != "Trans"
+                    && let Some((nested_macro, nested_start)) =
+                        nested_macro_use_in_lowered_choice_call(call, is_plural, self.imports)
+                {
+                    self.fail_nested_macro_in_value(
+                        &macro_info.imported_name,
+                        &nested_macro,
+                        nested_start,
+                    );
+                    return true;
+                }
+                let mut text = text;
+                let trans_placeholder = if macro_info.imported_name == "Trans"
+                    && macro_info.source.strip_suffix("/macro").is_some()
+                {
+                    let placeholder = self.next_trans_placeholder(&text);
+                    text = text.replacen(
+                        "(__palamedesTrans, { id:",
+                        &format!("({placeholder}, {{ id:"),
+                        1,
+                    );
+                    Some(placeholder)
+                } else {
+                    None
+                };
                 self.replacements.push(Replacement {
                     start: call.span.start as usize,
                     end: call.span.end as usize,
                     text,
                 });
                 self.push_compiled_id(&compiled_id);
-                self.record_consumed_binding(
-                    macro_symbol_id,
-                    call.span.start as usize,
-                    call.span.end as usize,
-                );
                 if macro_info.imported_name == "Trans" {
-                    if let Some(module) = macro_info.source.strip_suffix("/macro") {
+                    self.record_consumed_binding(
+                        macro_symbol_id,
+                        call.span.start as usize,
+                        call.span.end as usize,
+                    );
+                } else {
+                    let retained = retained_lowered_choice_call_spans(call, is_plural);
+                    self.record_discarded_outside_retained(
+                        call.span.start as usize,
+                        call.span.end as usize,
+                        retained,
+                    );
+                }
+                if macro_info.imported_name == "Trans" {
+                    if let (Some(module), Some(placeholder)) =
+                        (macro_info.source.strip_suffix("/macro"), trans_placeholder)
+                    {
                         self.trans_replacements.push(TransReplacement {
                             import_module: format!("{module}/compiled"),
                             macro_symbol_id,
                             reference_span,
                             replacement_index: self.replacements.len() - 1,
+                            placeholder,
                             style: TransReplacementStyle::Identifier,
                         });
                     }
@@ -588,6 +789,339 @@ impl TransformVisitor<'_> {
             Err(error) => self.fail(error),
         }
         true
+    }
+}
+
+fn nested_macro_use_in_expressions<'a>(
+    expressions: &[Expression<'a>],
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    for expression in expressions {
+        finder.visit_expression(expression);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_descriptor_call<'a>(
+    call: &CallExpression<'a>,
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    if let Some(Argument::ObjectExpression(descriptor)) = call.arguments.first()
+        && let Some(message) = crate::descriptor::descriptor_property_value(descriptor, "message")
+        && let Expression::TemplateLiteral(template) = message.without_parentheses()
+    {
+        for expression in &template.expressions {
+            finder.visit_expression(expression);
+            if finder.nested.is_some() {
+                return finder.nested;
+            }
+        }
+    }
+    if let Some(values) = call.arguments.get(1) {
+        finder.visit_argument(values);
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_choice_call<'a>(
+    call: &CallExpression<'a>,
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    for argument in call.arguments.iter().take(2) {
+        finder.visit_argument(argument);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn retained_descriptor_call_spans(call: &CallExpression<'_>) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    if let Some(Argument::ObjectExpression(descriptor)) = call.arguments.first()
+        && let Some(message) = crate::descriptor::descriptor_property_value(descriptor, "message")
+        && let Expression::TemplateLiteral(template) = message.without_parentheses()
+    {
+        for expression in &template.expressions {
+            let span = expression.span();
+            spans.push((span.start as usize, span.end as usize));
+        }
+    }
+    if let Some(values) = call.arguments.get(1) {
+        let span = values.span();
+        spans.push((span.start as usize, span.end as usize));
+    }
+    spans
+}
+
+fn retained_lowered_choice_call_spans(
+    call: &CallExpression<'_>,
+    is_plural: bool,
+) -> Vec<(usize, usize)> {
+    let Some(Argument::ObjectExpression(props)) = call.arguments.get(1) else {
+        return Vec::new();
+    };
+    let mut spans = Vec::new();
+    if let Some(value) = crate::descriptor::descriptor_property_value(props, "value") {
+        let span = value.span();
+        spans.push((span.start as usize, span.end as usize));
+    }
+    for property in &props.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            continue;
+        };
+        if let Some(key) = property.key.static_name()
+            && is_non_branch_choice_key(key.as_ref(), is_plural, true)
+        {
+            continue;
+        }
+        let span = property.value.span();
+        spans.push((span.start as usize, span.end as usize));
+    }
+    spans
+}
+
+fn retained_choice_jsx_attribute_spans(
+    attributes: &[JSXAttributeItem<'_>],
+    is_plural: bool,
+) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    let mut checked_value = false;
+    for attribute in attributes {
+        if let Some(attr) = attribute.as_attribute() {
+            let name = attr.name.get_identifier().name.as_str();
+            if name == "value" {
+                if !checked_value
+                    && let Some(JSXAttributeValue::ExpressionContainer(container)) =
+                        attr.value.as_ref()
+                {
+                    checked_value = true;
+                    let span = container.span;
+                    spans.push((span.start as usize, span.end as usize));
+                }
+                continue;
+            }
+            if is_non_branch_choice_key(name, is_plural, false) {
+                continue;
+            }
+        }
+        let span = attribute.span();
+        spans.push((span.start as usize, span.end as usize));
+    }
+    spans
+}
+
+fn is_non_branch_choice_key(key: &str, is_plural: bool, lowered: bool) -> bool {
+    matches!(
+        key,
+        "id" | "message" | "comment" | "context" | "value" | "key"
+    ) || (lowered && key == "children")
+        || (is_plural && key == "offset")
+}
+
+fn nested_macro_use_in_lowered_choice_call<'a>(
+    call: &CallExpression<'a>,
+    is_plural: bool,
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let Some(Argument::ObjectExpression(props)) = call.arguments.get(1) else {
+        return None;
+    };
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    // Lowering selects the last `value` property via `descriptor_property_value`.
+    if let Some(value) = crate::descriptor::descriptor_property_value(props, "value") {
+        finder.visit_expression(value);
+        if finder.nested.is_some() {
+            return finder.nested;
+        }
+    }
+    for property in &props.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            continue;
+        };
+        if let Some(key) = property.key.static_name()
+            && is_non_branch_choice_key(key.as_ref(), is_plural, true)
+        {
+            continue;
+        }
+        finder.visit_expression(&property.value);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_choice_jsx_attributes<'a>(
+    attributes: &[JSXAttributeItem<'a>],
+    is_plural: bool,
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    // Lowering selects the first `value` attribute whose value is an expression container.
+    let mut checked_value = false;
+    for attribute in attributes {
+        if let Some(attr) = attribute.as_attribute() {
+            let name = attr.name.get_identifier().name.as_str();
+            if name == "value" {
+                if !checked_value
+                    && let Some(JSXAttributeValue::ExpressionContainer(container)) =
+                        attr.value.as_ref()
+                {
+                    checked_value = true;
+                    finder.visit_jsx_expression_container(container);
+                    if finder.nested.is_some() {
+                        break;
+                    }
+                }
+                continue;
+            }
+            if is_non_branch_choice_key(name, is_plural, false) {
+                continue;
+            }
+        }
+        finder.visit_jsx_attribute_item(attribute);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_trans_expressions<'a>(
+    children: &[JSXChild<'a>],
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    fn visit_children<'a>(children: &[JSXChild<'a>], finder: &mut NestedMacroUseFinder<'_>) {
+        for child in children {
+            if finder.nested.is_some() {
+                return;
+            }
+            match child {
+                JSXChild::ExpressionContainer(container) => {
+                    finder.visit_jsx_expression_container(container);
+                }
+                JSXChild::Element(element) => {
+                    visit_children(&element.children, finder);
+                }
+                JSXChild::Fragment(fragment) => {
+                    visit_children(&fragment.children, finder);
+                }
+                _ => {}
+            }
+        }
+    }
+    visit_children(children, &mut finder);
+    finder.nested
+}
+
+struct NestedMacroUseFinder<'a> {
+    imports: &'a ImportCollector,
+    nested: Option<(String, usize)>,
+}
+
+impl<'a> Visit<'a> for NestedMacroUseFinder<'_> {
+    fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
+        if self.nested.is_some() {
+            return;
+        }
+        if let Some((local_name, tag_span)) = identifier_name_and_span(&it.tag)
+            && let Some((macro_info, _)) = self.imports.macro_at(local_name, tag_span)
+            && macro_info.imported_name == "t"
+        {
+            self.nested = Some((macro_info.imported_name, it.span.start as usize));
+            return;
+        }
+        walk::walk_tagged_template_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.nested.is_some() {
+            return;
+        }
+        if let Some((type_name, type_span)) = create_element_type(it)
+            && let Some((macro_info, _)) = self.imports.macro_at(type_name, type_span)
+            && matches!(
+                macro_info.imported_name.as_str(),
+                "Trans" | "Plural" | "Select" | "SelectOrdinal"
+            )
+        {
+            self.nested = Some((macro_info.imported_name, it.span.start as usize));
+            return;
+        }
+        if let Some((local_name, callee_span)) = identifier_name_and_span(&it.callee) {
+            if self.imports.remix_jsx_binding_at(local_name, callee_span)
+                == Some(super::imports::RemixJsxBinding::Helper)
+                && let Some(element_type) = it.arguments.first().and_then(Argument::as_expression)
+                && let Some((element_name, element_span)) = identifier_name_and_span(element_type)
+                && let Some((macro_info, _)) = self.imports.macro_at(element_name, element_span)
+                && matches!(
+                    macro_info.imported_name.as_str(),
+                    "Trans" | "Plural" | "Select" | "SelectOrdinal"
+                )
+            {
+                self.nested = Some((macro_info.imported_name, it.span.start as usize));
+                return;
+            }
+            if let Some((macro_info, _)) = self.imports.macro_at(local_name, callee_span)
+                && matches!(
+                    macro_info.imported_name.as_str(),
+                    "t" | "plural" | "select" | "selectOrdinal"
+                )
+            {
+                self.nested = Some((macro_info.imported_name, it.span.start as usize));
+                return;
+            }
+        }
+        walk::walk_call_expression(self, it);
+    }
+
+    fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
+        if self.nested.is_some() {
+            return;
+        }
+        if let Some(tag_name) = it.opening_element.name.get_identifier_name()
+            && let Some((macro_info, _)) = self.imports.macro_at(
+                tag_name.as_str(),
+                (
+                    it.opening_element.name.span().start,
+                    it.opening_element.name.span().end,
+                ),
+            )
+            && matches!(
+                macro_info.imported_name.as_str(),
+                "Trans" | "Plural" | "Select" | "SelectOrdinal"
+            )
+        {
+            self.nested = Some((macro_info.imported_name, it.span.start as usize));
+            return;
+        }
+        walk::walk_jsx_element(self, it);
     }
 }
 

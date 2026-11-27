@@ -1588,7 +1588,7 @@ fn extract_jsx_children_as_message(
     macros: &MacroImports,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<String> {
-    let lowered = lower_jsx_children(children, source, macros, |_| String::new())?;
+    let lowered = lower_jsx_children(children, source, macros, |_| Ok(String::new()))?;
     check_lowered_message(
         &lowered.message,
         lowered.values.iter().map(|value| value.name.as_str()),
