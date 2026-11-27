@@ -33,9 +33,11 @@ documents using a nonce-based CSP, generate a fresh cryptographic nonce per
 request on the server, keep those responses out of shared caches, and share the
 nonce across the response header, Palamedes catalog delivery, and Waku's
 framework nonce (with Waku `1.0.0-rc.4`'s default Node adapter, prerendered
-static pages are served by `serveStatic` before `middlewareFns` runs, so static
-routes need a hash-based CSP configured at the static host or edge proxy
-instead):
+static pages are served by `serveStatic` before `middlewareFns` runs—bypassing
+both the CSP middleware and `createWakuCatalogDeliveryMiddleware`, so routes
+whose client chunks use split catalogs need request-time rendering or a separate
+build-time catalog delivery step before computing a hash-based CSP at the static
+host or edge proxy):
 
 ```ts
 // src/lib/csp.server.ts
@@ -64,19 +66,13 @@ middlewareFns: [
       await next();
       const nonce = getRequestNonce();
       if (nonce && context.res.headers.get("content-type")?.startsWith("text/html")) {
-        const headers = new Headers(context.res.headers);
         // Add any other directives your application needs.
-        headers.set(
+        context.header(
           "content-security-policy",
           `script-src 'self' 'nonce-${nonce}'; object-src 'none'; base-uri 'none'`,
         );
         // Nonce-bearing HTML must never be replayed across visitors by a shared cache.
-        headers.set("cache-control", "private, no-store");
-        context.res = new Response(context.res.body, {
-          headers,
-          status: context.res.status,
-          statusText: context.res.statusText,
-        });
+        context.header("cache-control", "private, no-store");
       }
     }),
   () =>

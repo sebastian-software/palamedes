@@ -55,14 +55,16 @@ Palamedes are:
 - GitHub Actions release, publish, and trusted-publishing automation
 
 See [docs/security.md](./docs/security.md) for deployment hardening guidance and
-documented trust boundaries (including why compiled JS catalogs and explicitly
-configured `pmds` binary plugins are treated as trusted local code).
+documented trust boundaries (including why already-compiled JS catalog modules and
+explicitly configured `pmds` binary plugins are treated as trusted local code).
 
 Usually out of scope: reports without a concrete impact path, vulnerabilities in
 third-party dependencies used as documented, issues resulting from bypassing
-documented trust boundaries (such as compiling unreviewed third-party catalogs or
-configuring untrusted CLI plugins), and problems that require an
-already-compromised machine or a deliberately corrupted local state.
+documented trust boundaries (such as importing an untrusted precompiled `.mjs`
+catalog module or explicitly configuring an untrusted CLI binary plugin —
+parser, compiler, or escaping defects in Palamedes's own `.po`/`.fcl` toolchain
+remain in scope), and problems that require an already-compromised machine or a
+deliberately corrupted local state.
 
 ## Disclosure
 
