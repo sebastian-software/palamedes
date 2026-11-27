@@ -971,6 +971,7 @@ describe("security hardening", () => {
       ["\\\\evil.example/path", "/evil.example/path"],
       ["/\\/evil.example", "/evil.example"],
       ["  //evil.example", "/evil.example"],
+      ["\u00a0//docs", "/\u00a0//docs"],
       ["/ about", "/ about"],
       [" /docs", "/ /docs"],
       [" team", "/ team"],

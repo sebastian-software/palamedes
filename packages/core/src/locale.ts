@@ -663,8 +663,8 @@ function normalizeCanonicalPath(pathname: string): string {
     throw new TypeError("defineLocaleControls: pathname must not contain control characters.");
   }
 
-  const normalized = /^\s*(?:[/\\]{2,}|\\)/.test(pathname)
-    ? pathname.replace(/^\s*[/\\]+/, "")
+  const normalized = /^ *(?:[/\\]{2,}|\\)/.test(pathname)
+    ? pathname.replace(/^ *[/\\]+/, "")
     : pathname.replace(/^[/\\]+/, "");
   return `/${normalized}`;
 }
