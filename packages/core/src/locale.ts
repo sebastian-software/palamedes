@@ -135,69 +135,9 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   return null;
 }
 
-function isValidBcp47ExtensionSuffix(suffix: string): boolean {
-  if (!suffix.startsWith("-")) {
-    return false;
-  }
-
-  const subtags = suffix.slice(1).split("-");
-  const seenSingletons = new Set<string>();
-  let index = 0;
-
-  while (index < subtags.length) {
-    const singleton = subtags[index];
-    if (!singleton || singleton.length !== 1 || !/^[0-9a-z]$/.test(singleton)) {
-      return false;
-    }
-
-    if (singleton === "x") {
-      index += 1;
-      if (index >= subtags.length) {
-        return false;
-      }
-      while (index < subtags.length) {
-        const part = subtags[index];
-        if (!part || part.length > 8 || !/^[0-9a-z]+$/.test(part)) {
-          return false;
-        }
-        index += 1;
-      }
-      return true;
-    }
-
-    if (seenSingletons.has(singleton)) {
-      return false;
-    }
-    seenSingletons.add(singleton);
-    index += 1;
-
-    let extCount = 0;
-    while (index < subtags.length) {
-      const part = subtags[index];
-      if (!part) {
-        return false;
-      }
-      if (part.length === 1) {
-        break;
-      }
-      if (part.length < 2 || part.length > 8 || !/^[0-9a-z]+$/.test(part)) {
-        return false;
-      }
-      extCount += 1;
-      index += 1;
-    }
-
-    if (extCount === 0) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 function languagePreferences(
   header: string | null | undefined,
-  allowLongTag?: (lowerTag: string) => boolean,
+  maxTagLength = MAX_LANGUAGE_TAG_LENGTH,
 ) {
   if (!header || header.length > MAX_ACCEPT_LANGUAGE_LENGTH) {
     return [];
@@ -242,8 +182,7 @@ function languagePreferences(
       }
     }
 
-    const lowerTag = rawTag.toLowerCase();
-    if (rawTag.length > MAX_LANGUAGE_TAG_LENGTH && !allowLongTag?.(lowerTag)) {
+    if (rawTag.length > maxTagLength) {
       if (quality === 0) {
         return [];
       }
@@ -252,7 +191,7 @@ function languagePreferences(
 
     preferences.push({
       quality,
-      tag: lowerTag,
+      tag: rawTag.toLowerCase(),
     });
   }
 
@@ -755,52 +694,31 @@ export function defineLocaleControls<TLocale extends string>(
       maximized: parsed?.maximize(),
     };
   });
-  const configuredLocalesByLower = new Map(
-    languageLocales.map((entry) => [entry.locale.toLowerCase(), entry]),
+  const configuredLongMax = languageLocales.reduce(
+    (max, entry) =>
+      Math.max(
+        max,
+        entry.locale.length > MAX_LANGUAGE_TAG_LENGTH ? entry.locale.length : 0,
+        entry.lower.length > MAX_LANGUAGE_TAG_LENGTH ? entry.lower.length : 0,
+      ),
+    0,
   );
-  const configuredParsedBaseEntries = languageLocales.filter((entry) => entry.parsed !== null);
-  const matchConfiguredLongLocale = (lowerTag: string) => {
-    const exact = configuredLocalesByLower.get(lowerTag);
-    if (exact) {
-      return exact;
-    }
-
-    for (const entry of configuredParsedBaseEntries) {
-      if (lowerTag === entry.lower) {
-        return entry;
-      }
-      if (
-        lowerTag.startsWith(`${entry.lower}-`) &&
-        isValidBcp47ExtensionSuffix(lowerTag.slice(entry.lower.length))
-      ) {
-        return entry;
-      }
-    }
-
-    return null;
-  };
-  const allowLongRequestTag = (lowerTag: string): boolean =>
-    matchConfiguredLongLocale(lowerTag) !== null;
-  const parseRequestLanguageTag = (tag: string) => {
-    const configured = matchConfiguredLongLocale(tag);
-    if (configured) {
-      return { parsed: configured.parsed, maximized: configured.maximized };
-    }
-    const parsed = languageTag(tag, MAX_LANGUAGE_TAG_LENGTH);
-    return { parsed, maximized: parsed?.maximize() };
-  };
+  const maxRequestTagLength =
+    configuredLongMax > 0
+      ? Math.min(MAX_ACCEPT_LANGUAGE_LENGTH, configuredLongMax + MAX_LANGUAGE_TAG_LENGTH)
+      : MAX_LANGUAGE_TAG_LENGTH;
 
   const preferredLocale = (header: string | null | undefined): TLocale => {
-    const preferences = languagePreferences(header, allowLongRequestTag);
+    const preferences = languagePreferences(header, maxRequestTagLength);
     const exclusions = preferences
       .filter(({ quality }) => quality === 0)
       .map(({ tag }) => {
-        const { parsed, maximized } = parseRequestLanguageTag(tag);
+        const parsed = languageTag(tag, maxRequestTagLength);
         const excludedTag = parsed?.baseName.toLowerCase() ?? tag;
         return {
           tag: excludedTag,
           specificity: excludedTag.split("-").length,
-          maximized,
+          maximized: parsed?.maximize(),
         };
       });
     const unique = (matches: typeof languageLocales): TLocale | undefined =>
@@ -808,7 +726,7 @@ export function defineLocaleControls<TLocale extends string>(
 
     for (const { tag, quality } of preferences) {
       if (quality <= 0) continue;
-      const { parsed, maximized } = parseRequestLanguageTag(tag);
+      const parsed = languageTag(tag, maxRequestTagLength);
       const canonicalTag = parsed?.baseName.toLowerCase() ?? tag;
       const canonicalSpecificity = canonicalTag.split("-").length;
       const available = languageLocales.filter(({ lower, maximized: supported }) => {
@@ -830,7 +748,7 @@ export function defineLocaleControls<TLocale extends string>(
       const exact = unique(available.filter(({ locale }) => locale.toLowerCase() === tag));
       if (exact) return exact;
 
-      if (!parsed || !maximized) continue;
+      if (!parsed) continue;
       const canonical = unique(
         available.filter((candidate) => candidate.parsed?.baseName === parsed.baseName),
       );
@@ -838,6 +756,7 @@ export function defineLocaleControls<TLocale extends string>(
 
       // Likely subtags supply missing fields, but never replace an explicit
       // script. Use the host's CLDR data rather than a regional alias table.
+      const maximized = parsed.maximize();
       const compatible = available.filter(
         (candidate) =>
           candidate.maximized?.language === maximized.language &&

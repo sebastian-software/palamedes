@@ -1003,8 +1003,10 @@ describe("security hardening", () => {
       expect(controls.preferredLocale(overlongExclusion)).toBe("en");
     });
 
-    it("keeps exact and extension-insensitive matching working for valid configured locales longer than 64 chars", () => {
+    it("keeps exact, canonical, and extension-insensitive matching working for valid configured locales longer than 64 chars", () => {
       const longLocale = "de-DE-abcdefg-bcdefgh-cdefghi-defghij-efghijk-fghijkl-ghijklm-hijklmn";
+      const reorderedLongLocale =
+        "de-DE-hijklmn-abcdefg-bcdefgh-cdefghi-defghij-efghijk-fghijkl-ghijklm";
       const custom = defineLocaleControls({
         locales: ["en", longLocale] as const,
         defaultLocale: "en",
@@ -1014,10 +1016,17 @@ describe("security hardening", () => {
       expect(custom.preferredLocale("de-DE")).toBe(longLocale);
       expect(custom.preferredLocale(longLocale)).toBe(longLocale);
       expect(custom.preferredLocale(longLocale.toUpperCase())).toBe(longLocale);
+      expect(custom.preferredLocale(reorderedLongLocale)).toBe(longLocale);
       expect(custom.preferredLocale(`${longLocale}-u-ca-gregory`)).toBe(longLocale);
       expect(custom.preferredLocale(`${longLocale}-u-ca-gregory;q=0, de-DE`)).toBe("en");
       expect(custom.preferredLocale(`${longLocale}-notanextension`)).toBe("en");
       expect(custom.preferredLocale(`${longLocale};q=0, de-DE`)).toBe("en");
+
+      const posixControls = defineLocaleControls({
+        locales: ["en-US", "en-US-posix"] as const,
+        defaultLocale: "en-US",
+      });
+      expect(posixControls.preferredLocale("en-US-u-va-posix")).toBe("en-US-posix");
     });
 
     it("handles adversarial exclusion combinations in bounded time", () => {
