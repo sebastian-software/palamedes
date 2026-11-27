@@ -4789,12 +4789,67 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual([
-      "<memory>:12: container or environment operations in non-shell run step cannot be verified statically",
+      "<memory>:12: container tool invocation in non-shell run step cannot be verified statically",
       "<memory>:18: busybox:1.36 is not pinned to a sha256 digest",
       "<memory>:25: ubuntu:24.04 is not pinned to a sha256 digest",
       "<memory>:35: nginx:1.27 is not pinned to a sha256 digest",
       "<memory>:39: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:40: fedora:41 is not pinned to a sha256 digest",
+    ]);
+    // Buildx action `with.build-args` and `with.build-contexts` expand env/matrix
+    // expressions before splitting assignments, unconverged multi-hop loops fail
+    // closed on affected image operands, and non-shell steps only fail when they
+    // invoke a container tool or when their opaque output/env feeds an image.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r66:",
+          "    runs-on: ubuntu-latest",
+          "    env:",
+          "      BUILD_ARGS: |",
+          "        BUILDKIT_SYNTAX=docker/dockerfile:1",
+          "      BUILD_CONTEXTS: |",
+          "        tools=docker-image://alpine:3.20",
+          "    steps:",
+          `      - uses: docker/build-push-action@${"b".repeat(40)}`,
+          "        with:",
+          "          build-args: ${{ env.BUILD_ARGS }}",
+          "          build-contexts: ${{ env.BUILD_CONTEXTS }}",
+          "      - id: benign_py",
+          "        shell: python",
+          "        run: |",
+          "          # Mentions docker in a comment only",
+          "          import os",
+          '          open(os.environ["GITHUB_OUTPUT"], "a").write("count=5\\n")',
+          '      - run: echo "count=${{ steps.benign_py.outputs.count }}"',
+          "      - id: img_py",
+          "        shell: python",
+          "        run: |",
+          "          import os",
+          '          open(os.environ["GITHUB_OUTPUT"], "a").write("image=alpine:3.20\\n")',
+          '      - run: docker pull "${{ steps.img_py.outputs.image }}"',
+          "      - run: |",
+          `          a=node:24@${digest}`,
+          `          b=node:24@${digest}`,
+          `          c=node:24@${digest}`,
+          `          d=node:24@${digest}`,
+          `          e=node:24@${digest}`,
+          `          f=node:24@${digest}`,
+          "          g=debian:12",
+          "          for i in 1 2 3 4 5 6 7; do",
+          '            docker pull "$a"',
+          '            a="$b"; b="$c"; c="$d"; d="$e"; e="$f"; f="$g"',
+          "          done",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:9: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:13: docker/dockerfile:1 is not pinned to a sha256 digest",
+      "<memory>:27: container image reference depends on an unverified non-shell output or environment variable",
+      "<memory>:37: $a exceeds expansion limit and cannot be verified exhaustively",
     ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(

@@ -1395,18 +1395,29 @@ function isEventGuardSatisfiable(ifNode, eventNames) {
   );
 }
 
+const OPAQUE_ENV_KEY = "\0opaque_env";
+const OPAQUE_UNVERIFIED_SENTINEL = "\0unverified_non_shell_value";
+const NON_TAINTED_SYSTEM_ENV_PATTERN =
+  /^(?:GITHUB_|RUNNER_|ACTIONS_|PATH$|HOME$|PWD$|USER$|SHELL$|TERM$|CI$|TMPDIR$|TEMP$|TMP$|SHLVL$|OLDPWD$|IFS$)/iu;
+
 function lookupVarEntries(varMap, name, caseInsensitive = false) {
   if (varMap.has(name)) {
     return varMap.get(name);
   }
-  if (!caseInsensitive) {
-    return null;
-  }
-  const lower = name.toLowerCase();
-  for (const [key, entries] of varMap) {
-    if (key.toLowerCase() === lower) {
-      return entries;
+  if (caseInsensitive) {
+    const lower = name.toLowerCase();
+    for (const [key, entries] of varMap) {
+      if (key.toLowerCase() === lower) {
+        return entries;
+      }
     }
+  }
+  if (
+    !name.startsWith("\0") &&
+    !NON_TAINTED_SYSTEM_ENV_PATTERN.test(name) &&
+    varMap.has(OPAQUE_ENV_KEY)
+  ) {
+    return varMap.get(OPAQUE_ENV_KEY);
   }
   return null;
 }
@@ -1977,7 +1988,9 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
       stepOutMatch.groups.outSq ??
       stepOutMatch.groups.outDq
     ).toLowerCase();
-    const entries = stepEnv.get(`${STEP_OUTPUT_KEY_PREFIX}${stepId}\0${outName}`);
+    const entries =
+      stepEnv.get(`${STEP_OUTPUT_KEY_PREFIX}${stepId}\0${outName}`) ??
+      stepEnv.get(`${STEP_OUTPUT_KEY_PREFIX}${stepId}\0*`);
     if (!entries || entries.length === 0) {
       return { known: false, values: [], mayBeEmpty: true };
     }
@@ -2164,7 +2177,11 @@ function resolveEnvExpressionCandidates(text, stepEnv, fallbackLine) {
         match.groups.outSq ??
         match.groups.outDq
       ).toLowerCase();
-      return stepEnv.get(`${STEP_OUTPUT_KEY_PREFIX}${stepId}\0${outName}`) ?? null;
+      return (
+        stepEnv.get(`${STEP_OUTPUT_KEY_PREFIX}${stepId}\0${outName}`) ??
+        stepEnv.get(`${STEP_OUTPUT_KEY_PREFIX}${stepId}\0*`) ??
+        null
+      );
     },
     afterEnv.truncated,
   );
@@ -5689,25 +5706,31 @@ function formatPrintfLines(format, args) {
   return chunks.join("").split(/\r?\n/u);
 }
 
+function varEntryListsEqual(aEntries, bEntries) {
+  if (!aEntries || !bEntries || aEntries.length !== bEntries.length) {
+    return false;
+  }
+  for (let i = 0; i < aEntries.length; i += 1) {
+    const ae = aEntries[i];
+    const be = bEntries[i];
+    if (
+      ae.value !== be.value ||
+      Boolean(ae.unset) !== Boolean(be.unset) ||
+      Boolean(ae.truncated) !== Boolean(be.truncated)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function varMapsEqual(a, b) {
   if (a.size !== b.size) {
     return false;
   }
   for (const [key, aEntries] of a) {
-    const bEntries = b.get(key);
-    if (!bEntries || aEntries.length !== bEntries.length) {
+    if (!varEntryListsEqual(aEntries, b.get(key))) {
       return false;
-    }
-    for (let i = 0; i < aEntries.length; i += 1) {
-      const ae = aEntries[i];
-      const be = bEntries[i];
-      if (
-        ae.value !== be.value ||
-        Boolean(ae.unset) !== Boolean(be.unset) ||
-        Boolean(ae.truncated) !== Boolean(be.truncated)
-      ) {
-        return false;
-      }
     }
   }
   return true;
@@ -6081,10 +6104,65 @@ function peelControlKeywords(
     if (keyword === "done") {
       const top = frame.branches.at(-1);
       if (top?.kind === "loop") {
-        if (loopControl && top.mayRepeat && top.bodyStartIdx !== null && top.passCount < 2) {
+        if (
+          loopControl &&
+          top.mayRepeat &&
+          top.bodyStartIdx !== null &&
+          !top.finalUnconvergedPass
+        ) {
           const mergedIterStart = joinVarMaps([top.iterStartVars, frame.vars]);
           if (!varMapsEqual(top.iterStartVars, mergedIterStart)) {
+            if (top.passCount < 4) {
+              top.iterStartVars = mergedIterStart;
+              top.passCount += 1;
+              frame.vars = cloneVarMap(mergedIterStart);
+              loopControl.rewindTo = top.bodyStartIdx;
+              return [];
+            }
+            // Loop state did not stabilize within the pass bound: widen every
+            // still-changing variable AND every variable assigned inside the
+            // loop body to truncated/unverifiable, then run one final pass so
+            // any image/build operand depending on an unconverged loop value
+            // fails closed instead of silently accepting a partial set.
+            const widenedKeys = new Set();
+            for (const [vKey, nextEntries] of mergedIterStart) {
+              const prevEntries = top.iterStartVars.get(vKey);
+              if (!varEntryListsEqual(prevEntries, nextEntries)) {
+                widenedKeys.add(vKey);
+              }
+            }
+            if (loopControl.eventsList) {
+              for (let bIdx = top.bodyStartIdx; bIdx < loopControl.eventIdx; bIdx += 1) {
+                const bEv = loopControl.eventsList[bIdx];
+                if (bEv?.kind !== "command" || !bEv.tokens) {
+                  continue;
+                }
+                for (let tIdx = 0; tIdx < bEv.tokens.length; tIdx += 1) {
+                  const tok = bEv.tokens[tIdx];
+                  const assignM = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:\[[^\]]+\])?\+?=/u.exec(tok);
+                  if (assignM) {
+                    widenedKeys.add(assignM.groups.name);
+                  } else if (
+                    (tok === "-v" || tok === "unset") &&
+                    bEv.tokens[tIdx + 1] &&
+                    /^[A-Za-z_][A-Za-z0-9_]*$/u.test(bEv.tokens[tIdx + 1])
+                  ) {
+                    widenedKeys.add(bEv.tokens[tIdx + 1]);
+                  }
+                }
+              }
+            }
+            for (const vKey of widenedKeys) {
+              const baseEntries = mergedIterStart.get(vKey) ?? [
+                { value: "", line: 0, unset: true },
+              ];
+              mergedIterStart.set(
+                vKey,
+                mergeVarEntries(baseEntries, [{ value: "", line: lineNumber, truncated: true }]),
+              );
+            }
             top.iterStartVars = mergedIterStart;
+            top.finalUnconvergedPass = true;
             top.passCount += 1;
             frame.vars = cloneVarMap(mergedIterStart);
             loopControl.rewindTo = top.bodyStartIdx;
@@ -7037,13 +7115,92 @@ function inspectShellText(
   }
 
   if (shellMode === "unsupported") {
-    if (
-      /\b(?:docker|podman|buildah|docker-compose|podman-compose)\b/iu.test(scriptText) ||
-      /\b(?:GITHUB_ENV|GITHUB_OUTPUT)\b/u.test(scriptText)
-    ) {
-      problems.push(
-        `${filePath}:${startLine}: container or environment operations in non-shell run step cannot be verified statically`,
+    // Strip line/block comments outside quoted strings so comments mentioning
+    // Docker or GitHub files do not trigger false failures.
+    let codeOnly = "";
+    let q = null;
+    let triple = false;
+    for (let i = 0; i < scriptText.length; i += 1) {
+      const ch = scriptText[i];
+      if (q) {
+        codeOnly += ch;
+        if (ch === "\\" && i + 1 < scriptText.length) {
+          codeOnly += scriptText[i + 1];
+          i += 1;
+          continue;
+        }
+        if (triple) {
+          if (scriptText.slice(i, i + 3) === q.repeat(3)) {
+            codeOnly += q.repeat(2);
+            i += 2;
+            q = null;
+            triple = false;
+          }
+        } else if (ch === q) {
+          q = null;
+        }
+        continue;
+      }
+      if (ch === "#") {
+        while (i < scriptText.length && scriptText[i] !== "\n") {
+          i += 1;
+        }
+        codeOnly += "\n";
+        continue;
+      }
+      if (ch === "/" && scriptText[i + 1] === "/") {
+        while (i < scriptText.length && scriptText[i] !== "\n") {
+          i += 1;
+        }
+        codeOnly += "\n";
+        continue;
+      }
+      if (ch === "/" && scriptText[i + 1] === "*") {
+        i += 2;
+        while (i < scriptText.length && !(scriptText[i] === "*" && scriptText[i + 1] === "/")) {
+          if (scriptText[i] === "\n") {
+            codeOnly += "\n";
+          }
+          i += 1;
+        }
+        i += 1;
+        continue;
+      }
+      if (ch === "'" || ch === '"') {
+        if (scriptText.slice(i, i + 3) === ch.repeat(3)) {
+          q = ch;
+          triple = true;
+          codeOnly += ch.repeat(3);
+          i += 2;
+          continue;
+        }
+        q = ch;
+        triple = false;
+        codeOnly += ch;
+        continue;
+      }
+      codeOnly += ch;
+    }
+
+    const invokesContainerTool =
+      (/\b(?:subprocess|os\.system|os\.popen|os\.spawn\w*|os\.exec\w*|pty\.spawn|asyncio\.create_subprocess\w*|child_process|execSync|execFileSync|spawnSync|spawn|system|popen|open3|import\s+docker|from\s+docker|import\s+podman|from\s+podman)\b/u.test(
+        codeOnly,
+      ) &&
+        /\b(?:docker|podman|buildah|docker-compose|podman-compose)\b/iu.test(codeOnly)) ||
+      /\b(?:docker|podman|buildah|docker-compose|podman-compose)\s+(?:pull|run|create|build|buildx|image|container|service|compose|bud|from|bake)\b/iu.test(
+        codeOnly,
       );
+    if (invokesContainerTool) {
+      problems.push(
+        `${filePath}:${startLine}: container tool invocation in non-shell run step cannot be verified statically`,
+      );
+    }
+    const opaqueEntries = [{ value: OPAQUE_UNVERIFIED_SENTINEL, line: startLine }];
+    if (emittedGithubOutput && /\bGITHUB_OUTPUT\b/u.test(codeOnly)) {
+      recordGithubEnvWrite(emittedGithubOutput, "*", opaqueEntries, false);
+    }
+    if (emittedGithubEnv && /\bGITHUB_ENV\b/u.test(codeOnly)) {
+      recordGithubEnvWrite(emittedGithubEnv, OPAQUE_ENV_KEY, opaqueEntries, false);
     }
     return;
   }
@@ -7745,7 +7902,7 @@ function inspectShellText(
         continue;
       }
 
-      const loopControl = { eventIdx, rewindTo: null, problems };
+      const loopControl = { eventIdx, rewindTo: null, problems, eventsList };
       let tokens = peelControlKeywords(
         event.tokens,
         frame,
@@ -10962,6 +11119,14 @@ function inspectShellText(
             varCandidate.line,
           )) {
             for (const mountImageRef of extractRunMountImageSources(candidate.text)) {
+              if (mountImageRef.includes(OPAQUE_UNVERIFIED_SENTINEL)) {
+                const message = `${filePath}:${candidate.line}: container image reference depends on an unverified non-shell output or environment variable`;
+                if (!seenProblems.has(message)) {
+                  seenProblems.add(message);
+                  problems.push(message);
+                }
+                continue;
+              }
               if (
                 !mountImageRef ||
                 (isDynamicReference(mountImageRef, shellMode) &&
@@ -11013,6 +11178,14 @@ function inspectShellText(
             matrixRows,
             varCandidate.line,
           )) {
+            if (candidate.text.includes(OPAQUE_UNVERIFIED_SENTINEL)) {
+              const message = `${filePath}:${candidate.line}: container image reference depends on an unverified non-shell output or environment variable`;
+              if (!seenProblems.has(message)) {
+                seenProblems.add(message);
+                problems.push(message);
+              }
+              continue;
+            }
             if (
               !candidate.text ||
               (isDynamicReference(candidate.text, shellMode) &&
@@ -11887,22 +12060,40 @@ function checkStepsList(
         const namedContexts = new Set();
         if (buildContextsNode?.kind === "scalar") {
           const contextProblems = [];
-          for (const rawLine of String(buildContextsNode.value).split(/\r?\n/u)) {
-            const trimmedLine = rawLine.trim();
-            if (!trimmedLine || trimmedLine.startsWith("#")) {
-              continue;
-            }
-            inspectBuildContextSpec(
-              trimmedLine,
-              rowStepEnv,
-              rowStepEnv,
-              rowList,
-              filePath,
-              buildContextsNode.line,
-              "posix",
-              contextProblems,
-              namedContexts,
+          const expandedContexts = resolveEnvExpressionCandidates(
+            String(buildContextsNode.value),
+            rowStepEnv,
+            buildContextsNode.line,
+          );
+          if (expandedContexts.truncated) {
+            contextProblems.push(
+              `${filePath}:${buildContextsNode.line}: with.build-contexts exceeds expansion limit and cannot be verified exhaustively`,
             );
+          }
+          for (const envCandidate of expandedContexts.candidates) {
+            for (const candidate of expandMatrixReferences(
+              envCandidate.text,
+              rowList,
+              envCandidate.line,
+            )) {
+              for (const rawLine of candidate.text.split(/\r?\n/u)) {
+                const trimmedLine = rawLine.trim();
+                if (!trimmedLine || trimmedLine.startsWith("#")) {
+                  continue;
+                }
+                inspectBuildContextSpec(
+                  trimmedLine,
+                  rowStepEnv,
+                  rowStepEnv,
+                  rowList,
+                  filePath,
+                  candidate.line,
+                  "posix",
+                  contextProblems,
+                  namedContexts,
+                );
+              }
+            }
           }
           for (const message of contextProblems) {
             if (!seenActionContextProblems.has(message)) {
@@ -11913,25 +12104,59 @@ function checkStepsList(
         }
         const actionBuildArgs = new Map();
         if (buildArgsNode?.kind === "scalar") {
-          for (const rawLine of String(buildArgsNode.value).split(/\r?\n/u)) {
-            const trimmedLine = rawLine.trim();
-            if (!trimmedLine || trimmedLine.startsWith("#")) {
-              continue;
+          const expandedBuildArgs = resolveEnvExpressionCandidates(
+            String(buildArgsNode.value),
+            rowStepEnv,
+            buildArgsNode.line,
+          );
+          if (expandedBuildArgs.truncated) {
+            const msg = `${filePath}:${buildArgsNode.line}: with.build-args exceeds expansion limit and cannot be verified exhaustively`;
+            if (!seenActionSyntaxProblems.has(msg)) {
+              seenActionSyntaxProblems.add(msg);
+              problems.push(msg);
             }
-            const parsedArg = expandBuildArgSpec(
-              trimmedLine,
-              rowStepEnv,
-              rowStepEnv,
-              rowStepEnv,
+          }
+          for (const envCandidate of expandedBuildArgs.candidates) {
+            for (const candidate of expandMatrixReferences(
+              envCandidate.text,
               rowList,
-              buildArgsNode.line,
-              "posix",
-            );
-            if (parsedArg) {
-              actionBuildArgs.set(parsedArg.name, {
-                values: parsedArg.values,
-                truncated: parsedArg.truncated,
-              });
+              envCandidate.line,
+            )) {
+              for (const rawLine of candidate.text.split(/\r?\n/u)) {
+                const trimmedLine = rawLine.trim();
+                if (!trimmedLine || trimmedLine.startsWith("#")) {
+                  continue;
+                }
+                const parsedArg = expandBuildArgSpec(
+                  trimmedLine,
+                  rowStepEnv,
+                  rowStepEnv,
+                  rowStepEnv,
+                  rowList,
+                  candidate.line,
+                  "posix",
+                );
+                if (parsedArg) {
+                  const existingArg = actionBuildArgs.get(parsedArg.name);
+                  if (existingArg) {
+                    const combinedValues = [
+                      ...new Set([...existingArg.values, ...parsedArg.values]),
+                    ];
+                    actionBuildArgs.set(parsedArg.name, {
+                      values: combinedValues.slice(0, MAX_VAR_VALUES),
+                      truncated:
+                        existingArg.truncated ||
+                        parsedArg.truncated ||
+                        combinedValues.length > MAX_VAR_VALUES,
+                    });
+                  } else {
+                    actionBuildArgs.set(parsedArg.name, {
+                      values: parsedArg.values,
+                      truncated: parsedArg.truncated,
+                    });
+                  }
+                }
+              }
             }
           }
         }
@@ -12706,6 +12931,21 @@ function checkStepsList(
           mergedEntries = mergeVarEntries(mergedEntries, write.entries);
         }
         if (mergedEntries.length === 0) {
+          continue;
+        }
+        if (name === OPAQUE_ENV_KEY) {
+          targetEnv.set(OPAQUE_ENV_KEY, mergedEntries);
+          for (const [existingKey, existingEntries] of targetEnv) {
+            if (
+              !existingKey.startsWith("\0") &&
+              !NON_TAINTED_SYSTEM_ENV_PATTERN.test(existingKey)
+            ) {
+              targetEnv.set(existingKey, mergeVarEntries(existingEntries, mergedEntries));
+            }
+          }
+          if (failureTargetEnv) {
+            failureTargetEnv.set(OPAQUE_ENV_KEY, mergedEntries);
+          }
           continue;
         }
         if (failureTargetEnv) {
