@@ -1647,7 +1647,12 @@ struct TargetPrefixNode<'a> {
 }
 
 impl<'a> TargetPrefixNode<'a> {
-    fn check_and_record_ntfs_short_name(&mut self, raw: &OsStr, scope: &'a str) -> Option<&'a str> {
+    fn check_and_record_ntfs_short_name(
+        &mut self,
+        raw: &OsStr,
+        scope: &'a str,
+        record: bool,
+    ) -> Option<&'a str> {
         if let Some(short) = parse_ntfs_short_name(raw) {
             if let Some(&first_scope) = self.ntfs_long_prefixes.get(&(
                 short.ext.clone(),
@@ -1669,10 +1674,12 @@ impl<'a> TargetPrefixNode<'a> {
             if let Some(first_scope) = self.ntfs_any_non_ascii_ext_long {
                 return Some(first_scope);
             }
-            self.ntfs_short_by_ext
-                .entry(short.ext.clone())
-                .or_default()
-                .push((short, scope));
+            if record {
+                self.ntfs_short_by_ext
+                    .entry(short.ext.clone())
+                    .or_default()
+                    .push((short, scope));
+            }
             return None;
         }
 
@@ -1683,7 +1690,9 @@ impl<'a> TargetPrefixNode<'a> {
                         return Some(*first_scope);
                     }
                 }
-                self.ntfs_any_non_ascii_ext_long.get_or_insert(scope);
+                if record {
+                    self.ntfs_any_non_ascii_ext_long.get_or_insert(scope);
+                }
             } else if let Some(entries) = self.ntfs_short_by_ext.get(&long.ext) {
                 for (short, first_scope) in entries {
                     if ntfs_long_matches_short(&long, short) {
@@ -1692,6 +1701,9 @@ impl<'a> TargetPrefixNode<'a> {
                 }
             }
 
+            if !record {
+                return None;
+            }
             if long.has_non_ascii {
                 self.ntfs_non_ascii_long_by_ext
                     .entry(long.ext)
@@ -1743,16 +1755,41 @@ pub(crate) fn reject_colliding_catalog_targets(
     targets: &[(&str, PathBuf)],
     allow_mutating_probe: bool,
 ) -> Result<(), CliError> {
-    reject_colliding_catalog_targets_with_equivalence(root_dir, targets, allow_mutating_probe, None)
+    reject_colliding_catalog_targets_with_equivalence(
+        root_dir,
+        targets,
+        &[],
+        allow_mutating_probe,
+        None,
+    )
+}
+
+/// Checks that `write_targets` do not collide with one another or with any
+/// `protected_targets`, while allowing `protected_targets` to overlap each
+/// other (for example, a skipped fixed-path FCL catalog shared across locales).
+pub(crate) fn reject_colliding_catalog_targets_with_protected(
+    root_dir: &Path,
+    write_targets: &[(&str, PathBuf)],
+    protected_targets: &[(&str, PathBuf)],
+    allow_mutating_probe: bool,
+) -> Result<(), CliError> {
+    reject_colliding_catalog_targets_with_equivalence(
+        root_dir,
+        write_targets,
+        protected_targets,
+        allow_mutating_probe,
+        None,
+    )
 }
 
 fn reject_colliding_catalog_targets_with_equivalence(
     root_dir: &Path,
-    targets: &[(&str, PathBuf)],
+    write_targets: &[(&str, PathBuf)],
+    protected_targets: &[(&str, PathBuf)],
     allow_mutating_probe: bool,
     equivalence_override: Option<(DirFilenameEquivalence, bool)>,
 ) -> Result<(), CliError> {
-    if targets.len() <= 1 {
+    if write_targets.is_empty() || (write_targets.len() == 1 && protected_targets.is_empty()) {
         return Ok(());
     }
     let mut dir_eq_cache: HashMap<FileIdentity, (DirFilenameEquivalence, bool)> = HashMap::new();
@@ -1761,7 +1798,19 @@ fn reject_colliding_catalog_targets_with_equivalence(
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
     let mut needed_existing_dirs: HashMap<FileIdentity, &str> = HashMap::new();
 
-    for (scope, catalog_path) in targets {
+    // Process all write targets first (recording them into the trie and
+    // identity maps), then validate protected targets read-only against the
+    // recorded write targets so protected paths never conflict with each other.
+    let ordered_targets = write_targets
+        .iter()
+        .map(|(scope, path)| (*scope, path, true))
+        .chain(
+            protected_targets
+                .iter()
+                .map(|(scope, path)| (*scope, path, false)),
+        );
+
+    for (scope, catalog_path, is_write) in ordered_targets {
         let (relative_parent, file_name) = split_relative_catalog_path(root_dir, catalog_path)
             .map_err(|error| CliError::Io {
                 path: catalog_path.clone(),
@@ -1821,7 +1870,9 @@ fn reject_colliding_catalog_targets_with_equivalence(
                                 ),
                             });
                         }
-                        needed_existing_dirs.entry(id).or_insert(*scope);
+                        if is_write {
+                            needed_existing_dirs.entry(id).or_insert(scope);
+                        }
                     }
                     let (child_eq, child_eq_confirmed) =
                         equivalence_override.unwrap_or_else(|| {
@@ -1868,9 +1919,16 @@ fn reject_colliding_catalog_targets_with_equivalence(
 
         // Walk/insert this target's anchor-relative segments into a shared
         // prefix trie so memory and time stay linear in total segment count.
-        let mut node = anchor_tries.entry(anchor).or_default();
+        let mut node_opt = if is_write {
+            Some(anchor_tries.entry(anchor).or_default())
+        } else {
+            anchor_tries.get_mut(&anchor)
+        };
         let total_segments = raw_segments.len();
         for idx in 0..total_segments {
+            let Some(node) = node_opt else {
+                break;
+            };
             let is_leaf = idx + 1 == total_segments;
             let folded = &folded_segments[idx];
             let raw = &raw_segments[idx];
@@ -1880,7 +1938,8 @@ fn reject_colliding_catalog_targets_with_equivalence(
             let settled_by_identity = is_leaf && !hit_missing && leaf_identity.is_some();
             if !settled_by_identity
                 && can_have_ntfs_short_names(current_eq, current_eq_confirmed)
-                && let Some(first_scope) = node.check_and_record_ntfs_short_name(raw, scope)
+                && let Some(first_scope) =
+                    node.check_and_record_ntfs_short_name(raw, scope, is_write)
                 && dir_generates_ntfs_short_names(
                     &current,
                     current_id,
@@ -1898,26 +1957,48 @@ fn reject_colliding_catalog_targets_with_equivalence(
                     ),
                 });
             }
-            let bucket = node.children.entry(folded.clone()).or_default();
-            let next_idx = if let Some(existing_idx) =
-                bucket.iter().position(|(existing_raw, _)| {
-                    segment_pair_collides_on_dir(
-                        &current,
-                        current_eq,
-                        current_eq_confirmed,
-                        allow_mutating_probe,
-                        existing_raw,
-                        raw,
-                    )
-                }) {
-                existing_idx
+            let next_node = if is_write {
+                let bucket = node.children.entry(folded.clone()).or_default();
+                let next_idx = if let Some(existing_idx) =
+                    bucket.iter().position(|(existing_raw, _)| {
+                        segment_pair_collides_on_dir(
+                            &current,
+                            current_eq,
+                            current_eq_confirmed,
+                            allow_mutating_probe,
+                            existing_raw,
+                            raw,
+                        )
+                    }) {
+                    existing_idx
+                } else {
+                    bucket.push((raw.clone(), TargetPrefixNode::default()));
+                    bucket.len() - 1
+                };
+                Some(&mut bucket[next_idx].1)
+            } else if let Some(bucket) = node.children.get_mut(folded) {
+                bucket
+                    .iter_mut()
+                    .find(|(existing_raw, _)| {
+                        segment_pair_collides_on_dir(
+                            &current,
+                            current_eq,
+                            current_eq_confirmed,
+                            allow_mutating_probe,
+                            existing_raw,
+                            raw,
+                        )
+                    })
+                    .map(|(_, child)| child)
             } else {
-                bucket.push((raw.clone(), TargetPrefixNode::default()));
-                bucket.len() - 1
+                None
             };
-            node = &mut bucket[next_idx].1;
+            let Some(child) = next_node else {
+                node_opt = None;
+                break;
+            };
             if is_leaf {
-                if let Some(first_scope) = node.file_scope {
+                if let Some(first_scope) = child.file_scope {
                     return Err(CliError::Io {
                         path: catalog_path.clone(),
                         source: std::io::Error::new(
@@ -1928,7 +2009,7 @@ fn reject_colliding_catalog_targets_with_equivalence(
                         ),
                     });
                 }
-                if let Some(dir_scope) = node.dir_scope {
+                if let Some(dir_scope) = child.dir_scope {
                     return Err(CliError::Io {
                         path: catalog_path.clone(),
                         source: std::io::Error::new(
@@ -1939,9 +2020,11 @@ fn reject_colliding_catalog_targets_with_equivalence(
                         ),
                     });
                 }
-                node.file_scope = Some(*scope);
+                if is_write {
+                    child.file_scope = Some(scope);
+                }
             } else {
-                if let Some(file_scope) = node.file_scope {
+                if let Some(file_scope) = child.file_scope {
                     return Err(CliError::Io {
                         path: catalog_path.clone(),
                         source: std::io::Error::new(
@@ -1952,8 +2035,11 @@ fn reject_colliding_catalog_targets_with_equivalence(
                         ),
                     });
                 }
-                node.dir_scope.get_or_insert(*scope);
+                if is_write {
+                    child.dir_scope.get_or_insert(scope);
+                }
             }
+            node_opt = Some(child);
         }
 
         if let Some(identity) = leaf_identity {
@@ -1968,9 +2054,21 @@ fn reject_colliding_catalog_targets_with_equivalence(
                     ),
                 });
             }
-            if let Some((first_scope, _)) =
-                seen_identities.insert(identity, (*scope, catalog_path.clone()))
-            {
+            if is_write {
+                if let Some((first_scope, _)) =
+                    seen_identities.insert(identity, (scope, catalog_path.clone()))
+                {
+                    return Err(CliError::Io {
+                        path: catalog_path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::AlreadyExists,
+                            format!(
+                                "multiple catalog scopes ({first_scope:?} and {scope:?}) resolve to the same on-disk catalog file",
+                            ),
+                        ),
+                    });
+                }
+            } else if let Some((first_scope, _)) = seen_identities.get(&identity) {
                 return Err(CliError::Io {
                     path: catalog_path.clone(),
                     source: std::io::Error::new(
@@ -3172,20 +3270,20 @@ catalogs:
         let check_pair = |long: &str, short: &str| {
             let mut node = super::TargetPrefixNode::default();
             assert!(
-                node.check_and_record_ntfs_short_name(OsStr::new(long), "scope_long")
+                node.check_and_record_ntfs_short_name(OsStr::new(long), "scope_long", true)
                     .is_none()
             );
             let long_first =
-                node.check_and_record_ntfs_short_name(OsStr::new(short), "scope_short");
+                node.check_and_record_ntfs_short_name(OsStr::new(short), "scope_short", true);
 
             let mut rev_node = super::TargetPrefixNode::default();
             assert!(
                 rev_node
-                    .check_and_record_ntfs_short_name(OsStr::new(short), "scope_short")
+                    .check_and_record_ntfs_short_name(OsStr::new(short), "scope_short", true)
                     .is_none()
             );
             let short_first =
-                rev_node.check_and_record_ntfs_short_name(OsStr::new(long), "scope_long");
+                rev_node.check_and_record_ntfs_short_name(OsStr::new(long), "scope_long", true);
 
             (long_first, short_first)
         };
@@ -3280,6 +3378,7 @@ catalogs:
         let err = super::reject_colliding_catalog_targets_with_equivalence(
             &root,
             &targets,
+            &[],
             false,
             Some((vfat, true)),
         )

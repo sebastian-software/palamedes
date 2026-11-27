@@ -166,14 +166,14 @@ impl Command for ConvertOptions {
                 }
 
                 if !planned.is_empty() {
-                    let all_targets: Vec<(&str, PathBuf)> = planned
+                    let planned_outputs: Vec<(&str, PathBuf)> = planned
                         .iter()
                         .map(|job| (job.scope, job.output.clone()))
-                        .chain(protected_fcl_targets)
                         .collect();
-                    crate::commands::extract::reject_colliding_catalog_targets(
+                    crate::commands::extract::reject_colliding_catalog_targets_with_protected(
                         &config.root_dir,
-                        &all_targets,
+                        &planned_outputs,
+                        &protected_fcl_targets,
                         true,
                     )?;
                 }
@@ -947,6 +947,54 @@ catalogs:
             fs::read_to_string(catalog_dir.join("messages.fcl")).expect("read untouched fcl"),
             original_fcl,
             "existing configured FCL catalog must remain untouched"
+        );
+    }
+
+    #[test]
+    fn configured_convert_allows_overlapping_skipped_fcl_paths_when_po_output_is_distinct() {
+        let fixture = temp_dir("convert-overlapping-protected-fcl");
+        let po_dir = fixture.join("po");
+        let ref_dir = fixture.join("reference");
+        fs::create_dir_all(&po_dir).expect("create po dir");
+        fs::create_dir_all(&ref_dir).expect("create ref dir");
+        fs::write(
+            po_dir.join("en.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let shared_fcl = "---\nformat: fcl/1\nlocale: en\n---\n\n@Shared\n\"Shared\"\n";
+        fs::write(ref_dir.join("shared.fcl"), shared_fcl).expect("write shared fcl");
+
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            "locales:\n  - en\n  - de\nsource-locale: en\ncatalogs:\n  - path: reference/shared\n    format: fcl\n    include:\n      - src/shared\n  - path: po/{locale}\n    format: po\n    include:\n      - src/app\n",
+        )
+        .expect("write config");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+        let report = options
+            .run(&Context::with_cwd(&fixture))
+            .expect("overlapping skipped FCL paths must not block converting distinct PO catalog");
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 1,
+                skipped: 3,
+                ..
+            }
+        ));
+        assert!(po_dir.join("en.fcl").exists());
+        assert_eq!(
+            fs::read_to_string(ref_dir.join("shared.fcl")).expect("read shared fcl"),
+            shared_fcl
         );
     }
 }

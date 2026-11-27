@@ -517,6 +517,8 @@ mod platform {
         linux_flags: Option<libc::c_int>,
         #[cfg(target_os = "linux")]
         linux_fsxattr: Option<super::LinuxFsxattrSnapshot>,
+        #[cfg(target_os = "linux")]
+        linux_btrfs_compression: Option<Vec<u8>>,
     }
 
     enum SnapshotMatch {
@@ -1772,6 +1774,9 @@ mod platform {
             let linux_flags = read_linux_inode_flags(existing_fd.as_raw_fd())?;
             #[cfg(target_os = "linux")]
             let linux_fsxattr = read_linux_fsxattr(existing_fd.as_raw_fd())?;
+            #[cfg(target_os = "linux")]
+            let linux_btrfs_compression =
+                read_linux_xattr(existing_fd.as_raw_fd(), c"btrfs.compression")?;
             Ok(Some(ExistingTarget {
                 entry,
                 acl,
@@ -1780,6 +1785,8 @@ mod platform {
                 linux_flags,
                 #[cfg(target_os = "linux")]
                 linux_fsxattr,
+                #[cfg(target_os = "linux")]
+                linux_btrfs_compression,
             }))
         }
 
@@ -2154,7 +2161,8 @@ mod platform {
             }
             #[cfg(target_os = "linux")]
             let linux_flags_changed = current.linux_flags != expected.linux_flags
-                || current.linux_fsxattr != expected.linux_fsxattr;
+                || current.linux_fsxattr != expected.linux_fsxattr
+                || current.linux_btrfs_compression != expected.linux_btrfs_compression;
             #[cfg(not(target_os = "linux"))]
             let linux_flags_changed = false;
             if current.entry != expected.entry
@@ -5658,11 +5666,72 @@ mod platform {
     }
 
     #[cfg(target_os = "linux")]
+    fn apply_linux_btrfs_compression(
+        temp_fd: std::os::fd::RawFd,
+        expected: Option<&[u8]>,
+    ) -> io::Result<()> {
+        let current = read_linux_xattr(temp_fd, c"btrfs.compression")?;
+        if current.as_deref() == expected {
+            return Ok(());
+        }
+        match expected {
+            Some(value) => {
+                // SAFETY: `temp_fd` is open, `btrfs.compression` is NUL-terminated,
+                // and `value` is valid for `value.len()` bytes.
+                if unsafe {
+                    libc::fsetxattr(
+                        temp_fd,
+                        c"btrfs.compression".as_ptr(),
+                        value.as_ptr().cast::<libc::c_void>(),
+                        value.len(),
+                        0,
+                    )
+                } != 0
+                {
+                    let error = io::Error::last_os_error();
+                    return Err(io::Error::new(
+                        error.kind(),
+                        format!(
+                            "cannot safely preserve Btrfs compression property on replacement: {error}"
+                        ),
+                    ));
+                }
+            }
+            None => {
+                // SAFETY: `temp_fd` is open and `btrfs.compression` is NUL-terminated.
+                if unsafe { libc::fremovexattr(temp_fd, c"btrfs.compression".as_ptr()) } != 0 {
+                    let error = io::Error::last_os_error();
+                    if !matches!(
+                        error.raw_os_error(),
+                        Some(libc::ENODATA | libc::EOPNOTSUPP | libc::ENOSYS)
+                    ) {
+                        return Err(io::Error::new(
+                            error.kind(),
+                            format!(
+                                "cannot clear inherited Btrfs compression property on replacement: {error}"
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+        let verified = read_linux_xattr(temp_fd, c"btrfs.compression")?;
+        if verified.as_deref() != expected {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cannot verify Btrfs compression property preservation on replacement",
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
     fn apply_linux_pre_write_inode_flags(
         temp_fd: std::os::fd::RawFd,
         existing: &ExistingTarget,
     ) -> io::Result<()> {
         apply_linux_fsxattr(temp_fd, existing.linux_fsxattr)?;
+        apply_linux_btrfs_compression(temp_fd, existing.linux_btrfs_compression.as_deref())?;
         let Some(expected) = existing.linux_flags else {
             return Ok(());
         };
@@ -6298,6 +6367,15 @@ fn classify_linux_xattr_for_copy(name: &[u8]) -> LinuxCopyableXattrKind {
             return LinuxCopyableXattrKind::UnpreservableTrusted;
         }
         return LinuxCopyableXattrKind::Copyable;
+    }
+    if name.starts_with(b"btrfs.") {
+        // `btrfs.compression` is captured and restored pre-write on the empty
+        // staged inode so newly written extents keep the exact algorithm;
+        // fail closed on any other unrecognized `btrfs.*` property.
+        if name == b"btrfs.compression" {
+            return LinuxCopyableXattrKind::Ignore;
+        }
+        return LinuxCopyableXattrKind::UnpreservableTrusted;
     }
     LinuxCopyableXattrKind::Ignore
 }
@@ -7633,10 +7711,11 @@ mod platform {
                         )));
                     }
                     let live_identity = handle_file_identity(handle.as_raw_handle())?;
-                    let dir_entry_identity = self.file_identity(file_name)?;
-                    if dir_entry_identity.is_none()
-                        || (live_identity.is_some() && dir_entry_identity != live_identity)
-                    {
+                    let Some((dir_entry_identity, _)) = self.inspect_entry(file_name, false)?
+                    else {
+                        continue;
+                    };
+                    if live_identity.is_some() && dir_entry_identity != live_identity {
                         continue;
                     }
                     let mut file = File::from(handle);
@@ -9145,133 +9224,74 @@ mod platform {
 #[cfg(not(any(unix, windows)))]
 mod platform {
     use std::ffi::OsStr;
-    use std::fs;
-    use std::io::{self, Write};
-    use std::path::{Path, PathBuf};
-
+    use std::io;
     use std::marker::PhantomData;
+    use std::path::Path;
     use std::rc::Rc;
 
     use super::{
         ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
-        DirFilenameEquivalence, FileIdentity, TargetLockKey, validate_dir_segment,
-        validate_relative_dir_segments, validate_single_file_name,
+        DirFilenameEquivalence, FileIdentity, TargetLockKey,
     };
 
-    /// Target lock guard fallback for platforms without Unix/Windows locking.
+    fn unsupported_containment_error() -> ContainedFsError {
+        ContainedFsError::Io(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "directory-handle-pinned containment is not supported on this platform",
+        ))
+    }
+
+    /// Target lock guard stub for platforms without handle-pinned containment.
     #[derive(Debug)]
     pub struct ContainedTargetLock {
         _not_send: PhantomData<Rc<()>>,
     }
 
-    /// Verified directory handle fallback for platforms without Unix/Windows APIs.
+    /// Unconstructible stub on targets without Unix or Windows directory-handle
+    /// APIs; all constructors fail closed with [`io::ErrorKind::Unsupported`]
+    /// rather than falling back to pathname-based checks vulnerable to TOCTOU.
     #[derive(Debug)]
     pub struct ContainedDir {
-        dir: PathBuf,
+        _unsupported: (),
     }
 
     impl ContainedDir {
-        /// Opens `root_dir` as the anchor directory.
-        pub fn open_root(root_dir: &Path) -> Result<Self, ContainedFsError> {
-            let root_dir = super::normalize_anchor_root(root_dir);
-            Ok(Self {
-                dir: fs::canonicalize(root_dir)?,
-            })
+        /// Fails closed with [`io::ErrorKind::Unsupported`] because this target
+        /// has no directory-handle-pinned containment backend.
+        pub fn open_root(_root_dir: &Path) -> Result<Self, ContainedFsError> {
+            Err(unsupported_containment_error())
         }
 
-        /// Opens `relative_dir` under `root_dir` without following symlinks.
+        /// Fails closed with [`io::ErrorKind::Unsupported`] because this target
+        /// has no directory-handle-pinned containment backend.
         pub fn open_subpath(
-            root_dir: &Path,
-            relative_dir: &Path,
-            create_missing: bool,
+            _root_dir: &Path,
+            _relative_dir: &Path,
+            _create_missing: bool,
         ) -> Result<Option<Self>, ContainedFsError> {
-            let root_dir = super::normalize_anchor_root(root_dir);
-            let segments = validate_relative_dir_segments(relative_dir)?;
-            let canonical_root = fs::canonicalize(root_dir)?;
-            let mut current = canonical_root.clone();
-            for segment in segments {
-                current.push(&segment);
-                if create_missing {
-                    match fs::create_dir(&current) {
-                        Ok(()) => {}
-                        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-                        Err(error) => return Err(ContainedFsError::Io(error)),
-                    }
-                }
-                match fs::symlink_metadata(&current) {
-                    Ok(metadata) if metadata.file_type().is_symlink() => {
-                        return Err(ContainedFsError::Containment(format!(
-                            "refusing to follow symlink at directory component \"{}\"",
-                            segment.to_string_lossy()
-                        )));
-                    }
-                    Ok(_) => {}
-                    Err(error) if !create_missing && error.kind() == io::ErrorKind::NotFound => {
-                        return Ok(None);
-                    }
-                    Err(error) => return Err(ContainedFsError::Io(error)),
-                }
-                let canonical = fs::canonicalize(&current)?;
-                if !canonical.starts_with(&canonical_root) {
-                    return Err(ContainedFsError::Containment(format!(
-                        "directory {} escapes root directory {}",
-                        current.display(),
-                        canonical_root.display()
-                    )));
-                }
-                current = canonical;
-            }
-            Ok(Some(Self { dir: current }))
+            Err(unsupported_containment_error())
         }
 
-        /// Opens a direct existing child directory named `segment` without
-        /// following symlinks.
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
         pub fn open_existing_child_dir(
             &self,
-            segment: &OsStr,
+            _segment: &OsStr,
         ) -> Result<Option<Self>, ContainedFsError> {
-            validate_dir_segment(segment)?;
-            let next = self.dir.join(segment);
-            match fs::symlink_metadata(&next) {
-                Ok(metadata) if metadata.file_type().is_symlink() => {
-                    return Err(ContainedFsError::Containment(format!(
-                        "refusing to follow symlink at directory component \"{}\"",
-                        segment.to_string_lossy()
-                    )));
-                }
-                Ok(metadata) if !metadata.is_dir() => {
-                    return Err(ContainedFsError::Io(io::Error::new(
-                        io::ErrorKind::NotADirectory,
-                        format!("\"{}\" is not a directory", segment.to_string_lossy()),
-                    )));
-                }
-                Ok(_) => {}
-                Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-                Err(error) => return Err(ContainedFsError::Io(error)),
-            }
-            let canonical = fs::canonicalize(&next)?;
-            if !canonical.starts_with(&self.dir) {
-                return Err(ContainedFsError::Containment(format!(
-                    "directory {} escapes parent directory {}",
-                    next.display(),
-                    self.dir.display()
-                )));
-            }
-            Ok(Some(Self { dir: canonical }))
+            Err(unsupported_containment_error())
         }
 
-        /// Unsupported directory identity lookup fallback.
+        /// Unsupported directory identity lookup stub.
         pub fn self_identity(&self) -> Result<Option<FileIdentity>, ContainedFsError> {
-            Ok(None)
+            Err(unsupported_containment_error())
         }
 
-        /// Unsupported directory filename-equivalence lookup fallback.
+        /// Unsupported directory filename-equivalence lookup stub.
         #[must_use]
         pub fn filename_equivalence(&self) -> Option<DirFilenameEquivalence> {
             None
         }
 
-        /// Read-only filename-equivalence probe fallback.
+        /// Unsupported read-only filename-equivalence probe stub.
         #[must_use]
         pub fn probe_existing_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
             if left == right {
@@ -9280,7 +9300,7 @@ mod platform {
             None
         }
 
-        /// Unsupported directory filename-equivalence probe fallback.
+        /// Unsupported directory filename-equivalence probe stub.
         #[must_use]
         pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
             if left == right {
@@ -9289,157 +9309,100 @@ mod platform {
             None
         }
 
-        /// Unsupported 8.3 short-name capability probe fallback.
+        /// Unsupported 8.3 short-name capability probe stub.
         #[must_use]
         pub fn probe_8dot3_short_names_enabled(&self) -> Option<bool> {
             None
         }
 
-        /// Unsupported directory case-sensitivity lookup fallback.
+        /// Unsupported directory case-sensitivity lookup stub.
         #[must_use]
         pub fn is_case_insensitive(&self) -> Option<bool> {
             None
         }
 
-        /// Unsupported directory Unicode-normalization lookup fallback.
+        /// Unsupported directory Unicode-normalization lookup stub.
         #[must_use]
         pub fn is_unicode_normalizing(&self) -> Option<bool> {
             None
         }
 
-        /// Fallback lock key for platforms without Unix/Windows identities.
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
         pub fn target_lock_key(
             &self,
-            file_name: &OsStr,
+            _file_name: &OsStr,
         ) -> Result<TargetLockKey, ContainedFsError> {
-            validate_single_file_name(file_name)?;
-            Ok(TargetLockKey {
-                dir_id: FileIdentity { _unsupported: () },
-                target_hash: 0,
-            })
+            Err(unsupported_containment_error())
         }
 
-        /// No-op target lock fallback for platforms without Unix/Windows locking.
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
         pub fn lock_target(
             &self,
-            file_name: &OsStr,
+            _file_name: &OsStr,
         ) -> Result<ContainedTargetLock, ContainedFsError> {
-            validate_single_file_name(file_name)?;
-            Ok(ContainedTargetLock {
-                _not_send: PhantomData,
-            })
+            Err(unsupported_containment_error())
         }
 
-        /// Rejects `file_name` if it exists as a symlink.
-        pub fn reject_symlink(&self, file_name: &OsStr) -> Result<(), ContainedFsError> {
-            validate_single_file_name(file_name)?;
-            let path = self.dir.join(file_name);
-            match fs::symlink_metadata(&path) {
-                Ok(metadata) if metadata.file_type().is_symlink() => {
-                    Err(ContainedFsError::Containment(format!(
-                        "refusing to write through symlink \"{}\"",
-                        file_name.to_string_lossy()
-                    )))
-                }
-                Ok(_) => Ok(()),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(ContainedFsError::Io(error)),
-            }
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
+        pub fn reject_symlink(&self, _file_name: &OsStr) -> Result<(), ContainedFsError> {
+            Err(unsupported_containment_error())
         }
 
-        /// Rejects `file_name` if it exists as a symlink (hard-link count is
-        /// unavailable on fallback targets).
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
         pub fn reject_symlink_or_hard_link(
             &self,
-            file_name: &OsStr,
+            _file_name: &OsStr,
         ) -> Result<(), ContainedFsError> {
-            self.reject_symlink(file_name)
+            Err(unsupported_containment_error())
         }
 
-        /// Returns `true` if `file_name` exists in this directory (and is not a
-        /// symlink), or `false` if it does not exist.
-        pub fn entry_exists(&self, file_name: &OsStr) -> Result<bool, ContainedFsError> {
-            validate_single_file_name(file_name)?;
-            let path = self.dir.join(file_name);
-            match fs::symlink_metadata(&path) {
-                Ok(metadata) if metadata.file_type().is_symlink() => {
-                    Err(ContainedFsError::Containment(format!(
-                        "refusing to write through symlink \"{}\"",
-                        file_name.to_string_lossy()
-                    )))
-                }
-                Ok(_) => Ok(true),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
-                Err(error) => Err(ContainedFsError::Io(error)),
-            }
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
+        pub fn entry_exists(&self, _file_name: &OsStr) -> Result<bool, ContainedFsError> {
+            Err(unsupported_containment_error())
         }
 
-        /// Unsupported file identity lookup fallback.
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
         pub fn file_identity(
             &self,
-            file_name: &OsStr,
+            _file_name: &OsStr,
         ) -> Result<Option<FileIdentity>, ContainedFsError> {
-            self.reject_symlink(file_name)?;
-            Ok(None)
+            Err(unsupported_containment_error())
         }
 
-        /// Reads `file_name` if present and not a symlink.
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
         pub fn read_optional_file(
             &self,
-            file_name: &OsStr,
+            _file_name: &OsStr,
         ) -> Result<Option<String>, ContainedFsError> {
-            self.reject_symlink(file_name)?;
-            let path = self.dir.join(file_name);
-            match fs::read_to_string(&path) {
-                Ok(content) => Ok(Some(content)),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-                Err(error) => Err(ContainedFsError::Io(error)),
-            }
+            Err(unsupported_containment_error())
         }
 
-        /// Writes `bytes` to `file_name` after verifying containment and
-        /// rejecting reserved lock filenames.
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
         pub fn write_file_in_place(
             &self,
-            file_name: &OsStr,
-            bytes: &[u8],
+            _file_name: &OsStr,
+            _bytes: &[u8],
         ) -> Result<(), ContainedFsError> {
-            super::validate_writable_file_name(file_name)?;
-            self.write_file_atomically(
-                file_name,
-                bytes,
-                ContainedNewFileMode::RespectUmask,
-                ContainedWriteDurability::Rename,
-            )
-            .map(|_| ())
+            Err(unsupported_containment_error())
         }
 
-        /// Atomically writes `bytes` to `file_name`.
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
         pub fn write_file_atomically(
             &self,
-            file_name: &OsStr,
-            bytes: &[u8],
+            _file_name: &OsStr,
+            _bytes: &[u8],
             _new_file_mode: ContainedNewFileMode,
-            durability: ContainedWriteDurability,
+            _durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
-            super::validate_writable_file_name(file_name)?;
-            self.reject_symlink(file_name)?;
-            let destination = self.dir.join(file_name);
-            let mut temporary = tempfile::NamedTempFile::new_in(&self.dir)?;
-            temporary.write_all(bytes)?;
-            temporary.flush()?;
-            if durability.syncs_file() {
-                temporary.as_file().sync_all()?;
-            }
-            temporary
-                .persist(&destination)
-                .map_err(|error| ContainedFsError::Io(error.error))?;
-            Ok(ContainedWriteOutcome::Committed)
+            Err(unsupported_containment_error())
         }
 
-        /// Flushes directory metadata (no-op on fallback targets).
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
         pub fn sync_directory(&self) -> io::Result<()> {
-            Ok(())
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "directory-handle-pinned containment is not supported on this platform",
+            ))
         }
     }
 }
@@ -11115,6 +11078,7 @@ mod cross_platform_tests {
             b"trusted.afr.dirty".as_slice(),
             b"trusted.gfid".as_slice(),
             b"trusted.SGI_ACL_FILE".as_slice(),
+            b"btrfs.future_prop".as_slice(),
         ] {
             assert_eq!(
                 classify_linux_xattr_for_copy(internal),
@@ -11126,6 +11090,7 @@ mod cross_platform_tests {
         for ignored in [
             b"system.posix_acl_access".as_slice(),
             b"security.selinux".as_slice(),
+            b"btrfs.compression".as_slice(),
         ] {
             assert_eq!(
                 classify_linux_xattr_for_copy(ignored),
