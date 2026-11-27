@@ -543,30 +543,6 @@ impl<'a> ExtractionVisitor<'a> {
         });
     }
 
-    fn walk_trans_preserved_attributes(&mut self, children: &[JSXChild<'a>]) {
-        for child in children {
-            if self.error.is_some() {
-                return;
-            }
-            match child {
-                JSXChild::Element(element) => {
-                    walk::walk_jsx_opening_element(self, &element.opening_element);
-                    if let Some(tag_name) = element.opening_element.name.get_identifier_name() {
-                        self.jsx_parent_stack.push(tag_name.as_str());
-                        self.walk_trans_preserved_attributes(&element.children);
-                        self.jsx_parent_stack.pop();
-                    } else {
-                        self.walk_trans_preserved_attributes(&element.children);
-                    }
-                }
-                JSXChild::Fragment(fragment) => {
-                    self.walk_trans_preserved_attributes(&fragment.children);
-                }
-                _ => {}
-            }
-        }
-    }
-
     fn origin(&self, span_start: usize) -> (String, usize, Option<usize>) {
         (
             self.filename.clone(),
@@ -735,12 +711,6 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     let facts =
                         self.facts(surface, it.span.start as usize, it.span.end as usize, parts);
                     self.push(message, facts);
-                    if macro_name == "Trans" {
-                        self.jsx_parent_stack.push(tag_name);
-                        self.walk_trans_preserved_attributes(&it.children);
-                        self.jsx_parent_stack.pop();
-                    }
-                    return;
                 }
                 Ok(None) => {
                     self.fail_unsupported_macro(&macro_name, it.span.start as usize);
@@ -816,7 +786,6 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                         it.span.end as usize,
                         &macro_source,
                     );
-                    return;
                 }
                 Ok(None) => {
                     self.fail_unsupported_macro(&macro_name, it.span.start as usize);
@@ -827,9 +796,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     return;
                 }
             }
-        }
-
-        if is_i18n_runtime_call(&it.tag, true) {
+        } else if is_i18n_runtime_call(&it.tag, true) {
             match extract_from_tagged_template(
                 &it.quasi,
                 self.origin(it.span.start as usize),
@@ -945,7 +912,6 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                             &macro_source,
                         );
                     }
-                    return;
                 }
                 Ok(None) => {
                     self.fail_unsupported_macro(&macro_name, it.span.start as usize);
@@ -956,9 +922,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     return;
                 }
             }
-        }
-
-        if is_i18n_runtime_call(&it.callee, false) {
+        } else if is_i18n_runtime_call(&it.callee, false) {
             match extract_from_runtime_call(
                 it,
                 self.origin(it.span.start as usize),

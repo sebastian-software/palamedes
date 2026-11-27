@@ -3230,4 +3230,35 @@ fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements()
     let transformed = transform_macros_raw(shadowed, "shadowed.ts", None)
         .expect("shadowed t inside descriptor value should transform");
     assert!(transformed.code.contains("(t: any) => t`local`"));
+
+    // Valid: direct runtime calls inside macro value expressions remain extractable and preserved.
+    for (filename, source) in [
+        (
+            "runtime-in-descriptor.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f(i18n: any) { return t({ message: \"a {x}\" }, { x: i18n._(\"b\") }); }\n",
+        ),
+        (
+            "runtime-in-template.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f(i18n: any, name?: string) { return t`a ${name ?? i18n._(\"b\")}`; }\n",
+        ),
+        (
+            "runtime-in-trans.tsx",
+            "import { Trans } from \"@palamedes/react/macro\";\nexport function f(i18n: any, name?: string) { return <Trans>Hello {name ?? i18n._(\"b\")}</Trans>; }\n",
+        ),
+    ] {
+        let extracted = extract_messages(source, filename)
+            .unwrap_or_else(|e| panic!("{filename}: direct runtime call should extract: {e}"));
+        assert_eq!(
+            extracted.len(),
+            2,
+            "{filename}: expected both outer macro and inner runtime call to extract: {extracted:?}"
+        );
+        let transformed = transform_macros_raw(source, filename, None)
+            .unwrap_or_else(|e| panic!("{filename}: direct runtime call should transform: {e}"));
+        assert!(
+            transformed.code.contains("i18n._(\"b\")"),
+            "{filename}: direct runtime call should be preserved:\n{}",
+            transformed.code
+        );
+    }
 }

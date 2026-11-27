@@ -2831,21 +2831,34 @@ pub(crate) fn render_translation_value(value: &TranslationValue) -> PalamedesRes
 }
 
 fn validate_plural_variable(variable: &str) -> Result<(), ferrocat_icu::IcuParseError> {
-    if variable.is_empty()
-        || variable
-            .chars()
-            .any(|ch| ch.is_whitespace() || matches!(ch, '{' | '}' | ',' | '\'' | '#' | '<' | '>'))
-    {
+    if variable.is_empty() {
         return Err(ferrocat_icu::IcuParseError::syntax(
             "plural variable must be a valid ICU argument identifier",
             variable,
             0,
         ));
     }
-    let wrapped = format!("{{{variable}}}");
-    let parsed = ferrocat_icu::parse_icu(&wrapped)?;
-    match parsed.nodes.as_slice() {
-        [IcuNode::Argument { name }] if name == variable => Ok(()),
+    let arg_wrapped = format!("{{{variable}}}");
+    let arg_parsed = parse_runtime_icu(&arg_wrapped)?;
+    if !matches!(
+        arg_parsed.nodes.as_slice(),
+        [IcuNode::Argument { name }] if name == variable
+    ) {
+        return Err(ferrocat_icu::IcuParseError::syntax(
+            "plural variable must be a valid ICU argument identifier",
+            variable,
+            0,
+        ));
+    }
+    let plural_wrapped = format!("{{{variable}, plural, other {{#}}}}");
+    let plural_parsed = parse_runtime_icu(&plural_wrapped)?;
+    match plural_parsed.nodes.as_slice() {
+        [IcuNode::Plural { name, options, .. }]
+            if name == variable
+                && matches!(options.as_slice(), [option] if option.selector == "other") =>
+        {
+            Ok(())
+        }
         _ => Err(ferrocat_icu::IcuParseError::syntax(
             "plural variable must be a valid ICU argument identifier",
             variable,
@@ -4686,9 +4699,6 @@ mod tests {
             "a{b",
             "a}b",
             "a,b",
-            "a'b",
-            "a#b",
-            "a<b>",
         ] {
             assert!(
                 parse_plural_branch(bad_var, TranslationPluralKind::Cardinal, "# files").is_err(),
@@ -4703,6 +4713,15 @@ mod tests {
             assert!(
                 render_translation_value(&value).is_err(),
                 "expected render_translation_value to reject variable {bad_var:?}"
+            );
+        }
+
+        // Valid ICU argument names accepted by Ferrocat (including `#` inside the name)
+        // must remain accepted and round-trip cleanly.
+        for valid_var in ["count", "0", "file#count"] {
+            assert!(
+                parse_plural_branch(valid_var, TranslationPluralKind::Cardinal, "# files").is_ok(),
+                "expected parse_plural_branch to accept Ferrocat variable {valid_var:?}"
             );
         }
 
