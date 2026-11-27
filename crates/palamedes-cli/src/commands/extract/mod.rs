@@ -603,10 +603,10 @@ fn process_catalogs(
     Ok(drift)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ExtractTargetAnchor {
     Identity(FileIdentity),
-    Path(PathBuf),
+    Root,
 }
 
 fn is_default_ignorable_code_point(ch: char) -> bool {
@@ -1632,104 +1632,281 @@ fn dir_generates_ntfs_short_names(
     generates
 }
 
+struct TargetSegment {
+    raw: OsString,
+    folded: OsString,
+    eq: DirFilenameEquivalence,
+    eq_confirmed: bool,
+    dir_idx: usize,
+    parent_id: Option<FileIdentity>,
+    settled_by_identity: bool,
+}
+
 #[derive(Default)]
 struct TargetPrefixNode<'a> {
     file_scope: Option<&'a str>,
     dir_scope: Option<&'a str>,
-    children: HashMap<OsString, Vec<(OsString, Self)>>,
-    // Linear-time indexes for detecting potential NTFS 8.3 short-name aliases
-    // between sibling segments that land in distinct folded trie buckets.
-    ntfs_long_prefixes: HashMap<(String, String, usize), &'a str>,
-    ntfs_long_hash_prefixes: HashMap<(String, String), &'a str>,
-    ntfs_non_ascii_long_by_ext: HashMap<String, &'a str>,
-    ntfs_any_non_ascii_ext_long: Option<&'a str>,
-    ntfs_short_by_ext: HashMap<String, Vec<(NtfsShortNameCandidate, &'a str)>>,
+    child_nodes: Vec<(OsString, Self)>,
+    by_folded: HashMap<OsString, Vec<usize>>,
+    // Linear-time indexes mapping NTFS 8.3 short/long patterns to child_nodes indices.
+    ntfs_long_prefixes: HashMap<(String, String, usize), Vec<usize>>,
+    ntfs_long_hash_prefixes: HashMap<(String, String), Vec<usize>>,
+    ntfs_non_ascii_long_by_ext: HashMap<String, Vec<usize>>,
+    ntfs_any_non_ascii_ext_long: Vec<usize>,
+    ntfs_short_by_ext: HashMap<String, Vec<(NtfsShortNameCandidate, usize)>>,
 }
 
 impl<'a> TargetPrefixNode<'a> {
-    fn check_and_record_ntfs_short_name(
-        &mut self,
-        raw: &OsStr,
-        scope: &'a str,
-        record: bool,
-    ) -> Option<&'a str> {
+    fn matching_ntfs_short_name_children(&self, raw: &OsStr) -> Vec<usize> {
+        let mut matches = Vec::new();
+        let mut push_unique = |idx: usize| {
+            if !matches.contains(&idx) {
+                matches.push(idx);
+            }
+        };
         if let Some(short) = parse_ntfs_short_name(raw) {
-            if let Some(&first_scope) = self.ntfs_long_prefixes.get(&(
+            if let Some(indices) = self.ntfs_long_prefixes.get(&(
                 short.ext.clone(),
                 short.prefix.clone(),
                 short.digits_len,
             )) {
-                return Some(first_scope);
+                for &idx in indices {
+                    push_unique(idx);
+                }
             }
             if let Some(ref hash_prefix) = short.hash_prefix
-                && let Some(&first_scope) = self
+                && let Some(indices) = self
                     .ntfs_long_hash_prefixes
                     .get(&(short.ext.clone(), hash_prefix.clone()))
             {
-                return Some(first_scope);
+                for &idx in indices {
+                    push_unique(idx);
+                }
             }
-            if let Some(&first_scope) = self.ntfs_non_ascii_long_by_ext.get(&short.ext) {
-                return Some(first_scope);
+            if let Some(indices) = self.ntfs_non_ascii_long_by_ext.get(&short.ext) {
+                for &idx in indices {
+                    push_unique(idx);
+                }
             }
-            if let Some(first_scope) = self.ntfs_any_non_ascii_ext_long {
-                return Some(first_scope);
+            for &idx in &self.ntfs_any_non_ascii_ext_long {
+                push_unique(idx);
             }
-            if record {
-                self.ntfs_short_by_ext
-                    .entry(short.ext.clone())
-                    .or_default()
-                    .push((short, scope));
-            }
-            return None;
+            return matches;
         }
 
         if let Some(long) = parse_ntfs_long_name(raw) {
             if long.has_non_ascii && long.ext.contains('_') {
                 for entries in self.ntfs_short_by_ext.values() {
-                    if let Some((_, first_scope)) = entries.first() {
-                        return Some(*first_scope);
+                    for &(_, idx) in entries {
+                        push_unique(idx);
                     }
-                }
-                if record {
-                    self.ntfs_any_non_ascii_ext_long.get_or_insert(scope);
                 }
             } else if let Some(entries) = self.ntfs_short_by_ext.get(&long.ext) {
-                for (short, first_scope) in entries {
+                for (short, idx) in entries {
                     if ntfs_long_matches_short(&long, short) {
-                        return Some(*first_scope);
+                        push_unique(*idx);
                     }
                 }
             }
+        }
+        matches
+    }
 
-            if !record {
-                return None;
+    fn record_ntfs_short_name_child(&mut self, raw: &OsStr, child_idx: usize) {
+        if let Some(short) = parse_ntfs_short_name(raw) {
+            let entries = self.ntfs_short_by_ext.entry(short.ext.clone()).or_default();
+            if !entries.iter().any(|(_, idx)| *idx == child_idx) {
+                entries.push((short, child_idx));
+            }
+            return;
+        }
+        if let Some(long) = parse_ntfs_long_name(raw) {
+            if long.has_non_ascii
+                && long.ext.contains('_')
+                && !self.ntfs_any_non_ascii_ext_long.contains(&child_idx)
+            {
+                self.ntfs_any_non_ascii_ext_long.push(child_idx);
             }
             if long.has_non_ascii {
-                self.ntfs_non_ascii_long_by_ext
-                    .entry(long.ext)
-                    .or_insert(scope);
+                let entries = self.ntfs_non_ascii_long_by_ext.entry(long.ext).or_default();
+                if !entries.contains(&child_idx) {
+                    entries.push(child_idx);
+                }
             } else {
                 for digits_len in 1..=6 {
                     let prefix_len = long.base.len().min(7 - digits_len);
                     if prefix_len > 0 {
-                        self.ntfs_long_prefixes
+                        let entries = self
+                            .ntfs_long_prefixes
                             .entry((
                                 long.ext.clone(),
                                 long.base[..prefix_len].to_owned(),
                                 digits_len,
                             ))
-                            .or_insert(scope);
+                            .or_default();
+                        if !entries.contains(&child_idx) {
+                            entries.push(child_idx);
+                        }
                     }
                 }
                 let max_hash = long.base.len().min(2);
                 for len in 1..=max_hash {
-                    self.ntfs_long_hash_prefixes
+                    let entries = self
+                        .ntfs_long_hash_prefixes
                         .entry((long.ext.clone(), long.base[..len].to_owned()))
-                        .or_insert(scope);
+                        .or_default();
+                    if !entries.contains(&child_idx) {
+                        entries.push(child_idx);
+                    }
                 }
             }
         }
-        None
+    }
+
+    fn check_path_conflicts_readonly(
+        &self,
+        segments: &[TargetSegment],
+        segment_dirs: &[ContainedDir],
+        scope: &str,
+        catalog_path: &Path,
+        allow_mutating_probe: bool,
+        short_name_cache: &mut HashMap<FileIdentity, bool>,
+    ) -> Result<(), CliError> {
+        let Some((seg, rest)) = segments.split_first() else {
+            return Ok(());
+        };
+        let is_leaf = rest.is_empty();
+        let parent_dir = &segment_dirs[seg.dir_idx];
+
+        let mut matched_children: Vec<usize> = Vec::new();
+        if let Some(bucket) = self.by_folded.get(&seg.folded) {
+            for &child_idx in bucket {
+                if segment_pair_collides_on_dir(
+                    parent_dir,
+                    seg.eq,
+                    seg.eq_confirmed,
+                    allow_mutating_probe,
+                    &self.child_nodes[child_idx].0,
+                    &seg.raw,
+                ) {
+                    matched_children.push(child_idx);
+                }
+            }
+        }
+
+        if !seg.settled_by_identity && can_have_ntfs_short_names(seg.eq, seg.eq_confirmed) {
+            let alias_indices = self.matching_ntfs_short_name_children(&seg.raw);
+            if !alias_indices.is_empty()
+                && dir_generates_ntfs_short_names(
+                    parent_dir,
+                    seg.parent_id,
+                    allow_mutating_probe,
+                    short_name_cache,
+                )
+            {
+                for child_idx in alias_indices {
+                    if !matched_children.contains(&child_idx) {
+                        matched_children.push(child_idx);
+                    }
+                }
+            }
+        }
+
+        for child_idx in matched_children {
+            let child = &self.child_nodes[child_idx].1;
+            if is_leaf {
+                if let Some(first_scope) = child.file_scope {
+                    return Err(CliError::Io {
+                        path: catalog_path.to_path_buf(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::AlreadyExists,
+                            format!(
+                                "multiple catalog scopes ({first_scope:?} and {scope:?}) resolve to the same target file",
+                            ),
+                        ),
+                    });
+                }
+                if let Some(dir_scope) = child.dir_scope {
+                    return Err(CliError::Io {
+                        path: catalog_path.to_path_buf(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::AlreadyExists,
+                            format!(
+                                "catalog scope {scope:?} writes a file where {dir_scope:?} requires a parent directory",
+                            ),
+                        ),
+                    });
+                }
+            } else {
+                if let Some(file_scope) = child.file_scope {
+                    return Err(CliError::Io {
+                        path: catalog_path.to_path_buf(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::AlreadyExists,
+                            format!(
+                                "catalog scope {scope:?} requires a parent directory where {file_scope:?} writes a catalog file",
+                            ),
+                        ),
+                    });
+                }
+                child.check_path_conflicts_readonly(
+                    rest,
+                    segment_dirs,
+                    scope,
+                    catalog_path,
+                    allow_mutating_probe,
+                    short_name_cache,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn record_write_path(
+        &mut self,
+        segments: &[TargetSegment],
+        segment_dirs: &[ContainedDir],
+        scope: &'a str,
+        allow_mutating_probe: bool,
+    ) {
+        let mut node = self;
+        for (idx, seg) in segments.iter().enumerate() {
+            let is_leaf = idx + 1 == segments.len();
+            let parent_dir = &segment_dirs[seg.dir_idx];
+            let existing_idx = node.by_folded.get(&seg.folded).and_then(|bucket| {
+                bucket.iter().copied().find(|&child_idx| {
+                    segment_pair_collides_on_dir(
+                        parent_dir,
+                        seg.eq,
+                        seg.eq_confirmed,
+                        allow_mutating_probe,
+                        &node.child_nodes[child_idx].0,
+                        &seg.raw,
+                    )
+                })
+            });
+            let child_idx = if let Some(existing_idx) = existing_idx {
+                existing_idx
+            } else {
+                let new_idx = node.child_nodes.len();
+                node.child_nodes
+                    .push((seg.raw.clone(), TargetPrefixNode::default()));
+                node.by_folded
+                    .entry(seg.folded.clone())
+                    .or_default()
+                    .push(new_idx);
+                if !seg.settled_by_identity && can_have_ntfs_short_names(seg.eq, seg.eq_confirmed) {
+                    node.record_ntfs_short_name_child(&seg.raw, new_idx);
+                }
+                new_idx
+            };
+            node = &mut node.child_nodes[child_idx].1;
+            if is_leaf {
+                node.file_scope = Some(scope);
+            } else {
+                node.dir_scope.get_or_insert(scope);
+            }
+        }
     }
 }
 
@@ -1755,12 +1932,13 @@ pub(crate) fn reject_colliding_catalog_targets(
     targets: &[(&str, PathBuf)],
     allow_mutating_probe: bool,
 ) -> Result<(), CliError> {
-    reject_colliding_catalog_targets_with_equivalence(
+    reject_colliding_catalog_targets_with_options(
         root_dir,
         targets,
         &[],
         allow_mutating_probe,
         None,
+        false,
     )
 }
 
@@ -1773,21 +1951,23 @@ pub(crate) fn reject_colliding_catalog_targets_with_protected(
     protected_targets: &[(&str, PathBuf)],
     allow_mutating_probe: bool,
 ) -> Result<(), CliError> {
-    reject_colliding_catalog_targets_with_equivalence(
+    reject_colliding_catalog_targets_with_options(
         root_dir,
         write_targets,
         protected_targets,
         allow_mutating_probe,
         None,
+        false,
     )
 }
 
-fn reject_colliding_catalog_targets_with_equivalence(
+fn reject_colliding_catalog_targets_with_options(
     root_dir: &Path,
     write_targets: &[(&str, PathBuf)],
     protected_targets: &[(&str, PathBuf)],
     allow_mutating_probe: bool,
     equivalence_override: Option<(DirFilenameEquivalence, bool)>,
+    disable_identities: bool,
 ) -> Result<(), CliError> {
     if write_targets.is_empty() || (write_targets.len() == 1 && protected_targets.is_empty()) {
         return Ok(());
@@ -1817,47 +1997,60 @@ fn reject_colliding_catalog_targets_with_equivalence(
                 source: error.into_io_error(),
             })?;
 
-        let mut current = ContainedDir::open_root(root_dir).map_err(|error| CliError::Io {
+        let root_handle = ContainedDir::open_root(root_dir).map_err(|error| CliError::Io {
             path: root_dir.to_path_buf(),
             source: error.into_io_error(),
         })?;
-        let mut current_id = current.self_identity().map_err(|error| CliError::Io {
-            path: root_dir.to_path_buf(),
-            source: error.into_io_error(),
-        })?;
+        let mut current_id = if disable_identities {
+            None
+        } else {
+            root_handle.self_identity().map_err(|error| CliError::Io {
+                path: root_dir.to_path_buf(),
+                source: error.into_io_error(),
+            })?
+        };
         let (mut current_eq, mut current_eq_confirmed) =
             equivalence_override.unwrap_or_else(|| {
-                resolve_directory_equivalence(&current, current_id, &mut dir_eq_cache)
+                resolve_directory_equivalence(&root_handle, current_id, &mut dir_eq_cache)
             });
-        let mut existing_prefix = PathBuf::new();
-        let mut folded_segments: Vec<OsString> = Vec::new();
-        let mut raw_segments: Vec<OsString> = Vec::new();
+        let mut anchor =
+            current_id.map_or(ExtractTargetAnchor::Root, ExtractTargetAnchor::Identity);
+        let mut segment_dirs: Vec<ContainedDir> = vec![root_handle];
+        let mut segments: Vec<TargetSegment> = Vec::new();
         let mut hit_missing = false;
 
         for component in relative_parent.components() {
             let std::path::Component::Normal(segment) = component else {
                 continue;
             };
+            let parent_dir_idx = segment_dirs.len() - 1;
             if hit_missing {
-                raw_segments.push(segment.to_os_string());
-                folded_segments.push(fold_os_segment_for_bucket(
-                    segment,
-                    current_eq,
-                    current_eq_confirmed,
-                ));
+                segments.push(TargetSegment {
+                    raw: segment.to_os_string(),
+                    folded: fold_os_segment_for_bucket(segment, current_eq, current_eq_confirmed),
+                    eq: current_eq,
+                    eq_confirmed: current_eq_confirmed,
+                    dir_idx: parent_dir_idx,
+                    parent_id: current_id,
+                    settled_by_identity: false,
+                });
                 continue;
             }
-            match current
+            match segment_dirs[parent_dir_idx]
                 .open_existing_child_dir(segment)
                 .map_err(|error| CliError::Io {
                     path: catalog_path.clone(),
                     source: error.into_io_error(),
                 })? {
                 Some(child) => {
-                    let child_id = child.self_identity().map_err(|error| CliError::Io {
-                        path: catalog_path.clone(),
-                        source: error.into_io_error(),
-                    })?;
+                    let child_id = if disable_identities {
+                        None
+                    } else {
+                        child.self_identity().map_err(|error| CliError::Io {
+                            path: catalog_path.clone(),
+                            source: error.into_io_error(),
+                        })?
+                    };
                     if let Some(id) = child_id {
                         if let Some((file_scope, _)) = seen_identities.get(&id) {
                             return Err(CliError::Io {
@@ -1878,30 +2071,60 @@ fn reject_colliding_catalog_targets_with_equivalence(
                         equivalence_override.unwrap_or_else(|| {
                             resolve_directory_equivalence(&child, child_id, &mut dir_eq_cache)
                         });
-                    current = child;
+                    if segments.is_empty()
+                        && let Some(id) = child_id
+                    {
+                        // Advance the identity-keyed anchor whenever every
+                        // existing directory along the prefix has a valid ID.
+                        anchor = ExtractTargetAnchor::Identity(id);
+                        segment_dirs[0] = child;
+                    } else {
+                        // When a volume does not expose file IDs, keep the
+                        // segment inside the shared ancestor trie so spellings
+                        // such as `Locales` and `locales` are compared under
+                        // the parent directory's equivalence rules instead of
+                        // splitting into separate path-keyed tries.
+                        segments.push(TargetSegment {
+                            raw: segment.to_os_string(),
+                            folded: fold_os_segment_for_bucket(
+                                segment,
+                                current_eq,
+                                current_eq_confirmed,
+                            ),
+                            eq: current_eq,
+                            eq_confirmed: current_eq_confirmed,
+                            dir_idx: parent_dir_idx,
+                            parent_id: current_id,
+                            settled_by_identity: false,
+                        });
+                        segment_dirs.push(child);
+                    }
                     current_id = child_id;
                     current_eq = child_eq;
                     current_eq_confirmed = child_eq_confirmed;
-                    existing_prefix.push(segment);
                 }
                 None => {
                     hit_missing = true;
-                    raw_segments.push(segment.to_os_string());
-                    folded_segments.push(fold_os_segment_for_bucket(
-                        segment,
-                        current_eq,
-                        current_eq_confirmed,
-                    ));
+                    segments.push(TargetSegment {
+                        raw: segment.to_os_string(),
+                        folded: fold_os_segment_for_bucket(
+                            segment,
+                            current_eq,
+                            current_eq_confirmed,
+                        ),
+                        eq: current_eq,
+                        eq_confirmed: current_eq_confirmed,
+                        dir_idx: parent_dir_idx,
+                        parent_id: current_id,
+                        settled_by_identity: false,
+                    });
                 }
             }
         }
 
-        let anchor = current_id.map_or_else(
-            || ExtractTargetAnchor::Path(existing_prefix),
-            ExtractTargetAnchor::Identity,
-        );
-        let leaf_identity = if !hit_missing {
-            current
+        let leaf_dir_idx = segment_dirs.len() - 1;
+        let leaf_identity = if !hit_missing && !disable_identities {
+            segment_dirs[leaf_dir_idx]
                 .file_identity(&file_name)
                 .map_err(|error| CliError::Io {
                     path: catalog_path.clone(),
@@ -1910,136 +2133,33 @@ fn reject_colliding_catalog_targets_with_equivalence(
         } else {
             None
         };
-        folded_segments.push(fold_os_segment_for_bucket(
-            &file_name,
-            current_eq,
-            current_eq_confirmed,
-        ));
-        raw_segments.push(file_name.clone());
+        segments.push(TargetSegment {
+            raw: file_name.clone(),
+            folded: fold_os_segment_for_bucket(&file_name, current_eq, current_eq_confirmed),
+            eq: current_eq,
+            eq_confirmed: current_eq_confirmed,
+            dir_idx: leaf_dir_idx,
+            parent_id: current_id,
+            settled_by_identity: !hit_missing && leaf_identity.is_some(),
+        });
 
-        // Walk/insert this target's anchor-relative segments into a shared
-        // prefix trie so memory and time stay linear in total segment count.
-        let mut node_opt = if is_write {
-            Some(anchor_tries.entry(anchor).or_default())
-        } else {
-            anchor_tries.get_mut(&anchor)
-        };
-        let total_segments = raw_segments.len();
-        for idx in 0..total_segments {
-            let Some(node) = node_opt else {
-                break;
-            };
-            let is_leaf = idx + 1 == total_segments;
-            let folded = &folded_segments[idx];
-            let raw = &raw_segments[idx];
-            // Only apply the 8.3 short-name heuristic when on-disk entry
-            // identities cannot already settle whether two targets alias
-            // (for example, absent files/directories or volumes lacking IDs).
-            let settled_by_identity = is_leaf && !hit_missing && leaf_identity.is_some();
-            if !settled_by_identity
-                && can_have_ntfs_short_names(current_eq, current_eq_confirmed)
-                && let Some(first_scope) =
-                    node.check_and_record_ntfs_short_name(raw, scope, is_write)
-                && dir_generates_ntfs_short_names(
-                    &current,
-                    current_id,
-                    allow_mutating_probe,
-                    &mut short_name_cache,
-                )
-            {
-                return Err(CliError::Io {
-                    path: catalog_path.clone(),
-                    source: std::io::Error::new(
-                        std::io::ErrorKind::AlreadyExists,
-                        format!(
-                            "multiple catalog scopes ({first_scope:?} and {scope:?}) may collide via 8.3 short-name aliasing",
-                        ),
-                    ),
-                });
-            }
-            let next_node = if is_write {
-                let bucket = node.children.entry(folded.clone()).or_default();
-                let next_idx = if let Some(existing_idx) =
-                    bucket.iter().position(|(existing_raw, _)| {
-                        segment_pair_collides_on_dir(
-                            &current,
-                            current_eq,
-                            current_eq_confirmed,
-                            allow_mutating_probe,
-                            existing_raw,
-                            raw,
-                        )
-                    }) {
-                    existing_idx
-                } else {
-                    bucket.push((raw.clone(), TargetPrefixNode::default()));
-                    bucket.len() - 1
-                };
-                Some(&mut bucket[next_idx].1)
-            } else if let Some(bucket) = node.children.get_mut(folded) {
-                bucket
-                    .iter_mut()
-                    .find(|(existing_raw, _)| {
-                        segment_pair_collides_on_dir(
-                            &current,
-                            current_eq,
-                            current_eq_confirmed,
-                            allow_mutating_probe,
-                            existing_raw,
-                            raw,
-                        )
-                    })
-                    .map(|(_, child)| child)
-            } else {
-                None
-            };
-            let Some(child) = next_node else {
-                node_opt = None;
-                break;
-            };
-            if is_leaf {
-                if let Some(first_scope) = child.file_scope {
-                    return Err(CliError::Io {
-                        path: catalog_path.clone(),
-                        source: std::io::Error::new(
-                            std::io::ErrorKind::AlreadyExists,
-                            format!(
-                                "multiple catalog scopes ({first_scope:?} and {scope:?}) resolve to the same target file",
-                            ),
-                        ),
-                    });
-                }
-                if let Some(dir_scope) = child.dir_scope {
-                    return Err(CliError::Io {
-                        path: catalog_path.clone(),
-                        source: std::io::Error::new(
-                            std::io::ErrorKind::AlreadyExists,
-                            format!(
-                                "catalog scope {scope:?} writes a file where {dir_scope:?} requires a parent directory",
-                            ),
-                        ),
-                    });
-                }
-                if is_write {
-                    child.file_scope = Some(scope);
-                }
-            } else {
-                if let Some(file_scope) = child.file_scope {
-                    return Err(CliError::Io {
-                        path: catalog_path.clone(),
-                        source: std::io::Error::new(
-                            std::io::ErrorKind::AlreadyExists,
-                            format!(
-                                "catalog scope {scope:?} requires a parent directory where {file_scope:?} writes a catalog file",
-                            ),
-                        ),
-                    });
-                }
-                if is_write {
-                    child.dir_scope.get_or_insert(scope);
-                }
-            }
-            node_opt = Some(child);
+        if let Some(root_node) = anchor_tries.get(&anchor) {
+            root_node.check_path_conflicts_readonly(
+                &segments,
+                &segment_dirs,
+                scope,
+                catalog_path,
+                allow_mutating_probe,
+                &mut short_name_cache,
+            )?;
+        }
+        if is_write {
+            anchor_tries.entry(anchor).or_default().record_write_path(
+                &segments,
+                &segment_dirs,
+                scope,
+                allow_mutating_probe,
+            );
         }
 
         if let Some(identity) = leaf_identity {
@@ -3270,20 +3390,24 @@ catalogs:
         let check_pair = |long: &str, short: &str| {
             let mut node = super::TargetPrefixNode::default();
             assert!(
-                node.check_and_record_ntfs_short_name(OsStr::new(long), "scope_long", true)
-                    .is_none()
+                node.matching_ntfs_short_name_children(OsStr::new(long))
+                    .is_empty()
             );
-            let long_first =
-                node.check_and_record_ntfs_short_name(OsStr::new(short), "scope_short", true);
+            node.record_ntfs_short_name_child(OsStr::new(long), 0);
+            let long_first = !node
+                .matching_ntfs_short_name_children(OsStr::new(short))
+                .is_empty();
 
             let mut rev_node = super::TargetPrefixNode::default();
             assert!(
                 rev_node
-                    .check_and_record_ntfs_short_name(OsStr::new(short), "scope_short", true)
-                    .is_none()
+                    .matching_ntfs_short_name_children(OsStr::new(short))
+                    .is_empty()
             );
-            let short_first =
-                rev_node.check_and_record_ntfs_short_name(OsStr::new(long), "scope_long", true);
+            rev_node.record_ntfs_short_name_child(OsStr::new(short), 0);
+            let short_first = !rev_node
+                .matching_ntfs_short_name_children(OsStr::new(long))
+                .is_empty();
 
             (long_first, short_first)
         };
@@ -3298,14 +3422,12 @@ catalogs:
             ("longdirectory.v2", "LONGDI~1.V2"),
         ] {
             let (lf, sf) = check_pair(long, short);
-            assert_eq!(
+            assert!(
                 lf,
-                Some("scope_long"),
                 "expected long-then-short collision for ({long:?}, {short:?})"
             );
-            assert_eq!(
+            assert!(
                 sf,
-                Some("scope_short"),
                 "expected short-then-long collision for ({long:?}, {short:?})"
             );
         }
@@ -3320,12 +3442,12 @@ catalogs:
             ("longdir.v2", "LONGDI~1.V2"),
         ] {
             let (lf, sf) = check_pair(left, right);
-            assert_eq!(
-                lf, None,
+            assert!(
+                !lf,
                 "did not expect false collision for ({left:?}, {right:?})"
             );
-            assert_eq!(
-                sf, None,
+            assert!(
+                !sf,
                 "did not expect false reverse collision for ({left:?}, {right:?})"
             );
         }
@@ -3375,12 +3497,13 @@ catalogs:
             ("locales/{locale}", root.join("locales/en.po")),
             ("locales./{locale}", root.join("locales./en.po")),
         ];
-        let err = super::reject_colliding_catalog_targets_with_equivalence(
+        let err = super::reject_colliding_catalog_targets_with_options(
             &root,
             &targets,
             &[],
             false,
             Some((vfat, true)),
+            false,
         )
         .expect_err("VFAT trailing-dot missing directory alias must be rejected");
         assert!(
@@ -3395,6 +3518,99 @@ catalogs:
             !root.join("locales").exists() && !root.join("locales.").exists(),
             "no directories should be created on VFAT alias conflict"
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reject_colliding_catalog_targets_catches_existing_dir_aliases_without_file_ids() {
+        use palamedes::DirFilenameEquivalence;
+
+        let root = temp_dir("extract-existing-dir-no-file-ids");
+        fs::create_dir_all(root.join("Locales")).expect("create Locales dir");
+        let targets = [
+            ("Locales/{locale}", root.join("Locales/en.po")),
+            ("locales/{locale}", root.join("locales/en.po")),
+        ];
+        let err = super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &targets,
+            &[],
+            false,
+            Some((DirFilenameEquivalence::CaseInsensitiveNtfs, true)),
+            true,
+        )
+        .expect_err("case-aliased existing parent directories without FileIdInfo must collide");
+        assert!(
+            matches!(
+                err,
+                CliError::Io { ref source, .. }
+                    if source.kind() == std::io::ErrorKind::AlreadyExists
+            ),
+            "expected AlreadyExists error, got {err:?}"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reject_colliding_catalog_targets_distinguishes_83_aliased_dirs_with_distinct_files() {
+        use palamedes::DirFilenameEquivalence;
+
+        let root = temp_dir("extract-83-aliased-dirs");
+        let ntfs = Some((DirFilenameEquivalence::CaseInsensitiveNtfs, true));
+
+        // Distinct files under potentially 8.3-aliased parent directories must be allowed.
+        let distinct = [
+            ("LongDirectory/first", root.join("LongDirectory/first.po")),
+            ("LONGDI~1/second", root.join("LONGDI~1/second.po")),
+        ];
+        super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &distinct,
+            &[],
+            false,
+            ntfs,
+            false,
+        )
+        .expect("distinct files under potentially 8.3-aliased directories must succeed");
+
+        // Same leaf filename under potentially 8.3-aliased parent directories must fail.
+        let same_leaf = [
+            ("LongDirectory/first", root.join("LongDirectory/first.po")),
+            ("LONGDI~1/first", root.join("LONGDI~1/first.po")),
+        ];
+        let err = super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &same_leaf,
+            &[],
+            false,
+            ntfs,
+            false,
+        )
+        .expect_err("same leaf under 8.3-aliased directories must collide");
+        assert!(matches!(
+            err,
+            CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
+        ));
+
+        // File vs directory prefix conflict via 8.3 alias must fail.
+        let file_vs_dir = [
+            ("LongDirectory/first", root.join("LongDirectory/first.po")),
+            ("LONGDI~1", root.join("LONGDI~1")),
+        ];
+        let err = super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &file_vs_dir,
+            &[],
+            false,
+            ntfs,
+            false,
+        )
+        .expect_err("file vs directory via 8.3 alias must collide");
+        assert!(matches!(
+            err,
+            CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
+        ));
+
         let _ = fs::remove_dir_all(&root);
     }
 }

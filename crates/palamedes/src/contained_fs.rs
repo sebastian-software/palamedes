@@ -1169,7 +1169,7 @@ mod platform {
             }
             // SAFETY: `fstatat` succeeded and initialized `stat`.
             let stat = unsafe { stat.assume_init() };
-            if (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK {
+            if (stat_mode(&stat) & libc::S_IFMT) == libc::S_IFLNK {
                 return Err(ContainedFsError::Containment(format!(
                     "refusing to write through symlink \"{}\"",
                     file_name.to_string_lossy()
@@ -1250,7 +1250,7 @@ mod platform {
             // SAFETY: `raw` is a newly opened valid file descriptor.
             let fd = unsafe { OwnedFd::from_raw_fd(raw) };
             let stat = fstat_fd(fd.as_raw_fd())?;
-            match stat.st_mode & libc::S_IFMT {
+            match stat_mode(&stat) & libc::S_IFMT {
                 libc::S_IFREG => {}
                 libc::S_IFDIR => {
                     return Err(ContainedFsError::Io(io::Error::from_raw_os_error(
@@ -1355,7 +1355,7 @@ mod platform {
                 // SAFETY: `raw` is a newly opened valid file descriptor.
                 let mut file = File::from(unsafe { OwnedFd::from_raw_fd(raw) });
                 let pre_stat = fstat_fd(file.as_raw_fd())?;
-                if (pre_stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+                if (stat_mode(&pre_stat) & libc::S_IFMT) != libc::S_IFREG {
                     return Err(ContainedFsError::Io(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!(
@@ -1372,7 +1372,7 @@ mod platform {
                 }
                 lock_existing_in_place_fd(file.as_raw_fd()).map_err(ContainedFsError::Io)?;
                 let stat = fstat_fd(file.as_raw_fd())?;
-                if (stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+                if (stat_mode(&stat) & libc::S_IFMT) != libc::S_IFREG {
                     return Err(ContainedFsError::Io(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!(
@@ -1407,7 +1407,7 @@ mod platform {
                 // Clear and verify removal of `S_ISUID` / `S_ISGID` BEFORE
                 // truncating or writing any bytes so a failed chmod or partial
                 // write can never leave modified contents under set-ID bits.
-                let mode = stat.st_mode & 0o7777;
+                let mode = stat_mode(&stat) & 0o7777;
                 let stripped_mode = mode & !(libc::S_ISUID | libc::S_ISGID);
                 if stripped_mode != mode {
                     // SAFETY: `file` is an open regular file descriptor.
@@ -1415,7 +1415,7 @@ mod platform {
                         return Err(ContainedFsError::Io(io::Error::last_os_error()));
                     }
                     let verified_stat = fstat_fd(file.as_raw_fd())?;
-                    if (verified_stat.st_mode & (libc::S_ISUID | libc::S_ISGID)) != 0 {
+                    if (stat_mode(&verified_stat) & (libc::S_ISUID | libc::S_ISGID)) != 0 {
                         return Err(ContainedFsError::Io(io::Error::new(
                             io::ErrorKind::PermissionDenied,
                             "cannot verify removal of set-ID bits before updating file in place",
@@ -1740,7 +1740,7 @@ mod platform {
             }
             // SAFETY: `fstat` succeeded and initialized `stat`.
             let stat = unsafe { stat.assume_init() };
-            if (stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+            if (stat_mode(&stat) & libc::S_IFMT) != libc::S_IFREG {
                 return Err(ContainedFsError::Io(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!(
@@ -1755,7 +1755,7 @@ mod platform {
                 ino: stat.st_ino as u64,
             };
             let entry = ExistingEntry {
-                mode: stat.st_mode & 0o7777,
+                mode: stat_mode(&stat) & 0o7777,
                 uid: stat.st_uid,
                 gid: stat.st_gid,
                 #[cfg(any(
@@ -1814,7 +1814,7 @@ mod platform {
             }
             // SAFETY: `fstatat` succeeded and initialized `stat`.
             let stat = unsafe { stat.assume_init() };
-            if (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK {
+            if (stat_mode(&stat) & libc::S_IFMT) == libc::S_IFLNK {
                 return Err(ContainedFsError::Containment(format!(
                     "refusing to write through symlink \"{}\"",
                     file_name.to_string_lossy()
@@ -1826,7 +1826,7 @@ mod platform {
                 ino: stat.st_ino as u64,
             };
             Ok(Some(ExistingEntry {
-                mode: stat.st_mode & 0o7777,
+                mode: stat_mode(&stat) & 0o7777,
                 uid: stat.st_uid,
                 gid: stat.st_gid,
                 #[cfg(any(
@@ -2051,7 +2051,7 @@ mod platform {
                     dev: stage_stat.st_dev as u64,
                     ino: stage_stat.st_ino as u64,
                 };
-                let is_owned_same_dir = (stage_stat.st_mode & libc::S_IFMT) == libc::S_IFDIR
+                let is_owned_same_dir = (stat_mode(&stage_stat) & libc::S_IFMT) == libc::S_IFDIR
                     && stage_stat.st_dev == parent_stat.st_dev
                     && stage_stat.st_uid == euid
                     && self.entry_identity(&c_name) == Some(identity);
@@ -2092,8 +2092,8 @@ mod platform {
                     }
                     // SAFETY: `fstat` succeeded and initialized `post_stat`.
                     let mut post_stat = unsafe { post_stat.assume_init() };
-                    if (post_stat.st_mode & 0o0777) != 0o700 {
-                        let target_mode = 0o700 | (post_stat.st_mode & libc::S_ISGID);
+                    if (stat_mode(&post_stat) & 0o0777) != 0o700 {
+                        let target_mode = 0o700 | (stat_mode(&post_stat) & libc::S_ISGID);
                         // SAFETY: `fd` has been verified as our fresh private empty directory.
                         if unsafe { libc::fchmod(fd.as_raw_fd(), target_mode) } != 0 {
                             return Err(io::Error::last_os_error());
@@ -2109,7 +2109,7 @@ mod platform {
                     // Verify effective mode bits after hardening so mounts that
                     // ignore `fchmod` (for example world-writable non-POSIX
                     // mounts) fail closed rather than exposing staged files.
-                    if (post_stat.st_mode & 0o0077) != 0 {
+                    if (stat_mode(&post_stat) & 0o0077) != 0 {
                         return Err(io::Error::new(
                             io::ErrorKind::PermissionDenied,
                             "staging directory cannot be made private on this filesystem",
@@ -2137,12 +2137,12 @@ mod platform {
         ) -> io::Result<bool> {
             // Sticky directory owned by the caller or root prevents other
             // unprivileged users from unlinking or renaming our staging entry.
-            if (parent_stat.st_mode & libc::S_ISVTX) != 0
+            if (stat_mode(parent_stat) & libc::S_ISVTX) != 0
                 && (parent_stat.st_uid == euid || parent_stat.st_uid == 0)
             {
                 return Ok(true);
             }
-            if parent_stat.st_uid != euid || (parent_stat.st_mode & 0o0022) != 0 {
+            if parent_stat.st_uid != euid || (stat_mode(parent_stat) & 0o0022) != 0 {
                 return Ok(false);
             }
             Ok(!parent_has_foreign_write_acl(self)?)
@@ -2219,7 +2219,7 @@ mod platform {
             }
             // SAFETY: `fstatat` succeeded and initialized `stat`.
             let stat = unsafe { stat.assume_init() };
-            if (stat.st_mode & libc::S_IFMT) != libc::S_IFDIR
+            if (stat_mode(&stat) & libc::S_IFMT) != libc::S_IFDIR
                 || stat.st_dev != expected_dev
                 || stat.st_uid != expected_uid
             {
@@ -2282,7 +2282,7 @@ mod platform {
             }
             // SAFETY: `fstatat` succeeded and initialized `stat`.
             let stat = unsafe { stat.assume_init() };
-            (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK
+            (stat_mode(&stat) & libc::S_IFMT) == libc::S_IFLNK
         }
     }
 
@@ -2471,7 +2471,7 @@ mod platform {
                 result = Some(false);
                 break;
             }
-            let is_dir = (original_stat.st_mode & libc::S_IFMT) == libc::S_IFDIR;
+            let is_dir = (stat_mode(&original_stat) & libc::S_IFMT) == libc::S_IFDIR;
             if is_dir || original_stat.st_nlink <= 1 {
                 // Directories cannot be hard-linked on POSIX, and a single-link
                 // entry cannot have two distinct names in the directory: equal
@@ -2523,6 +2523,11 @@ mod platform {
             dev: stat.st_dev as u64,
             ino: stat.st_ino as u64,
         }
+    }
+
+    #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+    const fn stat_mode(stat: &libc::stat) -> libc::mode_t {
+        stat.st_mode as libc::mode_t
     }
 
     pub(super) fn fstat_fd(fd: std::os::fd::RawFd) -> io::Result<libc::stat> {
@@ -2749,7 +2754,7 @@ mod platform {
         // Keep `existing_fd` locked with `LOCK_SH` across recovery so no writer
         // can simultaneously hold `LOCK_EX` on `existing_id`.
         let dir_group_writable = fstat_fd(dir_raw)
-            .map(|stat| (stat.st_mode & 0o020) != 0)
+            .map(|stat| (stat_mode(&stat) & 0o020) != 0)
             .unwrap_or(false);
         let smb_share = is_smb_share(dir_raw);
         let mut generation: u32 = 0;
@@ -2927,7 +2932,7 @@ mod platform {
             };
 
             let other_stat = fstat_fd(other_fd.as_raw_fd())?;
-            if (other_stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+            if (stat_mode(&other_stat) & libc::S_IFMT) != libc::S_IFREG {
                 return Err(ContainedFsError::Io(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     "refusing to overwrite or remove pre-existing non-lock recovery claim file",
@@ -3177,9 +3182,9 @@ mod platform {
                 }
             } else if name.to_bytes().starts_with(UNIX_STAGE_DIR_PREFIX)
                 && let Ok(stat) = fstatat_nofollow(dir.fd.as_raw_fd(), name)
-                && (stat.st_mode & libc::S_IFMT) == libc::S_IFDIR
+                && (stat_mode(&stat) & libc::S_IFMT) == libc::S_IFDIR
                 && stat.st_uid == euid
-                && (stat.st_mode & 0o0077) == 0
+                && (stat_mode(&stat) & 0o0077) == 0
             {
                 stage_dirs.push((name.to_owned(), stat_identity(&stat)));
             }
@@ -3210,10 +3215,10 @@ mod platform {
             let stage_fd = unsafe { OwnedFd::from_raw_fd(stage_raw) };
             if fstat_fd(stage_fd.as_raw_fd())
                 .map(|st| {
-                    (st.st_mode & libc::S_IFMT) == libc::S_IFDIR
+                    (stat_mode(&st) & libc::S_IFMT) == libc::S_IFDIR
                         && stat_identity(&st) == stage_id
                         && st.st_uid == euid
-                        && (st.st_mode & 0o0077) == 0
+                        && (stat_mode(&st) & 0o0077) == 0
                 })
                 .unwrap_or(false)
             {
@@ -3281,11 +3286,12 @@ mod platform {
         // shared sticky directories can open it (`O_RDWR` for same-group NFS
         // locking, or `O_RDONLY` fallback) even under a 0022/0077 umask.
         if let Ok(stat) = fstat_fd(fd) {
-            let mut target_mode = (stat.st_mode & 0o664) | 0o644;
+            let cur_mode = stat_mode(&stat);
+            let mut target_mode = (cur_mode & 0o664) | 0o644;
             if dir_group_writable {
                 target_mode |= 0o020;
             }
-            if (stat.st_mode & 0o777) != target_mode {
+            if (cur_mode & 0o777) != target_mode {
                 // SAFETY: `fd` is an open file descriptor we just created.
                 let _ = unsafe { libc::fchmod(fd, target_mode) };
             }
@@ -3302,7 +3308,7 @@ mod platform {
                 "refusing to acquire catalog lock in non-sticky shared writable directory",
             )));
         }
-        Ok((parent_stat.st_mode & 0o020) != 0)
+        Ok((stat_mode(&parent_stat) & 0o020) != 0)
     }
 
     /// Creates, stamps, and exclusively locks a temporary lock/claim file, then
@@ -3611,13 +3617,13 @@ mod platform {
                         // to fail with `EACCES`/`ETXTBSY` until the Windows
                         // holder releases and deletes the lock.
                         match fstatat_nofollow(dir.fd.as_raw_fd(), UNIX_DIR_LOCK_NAME) {
-                            Ok(stat) if (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK => {
+                            Ok(stat) if (stat_mode(&stat) & libc::S_IFMT) == libc::S_IFLNK => {
                                 return Err(ContainedFsError::Containment(
                                     "refusing to use symlink as catalog lock \".pmds-lock\""
                                         .to_owned(),
                                 ));
                             }
-                            Ok(stat) if (stat.st_mode & libc::S_IFMT) == libc::S_IFDIR => {
+                            Ok(stat) if (stat_mode(&stat) & libc::S_IFMT) == libc::S_IFDIR => {
                                 return Err(ContainedFsError::Io(io::Error::new(
                                     io::ErrorKind::AlreadyExists,
                                     "refusing to overwrite existing directory \".pmds-lock\"",
@@ -3647,7 +3653,7 @@ mod platform {
             // SAFETY: `existing_raw` is a newly opened valid file descriptor.
             let existing_fd = unsafe { OwnedFd::from_raw_fd(existing_raw) };
             let pre_stat = fstat_fd(existing_fd.as_raw_fd())?;
-            if (pre_stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+            if (stat_mode(&pre_stat) & libc::S_IFMT) != libc::S_IFREG {
                 return Err(ContainedFsError::Containment(
                     "refusing to use non-regular file as catalog lock \".pmds-lock\"".to_owned(),
                 ));
@@ -6149,7 +6155,7 @@ mod platform {
         // replacement never preserves privilege bits that an in-place Unix
         // write would strip, while retaining ordinary permissions and sticky bit.
         let target_mode = existing.entry.mode & !(libc::S_ISUID | libc::S_ISGID);
-        if (temp_stat.st_mode & 0o7777) != target_mode {
+        if (stat_mode(&temp_stat) & 0o7777) != target_mode {
             // SAFETY: `temp_fd` is an open file descriptor.
             if unsafe { libc::fchmod(temp_fd, target_mode) } != 0 {
                 return Err(io::Error::last_os_error());

@@ -99,17 +99,10 @@ impl Command for ConvertOptions {
                 }
 
                 let mut planned = Vec::new();
-                let mut protected_fcl_targets = Vec::new();
+                let mut skipped_fcl_catalogs = Vec::new();
                 for catalog in &config.catalogs {
                     if catalog.format != palamedes::PalamedesCatalogFormat::Po {
-                        for locale in &config.locales {
-                            let protected = config.resolve_contained_catalog_path(
-                                &catalog.path,
-                                locale,
-                                catalog.format,
-                            )?;
-                            protected_fcl_targets.push((catalog.path.as_str(), protected));
-                        }
+                        skipped_fcl_catalogs.push(catalog);
                         skipped += config.locales.len();
                         continue;
                     }
@@ -166,6 +159,18 @@ impl Command for ConvertOptions {
                 }
 
                 if !planned.is_empty() {
+                    let mut protected_fcl_targets =
+                        Vec::with_capacity(skipped_fcl_catalogs.len() * config.locales.len());
+                    for catalog in skipped_fcl_catalogs {
+                        for locale in &config.locales {
+                            let protected = config.resolve_contained_catalog_path(
+                                &catalog.path,
+                                locale,
+                                catalog.format,
+                            )?;
+                            protected_fcl_targets.push((catalog.path.as_str(), protected));
+                        }
+                    }
                     let planned_outputs: Vec<(&str, PathBuf)> = planned
                         .iter()
                         .map(|job| (job.scope, job.output.clone()))
@@ -996,5 +1001,47 @@ catalogs:
             fs::read_to_string(ref_dir.join("shared.fcl")).expect("read shared fcl"),
             shared_fcl
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn configured_convert_noop_skips_fcl_only_config_without_inspecting_skipped_paths() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = temp_dir("convert-noop-fcl-only-dangling");
+        let locales_dir = fixture.join("locales");
+        fs::create_dir_all(&locales_dir).expect("create locales dir");
+        symlink(
+            fixture.join("nonexistent-outside-target.fcl"),
+            locales_dir.join("en.fcl"),
+        )
+        .expect("create dangling symlink");
+
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            "locales:\n  - en\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    format: fcl\n    include:\n      - src\n",
+        )
+        .expect("write config");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+        let report = options
+            .run(&Context::with_cwd(&fixture))
+            .expect("FCL-only no-op convert must skip without failing on skipped paths");
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 0,
+                skipped: 1,
+                ..
+            }
+        ));
     }
 }

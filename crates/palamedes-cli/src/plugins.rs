@@ -2010,7 +2010,8 @@ mod unix_pinned_plugin {
                     ),
                 )
             })?;
-            if (root_stat.st_mode & libc::S_IFMT) != libc::S_IFDIR {
+            #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+            if ((root_stat.st_mode as libc::mode_t) & libc::S_IFMT) != libc::S_IFDIR {
                 return Err(PluginFailure::new(
                     "PLUGIN_INVALID",
                     format!(
@@ -2309,9 +2310,10 @@ mod unix_pinned_plugin {
                                     dangling_symlink: symlinks_followed > 0,
                                 });
                             }
+                            #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
                             if is_symlink_open_error(error.raw_os_error())
                                 && let Ok(st) = fstatat_nofollow(cur_dir_raw, &c_seg)
-                                && (st.st_mode & libc::S_IFMT) == libc::S_IFLNK
+                                && ((st.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFLNK
                             {
                                 symlinks_followed += 1;
                                 if symlinks_followed > MAX_SYMLINK_DEPTH {
@@ -2329,7 +2331,8 @@ mod unix_pinned_plugin {
                         match Self::open_leaf_fd(cur_dir_raw, &c_seg, allow_execute_only) {
                             Ok((file_fd, readable)) => {
                                 let stat = fstat_fd(file_fd.as_raw_fd()).map_err(WalkError::Io)?;
-                                let kind = stat.st_mode & libc::S_IFMT;
+                                #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+                                let kind = (stat.st_mode as libc::mode_t) & libc::S_IFMT;
                                 if kind == libc::S_IFLNK {
                                     drop(file_fd);
                                     symlinks_followed += 1;
@@ -2365,9 +2368,11 @@ mod unix_pinned_plugin {
                                         dangling_symlink: symlinks_followed > 0,
                                     });
                                 }
+                                #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
                                 if is_symlink_open_error(error.raw_os_error())
                                     && let Ok(st) = fstatat_nofollow(cur_dir_raw, &c_seg)
-                                    && (st.st_mode & libc::S_IFMT) == libc::S_IFLNK
+                                    && ((st.st_mode as libc::mode_t) & libc::S_IFMT)
+                                        == libc::S_IFLNK
                                 {
                                     symlinks_followed += 1;
                                     if symlinks_followed > MAX_SYMLINK_DEPTH {
