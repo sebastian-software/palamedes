@@ -248,32 +248,122 @@ function stripInlineCodeSpans(line) {
   return result;
 }
 
+function escapesPackageRoot(target) {
+  const pathPart = target.split(/[?#]/u, 1)[0];
+  if (!pathPart || /^[a-z][a-z\d+.-]*:/iu.test(pathPart) || pathPart.startsWith("/")) {
+    return false;
+  }
+  const normalized = path.posix.normalize(pathPart);
+  return normalized === ".." || normalized.startsWith("../");
+}
+
+function stripBlockquotePrefix(line) {
+  let rest = line;
+  let quoteDepth = 0;
+  for (;;) {
+    const match = /^ {0,3}>[ \t]?/u.exec(rest);
+    if (!match) break;
+    quoteDepth += 1;
+    rest = rest.slice(match[0].length);
+  }
+  return { content: rest, quoteDepth };
+}
+
 export function findParentRelativeLinks(text) {
   const findings = [];
   let openFence = null;
-  for (const [index, line] of text.split(/\r?\n/u).entries()) {
+  let prevBlank = true;
+  let prevQuoteDepth = 0;
+  let inIndentedCode = false;
+  let inList = false;
+  let pendingRefQuoteDepth = null;
+
+  for (const [index, rawLine] of text.split(/\r?\n/u).entries()) {
+    const { content, quoteDepth } = stripBlockquotePrefix(rawLine);
+
     if (openFence) {
-      const closing = /^ {0,3}(`+|~+)[ \t]*$/u.exec(line);
-      if (closing && closing[1][0] === openFence.marker && closing[1].length >= openFence.length) {
+      if (quoteDepth < openFence.quoteDepth) {
         openFence = null;
+      } else {
+        if (quoteDepth === openFence.quoteDepth) {
+          const closing = /^ {0,3}(`+|~+)[ \t]*$/u.exec(content);
+          if (
+            closing &&
+            closing[1][0] === openFence.marker &&
+            closing[1].length >= openFence.length
+          ) {
+            openFence = null;
+          }
+        }
+        prevQuoteDepth = quoteDepth;
+        continue;
       }
+    }
+
+    if (quoteDepth !== prevQuoteDepth) {
+      prevBlank = true;
+      inIndentedCode = false;
+      inList = false;
+      prevQuoteDepth = quoteDepth;
+    }
+
+    if (content.trim() === "") {
+      prevBlank = true;
+      inIndentedCode = false;
+      pendingRefQuoteDepth = null;
       continue;
     }
-    const opener = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+
+    if (pendingRefQuoteDepth !== null && quoteDepth === pendingRefQuoteDepth) {
+      pendingRefQuoteDepth = null;
+      const wrappedRef = /^\s*(?:<([^>\r\n]+)>|(\S+))(?:\s|$)/u.exec(content);
+      const target = wrappedRef?.[1] ?? wrappedRef?.[2];
+      if (target && escapesPackageRoot(target)) {
+        findings.push({ line: index + 1, target });
+      }
+      prevBlank = false;
+      continue;
+    }
+    pendingRefQuoteDepth = null;
+
+    if (!inList && (prevBlank || inIndentedCode) && /^(?: {4}|\t)/u.test(content)) {
+      inIndentedCode = true;
+      prevBlank = false;
+      continue;
+    }
+    inIndentedCode = false;
+
+    const opener = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(content);
     if (opener && (opener[1][0] !== "`" || !opener[2].includes("`"))) {
-      openFence = { marker: opener[1][0], length: opener[1].length };
+      openFence = { marker: opener[1][0], length: opener[1].length, quoteDepth };
+      prevBlank = false;
       continue;
     }
-    const prose = stripInlineCodeSpans(line);
-    for (const match of prose.matchAll(
-      /\]\(\s*(?:<(\.\.(?:\/[^>\r\n]*)?)>|(\.\.(?:\/[^)\s]*)?))(?:\s+["'(][^)\r\n]*)?\)/gu,
-    )) {
-      findings.push({ line: index + 1, target: match[1] ?? match[2] });
+
+    if (/^ {0,3}(?:[-*+]|\d+[.)])\s+/u.test(content)) {
+      inList = true;
+    } else if (!/^(?: {2}|\t)/u.test(content)) {
+      inList = false;
     }
-    const refMatch =
-      /^\s{0,3}\[[^\]]+\]:\s*(?:<(\.\.(?:\/[^>\r\n]*)?)>|(\.\.(?:\/[^\s]*)?))(?:\s|$)/u.exec(prose);
+    prevBlank = false;
+
+    const prose = stripInlineCodeSpans(content);
+    for (const match of prose.matchAll(
+      /\]\(\s*(?:<([^>\r\n]+)>|([^)\s]+))(?:\s+["'(][^)\r\n]*)?\)/gu,
+    )) {
+      const target = match[1] ?? match[2];
+      if (escapesPackageRoot(target)) {
+        findings.push({ line: index + 1, target });
+      }
+    }
+    const refMatch = /^ {0,3}\[[^\]]+\]:\s*(?:<([^>\r\n]+)>|(\S+))(?:\s|$)/u.exec(prose);
     if (refMatch) {
-      findings.push({ line: index + 1, target: refMatch[1] ?? refMatch[2] });
+      const target = refMatch[1] ?? refMatch[2];
+      if (escapesPackageRoot(target)) {
+        findings.push({ line: index + 1, target });
+      }
+    } else if (/^ {0,3}\[[^\]]+\]:\s*$/u.test(prose)) {
+      pendingRefQuoteDepth = quoteDepth;
     }
   }
   return findings;

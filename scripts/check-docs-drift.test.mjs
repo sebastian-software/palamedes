@@ -162,22 +162,38 @@ test("scopes the guard to npm-facing docs and exempts migration files", () => {
 test("flags parent-relative links in published package READMEs while ignoring code", () => {
   const sample = [
     "See [the guide](../../docs/cli.md#output-language) and [notes](<../../docs/notes.md>).",
+    "Normalized [dot-prefix](./../../docs/cli.md) and [subpath](sub/../../docs/cli.md) still escape.",
     "Wrapped [link",
     "text](../other/README.md) still breaks.",
     "[ref-link]: ../../docs/stability.md#waku-contract",
+    "> Quoted [ref][quoted-ref]",
+    ">",
+    "> [quoted-ref]: ../../docs/cli.md",
+    "[wrapped-ref]:",
+    "  ./../../docs/cli.md",
     "Inline code `[ignored](../../docs/cli.md)` and ``[also](../ignored.md)`` stay allowed.",
+    "",
+    "    [indented-code](../../docs/cli.md)",
+    "",
+    `> ${fence}md`,
+    "> [quoted-fence](../../docs/cli.md)",
+    `> ${fence}`,
     `${fence}md`,
     "See [example](../../docs/cli.md).",
     "[code-ref]: ../../docs/cli.md",
     fence,
-    "Canonical [docs](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md) and [local](./CHANGELOG.md) are fine.",
+    "Canonical [docs](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md), [local](./CHANGELOG.md), and [in-pkg](sub/../CHANGELOG.md) are fine.",
   ].join("\n");
 
   assert.deepEqual(findParentRelativeLinks(sample), [
     { line: 1, target: "../../docs/cli.md#output-language" },
     { line: 1, target: "../../docs/notes.md" },
-    { line: 3, target: "../other/README.md" },
-    { line: 4, target: "../../docs/stability.md#waku-contract" },
+    { line: 2, target: "./../../docs/cli.md" },
+    { line: 2, target: "sub/../../docs/cli.md" },
+    { line: 4, target: "../other/README.md" },
+    { line: 5, target: "../../docs/stability.md#waku-contract" },
+    { line: 8, target: "../../docs/cli.md" },
+    { line: 10, target: "./../../docs/cli.md" },
   ]);
 });
 
