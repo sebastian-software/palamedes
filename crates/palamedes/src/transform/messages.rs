@@ -3,7 +3,7 @@ use oxc_ast::ast::{
 };
 use oxc_span::GetSpan;
 
-use crate::error::PalamedesResult;
+use crate::error::{PalamedesError, PalamedesResult};
 use crate::placeholder_name::expression_name;
 use crate::source::DiagnosticLocation;
 use crate::source_macros::MacroImports;
@@ -121,19 +121,19 @@ pub(super) fn opening_element_to_component(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
     replacements: &[Replacement],
-) -> String {
+) -> PalamedesResult<String> {
     let start = opening_element.span.start as usize;
     let end = opening_element.span.end as usize;
-    let markup = source_range_with_replacements(source, start, end, replacements);
+    let markup = source_range_with_replacements(source, start, end, replacements)?;
 
     if markup.trim_end().ends_with("/>") {
-        return markup;
+        return Ok(markup);
     }
 
     if let Some(prefix) = markup.strip_suffix('>') {
-        format!("{prefix} />")
+        Ok(format!("{prefix} />"))
     } else {
-        format!("{markup} />")
+        Ok(format!("{markup} />"))
     }
 }
 
@@ -141,14 +141,19 @@ pub(super) fn opening_element_to_component_wrapper(
     opening_element: &JSXOpeningElement<'_>,
     source: &str,
     replacements: &[Replacement],
-) -> String {
+) -> PalamedesResult<String> {
     let start = opening_element.span.start as usize;
     let end = opening_element.span.end as usize;
-    let markup = source_range_with_replacements(source, start, end, replacements)
+    let markup = source_range_with_replacements(source, start, end, replacements)?
         .trim()
         .to_string();
     let name_span = opening_element.name.span();
-    let name = source[name_span.start as usize..name_span.end as usize].to_string();
+    let name = source
+        .get(name_span.start as usize..name_span.end as usize)
+        .ok_or_else(|| PalamedesError::TransformEditFailed {
+            reason: "component opening element name span is out of bounds".to_string(),
+        })?
+        .to_string();
 
     let opening = if let Some(prefix) = markup.strip_suffix("/>") {
         format!("{}>", prefix.trim_end())
@@ -158,7 +163,7 @@ pub(super) fn opening_element_to_component_wrapper(
         format!("{markup}>")
     };
 
-    format!("(props) => {opening}{{props.children}}</{name}>")
+    Ok(format!("(props) => {opening}{{props.children}}</{name}>"))
 }
 
 fn source_range_with_replacements(
@@ -166,28 +171,47 @@ fn source_range_with_replacements(
     start: usize,
     end: usize,
     replacements: &[Replacement],
-) -> String {
-    let mut text = source[start..end].to_string();
+) -> PalamedesResult<String> {
+    let mut text = source
+        .get(start..end)
+        .ok_or_else(|| PalamedesError::TransformEditFailed {
+            reason: "component source range is out of bounds".to_string(),
+        })?
+        .to_string();
     let mut contained = replacements
         .iter()
         .filter(|replacement| replacement.start >= start && replacement.end <= end)
         .collect::<Vec<_>>();
+    if contained
+        .iter()
+        .any(|replacement| replacement.start > replacement.end)
+    {
+        return Err(PalamedesError::TransformEditFailed {
+            reason: "component source replacement span is inverted".to_string(),
+        });
+    }
     contained.sort_by(|left, right| right.start.cmp(&left.start).then(right.end.cmp(&left.end)));
-    debug_assert!(
-        contained
-            .windows(2)
-            .all(|pair| pair[0].start >= pair[1].end),
-        "component source replacements must not overlap"
-    );
-
-    for replacement in contained {
-        text.replace_range(
-            replacement.start - start..replacement.end - start,
-            &replacement.text,
-        );
+    if contained.windows(2).any(|pair| pair[0].start < pair[1].end) {
+        return Err(PalamedesError::TransformEditFailed {
+            reason: "component source replacements must not overlap".to_string(),
+        });
     }
 
-    text
+    for replacement in contained {
+        let relative_start = replacement.start - start;
+        let relative_end = replacement.end - start;
+        if relative_end > text.len()
+            || !text.is_char_boundary(relative_start)
+            || !text.is_char_boundary(relative_end)
+        {
+            return Err(PalamedesError::TransformEditFailed {
+                reason: "component source replacement span is not on UTF-8 boundaries".to_string(),
+            });
+        }
+        text.replace_range(relative_start..relative_end, &replacement.text);
+    }
+
+    Ok(text)
 }
 
 pub(super) fn extract_jsx_children_parts(
@@ -339,4 +363,44 @@ pub(super) fn first_argument_object<'a>(
         return None;
     };
     Some(object)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::source_range_with_replacements;
+    use crate::error::PalamedesError;
+    use crate::transform::Replacement;
+
+    #[test]
+    fn source_range_with_replacements_rejects_overlapping_and_invalid_spans_without_panicking() {
+        let source = "<Button title={t({ message: \"a {x}\" }, { x: t`b` })} />";
+        let overlapping = vec![
+            Replacement {
+                start: 15,
+                end: 51,
+                text: "getI18n()._(\"outer\")".to_string(),
+            },
+            Replacement {
+                start: 44,
+                end: 48,
+                text: "getI18n()._(\"inner\")".to_string(),
+            },
+        ];
+        let err = source_range_with_replacements(source, 0, source.len(), &overlapping)
+            .expect_err("overlapping replacements must return an error, not panic");
+        assert!(matches!(err, PalamedesError::TransformEditFailed { .. }));
+
+        let inverted = vec![Replacement {
+            start: 20,
+            end: 10,
+            text: "bad".to_string(),
+        }];
+        let err = source_range_with_replacements(source, 0, source.len(), &inverted)
+            .expect_err("inverted replacement span must return an error");
+        assert!(matches!(err, PalamedesError::TransformEditFailed { .. }));
+
+        let err = source_range_with_replacements("😀", 1, 4, &[])
+            .expect_err("non-char-boundary range must return an error");
+        assert!(matches!(err, PalamedesError::TransformEditFailed { .. }));
+    }
 }

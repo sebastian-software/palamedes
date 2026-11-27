@@ -110,7 +110,7 @@ impl ImportCollector {
         &self,
         source: &str,
         semantic: &Semantic<'_>,
-        consumed_binding_ranges: &[(SymbolId, usize, usize)],
+        consumed_binding_ranges: &[(Option<SymbolId>, usize, usize)],
     ) -> Vec<Replacement> {
         let mut removable = HashSet::new();
         for (index, specifier) in self.macro_specifiers.iter().enumerate() {
@@ -125,7 +125,7 @@ impl ImportCollector {
                     consumed_binding_ranges
                         .iter()
                         .any(|(consumed_symbol, start, end)| {
-                            *consumed_symbol == symbol_id
+                            consumed_symbol.is_none_or(|consumed| consumed == symbol_id)
                                 && *start <= span.start as usize
                                 && span.end as usize <= *end
                         })
@@ -183,7 +183,7 @@ impl ImportCollector {
         &self,
         semantic: &Semantic<'_>,
         symbol_id: SymbolId,
-        consumed_binding_ranges: &[(SymbolId, usize, usize)],
+        consumed_binding_ranges: &[(Option<SymbolId>, usize, usize)],
     ) -> bool {
         semantic
             .scoping()
@@ -193,7 +193,7 @@ impl ImportCollector {
                 !consumed_binding_ranges
                     .iter()
                     .any(|(consumed_symbol, start, end)| {
-                        *consumed_symbol == symbol_id
+                        consumed_symbol.is_none_or(|consumed| consumed == symbol_id)
                             && *start <= span.start as usize
                             && span.end as usize <= *end
                     })

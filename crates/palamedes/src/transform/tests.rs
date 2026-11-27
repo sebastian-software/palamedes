@@ -3137,3 +3137,318 @@ fn emits_computed_proto_keys_in_macro_value_bindings() {
         );
     }
 }
+
+#[test]
+fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements() {
+    let cases = [
+        (
+            "descriptor-value.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"a {x}\" }, { x: t`b` }); }\n",
+            "t",
+        ),
+        (
+            "descriptor-raw-values.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"a {x}\" }, buildValues(t`b`)); }\n",
+            "t",
+        ),
+        (
+            "tagged-template-coalesce.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f(name?: string) { return t`a ${name ?? t`b`}`; }\n",
+            "t",
+        ),
+        (
+            "choice-value.ts",
+            "import { plural, t } from \"@palamedes/core/macro\";\nexport function f(count?: number) { return plural(count ?? t`b`, { one: \"# item\", other: \"# items\" }); }\n",
+            "plural",
+        ),
+        (
+            "choice-branch-template.ts",
+            "import { plural, t } from \"@palamedes/core/macro\";\nexport function f(count: number, name?: string) { return plural(count, { one: `${name ?? t`b`}`, other: \"# items\" }); }\n",
+            "plural",
+        ),
+        (
+            "jsx-choice-value.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Plural } from \"@palamedes/react/macro\";\nexport function f(count?: number) { return <Plural value={count ?? t`b`} one=\"# item\" other=\"# items\" />; }\n",
+            "Plural",
+        ),
+        (
+            "jsx-select-offset-branch.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Select } from \"@palamedes/react/macro\";\nexport function f(mode: string, label?: string) { return <Select value={mode} offset={`${label ?? t`b`}`} other=\"Default\" />; }\n",
+            "Select",
+        ),
+        (
+            "lowered-select-offset-branch.js",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Select } from \"@palamedes/react/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nexport function f(mode, label) { return render(Select, { value: mode, offset: `${label ?? t`b`}`, other: \"Default\" }); }\n",
+            "Select",
+        ),
+        (
+            "trans-expression-value.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f(name?: string) { return <Trans>Hello {name ?? t`b`}</Trans>; }\n",
+            "Trans",
+        ),
+        (
+            "trans-attribute-nested-descriptor.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f() { return <Trans>Click <Button title={t({ message: \"a {x}\" }, { x: t`b` })} /> now</Trans>; }\n",
+            "t",
+        ),
+        (
+            "trans-attribute-nested-template.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f(name?: string) { return <Trans>Click <Button title={t`a ${name ?? t`b`}`} /> now</Trans>; }\n",
+            "t",
+        ),
+    ];
+
+    for (filename, source, expected_outer) in cases {
+        let transform_err = transform_macros_raw(source, filename, None)
+            .expect_err("nested macro in value expression must fail transform cleanly");
+        assert!(
+            matches!(
+                &transform_err,
+                PalamedesError::UnsupportedMacroSyntax { macro_name, detail, .. }
+                    if macro_name == expected_outer && detail.contains("nested `t` macro")
+            ),
+            "{filename}: unexpected transform error: {transform_err:?}"
+        );
+    }
+
+    // Valid for unbundled Node runtime macros: extraction still collects both calls in
+    // manifest-compatible descriptor value expressions even when the compiler transform rejects them.
+    let unbundled = "import { t } from \"@palamedes/core/macro\";\nexport function f(value?: string) { return t({ message: \"a {status}\" }, { status: value ?? t`Unknown` }); }\n";
+    let extracted = extract_messages(unbundled, "unbundled.ts")
+        .expect("manifest-compatible nested macro in descriptor value should remain extractable");
+    assert_eq!(extracted.len(), 2);
+
+    // Valid: a single `t` macro inside a `<Trans>` component attribute still transforms cleanly.
+    let valid_attr = "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f() { return <Trans>Click <Button title={t`Tooltip`} /> now</Trans>; }\n";
+    let extracted = extract_messages(valid_attr, "valid-attr.tsx")
+        .expect("single t macro in Trans component attribute should extract");
+    assert_eq!(extracted.len(), 2);
+    let transformed = transform_macros_raw(valid_attr, "valid-attr.tsx", None)
+        .expect("single t macro in Trans component attribute should transform");
+    assert_eq!(transformed.compiled_ids.len(), 2);
+    assert!(!transformed.code.contains("t`Tooltip`"));
+
+    // Valid: a shadowed local binding named `t` inside a descriptor value is not a nested macro.
+    let shadowed = "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"a {fn}\" }, { fn: (t: any) => t`local` }); }\n";
+    let extracted = extract_messages(shadowed, "shadowed.ts")
+        .expect("shadowed t inside descriptor value should extract");
+    assert_eq!(extracted.len(), 1);
+    let transformed = transform_macros_raw(shadowed, "shadowed.ts", None)
+        .expect("shadowed t inside descriptor value should transform");
+    assert!(transformed.code.contains("(t: any) => t`local`"));
+
+    // Valid: discarded choice list `key` and overwritten duplicate `value` attributes/props
+    // do not trigger nested-macro rejection.
+    let keyed_plural = "import { t } from \"@palamedes/core/macro\";\nimport { Plural } from \"@palamedes/react/macro\";\nexport function f(count: number) { return [<Plural key={t`Files`} value={count} one=\"# file\" other=\"# files\" />, <Plural value={count} value={t`Ignored`} one=\"# file\" other=\"# files\" />]; }\n";
+    let transformed = transform_macros_raw(keyed_plural, "keyed-plural.tsx", None)
+        .expect("choice JSX macro with discarded key/value attributes should transform");
+    assert_eq!(transformed.compiled_ids.len(), 1);
+
+    let keyed_lowered_plural = "import { t } from \"@palamedes/core/macro\";\nimport { Plural, Select } from \"@palamedes/react/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nexport function f(count, status) { return [render(Plural, { key: t`Files`, value: count, one: \"# file\", other: \"# files\" }), render(Plural, { value: count, one: \"# file\", other: \"# files\" }, t`Files`), render(Select, { value: t`Unknown`, value: status, other: \"Not ready\" })]; }\n";
+    let transformed = transform_macros_raw(keyed_lowered_plural, "keyed-lowered.js", None)
+        .expect("lowered choice macro with discarded key/overwritten value prop should transform");
+    assert_eq!(transformed.compiled_ids.len(), 2);
+
+    // Valid: macro references only in discarded descriptor fields still allow import removal
+    // (including distinct aliased macro bindings), while bare macro references in retained values
+    // preserve the import.
+    let discarded_spread = "import { t, t as tooltip } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"Welcome\", ...{ label: tooltip`Help` } }); }\n";
+    let transformed = transform_macros_raw(discarded_spread, "discarded-spread.ts", None)
+        .expect("discarded descriptor field should transform cleanly");
+    assert!(
+        !transformed.code.contains("@palamedes/core/macro"),
+        "unused macro imports from discarded descriptor field must be removed:\n{}",
+        transformed.code
+    );
+
+    let retained_ref = "import { t } from \"@palamedes/core/macro\";\nexport function f(inspect: (fn: unknown) => string) { return t({ message: \"a {x}\" }, { x: inspect(t) }); }\n";
+    let transformed = transform_macros_raw(retained_ref, "retained-ref.ts", None)
+        .expect("retained bare macro reference in descriptor values should transform");
+    assert!(
+        transformed.code.contains("@palamedes/core/macro"),
+        "macro import referenced in retained descriptor value must be preserved:\n{}",
+        transformed.code
+    );
+
+    // Valid: nested lowered Trans inside a parent Trans attribute with shadowed `Trans`
+    // followed by a descriptor with a discarded macro field must rebind cleanly without panicking.
+    let nested_lowered_trans = r#"import { Trans as MacroTrans } from "@palamedes/remix/macro";
+import { jsx as render } from "remix/component/jsx-runtime";
+import { t } from "@palamedes/core/macro";
+export function f() {
+  const Trans = () => null;
+  return [
+    <MacroTrans><Button title={t`Title`} label={t`Label`} badge={render(MacroTrans, { children: "Inner" })} /></MacroTrans>,
+    t({ message: "Notice", ignored: t`Unused` }),
+  ];
+}
+"#;
+    let transformed = transform_macros_raw(nested_lowered_trans, "nested-lowered-trans.tsx", None)
+        .expect("nested lowered Trans in attribute with later discarded macro must not panic");
+    assert!(transformed.code.contains("<__palamedesTrans id="));
+    assert!(transformed.code.contains("render(__palamedesTrans, { id:"));
+    assert!(!transformed.code.contains("@palamedes/remix/macro"));
+    assert!(!transformed.code.contains("@palamedes/core/macro"));
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &transformed.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "rebound nested Trans output must be valid TSX: {:?}\n{}",
+        parsed.diagnostics,
+        transformed.code
+    );
+
+    // Valid: distinct runtime modules (`react` and `remix`) must not emit duplicate `Trans` bindings.
+    let multi_runtime_trans = r#"import { Trans as ReactTrans } from "@palamedes/react/macro";
+import { Trans as RemixTrans } from "@palamedes/remix/macro";
+import { t } from "@palamedes/core/macro";
+export function f() {
+  return [
+    <ReactTrans>React</ReactTrans>,
+    <RemixTrans>Remix</RemixTrans>,
+    t({ message: "Notice", ignored: ReactTrans }),
+  ];
+}
+"#;
+    let transformed = transform_macros_raw(multi_runtime_trans, "multi-runtime-trans.tsx", None)
+        .expect("React and Remix Trans macros in one file should emit distinct compiled imports");
+    assert!(
+        transformed
+            .code
+            .contains("import { Trans } from \"@palamedes/react/compiled\";")
+    );
+    assert!(
+        transformed
+            .code
+            .contains("import { Trans as __palamedesTrans } from \"@palamedes/remix/compiled\";")
+    );
+    let parsed = Parser::new(&allocator, &transformed.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "multi-runtime Trans output must be valid TSX: {:?}\n{}",
+        parsed.diagnostics,
+        transformed.code
+    );
+
+    // Valid: escaped placeholder-like keys inside `<Trans>` values must never be rewritten by
+    // Trans rebinding, and custom runtime import names must be reserved against Trans aliases.
+    let escaped_slot_key = "import { Trans } from \"@palamedes/react/macro\";\nconst values: Record<string, string> = {};\nexport const el = <Trans>{values[\"__palamedesTransSlot\\u0030__\"]}<Button title={<Trans>Tooltip</Trans>} /></Trans>;\n";
+    let transformed = transform_macros_raw(escaped_slot_key, "escaped-slot.tsx", None)
+        .expect("escaped slot-like key inside Trans values should transform cleanly");
+    assert!(
+        transformed
+            .code
+            .contains("__palamedesTransSlot0__: values[\"__palamedesTransSlot\\u0030__\"]"),
+        "value key must stay intact:\n{}",
+        transformed.code
+    );
+    assert!(
+        transformed.code.contains("title={<Trans id="),
+        "inner Trans component must be rebound cleanly:\n{}",
+        transformed.code
+    );
+    assert!(!transformed.code.contains('\0'));
+
+    // Valid: decoded NUL-sentinel text in lowered Trans children with includeSourceMetadata: true
+    // must never collide with internal Trans rebinding placeholders.
+    let decoded_nul_sentinel = "import { Trans as MacroTrans } from \"@palamedes/remix/macro\";\nimport { jsx as render } from \"remix/component/jsx-runtime\";\nexport const el = <MacroTrans><Button title={render(MacroTrans, { children: \"\\u0000__palamedesTransSlot0__\\u0000\" })} /></MacroTrans>;\n";
+    let transformed = transform_macros_raw(
+        decoded_nul_sentinel,
+        "decoded-nul-sentinel.tsx",
+        Some(NativeTransformOptions {
+            include_source_metadata: Some(true),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("decoded sentinel in lowered Trans message metadata must not break rebinding");
+    assert!(
+        transformed.code.contains("title={render(Trans, { id:"),
+        "lowered Trans callee must be rebound:\n{}",
+        transformed.code
+    );
+    assert!(
+        transformed
+            .code
+            .contains("message: \"\0__palamedesTransSlot0__\0\""),
+        "message metadata must stay intact:\n{}",
+        transformed.code
+    );
+    let parsed = Parser::new(&allocator, &transformed.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "decoded sentinel output must be valid TSX: {:?}\n{}",
+        parsed.diagnostics,
+        transformed.code
+    );
+
+    let custom_getter_collision = r#"import { Trans as ReactTrans } from "@palamedes/react/macro";
+import { Trans as RemixTrans } from "@palamedes/remix/macro";
+import { t } from "@palamedes/core/macro";
+export function f() {
+  return [<ReactTrans>React</ReactTrans>, <RemixTrans>Remix</RemixTrans>, t`Hi`];
+}
+"#;
+    let transformed = transform_macros_raw(
+        custom_getter_collision,
+        "custom-getter-collision.tsx",
+        Some(NativeTransformOptions {
+            runtime_module: Some("custom-i18n".to_string()),
+            runtime_import_name: Some("__palamedesTrans".to_string()),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("custom runtimeImportName matching __palamedesTrans must not collide with Trans alias");
+    assert!(
+        transformed
+            .code
+            .contains("import { __palamedesTrans } from \"custom-i18n\";")
+    );
+    assert!(
+        transformed
+            .code
+            .contains("import { Trans } from \"@palamedes/react/compiled\";")
+    );
+    assert!(
+        transformed
+            .code
+            .contains("import { Trans as __palamedesTrans2 } from \"@palamedes/remix/compiled\";")
+    );
+    let parsed = Parser::new(&allocator, &transformed.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "non-colliding runtime and Trans imports must be valid TSX: {:?}\n{}",
+        parsed.diagnostics,
+        transformed.code
+    );
+
+    // Valid: direct runtime calls inside macro value expressions remain extractable and preserved.
+    for (filename, source) in [
+        (
+            "runtime-in-descriptor.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f(i18n: any) { return t({ message: \"a {x}\" }, { x: i18n._(\"b\") }); }\n",
+        ),
+        (
+            "runtime-in-template.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f(i18n: any, name?: string) { return t`a ${name ?? i18n._(\"b\")}`; }\n",
+        ),
+        (
+            "runtime-in-trans.tsx",
+            "import { Trans } from \"@palamedes/react/macro\";\nexport function f(i18n: any, name?: string) { return <Trans>Hello {name ?? i18n._(\"b\")}</Trans>; }\n",
+        ),
+    ] {
+        let extracted = extract_messages(source, filename)
+            .unwrap_or_else(|e| panic!("{filename}: direct runtime call should extract: {e}"));
+        assert_eq!(
+            extracted.len(),
+            2,
+            "{filename}: expected both outer macro and inner runtime call to extract: {extracted:?}"
+        );
+        let transformed = transform_macros_raw(source, filename, None)
+            .unwrap_or_else(|e| panic!("{filename}: direct runtime call should transform: {e}"));
+        assert!(
+            transformed.code.contains("i18n._(\"b\")"),
+            "{filename}: direct runtime call should be preserved:\n{}",
+            transformed.code
+        );
+    }
+}
