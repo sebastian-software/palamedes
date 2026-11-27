@@ -1573,21 +1573,26 @@ mod platform {
             )
         }
 
-        /// Atomically publishes `bytes` to `file_name` only if the live
-        /// destination still matches `expected_original` (`None` requires the
-        /// destination not to exist yet; `Some(orig)` requires its content
+        /// Atomically publishes `bytes` to `file_name` after verifying that the
+        /// live destination still matches `expected_original` (`None` requires
+        /// the destination not to exist yet; `Some(orig)` requires its content
         /// digest to still match `orig` right before publication).
         ///
-        /// If an external writer edited the file in place or replaced it since
-        /// the caller read `expected_original`, returns an
-        /// [`io::ErrorKind::AlreadyExists`] conflict without overwriting it so
-        /// the caller can re-read and merge.
+        /// Cooperating writers that acquire this directory's target lock are
+        /// strictly serialized, so concurrent Palamedes updates are detected
+        /// deterministically and return [`io::ErrorKind::AlreadyExists`] so the
+        /// caller can re-read and merge. Non-locking external writers (such as
+        /// an editor saving in place) are detected on a best-effort basis via
+        /// the pre-publication snapshot check: because POSIX `renameat` cannot
+        /// atomically compare existing file contents as part of the rename, an
+        /// external edit written in the narrow window between the snapshot
+        /// check and `renameat` can still race with publication.
         ///
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid
         /// or refers to a symlink, or [`ContainedFsError::Io`] on OS errors or
-        /// concurrent modification conflicts.
+        /// detected concurrent modification conflicts.
         pub fn write_file_atomically_if_unchanged(
             &self,
             file_name: &OsStr,
@@ -1949,6 +1954,7 @@ mod platform {
                 dev: stat.st_dev as u64,
                 ino: stat.st_ino as u64,
             };
+            let (mtime_sec, mtime_nsec) = stat_mtime(&stat);
             #[allow(clippy::unnecessary_cast)]
             let entry = ExistingEntry {
                 mode: stat_mode(&stat) & 0o7777,
@@ -1964,8 +1970,8 @@ mod platform {
                 flags: stat.st_flags,
                 identity,
                 size: stat.st_size as i64,
-                mtime_sec: stat.st_mtime as i64,
-                mtime_nsec: stat.st_mtime_nsec as i64,
+                mtime_sec,
+                mtime_nsec,
             };
             let content_digest = if readable {
                 let mut borrowed = std::mem::ManuallyDrop::new(File::from(
@@ -2035,6 +2041,7 @@ mod platform {
                 dev: stat.st_dev as u64,
                 ino: stat.st_ino as u64,
             };
+            let (mtime_sec, mtime_nsec) = stat_mtime(&stat);
             #[allow(clippy::unnecessary_cast)]
             Ok(Some(ExistingEntry {
                 mode: stat_mode(&stat) & 0o7777,
@@ -2050,8 +2057,8 @@ mod platform {
                 flags: stat.st_flags,
                 identity,
                 size: stat.st_size as i64,
-                mtime_sec: stat.st_mtime as i64,
-                mtime_nsec: stat.st_mtime_nsec as i64,
+                mtime_sec,
+                mtime_nsec,
             }))
         }
 
@@ -2571,6 +2578,33 @@ mod platform {
         )))]
         {
             None
+        }
+    }
+
+    #[allow(clippy::unnecessary_cast)]
+    const fn stat_mtime(stat: &libc::stat) -> (i64, i64) {
+        #[cfg(target_os = "netbsd")]
+        {
+            (stat.st_mtime as i64, stat.st_mtimensec as i64)
+        }
+        #[cfg(any(
+            target_os = "aix",
+            target_os = "hurd",
+            target_os = "nto",
+            target_os = "nuttx"
+        ))]
+        {
+            (stat.st_mtim.tv_sec as i64, stat.st_mtim.tv_nsec as i64)
+        }
+        #[cfg(not(any(
+            target_os = "netbsd",
+            target_os = "aix",
+            target_os = "hurd",
+            target_os = "nto",
+            target_os = "nuttx"
+        )))]
+        {
+            (stat.st_mtime as i64, stat.st_mtime_nsec as i64)
         }
     }
 
@@ -7509,16 +7543,28 @@ mod platform {
         /// entries in `self` without mutating the directory.
         #[must_use]
         pub fn probe_existing_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            match self.probe_existing_names_detailed(left, right) {
+                ExistingNamesProbe::Conclusive(result) => Some(result),
+                ExistingNamesProbe::ExistingButIndeterminate
+                | ExistingNamesProbe::NeitherExists => None,
+            }
+        }
+
+        fn probe_existing_names_detailed(&self, left: &OsStr, right: &OsStr) -> ExistingNamesProbe {
             if left == right {
-                return Some(true);
+                return ExistingNamesProbe::Conclusive(true);
             }
             if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
             {
-                return None;
+                return ExistingNamesProbe::ExistingButIndeterminate;
             }
             match (self.file_identity(left), self.file_identity(right)) {
-                (Ok(Some(left_id)), Ok(Some(right_id))) => return Some(left_id == right_id),
-                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => return Some(false),
+                (Ok(Some(left_id)), Ok(Some(right_id))) => {
+                    return ExistingNamesProbe::Conclusive(left_id == right_id);
+                }
+                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => {
+                    return ExistingNamesProbe::Conclusive(false);
+                }
                 _ => {}
             }
             // When `FileIdInfo` is unavailable (for example, on a Windows share
@@ -7547,25 +7593,30 @@ mod platform {
                 std::ptr::null_mut(),
             );
             match (left_open, right_open) {
+                (Err(left_status), Err(right_status))
+                    if is_not_found_status(left_status) && is_not_found_status(right_status) =>
+                {
+                    ExistingNamesProbe::NeitherExists
+                }
                 (Ok(_), Err(status)) | (Err(status), Ok(_)) if is_not_found_status(status) => {
-                    Some(false)
+                    ExistingNamesProbe::Conclusive(false)
                 }
                 (Ok(left_h), Ok(right_h)) => {
                     let left_alt = query_windows_alternate_name(left_h.as_raw_handle());
                     let right_alt = query_windows_alternate_name(right_h.as_raw_handle());
                     let left_str = left.to_str();
                     let right_str = right.to_str();
-                    if let (Ok(Some(ref alt)), Some(r)) = (&left_alt, right_str)
+                    if let (Ok(Some(alt)), Some(r)) = (&left_alt, right_str)
                         && windows_upcase_str(alt)
                             == windows_upcase_str(r.trim_end_matches(['.', ' ']))
                     {
-                        return Some(true);
+                        return ExistingNamesProbe::Conclusive(true);
                     }
-                    if let (Ok(Some(ref alt)), Some(l)) = (&right_alt, left_str)
+                    if let (Ok(Some(alt)), Some(l)) = (&right_alt, left_str)
                         && windows_upcase_str(alt)
                             == windows_upcase_str(l.trim_end_matches(['.', ' ']))
                     {
-                        return Some(true);
+                        return ExistingNamesProbe::Conclusive(true);
                     }
                     if let (Some(l), Some(r)) = (left_str, right_str)
                         && windows_upcase_str(l.trim_end_matches(['.', ' ']))
@@ -7573,11 +7624,11 @@ mod platform {
                         && left_alt.is_ok()
                         && right_alt.is_ok()
                     {
-                        return Some(false);
+                        return ExistingNamesProbe::Conclusive(false);
                     }
-                    None
+                    ExistingNamesProbe::ExistingButIndeterminate
                 }
-                _ => None,
+                _ => ExistingNamesProbe::ExistingButIndeterminate,
             }
         }
 
@@ -7681,10 +7732,18 @@ mod platform {
 
         #[must_use]
         pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
-            if let Some(result) = self.probe_existing_names_equivalent(left, right) {
-                return Some(result);
+            match self.probe_existing_names_detailed(left, right) {
+                ExistingNamesProbe::Conclusive(result) => Some(result),
+                // When either entry already exists in `self` and neither file
+                // IDs nor alternate names could distinguish them, do NOT fall
+                // back to a fresh empty directory: in a populated directory an
+                // entry's numeric tail (such as `~2`) differs from what an
+                // empty probe directory would assign (`~1`).
+                ExistingNamesProbe::ExistingButIndeterminate => None,
+                ExistingNamesProbe::NeitherExists => {
+                    self.probe_names_equivalent_in_fresh_dir(left, right)
+                }
             }
-            self.probe_names_equivalent_in_fresh_dir(left, right)
         }
 
         /// Probes whether this volume synthesizes 8.3 short-name aliases inside
@@ -8208,17 +8267,27 @@ mod platform {
             )
         }
 
-        /// Atomically publishes `bytes` to `file_name` only if the live
-        /// destination still matches `expected_original` (`None` requires the
-        /// destination not to exist yet; `Some(orig)` requires its content
+        /// Atomically publishes `bytes` to `file_name` after verifying that the
+        /// live destination still matches `expected_original` (`None` requires
+        /// the destination not to exist yet; `Some(orig)` requires its content
         /// digest to still match `orig` right before publication).
+        ///
+        /// Cooperating writers that acquire this directory's target lock are
+        /// strictly serialized, so concurrent Palamedes updates are detected
+        /// deterministically and return [`io::ErrorKind::AlreadyExists`] so the
+        /// caller can re-read and merge. Non-locking external writers (such as
+        /// an editor saving in place) are detected on a best-effort basis via
+        /// the pre-publication digest check: because Windows atomic rename
+        /// cannot compare existing file contents atomically with the rename, an
+        /// external edit written in the narrow window between the digest check
+        /// and rename can still race with publication.
         ///
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Containment`] if `file_name` is a
         /// symlink/reparse point or hard-linked target during transacted
-        /// update, or [`ContainedFsError::Io`] on OS errors or concurrent
-        /// modification conflicts.
+        /// update, or [`ContainedFsError::Io`] on OS errors or detected
+        /// concurrent modification conflicts.
         pub fn write_file_atomically_if_unchanged(
             &self,
             file_name: &OsStr,
@@ -9756,6 +9825,13 @@ mod platform {
             ));
         }
         Ok(wide)
+    }
+
+    #[derive(Clone, Copy)]
+    enum ExistingNamesProbe {
+        Conclusive(bool),
+        ExistingButIndeterminate,
+        NeitherExists,
     }
 
     fn windows_upcase_str(text: &str) -> String {

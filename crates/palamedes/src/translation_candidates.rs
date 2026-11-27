@@ -1502,12 +1502,18 @@ impl UnidentifiedAliasProbeContext<'_> {
         let probed = if let Some(simulated) = self.simulated_8dot3_alias_probe {
             simulated
         } else if dir_rel == self.leaf_parent_rel {
-            self.leaf_parent_dir.probe_names_equivalent(left, right)
+            // Both catalog paths already exist in their containing directory,
+            // so inspect the live entries directly (file IDs or Windows
+            // `FileAlternateNameInformation`) without probing an empty
+            // directory where populated-directory numeric tails (`~2`, etc.)
+            // would differ.
+            self.leaf_parent_dir
+                .probe_existing_names_equivalent(left, right)
         } else {
             ContainedDir::open_subpath(self.root_dir, dir_rel, false)
                 .ok()
                 .flatten()
-                .and_then(|dir| dir.probe_names_equivalent(left, right))
+                .and_then(|dir| dir.probe_existing_names_equivalent(left, right))
         };
         // Only treat the pair as distinct when the filesystem explicitly
         // disproves aliasing (`Some(false)`); fail closed on `Some(true)` or
