@@ -8,8 +8,10 @@ import vm from "node:vm";
 import { renderCatalogModule } from "@palamedes/core-node";
 
 import {
+  DEFAULT_IO_CONCURRENCY,
   MARKER_PATTERN,
   createCatalogCompiler,
+  mapWithConcurrency,
   readChunks,
   scanMarkers,
   splitRenderedCatalog,
@@ -46,13 +48,30 @@ export function chunkReferences(source: string, known: ReadonlySet<string>): str
 /** The marked chunks plus every chunk that references one of them, transitively. */
 export function affectedChunks(graph: ChunkGraph, marked: Iterable<string>): Set<string> {
   const affected = new Set(marked);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const [key, chunk] of graph) {
-      if (affected.has(key) || !chunk.references.some((ref) => affected.has(ref))) continue;
-      affected.add(key);
-      grew = true;
+  if (affected.size === 0) return affected;
+
+  const importersByTarget = new Map<string, string[]>();
+  for (const [importer, chunk] of graph) {
+    for (const target of chunk.references) {
+      let importers = importersByTarget.get(target);
+      if (!importers) {
+        importers = [];
+        importersByTarget.set(target, importers);
+      }
+      importers.push(importer);
+    }
+  }
+
+  const queue = [...affected];
+  let index = 0;
+  while (index < queue.length) {
+    const importers = importersByTarget.get(queue[index]!);
+    index += 1;
+    if (!importers) continue;
+    for (const importer of importers) {
+      if (affected.has(importer)) continue;
+      affected.add(importer);
+      queue.push(importer);
     }
   }
   return affected;
@@ -6299,41 +6318,63 @@ ${ADAPTER_MARKER}
   var fallback = ${JSON.stringify(fallback)};
   var variants = ${JSON.stringify(variants)};
   var optionalRootLocale = ${JSON.stringify(optionalRootLocale)};
+  var lookup = Object.create(null);
   var keys = Object.keys(variants);
+  for (var k = 0; k < keys.length; k++) lookup[keys[k]] = true;
+  var localeIndex = Object.create(null);
+  for (var l = 0; l < locales.length; l++) localeIndex[locales[l]] = l;
   var resolve = null;
   var covered = Object.create(null);
   globalThis[${JSON.stringify(CLIENT_CATALOG_BIND_GLOBAL)}] = function (fn) { resolve = fn; };
   function locate(value) {
     if (typeof value !== "string") return null;
-    for (var i = 0; i < keys.length; i++) {
-      var at = value.indexOf(keys[i]);
-      var end = at + keys[i].length;
-      if (at !== -1 && (at === 0 || value[at - 1] === "/") && (end === value.length || value[end] === "?")) {
-        return { key: keys[i], at: at, end: end };
+    var end = value.indexOf("?");
+    if (end === -1) end = value.length;
+    var at = 0;
+    while (at <= end) {
+      var candidate = value.slice(at, end);
+      if (candidate in lookup) {
+        return { key: candidate, at: at, end: end };
       }
+      var slash = value.indexOf("/", at);
+      if (slash === -1 || slash >= end) break;
+      at = slash + 1;
     }
     return null;
   }
-  function table(array, index) {
-    return Object.freeze(array.map(function (value) {
-      var hit = locate(value);
-      if (hit) covered[hit.key] = true;
-      return hit ? value.slice(0, hit.at) + variants[hit.key][index] + value.slice(hit.end) : value;
-    }));
+  function table(array, hits, index) {
+    var out = new Array(array.length);
+    for (var i = 0; i < array.length; i++) {
+      var hit = hits[i];
+      var value = array[i];
+      out[i] = hit ? value.slice(0, hit.at) + variants[hit.key][index] + value.slice(hit.end) : value;
+    }
+    return Object.freeze(out);
   }
   function visit(owner) {
     Object.keys(owner).forEach(function (name) {
       var value = owner[name];
       if (!value || typeof value !== "object") return;
-      if (!Array.isArray(value) || !value.some(locate)) return visit(value);
-      var tables = locales.map(function (_, index) { return table(value, index); });
+      if (!Array.isArray(value)) return visit(value);
+      var hits = null;
+      for (var i = 0; i < value.length; i++) {
+        var hit = locate(value[i]);
+        if (hit) {
+          if (hits === null) hits = new Array(value.length);
+          hits[i] = hit;
+          if (locales.length > 0) covered[hit.key] = true;
+        }
+      }
+      if (hits === null) return visit(value);
+      var tables = locales.map(function (_, index) { return table(value, hits, index); });
       Object.defineProperty(owner, name, {
         enumerable: false,
         get: function () {
           if (resolve === null) {
             throw new Error("Palamedes client catalog permutations: this process renders without a bound locale resolver, so it cannot select locale chunks. Call bindClientCatalogPermutations() from register() in instrumentation.ts; during next build, the prerender workers need the Palamedes Node preload (experimental.workerThreads is not supported).");
           }
-          var index = locales.indexOf(resolve(locales, fallback, optionalRootLocale));
+          var resolved = resolve(locales, fallback, optionalRootLocale);
+          var index = typeof resolved === "string" && resolved in localeIndex ? localeIndex[resolved] : -1;
           if (index === -1) throw new Error("Palamedes client catalog permutations: the resolved locale has no chunk permutation.");
           return tables[index];
         },
@@ -6475,29 +6516,47 @@ export async function emitClientCatalogPermutations(
   const variants: Record<string, string[]> = Object.fromEntries(
     [...affected].sort().map((key) => [key, []]),
   );
-  for (const locale of compiler.locales) {
-    const compiled = await compiler.compileLocale(locale);
+  const compiledLocales = await mapWithConcurrency(
+    compiler.locales,
+    DEFAULT_IO_CONCURRENCY,
+    async (locale) => ({
+      locale,
+      compiled: await compiler.compileLocale(locale),
+    }),
+  );
+  const variantWrites: Array<{ filePath: string; body: string }> = [];
+  for (const { locale, compiled } of compiledLocales) {
     const expressions = new Map(
       [...compiled].map(([key, messages]) => [key, inlineMessageExpression(messages)]),
     );
     for (const [key, variant] of renderVariants(graph, affected, locale, expressions)) {
-      await writeFile(path.join(distDir, variant.path), variant.body);
+      variantWrites.push({ filePath: path.join(distDir, variant.path), body: variant.body });
       variants[key]!.push(variant.path);
     }
   }
+  await mapWithConcurrency(variantWrites, DEFAULT_IO_CONCURRENCY, ({ filePath, body }) =>
+    writeFile(filePath, body),
+  );
 
   const covered = new Set<string>();
   for (const key of affected) {
     for (const ref of graph.get(key)!.references) if (affected.has(ref)) covered.add(ref);
   }
-  let removedLoadableHints = 0;
-  for (const file of await findFiles(distDir, "react-loadable-manifest.json")) {
-    if (file.includes(`${path.sep}standalone${path.sep}`)) continue;
-    const manifest = JSON.parse(await readFile(file, "utf8")) as LoadableManifest;
-    // Hints are removed below, so they count for nothing here.
-    removedLoadableHints += filterLoadableManifest(manifest, affected);
-    await writeFile(file, JSON.stringify(manifest));
-  }
+  const loadableManifestFiles = (await findFiles(distDir, "react-loadable-manifest.json")).filter(
+    (file) => !file.includes(`${path.sep}standalone${path.sep}`),
+  );
+  const removedHintCounts = await mapWithConcurrency(
+    loadableManifestFiles,
+    DEFAULT_IO_CONCURRENCY,
+    async (file) => {
+      const manifest = JSON.parse(await readFile(file, "utf8")) as LoadableManifest;
+      // Hints are removed below, so they count for nothing here.
+      const removed = filterLoadableManifest(manifest, affected);
+      await writeFile(file, JSON.stringify(manifest));
+      return removed;
+    },
+  );
+  const removedLoadableHints = removedHintCounts.reduce((total, count) => total + count, 0);
 
   const serverAppDir = path.join(distDir, "server", "app");
   const manifests = await findFiles(serverAppDir, /_client-reference-manifest\.js$/u);
@@ -6515,10 +6574,18 @@ export async function emitClientCatalogPermutations(
     variants,
     { optionalRootLocale: true },
   );
+  const manifestSources = await mapWithConcurrency(
+    manifests,
+    DEFAULT_IO_CONCURRENCY,
+    async (file) => ({
+      file,
+      source: (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!,
+    }),
+  );
   const turbopackChunkCache: TurbopackChunkModuleCache = new Map();
   const inconclusiveOptionalLocaleRoutes: string[] = [];
-  for (const file of manifests) {
-    const source = (await readFile(file, "utf8")).split(`\n${ADAPTER_MARKER}`)[0]!;
+  const manifestWrites: Array<{ file: string; content: string }> = [];
+  for (const { file, source } of manifestSources) {
     // Next may construct paths from shared prefixes, so inspect the evaluated
     // arrays that the adapter actually replaces, not substrings in source.
     // Evaluate coverage first so server-only routes without affected client
@@ -6579,8 +6646,11 @@ export async function emitClientCatalogPermutations(
       }
     }
     const adapter = optionalRootLocale ? optionalRootLocaleAdapter : standardAdapter;
-    await writeFile(file, `${source}${adapter}`);
+    manifestWrites.push({ file, content: `${source}${adapter}` });
   }
+  await mapWithConcurrency(manifestWrites, DEFAULT_IO_CONCURRENCY, ({ file, content }) =>
+    writeFile(file, content),
+  );
   assertChunkCoverage(affected, covered);
   if (inconclusiveOptionalLocaleRoutes.length > 0) {
     console.warn(

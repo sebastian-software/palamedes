@@ -5,7 +5,9 @@ import path from "node:path";
 import { renderCatalogModule } from "@palamedes/core-node";
 
 import {
+  DEFAULT_IO_CONCURRENCY,
   createCatalogCompiler,
+  mapWithConcurrency,
   readChunks,
   scanMarkers,
   splitRenderedCatalog,
@@ -92,11 +94,31 @@ export async function emitClientCatalogAssets(
   const outputDir = path.join(staticDir, "palamedes");
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
+  const mapNames = compiler.locales.map((locale) => {
+    const mapName = clientCatalogMapName(locale, options.buildToken);
+    if (!mapName) {
+      throw new Error(
+        `Palamedes Next client catalogs: locale "${locale}" cannot name a catalog map. Use letters, digits, "_" and "-" in locale codes.`,
+      );
+    }
+    return [locale, mapName] as const;
+  });
+
+  const compiledLocales = await mapWithConcurrency(
+    mapNames,
+    DEFAULT_IO_CONCURRENCY,
+    async ([locale, mapName]) => ({
+      locale,
+      mapName,
+      compiled: await compiler.compileLocale(locale),
+    }),
+  );
+
+  const writes: Array<{ filePath: string; content: string }> = [];
   // Locale to the file name of its map, for the build checks.
   const maps: Record<string, string> = {};
-  for (const locale of compiler.locales) {
+  for (const { locale, mapName, compiled } of compiledLocales) {
     const assets: Record<string, string[]> = {};
-    const compiled = await compiler.compileLocale(locale);
     for (const keys of groups) {
       const selections = keys.map((key) => compiled.get(key)!);
       const union = mergeSelections(selections);
@@ -107,18 +129,18 @@ export async function emitClientCatalogAssets(
         const asset = bareMessageAsset(renderCatalogModule(messages));
         const hash = createHash("sha256").update(asset).digest("hex").slice(0, 8);
         const fileName = `${name}.${locale}-${hash}.js`;
-        await writeFile(path.join(outputDir, fileName), asset);
+        writes.push({ filePath: path.join(outputDir, fileName), content: asset });
         assets[fileName] = members;
       }
     }
-    const mapName = clientCatalogMapName(locale, options.buildToken);
-    if (!mapName) {
-      throw new Error(
-        `Palamedes Next client catalogs: locale "${locale}" cannot name a catalog map. Use letters, digits, "_" and "-" in locale codes.`,
-      );
-    }
-    await writeFile(path.join(outputDir, mapName), renderCatalogMap(locale, assets));
+    writes.push({
+      filePath: path.join(outputDir, mapName),
+      content: renderCatalogMap(locale, assets),
+    });
     maps[locale] = mapName;
   }
+  await mapWithConcurrency(writes, DEFAULT_IO_CONCURRENCY, ({ filePath, content }) =>
+    writeFile(filePath, content),
+  );
   return maps;
 }

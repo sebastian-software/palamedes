@@ -4,6 +4,7 @@ import { createI18n as createCoreI18n, defineCompiledCatalog } from "@palamedes/
 import { defineLocaleControls } from "@palamedes/core/locale";
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
 import { transformPalamedesMacros } from "@palamedes/transform";
+import { AcceptLanguage } from "remix/headers";
 import { createRouter } from "remix/router";
 
 import { createPalamedesRemixCatalogAssetRegistry } from "./index";
@@ -75,7 +76,7 @@ describe("stable Remix client entries", () => {
     expect(html.match(/nonce="request&quot;nonce"/gu)).toHaveLength(2);
     expect(html).not.toContain("data-palamedes-entry");
     expect(html).not.toContain("data-palamedes-error-html");
-    const response = remixI18n.serveClientCatalogAsset(
+    const response = await remixI18n.serveClientCatalogAsset(
       new Request(`https://example.test${entryUrl}`),
     );
     expect(response?.status).toBe(200);
@@ -105,9 +106,9 @@ describe("stable Remix client entries", () => {
     const src = html.match(/src="([^"]+)"/u)![1];
     expect(src).toMatch(/^\/custom\/assets\/__palamedes\/entry\/[a-f0-9]{64}\.js$/u);
     const request = new Request(`https://example.test${src}`);
-    const expected = await first.serveClientCatalogAsset(request)!.text();
+    const expected = await (await first.serveClientCatalogAsset(request))!.text();
     for (const worker of [cold, createWorker()]) {
-      const response = worker.serveClientCatalogAsset(request)!;
+      const response = (await worker.serveClientCatalogAsset(request))!;
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("application/javascript; charset=utf-8");
       expect(await response.text()).toBe(expected);
@@ -119,8 +120,10 @@ describe("stable Remix client entries", () => {
       decodeEntryData(parseEntryScope(html, src)["@palamedes/remix/entry-data"]!),
     ).toMatchObject({ catalog: "/custom/assets/__palamedes/catalog/" });
     expect(
-      cold.serveClientCatalogAsset(
-        new Request("https://example.test/custom/assets/__palamedes/entry/not-an-entry.js"),
+      (
+        await cold.serveClientCatalogAsset(
+          new Request("https://example.test/custom/assets/__palamedes/entry/not-an-entry.js"),
+        )
       )?.status,
     ).toBe(404);
   });
@@ -158,9 +161,9 @@ describe("stable Remix client entries", () => {
       errorHtml: "Other entry",
     });
     expect(otherHtml.match(/src="([^"]+)"/u)![1]).not.toBe(src);
-    const source = await worker
-      .serveClientCatalogAsset(new Request(`https://example.test${src}`))!
-      .text();
+    const source = await (await worker.serveClientCatalogAsset(
+      new Request(`https://example.test${src}`),
+    ))!.text();
     expect(source).not.toContain(entryUrl);
     expect(source).not.toContain(errorHtml);
   });
@@ -189,9 +192,9 @@ describe("stable Remix client entries", () => {
       });
       const src = html.match(/src="([^"]+)"/u)![1];
       const scopedEntryData = parseEntryScope(html, src)["@palamedes/remix/entry-data"]!;
-      const source = await worker
-        .serveClientCatalogAsset(new Request(`https://example.test${src}`))!
-        .text();
+      const source = await (await worker.serveClientCatalogAsset(
+        new Request(`https://example.test${src}`),
+      ))!.text();
       // Node has no import maps: route both scoped specifiers through test doubles
       // that model the import-map scope this document rendered for the bootstrap.
       const client = `data:text/javascript,${encodeURIComponent("export const startRemixClient = (...args) => globalThis.startTestRemixClient(...args);")}`;
@@ -761,7 +764,7 @@ describe("createRemixI18nServer", () => {
       const request = new Request("https://example.test/assets/__palamedes/catalog/de.js");
 
       vi.stubEnv("NODE_ENV", "production");
-      const prodResponse = remixI18n.serveClientCatalogAsset(request);
+      const prodResponse = await remixI18n.serveClientCatalogAsset(request);
       expect(prodResponse?.status).toBe(500);
       const prodBody = await prodResponse?.text();
       expect(prodBody).toBe("Palamedes Remix executable catalog asset failed.");
@@ -774,7 +777,7 @@ describe("createRemixI18nServer", () => {
 
       errorSpy.mockClear();
       vi.stubEnv("NODE_ENV", "development");
-      const devResponse = remixI18n.serveClientCatalogAsset(request);
+      const devResponse = await remixI18n.serveClientCatalogAsset(request);
       expect(devResponse?.status).toBe(500);
       expect(await devResponse?.text()).toContain("/srv/secret-app/locales/de.po");
       expect(errorSpy).toHaveBeenCalledTimes(1);
@@ -886,7 +889,7 @@ describe("createRemixI18nServer", () => {
     expect(await response.text()).toBe("es:hello:es");
   });
 
-  it("serves only the requested locale as an executable catalog module", () => {
+  it("serves only the requested locale as an executable catalog module", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-catalog-"));
     const localePath = path.join(root, "de.po");
     writeFileSync(
@@ -915,33 +918,94 @@ describe("createRemixI18nServer", () => {
       expect(asset.source).toContain('export const locale="de"');
       expect(asset.source).not.toContain("msgid");
       expect(remixI18n.renderClientCatalog("de")).toContain("/assets/__palamedes/catalog/de.js");
-      const response = remixI18n.serveClientCatalogAsset(
+      const response = await remixI18n.serveClientCatalogAsset(
         new Request("https://example.test/assets/__palamedes/catalog/de.js"),
       );
       expect(response?.status).toBe(200);
       expect(response?.headers.get("content-type")).toContain("javascript");
-      const cached = remixI18n.serveClientCatalogAsset(
+      const cached = await remixI18n.serveClientCatalogAsset(
         new Request("https://example.test/assets/__palamedes/catalog/de.js", {
           headers: { "if-none-match": response?.headers.get("etag") ?? "" },
         }),
       );
       expect(cached?.status).toBe(304);
       expect(
-        remixI18n.serveClientCatalogAsset(
-          new Request("https://example.test/assets/__palamedes/catalog/fr.js"),
+        (
+          await remixI18n.serveClientCatalogAsset(
+            new Request("https://example.test/assets/__palamedes/catalog/fr.js"),
+          )
         )?.status,
       ).toBe(404);
       expect(
-        remixI18n.serveClientCatalogAsset(
-          new Request("https://example.test/assets/__palamedes/catalog/%E0%A4%A.js"),
+        (
+          await remixI18n.serveClientCatalogAsset(
+            new Request("https://example.test/assets/__palamedes/catalog/%E0%A4%A.js"),
+          )
         )?.status,
       ).toBe(400);
       expect(
-        remixI18n.serveClientCatalogAsset(
-          new Request("https://example.test/assets/__palamedes/catalog/%ZZ.js"),
+        (
+          await remixI18n.serveClientCatalogAsset(
+            new Request("https://example.test/assets/__palamedes/catalog/%ZZ.js"),
+          )
         )?.status,
       ).toBe(400);
     } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("compiles cold client catalog assets asynchronously with in-flight deduplication and retry after failure", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-async-catalog-"));
+    const localePath = path.join(root, "de.po");
+    writeFileSync(
+      path.join(root, "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "greeting"\nmsgstr "Hello"\n',
+    );
+    writeFileSync(localePath, 'msgid ""\nmsgstr ""\n\nmsgid "greeting"\nmsgstr "Hallo"\n');
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      let shouldFail = true;
+      const resolvePath = vi.fn(() => {
+        if (shouldFail) {
+          throw new Error("temporary failure");
+        }
+        return localePath;
+      });
+      const remixI18n = createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({ greeting: "Hallo" }),
+        catalogAssets: {
+          config: {
+            rootDir: root,
+            locales: ["en", "de", "es"],
+            sourceLocale: "en",
+            catalogs: [{ path: "{locale}", include: ["."] }],
+          },
+          resolvePath,
+        },
+      });
+      const makeRequest = () =>
+        new Request("https://example.test/assets/__palamedes/catalog/de.js");
+
+      const failed = await remixI18n.serveClientCatalogAsset(makeRequest());
+      expect(failed?.status).toBe(500);
+      expect(resolvePath).toHaveBeenCalledTimes(1);
+
+      shouldFail = false;
+      resolvePath.mockClear();
+      const firstPending = remixI18n.serveClientCatalogAsset(makeRequest());
+      const secondPending = remixI18n.serveClientCatalogAsset(makeRequest());
+      expect(firstPending).toBeInstanceOf(Promise);
+      expect(secondPending).toBeInstanceOf(Promise);
+      const [first, second] = await Promise.all([firstPending, secondPending]);
+      expect(first?.status).toBe(200);
+      expect(second?.status).toBe(200);
+      expect(await first?.text()).toBe(await second?.text());
+      expect(resolvePath).toHaveBeenCalledTimes(1);
+    } finally {
+      errorSpy.mockRestore();
       rmSync(root, { force: true, recursive: true });
     }
   });
@@ -1055,6 +1119,37 @@ describe("createRemixI18nServer", () => {
         }),
       ),
     ).toStrictEqual({ locale: "en", source: "default" });
+  });
+
+  it("skips Accept-Language parsing when a higher-priority strategy resolves the locale", () => {
+    const acceptLanguageSpy = vi.spyOn(AcceptLanguage, "from");
+    try {
+      const remixI18n = createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({}),
+      });
+
+      expect(
+        remixI18n.resolveLocale(
+          new Request("https://example.test/", {
+            headers: { cookie: "locale=es", "accept-language": "de-DE,de;q=0.9,en;q=0.8" },
+          }),
+        ),
+      ).toStrictEqual({ locale: "es", source: "cookie" });
+      expect(acceptLanguageSpy).not.toHaveBeenCalled();
+
+      expect(
+        remixI18n.resolveLocale(
+          new Request("https://example.test/", {
+            headers: { "accept-language": "de-DE,de;q=0.9,en;q=0.8" },
+          }),
+        ),
+      ).toStrictEqual({ locale: "de", source: "accept-language" });
+      expect(acceptLanguageSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      acceptLanguageSpy.mockRestore();
+    }
   });
 });
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

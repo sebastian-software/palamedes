@@ -32,7 +32,7 @@ import {
 import { isCompiledCatalog, type CompiledCatalogMessages } from "@palamedes/core/compiled";
 import {
   assertNoRemovedPalamedesOptions,
-  compileCatalogArtifactSelected,
+  compileCatalogArtifactSelectedAsync,
   compileCatalogModule,
   compileCatalogModuleAsync,
   renderCatalogModule,
@@ -113,7 +113,7 @@ export type PalamedesRemixCatalogAssetRegistry = {
   /** Return the current config/catalog generation for HTTP cache keys. */
   generation?(): string;
   sidecarUrl(key: string): string;
-  serve(request: Request): Response | undefined;
+  serve(request: Request): Response | Promise<Response> | undefined;
   invalidate(sourcePath?: string): void;
   /** Close development file watchers when the host shuts down. */
   close?(): void;
@@ -168,6 +168,8 @@ export function createPalamedesRemixCatalogAssetRegistry(
   let refreshQueued = false;
   const warnedConflicts = new Set<string>();
   const fragmentAssets = new Map<string, { source: string; etag: string }>();
+  const fragmentInFlight = new Map<string, Promise<{ source: string; etag: string }>>();
+  let fragmentEpoch = 0;
   const entries = new Map<string, CatalogFragmentEntry>();
   const keysBySource = new Map<string, string>();
   // Cold lookups by canonical source path; null records a failed transform.
@@ -215,8 +217,10 @@ export function createPalamedesRemixCatalogAssetRegistry(
     config = nextConfig;
     configDigest = nextDigest;
     catalogGenerationDigest = catalogDigest(config);
+    fragmentEpoch += 1;
     serverCatalogStore.invalidate();
     fragmentAssets.clear();
+    fragmentInFlight.clear();
     warnedConflicts.clear();
     entries.clear();
     keysBySource.clear();
@@ -229,8 +233,10 @@ export function createPalamedesRemixCatalogAssetRegistry(
       return;
     }
     catalogGenerationDigest = nextDigest;
+    fragmentEpoch += 1;
     serverCatalogStore.invalidate();
     fragmentAssets.clear();
+    fragmentInFlight.clear();
     warnedConflicts.clear();
   };
 
@@ -278,6 +284,8 @@ export function createPalamedesRemixCatalogAssetRegistry(
       entries.delete(previousKey);
       for (const assetKey of fragmentAssets.keys())
         if (assetKey.startsWith(`${previousKey}:`)) fragmentAssets.delete(assetKey);
+      for (const assetKey of fragmentInFlight.keys())
+        if (assetKey.startsWith(`${previousKey}:`)) fragmentInFlight.delete(assetKey);
     }
     coldSelections.delete(entry.sourcePath);
     keysBySource.set(entry.sourcePath, key);
@@ -480,64 +488,89 @@ export function createPalamedesRemixCatalogAssetRegistry(
       const cached = fragmentAssets.get(cacheKey);
       if (cached) return serveFragment(cached, request);
 
-      try {
-        const catalogs = config.catalogs.filter((candidate) =>
-          catalogMatchesSource(config, candidate, entry.sourcePath),
-        );
-        if (catalogs.length === 0) {
-          const diagnostic = `Palamedes source module "${entry.sourcePath}" is not included in a configured catalog.`;
-          console.error(diagnostic);
-          return new Response(
-            process.env.NODE_ENV === "development"
-              ? diagnostic
-              : "Palamedes catalog fragment is unavailable.",
-            { status: 500 },
-          );
-        }
-        const messages = Object.create(null);
-        for (const catalog of catalogs) {
-          const result = compileCatalogArtifactSelected(
-            {
-              rootDir: config.rootDir,
-              locales: config.locales,
-              sourceLocale: config.sourceLocale,
-              fallbackLocales: config.fallbackLocales,
-              pseudoLocale: config.pseudoLocale,
-              catalogs: [catalog],
-            },
-            catalogResourcePath(config, catalog, locale),
-            entry.compiledIds,
-          );
-          for (const [id, message] of Object.entries(result.messages)) {
-            if (Object.hasOwn(messages, id) && messages[id] !== message) {
-              const conflict = `${locale}\0${id}`;
-              if (!warnedConflicts.has(conflict)) {
-                warnedConflicts.add(conflict);
-                console.warn(
-                  `Palamedes compiled message ID "${id}" has different ${locale} values in more than one Remix catalog; the last catalog wins. ` +
-                    "Give the messages distinct contexts or make the catalogs agree.",
-                );
-              }
-            }
-            messages[id] = message;
-          }
-        }
-        const source = `${stripCatalogBranding(renderCatalogModule(messages))}export const locale=${JSON.stringify(locale)};`;
-        const etag = `"${createHash("sha256").update(source).digest("hex")}"`;
-        const asset = { source, etag };
-        fragmentAssets.set(cacheKey, asset);
-        return serveFragment(asset, request);
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        const diagnostic = `Palamedes catalog fragment failed for "${entry.sourcePath}" (${locale}): ${detail}`;
-        console.error(diagnostic, error);
+      const activeConfig = config;
+      const catalogs = activeConfig.catalogs.filter((candidate) =>
+        catalogMatchesSource(activeConfig, candidate, entry.sourcePath),
+      );
+      if (catalogs.length === 0) {
+        const diagnostic = `Palamedes source module "${entry.sourcePath}" is not included in a configured catalog.`;
+        console.error(diagnostic);
         return new Response(
           process.env.NODE_ENV === "development"
             ? diagnostic
-            : "Palamedes catalog fragment failed.",
+            : "Palamedes catalog fragment is unavailable.",
           { status: 500 },
         );
       }
+
+      let pending = fragmentInFlight.get(cacheKey);
+      if (!pending) {
+        const epoch = fragmentEpoch;
+        const compilePromise = (async () => {
+          const compiledCatalogs = await Promise.all(
+            catalogs.map((catalog) =>
+              compileCatalogArtifactSelectedAsync(
+                {
+                  rootDir: activeConfig.rootDir,
+                  locales: activeConfig.locales,
+                  sourceLocale: activeConfig.sourceLocale,
+                  fallbackLocales: activeConfig.fallbackLocales,
+                  pseudoLocale: activeConfig.pseudoLocale,
+                  catalogs: [catalog],
+                },
+                catalogResourcePath(activeConfig, catalog, locale),
+                entry.compiledIds,
+              ),
+            ),
+          );
+          const messages: Record<string, string> = Object.create(null);
+          for (const result of compiledCatalogs) {
+            for (const [id, message] of Object.entries(result.messages)) {
+              if (Object.hasOwn(messages, id) && messages[id] !== message) {
+                const conflict = `${locale}\0${id}`;
+                if (epoch === fragmentEpoch && !warnedConflicts.has(conflict)) {
+                  warnedConflicts.add(conflict);
+                  console.warn(
+                    `Palamedes compiled message ID "${id}" has different ${locale} values in more than one Remix catalog; the last catalog wins. ` +
+                      "Give the messages distinct contexts or make the catalogs agree.",
+                  );
+                }
+              }
+              messages[id] = message;
+            }
+          }
+          const source = `${stripCatalogBranding(renderCatalogModule(messages))}export const locale=${JSON.stringify(locale)};`;
+          const etag = `"${createHash("sha256").update(source).digest("hex")}"`;
+          const asset = { source, etag };
+          if (epoch === fragmentEpoch && entries.get(key) === entry) {
+            fragmentAssets.set(cacheKey, asset);
+          }
+          return asset;
+        })();
+        pending = compilePromise;
+        fragmentInFlight.set(cacheKey, compilePromise);
+        const cleanup = (): void => {
+          if (fragmentInFlight.get(cacheKey) === compilePromise) {
+            fragmentInFlight.delete(cacheKey);
+          }
+        };
+        compilePromise.then(cleanup, cleanup);
+      }
+
+      return pending.then(
+        (asset) => serveFragment(asset, request),
+        (error) => {
+          const detail = error instanceof Error ? error.message : String(error);
+          const diagnostic = `Palamedes catalog fragment failed for "${entry.sourcePath}" (${locale}): ${detail}`;
+          console.error(diagnostic, error);
+          return new Response(
+            process.env.NODE_ENV === "development"
+              ? diagnostic
+              : "Palamedes catalog fragment failed.",
+            { status: 500 },
+          );
+        },
+      );
     },
 
     close() {
@@ -551,8 +584,10 @@ export function createPalamedesRemixCatalogAssetRegistry(
       refreshFailure = undefined;
       watchInputs();
       if (sourcePath === undefined) {
+        fragmentEpoch += 1;
         serverCatalogStore.invalidate();
         fragmentAssets.clear();
+        fragmentInFlight.clear();
         warnedConflicts.clear();
         entries.clear();
         keysBySource.clear();
@@ -566,6 +601,8 @@ export function createPalamedesRemixCatalogAssetRegistry(
           keysBySource.delete(source);
           for (const assetKey of fragmentAssets.keys())
             if (assetKey.startsWith(`${key}:`)) fragmentAssets.delete(assetKey);
+          for (const assetKey of fragmentInFlight.keys())
+            if (assetKey.startsWith(`${key}:`)) fragmentInFlight.delete(assetKey);
         }
       }
     },
@@ -775,6 +812,15 @@ function evictIdleServerModuleWrites(): void {
   }
 }
 
+let cachedCompiledCoreModuleUrl: string | undefined;
+
+function getCompiledCoreModuleUrl(): string {
+  cachedCompiledCoreModuleUrl ??= pathToFileURL(
+    createRequire(import.meta.url).resolve("@palamedes/core/compiled"),
+  ).href;
+  return cachedCompiledCoreModuleUrl;
+}
+
 function createServerCatalogModuleLoader(): {
   importModule(source: string): Promise<CompiledCatalogMessages>;
   close(): void;
@@ -792,7 +838,7 @@ function createServerCatalogModuleLoader(): {
 
       const code = source.replace(
         'from"@palamedes/core/compiled"',
-        `from${JSON.stringify(pathToFileURL(createRequire(import.meta.url).resolve("@palamedes/core/compiled")).href)}`,
+        `from${JSON.stringify(getCompiledCoreModuleUrl())}`,
       );
       const digest = createHash("sha256").update(code).digest("hex");
       let entry = serverModuleWrites.get(digest);

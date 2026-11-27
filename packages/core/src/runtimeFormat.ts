@@ -49,7 +49,7 @@ export function formatMessageArgument(
 
 export function formatNumberValue(
   value: unknown,
-  options: Intl.NumberFormatOptions = {},
+  options?: Intl.NumberFormatOptions,
   locale?: string,
 ): string {
   const numericValue = normalizeFormattedNumberValue(value);
@@ -61,7 +61,7 @@ export function formatNumberValue(
 
 export function formatDateValue(
   value: unknown,
-  options: Intl.DateTimeFormatOptions = {},
+  options?: Intl.DateTimeFormatOptions,
   locale?: string,
   timeZone?: string,
 ): string {
@@ -70,19 +70,22 @@ export function formatDateValue(
     throw new TypeError("Expected a valid date value for a date/time formatter.");
   }
 
-  return getDateTimeFormatter(locale, options, {
-    timeZone: isDateOnlyIsoString(value) ? "UTC" : (options.timeZone ?? timeZone),
-  }).format(dateValue);
+  const resolvedTimeZone = isDateOnlyIsoString(value) ? "UTC" : (options?.timeZone ?? timeZone);
+  return getDateTimeFormatter(
+    locale,
+    options,
+    resolvedTimeZone === undefined ? undefined : { timeZone: resolvedTimeZone },
+  ).format(dateValue);
 }
 
 function isDateOnlyIsoString(value: unknown): value is string {
   return typeof value === "string" && DATE_ONLY_ISO_PATTERN.test(value);
 }
 
-function parseNumberFormatOptions(style: string | undefined): Intl.NumberFormatOptions {
+function parseNumberFormatOptions(style: string | undefined): Intl.NumberFormatOptions | undefined {
   const normalized = style?.trim();
   if (!normalized) {
-    return {};
+    return undefined;
   }
 
   const skeleton = normalized.startsWith("::") ? normalized.slice(2) : normalized;
@@ -191,7 +194,10 @@ export function replacePoundPlaceholders(
   numericValue: number,
   locale?: string,
 ): string {
-  return value.replaceAll("#", getNumberFormatter(locale, {}).format(numericValue));
+  if (!value.includes("#")) {
+    return value;
+  }
+  return value.replaceAll("#", getNumberFormatter(locale, undefined).format(numericValue));
 }
 
 export function stringifyValue(value: unknown): string {

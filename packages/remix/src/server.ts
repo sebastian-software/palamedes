@@ -9,7 +9,11 @@ import {
   type PalamedesI18n,
 } from "@palamedes/core";
 import type { LocaleControls, LocaleSource } from "@palamedes/core/locale";
-import { compileCatalogModule, type CatalogArtifactConfig } from "@palamedes/core-node";
+import {
+  compileCatalogModule,
+  compileCatalogModuleAsync,
+  type CatalogArtifactConfig,
+} from "@palamedes/core-node";
 import type { I18nInstance } from "@palamedes/runtime";
 import {
   createScopedI18nRunner,
@@ -161,7 +165,7 @@ export type RemixI18nServer<TLocale extends string> = {
   renderClientCatalog(locale: TLocale, options?: { basePath?: string }): string;
   /** Render the stable Remix import map and external adapter bootstrap for an entry file. */
   renderClientEntry(entryPath: string, options: RemixClientEntryOptions): Promise<string>;
-  serveClientCatalogAsset(request: Request): Response | undefined;
+  serveClientCatalogAsset(request: Request): Response | Promise<Response> | undefined;
   serializeLocaleCookie(locale: TLocale, options?: { secure?: boolean }): string;
 };
 
@@ -229,6 +233,17 @@ const COOKIE_VALUE_PATTERN = /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/;
 const MAX_ACCEPT_LANGUAGE_LENGTH = 2048;
 const MAX_ACCEPT_LANGUAGE_ENTRIES = 32;
 
+let resolvedRemixClientPath: string | undefined;
+
+function getRemixClientModulePath(): string {
+  // Node's require resolver selects our CJS export, but browser assets must use
+  // the ESM sibling emitted by the same package build (including from CJS hosts).
+  resolvedRemixClientPath ??= createRequire(import.meta.url)
+    .resolve("@palamedes/remix/client")
+    .replace(/\.cjs$/u, ".mjs");
+  return resolvedRemixClientPath;
+}
+
 export function createRemixI18nRequestScope<T extends I18nInstance = I18nInstance>(
   resolveI18n: RemixI18nResolver<T>,
   options: RemixI18nRequestScopeOptions = {},
@@ -266,6 +281,11 @@ export function createRemixI18nServer<TLocale extends string>(
   const failureMessage = options.failureMessage ?? DEFAULT_FAILURE_MESSAGE;
   const scope = createServerI18nScope<PalamedesI18n>();
   const clientCatalogAssetCache = new Map<TLocale, CachedRemixClientCatalogAsset<TLocale>>();
+  const clientCatalogAssetInFlight = new Map<
+    TLocale,
+    Promise<CachedRemixClientCatalogAsset<TLocale>>
+  >();
+  let clientCatalogAssetEpoch = 0;
   const scopedContexts = new WeakMap<
     PalamedesI18n,
     RemixI18nContextValue<TLocale, PalamedesI18n>
@@ -311,8 +331,10 @@ export function createRemixI18nServer<TLocale extends string>(
       return;
     }
     serverRegistryGeneration = next;
+    clientCatalogAssetEpoch += 1;
     serverCatalogStore.invalidate();
     clientCatalogAssetCache.clear();
+    clientCatalogAssetInFlight.clear();
   };
 
   const getMessages = async (locale: TLocale): Promise<CompiledCatalogMessages> => {
@@ -346,14 +368,7 @@ export function createRemixI18nServer<TLocale extends string>(
     }
   };
 
-  const createClientCatalogAsset = (locale: TLocale): RemixClientCatalogAsset<TLocale> => {
-    refreshRegistryGeneration();
-    const registryGeneration = options.catalogAssets?.registry?.generation?.();
-    const cached = clientCatalogAssetCache.get(locale);
-    if (cached && cached.registryGeneration === registryGeneration) {
-      return cached;
-    }
-
+  const validateCatalogAssetOptions = (): RemixCatalogAssetOptions<TLocale> => {
     const assetOptions = options.catalogAssets;
     if (!assetOptions) {
       throw new Error(
@@ -366,6 +381,35 @@ export function createRemixI18nServer<TLocale extends string>(
         "Palamedes Remix executable catalog assets require catalogAssets.config and catalogAssets.resolvePath, or a shared catalogAssets.registry.",
       );
     }
+    return assetOptions;
+  };
+
+  const buildClientCatalogAsset = (
+    locale: TLocale,
+    registryGeneration: string | undefined,
+    compiledCode: string | undefined,
+    isRegistry: boolean,
+  ): CachedRemixClientCatalogAsset<TLocale> => {
+    const catalogVersion = resolveCatalogAssetVersion(
+      locale,
+      compiledCode ?? `fragment-registry:${registryGeneration ?? ""}`,
+      options.catalogVersion,
+    );
+    const source = isRegistry
+      ? `export const messages={};export default { messages };export const fragmentRegistry=true;export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`
+      : `${compiledCode ?? ""}export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`;
+    return Object.freeze({ locale, catalogVersion, source, registryGeneration });
+  };
+
+  const createClientCatalogAsset = (locale: TLocale): RemixClientCatalogAsset<TLocale> => {
+    refreshRegistryGeneration();
+    const registryGeneration = options.catalogAssets?.registry?.generation?.();
+    const cached = clientCatalogAssetCache.get(locale);
+    if (cached && cached.registryGeneration === registryGeneration) {
+      return cached;
+    }
+
+    const assetOptions = validateCatalogAssetOptions();
     const resourcePath = assetOptions.resolvePath?.(locale);
     const result = assetOptions.registry
       ? undefined
@@ -380,17 +424,73 @@ export function createRemixI18nServer<TLocale extends string>(
             "Inspect the generated Remix catalog asset diagnostics before deploying this locale.",
         });
     result?.warnings.forEach((warning) => console.warn(warning));
-    const catalogVersion = resolveCatalogAssetVersion(
+    const asset = buildClientCatalogAsset(
       locale,
-      result?.code ?? `fragment-registry:${registryGeneration ?? ""}`,
-      options.catalogVersion,
+      registryGeneration,
+      result?.code,
+      Boolean(assetOptions.registry),
     );
-    const source = assetOptions.registry
-      ? `export const messages={};export default { messages };export const fragmentRegistry=true;export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`
-      : `${result?.code ?? ""}export const locale=${JSON.stringify(locale)};export const catalogVersion=${JSON.stringify(catalogVersion)};`;
-    const asset = Object.freeze({ locale, catalogVersion, source, registryGeneration });
     clientCatalogAssetCache.set(locale, asset);
     return asset;
+  };
+
+  const getOrCompileClientCatalogAssetAsync = (
+    locale: TLocale,
+  ): CachedRemixClientCatalogAsset<TLocale> | Promise<CachedRemixClientCatalogAsset<TLocale>> => {
+    refreshRegistryGeneration();
+    const registryGeneration = options.catalogAssets?.registry?.generation?.();
+    const cached = clientCatalogAssetCache.get(locale);
+    if (cached && cached.registryGeneration === registryGeneration) {
+      return cached;
+    }
+
+    const assetOptions = validateCatalogAssetOptions();
+    if (assetOptions.registry) {
+      const asset = buildClientCatalogAsset(locale, registryGeneration, undefined, true);
+      clientCatalogAssetCache.set(locale, asset);
+      return asset;
+    }
+
+    const inFlight = clientCatalogAssetInFlight.get(locale);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const epoch = clientCatalogAssetEpoch;
+    const config = assetOptions.config!;
+    const resolvePath = assetOptions.resolvePath!;
+    const compilePromise = (async () => {
+      const resourcePath = resolvePath(locale);
+      const result = await compileCatalogModuleAsync(
+        toCatalogArtifactConfig(config),
+        resourcePath,
+        {
+          locale,
+          pseudoLocale: config.pseudoLocale,
+          missingFailureHint:
+            "You see this error because executable Remix catalog asset compilation failed on a missing translation.",
+          compileFailureHint:
+            "These errors fail loading because executable Remix catalog asset compilation was configured as fatal.",
+          diagnosticsWarningHint:
+            "Inspect the generated Remix catalog asset diagnostics before deploying this locale.",
+        },
+      );
+      result.warnings.forEach((warning) => console.warn(warning));
+      const asset = buildClientCatalogAsset(locale, registryGeneration, result.code, false);
+      if (epoch === clientCatalogAssetEpoch) {
+        clientCatalogAssetCache.set(locale, asset);
+      }
+      return asset;
+    })();
+
+    clientCatalogAssetInFlight.set(locale, compilePromise);
+    const cleanup = (): void => {
+      if (clientCatalogAssetInFlight.get(locale) === compilePromise) {
+        clientCatalogAssetInFlight.delete(locale);
+      }
+    };
+    compilePromise.then(cleanup, cleanup);
+    return compilePromise;
   };
 
   const renderClientCatalog = (locale: TLocale, renderOptions: { basePath?: string } = {}) => {
@@ -404,11 +504,7 @@ export function createRemixI18nServer<TLocale extends string>(
     entryOptions: RemixClientEntryOptions,
   ): Promise<string> => {
     const basePath = options.catalogAssets?.basePath ?? "/assets";
-    // Node's require resolver selects our CJS export, but browser assets must use
-    // the ESM sibling emitted by the same package build (including from CJS hosts).
-    const clientPath = createRequire(import.meta.url)
-      .resolve("@palamedes/remix/client")
-      .replace(/\.cjs$/u, ".mjs");
+    const clientPath = getRemixClientModulePath();
     const [entryUrl, clientUrl, importMap] = await Promise.all([
       entryOptions.assetServer.getHref(entryPath),
       entryOptions.assetServer.getHref(clientPath),
@@ -438,7 +534,7 @@ export function createRemixI18nServer<TLocale extends string>(
     return `<script type="importmap"${nonce}>${serializedImportMap}</script><script type="module" src="${escapeHtmlAttribute(src)}"${nonce}></script>`;
   };
 
-  const serveClientCatalogAsset = (request: Request): Response | undefined => {
+  const serveClientCatalogAsset = (request: Request): Response | Promise<Response> | undefined => {
     const basePath = options.catalogAssets?.basePath ?? "/assets";
     const pathname = new URL(request.url).pathname;
     const entryPrefix = `${basePath.replace(/\/$/u, "")}/__palamedes/entry/`;
@@ -467,8 +563,7 @@ export function createRemixI18nServer<TLocale extends string>(
     if (!options.locales.locales.includes(locale)) {
       return new Response(`Unknown Palamedes locale "${locale}".`, { status: 404 });
     }
-    try {
-      const asset = createClientCatalogAsset(locale);
+    const formatAssetResponse = (asset: RemixClientCatalogAsset<TLocale>): Response => {
       const etag = `"${asset.catalogVersion}"`;
       if (request.headers.get("if-none-match") === etag) {
         return new Response(null, {
@@ -484,7 +579,8 @@ export function createRemixI18nServer<TLocale extends string>(
           vary: "Accept-Encoding",
         },
       });
-    } catch (error) {
+    };
+    const formatAssetError = (error: unknown): Response => {
       const detail = error instanceof Error ? error.message : String(error);
       const diagnostic = `Palamedes Remix executable catalog asset failed for locale "${locale}": ${detail}`;
       console.error(diagnostic, error);
@@ -494,6 +590,15 @@ export function createRemixI18nServer<TLocale extends string>(
           : "Palamedes Remix executable catalog asset failed.",
         { status: 500 },
       );
+    };
+    try {
+      const assetOrPromise = getOrCompileClientCatalogAssetAsync(locale);
+      if (assetOrPromise instanceof Promise) {
+        return assetOrPromise.then(formatAssetResponse, formatAssetError);
+      }
+      return formatAssetResponse(assetOrPromise);
+    } catch (error) {
+      return formatAssetError(error);
     }
   };
 
@@ -657,15 +762,31 @@ function resolveLocaleFromInput<TLocale extends string>(
 ): RemixResolvedLocale<TLocale> {
   const normalized = normalizeInput(input);
   const headers = normalized.headers ?? normalized.request.headers;
-  const acceptLanguageHeader = normalizeAcceptLanguageHeader(headers.get("accept-language"));
-  const url = new URL(normalized.request.url);
+  let acceptLanguageResolved = false;
+  let acceptLanguageHeader: string | null = null;
+  let routeLocaleResolved = false;
+  let routeLocale: string | null = null;
 
   return options.locales.resolve({
     strategy: options.strategy,
-    acceptLanguageHeader,
+    get acceptLanguageHeader() {
+      if (!acceptLanguageResolved) {
+        acceptLanguageResolved = true;
+        acceptLanguageHeader = normalizeAcceptLanguageHeader(headers.get("accept-language"));
+      }
+      return acceptLanguageHeader;
+    },
     cookieHeader: headers.get("cookie"),
     requestHost: headers.get("host"),
-    routeLocale: normalized.params?.[options.routeParam ?? "locale"] ?? firstPathSegment(url),
+    get routeLocale() {
+      if (!routeLocaleResolved) {
+        routeLocaleResolved = true;
+        routeLocale =
+          normalized.params?.[options.routeParam ?? "locale"] ??
+          firstPathSegment(new URL(normalized.request.url));
+      }
+      return routeLocale;
+    },
   });
 }
 

@@ -67,4 +67,32 @@ describe("Intl options cache", () => {
     expect(get("en", { dateStyle: "medium", timeZone: "UTC" })).toBe(retained);
     expect(create).toHaveBeenCalledTimes(3);
   });
+
+  it("fast-paths empty options to the shared default entry without skipping inherited or non-enumerable keys", () => {
+    const create = vi.fn(
+      (locale, options: Intl.NumberFormatOptions) => new Intl.NumberFormat(locale, options),
+    );
+    const get = createIntlFormatterCache(create, NUMBER_FORMAT_KEYS);
+    const stringifySpy = vi.spyOn(JSON, "stringify");
+    try {
+      const fromUndefined = get("en", undefined);
+      const fromEmpty = get("en", {});
+      const fromNullProto = get("en", Object.create(null) as Intl.NumberFormatOptions);
+      expect(fromEmpty).toBe(fromUndefined);
+      expect(fromNullProto).toBe(fromUndefined);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(stringifySpy).not.toHaveBeenCalled();
+
+      const inherited = Object.create({ style: "percent" }) as Intl.NumberFormatOptions;
+      expect(get("en", inherited).format(0.5)).toBe("50%");
+
+      const nonEnumerable = {} as Intl.NumberFormatOptions;
+      Object.defineProperty(nonEnumerable, "style", { value: "percent", enumerable: false });
+      expect(get("en", nonEnumerable).format(0.5)).toBe("50%");
+
+      expect(get("en", undefined, { maximumFractionDigits: 0 }).format(12.7)).toBe("13");
+    } finally {
+      stringifySpy.mockRestore();
+    }
+  });
 });
