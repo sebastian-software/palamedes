@@ -1,0 +1,36 @@
+0msgid ""
+msgstr ""
+"Language: en\n"
+
+msgid "Hello"
+msgstr "Hello"
+
+msgid "Draft"
+msgstr "Draft"
+
+msgid "{count, plural, =0 {No files} one {# file} other {# files}}"
+msgstr "{count, plural, =0 {No files} one {# file} other {# files}}"
+
+msgid "Read <0>the docs</0> for {name}"
+msgstr "Read <0>the docs</0> for {name}"
+---
+msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "Hello"
+msgstr "Hallo"
+
+#, fuzzy
+msgid "Draft"
+msgstr "Entwurf"
+
+msgid "{count, plural, =0 {No files} one {# file} other {# files}}"
+msgstr "{count, plural, =0 {Keine Dateien} one {# Datei} other {# Dateien}}"
+---
+msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "Hello"
+msgstr "Servus"

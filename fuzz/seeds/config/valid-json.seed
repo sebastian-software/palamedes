@@ -1,0 +1,13 @@
+1
+{
+  "locales": ["en", "de", "de-AT", "fr"],
+  "source-locale": "en",
+  "fallback-locales": { "de-AT": ["de", "en"] },
+  "catalogs": [
+    {
+      "path": "src/locales/{locale}",
+      "format": "fcl",
+      "include": ["src"]
+    }
+  ]
+}

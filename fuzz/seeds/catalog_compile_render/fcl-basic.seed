@@ -1,0 +1,12 @@
+1%FCL1	source=en	locale=de
+Hello		Hallo
+Removed		Alt
+{count, plural, one {# file} other {# files}}		{count, plural, one {# Datei} other {# Dateien}}
+---
+%FCL1	source=en	locale=de
+Hello		Hallo Welt
+New ours		Unser
+---
+%FCL1	source=en	locale=de
+Hello		Servus
+New theirs		Ihr

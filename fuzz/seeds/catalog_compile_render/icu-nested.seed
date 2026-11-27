@@ -1,0 +1,3 @@
+2{gender, select, female {{count, plural, offset:1 =0 {No one} one {She and # other} other {She and # others}}} other {{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} <0>it''s '{literal}'</0>}}
+m1={amount, number, percent}
+m2={when, date, short} {when, time, medium}

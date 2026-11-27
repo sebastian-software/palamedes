@@ -1,0 +1,8 @@
+<script setup lang="ts">
+import { t, plural } from "@palamedes/core/macro";
+const greeting = t`Hello ${name}`;
+const countText = plural(count, { one: "# item", other: "# items" });
+</script>
+<template>
+  <div :[attr]="greeting" data-weird="][">{{ countText }}</div>
+</template>

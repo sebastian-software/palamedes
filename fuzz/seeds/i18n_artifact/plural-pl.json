@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "fingerprint": "fuzz-plural",
+  "locale": "pl",
+  "messages": {
+    "p": {
+      "kind": "program",
+      "value": [
+        {
+          "op": "plural",
+          "name": "count",
+          "kind": "ordinal",
+          "offset": 1,
+          "options": {
+            "=1.0": [{ "op": "text", "value": "exact one" }],
+            "one": [{ "op": "pound" }, { "op": "text", "value": "st" }],
+            "few": [{ "op": "pound" }, { "op": "text", "value": " few" }],
+            "many": [{ "op": "pound" }, { "op": "text", "value": " many" }],
+            "other": [{ "op": "pound" }, { "op": "text", "value": "th" }]
+          }
+        }
+      ]
+    }
+  }
+}

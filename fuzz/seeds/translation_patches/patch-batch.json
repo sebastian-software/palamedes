@@ -1,0 +1,45 @@
+{
+  "config": {
+    "rootDir": ".",
+    "locales": ["en", "de"],
+    "sourceLocale": "en",
+    "catalogs": [
+      {
+        "path": "locales/{locale}",
+        "format": "po"
+      }
+    ]
+  },
+  "patches": [
+    {
+      "id": {
+        "catalog": "locales/{locale}",
+        "locale": "de",
+        "message": "Hello {name}"
+      },
+      "fingerprint": "fp-1",
+      "translation": {
+        "kind": "singular",
+        "value": " Hallo {name} #@ ferrocat-mt model=test"
+      }
+    },
+    {
+      "id": {
+        "catalog": "locales/{locale}",
+        "locale": "de",
+        "message": "{count, plural, one {# item} other {# items}}"
+      },
+      "fingerprint": "fp-2",
+      "translation": {
+        "kind": "plural",
+        "variable": "count",
+        "plural_kind": "cardinal",
+        "offset": 0,
+        "values": {
+          "one": "# Eintrag",
+          "other": "# Einträge"
+        }
+      }
+    }
+  ]
+}
