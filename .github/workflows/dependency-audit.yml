@@ -8,9 +8,10 @@ on:
     - cron: "23 6 * * 1"
   workflow_dispatch:
 
+# The audit job installs npm dependencies and compiles cargo-audit, so it stays
+# read-only; only the downstream reporting job opts into `issues: write`.
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: dependency-audit-${{ github.ref }}
@@ -24,6 +25,10 @@ jobs:
     name: audit
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      npm_audit_outcome: ${{ steps.npm-audit.outcome }}
+      cargo_audit_outcome: ${{ steps.cargo-audit.outcome }}
+      upload_report_outcome: ${{ steps.upload-report.outcome }}
 
     steps:
       - name: Check out repository
@@ -81,15 +86,42 @@ jobs:
           exit "$status"
 
       - name: Upload audit report
+        id: upload-report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dependency-audit
           path: audit-report.md
 
-      # One long-lived issue that is refreshed in place, so a weekly cron cannot
-      # accumulate a backlog of near-identical reports.
+  # One long-lived issue that is refreshed in place, so a weekly cron cannot
+  # accumulate a backlog of near-identical reports. Kept in a downstream job so
+  # `issues: write` is never exposed to `pnpm install` or `cargo install`.
+  report-issue:
+    name: report audit findings
+    needs: audit
+    if: >-
+      always() &&
+      needs.audit.result != 'cancelled' &&
+      needs.audit.outputs.upload_report_outcome == 'success' &&
+      (needs.audit.outputs.npm_audit_outcome == 'failure' ||
+      needs.audit.outputs.cargo_audit_outcome == 'failure')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download audit report
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dependency-audit
+          path: audit-report
+
       - name: Open or refresh the tracking issue
-        if: steps.npm-audit.outcome == 'failure' || steps.cargo-audit.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
           TITLE: "chore(deps): dependency audit findings"
@@ -103,7 +135,7 @@ jobs:
             echo "\`pnpm-workspace.yaml\`, and pin the patched version where the parent"
             echo "dependency line permits it."
             echo
-            cat audit-report.md
+            cat audit-report/audit-report.md
             echo
             echo "Run: $RUN_URL"
           } > issue-body.md

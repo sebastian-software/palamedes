@@ -45,6 +45,8 @@ it("runs four strategies per component framework from one shared build", () => {
         "exec",
         "vite",
         "preview",
+        "--configLoader",
+        "native",
         "--host",
         "0.0.0.0",
         "--port",

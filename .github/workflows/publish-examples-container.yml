@@ -65,6 +65,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.35.1@sha256:baf6138eb8c37644800c7c913fba051e840ebb9ba13eaf92d92ef9a1712d0b4c
 
       - name: Extract image metadata
         id: meta
@@ -97,6 +100,18 @@ jobs:
         run: |
           docker run -d --name examples-smoke "$IMAGE"
           trap 'docker logs examples-smoke; docker rm -f examples-smoke' EXIT
+          test "$(docker exec examples-smoke id -un)" = node
+          if docker exec examples-smoke sh -c 'touch /app/.ro-check 2>/dev/null || touch /app/scripts/container/.ro-check 2>/dev/null'; then
+            echo "Expected /app to be read-only for runtime user node" >&2
+            exit 1
+          fi
+          docker exec examples-smoke sh -eu -c '
+            unsafe=$(find /app /usr/local/share/corepack ! -type l \( -perm /6022 -o -writable \) -print -quit)
+            test -z "$unsafe"
+            for pruned in crates docs adr tests benchmarks fuzz site video; do
+              test ! -e "/app/$pruned"
+            done
+          '
           docker exec examples-smoke node scripts/container/verify-all.mjs
           docker exec examples-smoke node -e 'fetch("http://127.0.0.1:4080/ready").then(r => { if (!r.ok) process.exit(1); })'
           docker stats --no-stream examples-smoke

@@ -38,8 +38,10 @@ build it yourself (e.g. on arm64), use the next section.
 ## Build the image
 
 ```bash
-podman build -f Containerfile -t palamedes-examples .
+podman build --format docker -f Containerfile -t palamedes-examples .
 ```
+
+Pass `--format docker` so Podman retains the `HEALTHCHECK` metadata defined in `Containerfile` (Podman's default OCI format omits Docker `HEALTHCHECK` instructions).
 
 The build is multi-stage:
 
