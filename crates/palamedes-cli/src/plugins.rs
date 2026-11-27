@@ -4311,9 +4311,9 @@ struct ActivePluginTarget {
 static NEXT_PLUGIN_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(unix)]
-fn active_plugin_signal_state() -> &'static (Mutex<Option<ActivePluginTarget>>, Condvar) {
-    static STATE: OnceLock<(Mutex<Option<ActivePluginTarget>>, Condvar)> = OnceLock::new();
-    STATE.get_or_init(|| (Mutex::new(None), Condvar::new()))
+fn active_plugin_signal_state() -> &'static (Mutex<Vec<ActivePluginTarget>>, Condvar) {
+    static STATE: OnceLock<(Mutex<Vec<ActivePluginTarget>>, Condvar)> = OnceLock::new();
+    STATE.get_or_init(|| (Mutex::new(Vec::new()), Condvar::new()))
 }
 
 #[cfg(unix)]
@@ -4325,14 +4325,10 @@ enum ForwardedSignalOutcome {
 }
 
 #[cfg(unix)]
-fn forward_signal_to_active_plugin(signal: i32, grace: Duration) -> ForwardedSignalOutcome {
-    let (lock, condvar) = active_plugin_signal_state();
-    let mut guard = lock
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Some(target) = guard.as_mut() else {
-        return ForwardedSignalOutcome::NoActivePlugin;
-    };
+fn signal_target_locked(
+    target: &ActivePluginTarget,
+    signal: i32,
+) -> (ForwardedSignalOutcome, Option<(i32, u64)>) {
     let group = target.group;
     let generation = target.generation;
     if target
@@ -4341,49 +4337,109 @@ fn forward_signal_to_active_plugin(signal: i32, grace: Duration) -> ForwardedSig
         .is_err()
     {
         target.escalated.store(true, Ordering::SeqCst);
-        drop(guard);
-        if group > 0 {
-            // SAFETY: a negative PID addresses the isolated process group led
-            // by the currently running plugin child.
-            unsafe { libc::kill(-group, libc::SIGKILL) };
-        }
-        return ForwardedSignalOutcome::EscalatedKill { group };
+        return (ForwardedSignalOutcome::EscalatedKill { group }, None);
     }
-    drop(guard);
-    if group > 0 {
-        // SAFETY: a negative PID addresses the isolated process group led by
-        // the currently running plugin child.
-        unsafe { libc::kill(-group, signal) };
-        thread::spawn(move || {
-            let deadline = Instant::now() + grace;
-            let mut guard = lock
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            loop {
-                let still_active = guard
-                    .as_ref()
-                    .is_some_and(|active| active.generation == generation && active.group == group);
-                if !still_active {
-                    return;
-                }
-                let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
-                    if let Some(active) = guard.as_ref() {
-                        active.escalated.store(true, Ordering::SeqCst);
-                    }
-                    drop(guard);
-                    // SAFETY: the same plugin invocation is still active past
-                    // the grace period; escalate to SIGKILL.
-                    unsafe { libc::kill(-group, libc::SIGKILL) };
-                    return;
-                };
-                let (next_guard, _) = condvar
-                    .wait_timeout(guard, remaining)
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                guard = next_guard;
+    (
+        ForwardedSignalOutcome::ForwardedGraceful { group },
+        (group > 0).then_some((group, generation)),
+    )
+}
+
+#[cfg(unix)]
+fn dispatch_signal_action(
+    outcome: &ForwardedSignalOutcome,
+    grace_target: Option<(i32, u64)>,
+    signal: i32,
+    grace: Duration,
+) {
+    match *outcome {
+        ForwardedSignalOutcome::NoActivePlugin => {}
+        ForwardedSignalOutcome::EscalatedKill { group } => {
+            if group > 0 {
+                // SAFETY: a negative PID addresses the isolated process group led
+                // by the currently running plugin child.
+                unsafe { libc::kill(-group, libc::SIGKILL) };
             }
-        });
+        }
+        ForwardedSignalOutcome::ForwardedGraceful { group } => {
+            if group > 0 {
+                // SAFETY: a negative PID addresses the isolated process group led by
+                // the currently running plugin child.
+                unsafe { libc::kill(-group, signal) };
+            }
+            if let Some((group, generation)) = grace_target {
+                let (lock, condvar) = active_plugin_signal_state();
+                thread::spawn(move || {
+                    let deadline = Instant::now() + grace;
+                    let mut guard = lock
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    loop {
+                        let Some(active) = guard.iter().find(|active| {
+                            active.generation == generation && active.group == group
+                        }) else {
+                            return;
+                        };
+                        let Some(remaining) = deadline.checked_duration_since(Instant::now())
+                        else {
+                            active.escalated.store(true, Ordering::SeqCst);
+                            drop(guard);
+                            // SAFETY: the same plugin invocation is still active past
+                            // the grace period; escalate to SIGKILL.
+                            unsafe { libc::kill(-group, libc::SIGKILL) };
+                            return;
+                        };
+                        let (next_guard, _) = condvar
+                            .wait_timeout(guard, remaining)
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        guard = next_guard;
+                    }
+                });
+            }
+        }
     }
-    ForwardedSignalOutcome::ForwardedGraceful { group }
+}
+
+#[cfg(unix)]
+fn forward_signal_to_active_plugin(signal: i32, grace: Duration) -> ForwardedSignalOutcome {
+    let (lock, _) = active_plugin_signal_state();
+    let actions: Vec<_> = {
+        let guard = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if guard.is_empty() {
+            return ForwardedSignalOutcome::NoActivePlugin;
+        }
+        guard
+            .iter()
+            .map(|target| signal_target_locked(target, signal))
+            .collect()
+    };
+    let mut last_outcome = ForwardedSignalOutcome::NoActivePlugin;
+    for (outcome, grace_target) in actions {
+        dispatch_signal_action(&outcome, grace_target, signal, grace);
+        last_outcome = outcome;
+    }
+    last_outcome
+}
+
+#[cfg(all(unix, test))]
+fn forward_signal_to_group(group: i32, signal: i32, grace: Duration) -> ForwardedSignalOutcome {
+    let (lock, _) = active_plugin_signal_state();
+    let action = {
+        let guard = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard
+            .iter()
+            .find(|active| active.group == group)
+            .map(|target| signal_target_locked(target, signal))
+    };
+    let Some((outcome, grace_target)) = action else {
+        return ForwardedSignalOutcome::NoActivePlugin;
+    };
+    dispatch_signal_action(&outcome, grace_target, signal, grace);
+    outcome
 }
 
 #[cfg(unix)]
@@ -4424,17 +4480,19 @@ impl ChildSignalGuard {
         let generation = NEXT_PLUGIN_GENERATION.fetch_add(1, Ordering::SeqCst);
         let received_signal = Arc::new(AtomicI32::new(0));
         let escalated = Arc::new(AtomicBool::new(false));
-        let (lock, condvar) = active_plugin_signal_state();
-        let mut guard = lock
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        *guard = (group > 0).then(|| ActivePluginTarget {
-            group,
-            generation,
-            received_signal: Arc::clone(&received_signal),
-            escalated: Arc::clone(&escalated),
-        });
-        condvar.notify_all();
+        if group > 0 {
+            let (lock, condvar) = active_plugin_signal_state();
+            let mut guard = lock
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            guard.push(ActivePluginTarget {
+                group,
+                generation,
+                received_signal: Arc::clone(&received_signal),
+                escalated: Arc::clone(&escalated),
+            });
+            condvar.notify_all();
+        }
         Self {
             generation,
             received_signal,
@@ -4459,11 +4517,9 @@ impl Drop for ChildSignalGuard {
         let mut guard = lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if guard
-            .as_ref()
-            .is_some_and(|active| active.generation == self.generation)
-        {
-            *guard = None;
+        let before = guard.len();
+        guard.retain(|active| active.generation != self.generation);
+        if guard.len() != before {
             condvar.notify_all();
         }
     }
@@ -7574,13 +7630,9 @@ catalogs:
         use std::thread;
 
         use super::{
-            ChildSignalGuard, ForwardedSignalOutcome, forward_signal_to_active_plugin,
+            ChildSignalGuard, ForwardedSignalOutcome, forward_signal_to_group,
             isolate_process_group,
         };
-
-        let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let root = temp_dir("signal-escalation");
         let script = root.join("trapper");
@@ -7610,7 +7662,7 @@ catalogs:
             let (mut child, pgid) = spawn_trapper();
             let guard = ChildSignalGuard::arm_group(pgid);
             assert_eq!(
-                forward_signal_to_active_plugin(libc::SIGTERM, Duration::from_secs(30)),
+                forward_signal_to_group(pgid, libc::SIGTERM, Duration::from_secs(30)),
                 ForwardedSignalOutcome::ForwardedGraceful { group: pgid }
             );
             thread::sleep(Duration::from_millis(50));
@@ -7621,7 +7673,7 @@ catalogs:
             assert!(!guard.was_escalated());
 
             assert_eq!(
-                forward_signal_to_active_plugin(libc::SIGTERM, Duration::from_secs(30)),
+                forward_signal_to_group(pgid, libc::SIGTERM, Duration::from_secs(30)),
                 ForwardedSignalOutcome::EscalatedKill { group: pgid }
             );
             assert!(guard.was_escalated());
@@ -7634,10 +7686,10 @@ catalogs:
             let (mut child, pgid) = spawn_trapper();
             let guard = ChildSignalGuard::arm_group(pgid);
             assert_eq!(
-                forward_signal_to_active_plugin(libc::SIGTERM, Duration::from_millis(120)),
+                forward_signal_to_group(pgid, libc::SIGTERM, Duration::from_millis(120)),
                 ForwardedSignalOutcome::ForwardedGraceful { group: pgid }
             );
-            let deadline = Instant::now() + Duration::from_secs(2);
+            let deadline = Instant::now() + Duration::from_secs(5);
             loop {
                 if let Some(status) = child.try_wait().expect("try_wait") {
                     assert!(!status.success());
@@ -7722,7 +7774,7 @@ catalogs:
     fn load_registry_aborts_when_plugin_describe_is_terminated_by_signal() {
         use std::thread;
 
-        use super::{forward_signal_to_active_plugin, load_registry};
+        use super::{ForwardedSignalOutcome, forward_signal_to_group, load_registry};
         use crate::config::load_config;
 
         let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
@@ -7737,7 +7789,7 @@ catalogs:
         write_executable_fixture(
             &first,
             format!(
-                "#!/bin/sh\ntrap '' INT TERM\nread _request\n: > '{}'\nwhile :; do sleep 1; done\n",
+                "#!/bin/sh\ntrap '' INT TERM\nread _request\nprintf '%s\\n' \"$$\" > '{}'\nwhile :; do sleep 1; done\n",
                 first_ready.display()
             ),
         );
@@ -7756,12 +7808,29 @@ catalogs:
         let config = load_config(&root, None).expect("load config");
 
         let signaler = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(3);
-            while !first_ready.exists() && Instant::now() < deadline {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let pgid = loop {
+                if let Ok(text) = fs::read_to_string(&first_ready)
+                    && let Ok(pid) = text.trim().parse::<i32>()
+                {
+                    break pid;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "first plugin did not become ready"
+                );
+                thread::sleep(Duration::from_millis(10));
+            };
+            while forward_signal_to_group(pgid, libc::SIGTERM, Duration::from_millis(50))
+                == ForwardedSignalOutcome::NoActivePlugin
+            {
+                assert!(
+                    Instant::now() < deadline,
+                    "first plugin guard was not armed"
+                );
                 thread::sleep(Duration::from_millis(10));
             }
-            let _ = forward_signal_to_active_plugin(libc::SIGTERM, Duration::from_millis(50));
-            let _ = forward_signal_to_active_plugin(libc::SIGTERM, Duration::from_millis(50));
+            let _ = forward_signal_to_group(pgid, libc::SIGTERM, Duration::from_millis(50));
         });
 
         let error = load_registry(&config, &root, Path::new("pmds"), false)
@@ -7781,11 +7850,7 @@ catalogs:
     fn writer_timeout_terminates_same_group_descendants_and_signals_preserve_exit_codes() {
         use std::thread;
 
-        use super::{forward_signal_to_active_plugin, invoke_binary};
-
-        let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        use super::{ForwardedSignalOutcome, forward_signal_to_group, invoke_binary};
 
         // 1. Writer timeout kills surviving descendants in the same process group.
         let root = temp_dir("writer-timeout-kills-group");
@@ -7850,7 +7915,7 @@ catalogs:
         write_executable_fixture(
             &sigint_script,
             format!(
-                "#!/bin/sh\nread _request\n: > '{}'\nwhile :; do sleep 1; done\n",
+                "#!/bin/sh\nread _request\nprintf '%s\\n' \"$$\" > '{}'\nwhile :; do sleep 1; done\n",
                 sigint_ready.display()
             ),
         );
@@ -7861,11 +7926,25 @@ catalogs:
             pinned_binary: None,
         };
         let signaler = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(3);
-            while !sigint_ready.exists() && Instant::now() < deadline {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let pgid = loop {
+                if let Ok(text) = fs::read_to_string(&sigint_ready)
+                    && let Ok(pid) = text.trim().parse::<i32>()
+                {
+                    break pid;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "sigint plugin did not become ready"
+                );
+                thread::sleep(Duration::from_millis(10));
+            };
+            while forward_signal_to_group(pgid, libc::SIGINT, Duration::from_secs(10))
+                == ForwardedSignalOutcome::NoActivePlugin
+            {
+                assert!(Instant::now() < deadline, "sigint guard was not armed");
                 thread::sleep(Duration::from_millis(10));
             }
-            let _ = forward_signal_to_active_plugin(libc::SIGINT, Duration::from_secs(10));
         });
         let sigint_error = invoke_binary(
             &sigint_resolved,
@@ -7881,6 +7960,7 @@ catalogs:
         assert_eq!(sigint_error.exit_code, 130);
 
         // 3. SIGTERM while waiting on the request writer preserves exit code 143.
+        let writer_pgid = root.join("writer-sig.pgid");
         let writer_ready = root.join("writer-sig.ready");
         let writer_script = root.join("writer-sig-plugin");
         write_executable_fixture(
@@ -7888,10 +7968,12 @@ catalogs:
             format!(
                 "#!/bin/sh\n\
                  exec 3<&0\n\
+                 printf '%s\\n' \"$$\" > '{}'\n\
                  /usr/bin/perl -e 'close STDOUT; open my $f, \">\", $ARGV[0]; print $f $$; close $f; sleep 15;' '{}' <&3 &\n\
                  while [ ! -s '{}' ]; do sleep 0.01; done\n\
                  printf '%s\\n' '{{\"event\":\"result\",\"exitCode\":0}}'\n\
                  exit 0\n",
+                writer_pgid.display(),
                 writer_ready.display(),
                 writer_ready.display()
             ),
@@ -7903,12 +7985,27 @@ catalogs:
             pinned_binary: None,
         };
         let signaler = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(3);
-            while !writer_ready.exists() && Instant::now() < deadline {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let pgid = loop {
+                if writer_ready.exists()
+                    && let Ok(text) = fs::read_to_string(&writer_pgid)
+                    && let Ok(pid) = text.trim().parse::<i32>()
+                {
+                    break pid;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "writer plugin did not become ready"
+                );
+                thread::sleep(Duration::from_millis(10));
+            };
+            thread::sleep(Duration::from_millis(50));
+            while forward_signal_to_group(pgid, libc::SIGTERM, Duration::from_secs(10))
+                == ForwardedSignalOutcome::NoActivePlugin
+            {
+                assert!(Instant::now() < deadline, "writer guard was not armed");
                 thread::sleep(Duration::from_millis(10));
             }
-            thread::sleep(Duration::from_millis(50));
-            let _ = forward_signal_to_active_plugin(libc::SIGTERM, Duration::from_secs(10));
         });
         let sigterm_error = invoke_binary(
             &writer_resolved,
