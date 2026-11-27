@@ -1134,10 +1134,24 @@ describe("security hardening", () => {
       expect(custom.preferredLocale(`${longLocale};q=0, de-DE`)).toBe("en");
 
       const posixControls = defineLocaleControls({
-        locales: ["en-US", "en-US-posix"] as const,
-        defaultLocale: "en-US",
+        locales: ["de", "en-US", "en-US-posix"] as const,
+        defaultLocale: "de",
       });
       expect(posixControls.preferredLocale("en-US-u-va-posix")).toBe("en-US-posix");
+
+      const overlongPosixExclusion = `en-US-u-va-posix-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(posixControls.preferredLocale(`${overlongPosixExclusion}, en-US`)).toBe("en-US");
+      expect(posixControls.preferredLocale(`${overlongPosixExclusion}, en-US-posix`)).toBe(
+        posixControls.preferredLocale("en-US-u-va-posix;q=0, en-US-posix"),
+      );
+
+      const posixOnlyControls = defineLocaleControls({
+        locales: ["de", "en-US-posix"] as const,
+        defaultLocale: "de",
+      });
+      expect(posixOnlyControls.preferredLocale(`${overlongPosixExclusion}, en-US-posix`)).toBe(
+        "de",
+      );
     });
 
     it("handles adversarial exclusion combinations in bounded time", () => {

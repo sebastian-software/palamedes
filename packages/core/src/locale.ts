@@ -175,6 +175,7 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
   }
 
   let index = baseEndIndex;
+  let vaValues: string[] | null = null;
   const seenSingletons = new Set<string>();
   while (index < subtags.length && /^[0-9a-wy-z]$/.test(subtags[index]!)) {
     const singleton = subtags[index]!;
@@ -191,10 +192,15 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
         index += 1;
       }
       while (index < subtags.length && /^[a-z0-9][a-z]$/.test(subtags[index]!)) {
+        const key = subtags[index]!;
         hasAttributeOrKeyword = true;
         index += 1;
+        const valuesStart = index;
         while (index < subtags.length && /^[a-z0-9]{3,8}$/.test(subtags[index]!)) {
           index += 1;
+        }
+        if (key === "va" && vaValues === null && index > valuesStart) {
+          vaValues = subtags.slice(valuesStart, index);
         }
       }
       if (!hasAttributeOrKeyword) {
@@ -262,7 +268,12 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
     }
   }
 
-  return index === subtags.length ? subtags.slice(0, baseEndIndex).join("-") : null;
+  if (index !== subtags.length) {
+    return null;
+  }
+
+  const baseTag = subtags.slice(0, baseEndIndex).join("-");
+  return vaValues ? `${baseTag}-u-va-${vaValues.join("-")}` : baseTag;
 }
 
 function languagePreferences(
