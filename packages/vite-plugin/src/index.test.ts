@@ -566,6 +566,101 @@ describe("palamedes vite plugin", () => {
     );
   });
 
+  it("reloads active React source modules when an unused catalog resolves a conflict error", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [
+        { path: "src/locales/{locale}", include: ["src/**/*"] },
+        { path: "src/other/{locale}", include: ["unused/**/*"] },
+      ],
+    });
+    const plugin = palamedes({ experimentalReactCatalogHmr: true, mdx: false }).find(
+      (candidate) => candidate.name === "palamedes:transform",
+    ) as any;
+    mocks.transformPalamedesMacros.mockReturnValue({
+      code: "transformed",
+      hasChanged: true,
+      compiledIds: ["label"],
+      map: null,
+    });
+    await transformHandler(plugin.transform)!.call(
+      { error: vi.fn() } as never,
+      'import { t } from "@palamedes/core/macro"; export const label = t`Hello`;',
+      "/repo/src/App.tsx",
+    );
+
+    const appModule = { id: "/repo/src/App.tsx", importedModules: new Set([{}]) };
+    const reloadModule = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn();
+    const server = {
+      config: { logger: { warn: vi.fn() } },
+      environments: {
+        client: {
+          hot: { send },
+          moduleGraph: {
+            idToModuleMap: new Map(),
+            getModulesByFile: (file: string) => (file === "/repo/src/App.tsx" ? [appModule] : []),
+            invalidateModule: vi.fn(),
+          },
+          reloadModule,
+        },
+      },
+    };
+    plugin.configureServer(server);
+
+    const otherDeCatalogPath = path.resolve("/repo/src/other/de.po");
+    let conflict = true;
+    mocks.compileCatalogArtifact.mockImplementation(async (_config, resourcePath: string) => ({
+      messages: {
+        label: conflict && resourcePath === otherDeCatalogPath ? "Other DE" : "Primary DE",
+      },
+      missing: [],
+      diagnostics: [],
+      watchFiles: [],
+    }));
+
+    // 1. Conflicting translation in the unused catalog triggers Vite's error overlay.
+    await plugin.hotUpdate.handler({
+      file: otherDeCatalogPath,
+      type: "update",
+      timestamp: 1,
+      server,
+    });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          err: expect.objectContaining({ message: expect.stringContaining("conflicting") }),
+        }),
+      ),
+    );
+    expect(reloadModule).not.toHaveBeenCalled();
+
+    // 2. Resolving the conflict in the unused catalog must still reload App.tsx so Vite dismisses the overlay,
+    // without needlessly running selected-ID compilation on the untouched primary catalog.
+    conflict = false;
+    send.mockClear();
+    mocks.compileCatalogArtifactSelected.mockClear();
+    await plugin.hotUpdate.handler({
+      file: otherDeCatalogPath,
+      type: "update",
+      timestamp: 2,
+      server,
+    });
+    await vi.waitFor(() => expect(reloadModule).toHaveBeenCalledWith(appModule));
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "custom",
+        event: "palamedes:catalog-update",
+        data: { generation: 1 },
+      }),
+    );
+    expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled();
+  });
+
   it("still reports a current refresh failure after committing its catalog generation", async () => {
     const plugin = palamedes({ experimentalReactCatalogHmr: true, mdx: false }).find(
       (candidate) => candidate.name === "palamedes:transform",

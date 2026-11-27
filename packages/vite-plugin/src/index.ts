@@ -804,18 +804,19 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           cfg,
           filesToValidate,
         );
-        const sourceEntries = [...sidecarModules.values()].filter(
+        const activeSourceEntries = [...sidecarModules.values()].filter(
           (entry) =>
-            affectedCatalogs.some((catalog) =>
-              catalogMatchesSource(cfg, catalog, entry.sourceId),
-            ) &&
+            cfg.catalogs.some((catalog) => catalogMatchesSource(cfg, catalog, entry.sourceId)) &&
             [...(client?.moduleGraph.getModulesByFile(entry.sourceId) ?? [])].some(
               (module) => module.importedModules.size > 0,
             ),
         );
+        const affectedSourceEntries = activeSourceEntries.filter((entry) =>
+          affectedCatalogs.some((catalog) => catalogMatchesSource(cfg, catalog, entry.sourceId)),
+        );
         // Preserve production's source/catalog and selected-ID contract before
         // a complete snapshot can make an unrelated catalog's message visible.
-        await compileBatchedSidecarLocales(cfg, sourceEntries, affectedLocales, {
+        await compileBatchedSidecarLocales(cfg, affectedSourceEntries, affectedLocales, {
           warn: (message) => server.config?.logger.warn(message),
         });
         // Validate every affected snapshot before changing the browser generation.
@@ -841,8 +842,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           nextSnapshots.set(locale, Promise.resolve(snapshot));
         }
         reactCatalogSnapshots = nextSnapshots;
+        // Refresh every active source boundary (not only those matched by
+        // `affectedCatalogs`) so recovering from a cross-catalog conflict in an
+        // unused catalog still sends a Vite HMR update that clears the overlay.
         const sourceModules = new Set(
-          sourceEntries.flatMap((entry) =>
+          activeSourceEntries.flatMap((entry) =>
             [...(client?.moduleGraph.getModulesByFile(entry.sourceId) ?? [])].filter(
               (module) => module.importedModules.size > 0,
             ),
