@@ -4332,6 +4332,71 @@ describe("workflow contracts", () => {
       "<memory>:176: nginx:1.27 is not pinned to a sha256 digest",
       "<memory>:177: redis:7 is not pinned to a sha256 digest",
     ]);
+    // Uncalled shell helpers do not pollute later steps' `GITHUB_ENV` /
+    // `GITHUB_OUTPUT`, object-valued matrix entries satisfy `!= null`, OR
+    // runner guards prune non-matching rows, and unary `!` binds tighter than
+    // `==`/`!=` in Actions guards.
+    const r56Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r56-"));
+    try {
+      await mkdir(join(r56Fixture, ".github", "workflows"), { recursive: true });
+      await mkdir(join(r56Fixture, "unix"), { recursive: true });
+      await writeFile(join(r56Fixture, "unix", "Dockerfile"), `FROM node:24@${digest}\n`);
+      const r56Workflow = [
+        "on: push",
+        "jobs:",
+        "  uncalled-helper-isolation:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - id: init",
+        "        run: |",
+        '          echo "IMG=alpine:3.20" >> "$GITHUB_ENV"',
+        '          echo "ref=busybox:1.36" >> "$GITHUB_OUTPUT"',
+        "          unused_helper() {",
+        `            echo "IMG=node:24@${digest}" >> "$GITHUB_ENV"`,
+        `            echo "ref=node:24@${digest}" >> "$GITHUB_OUTPUT"`,
+        "          }",
+        "      - run: |",
+        '          docker pull "$IMG"',
+        '          docker pull "${{ steps.init.outputs.ref }}"',
+        "  object-matrix-and-or-guard:",
+        "    runs-on: ${{ matrix.os }}",
+        "    strategy:",
+        "      matrix:",
+        "        include:",
+        "          - os: ubuntu-latest",
+        "            dir: unix",
+        "            platform:",
+        "              arch: amd64",
+        "          - os: windows-latest",
+        "            dir: missing-windows-dir",
+        "    steps:",
+        "      - if: matrix.platform != null",
+        "        run: docker pull nginx:1.27",
+        "      - if: runner.os == 'Linux' || runner.os == 'macOS'",
+        "        working-directory: ${{ matrix.dir }}",
+        "        run: docker build .",
+        "  unary-negation-precedence:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - if: \"!github.event_name == 'schedule'\"",
+        "        run: docker pull redis:7",
+        "      - if: \"!(github.event_name == 'schedule')\"",
+        "        run: docker pull postgres:17",
+        "",
+      ].join("\n");
+      expect(
+        unpinnedWorkflowContainerReferences(r56Workflow, ".github/workflows/r56.yml", {
+          root: r56Fixture,
+        }),
+      ).toEqual([
+        ".github/workflows/r56.yml:8: alpine:3.20 is not pinned to a sha256 digest",
+        ".github/workflows/r56.yml:16: busybox:1.36 is not pinned to a sha256 digest",
+        ".github/workflows/r56.yml:30: nginx:1.27 is not pinned to a sha256 digest",
+        ".github/workflows/r56.yml:40: postgres:17 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r56Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

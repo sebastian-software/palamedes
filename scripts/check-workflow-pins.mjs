@@ -837,12 +837,22 @@ function evaluateStepIfClause(clause, context) {
         context.runnerOs !== null ? { value: context.runnerOs, scalarType: "string" } : null;
     } else if (context.row) {
       const pathSuffix = eqMatch.groups.lhs.slice("matrix".length);
-      const resolved = resolveMatrixPath(context.row, parseMatrixPathSegments(pathSuffix));
-      actualScalar = resolved
-        ? { value: resolved.value, scalarType: resolved.scalarType ?? "string" }
-        : context.row.hasUnknownProperties
-          ? null
-          : { value: "", scalarType: "null" };
+      const resolvedNode = resolveMatrixNode(context.row, parseMatrixPathSegments(pathSuffix));
+      if (resolvedNode) {
+        if (resolvedNode.kind === "scalar") {
+          actualScalar = {
+            value: String(resolvedNode.value),
+            scalarType: resolvedNode.scalarType ?? "string",
+          };
+        } else {
+          if (expectedScalar.scalarType === "null") {
+            return eqMatch.groups.op === "!=";
+          }
+          return null;
+        }
+      } else {
+        actualScalar = context.row.hasUnknownProperties ? null : { value: "", scalarType: "null" };
+      }
     }
     if (actualScalar === null) {
       return null;
@@ -878,20 +888,19 @@ function evaluateStepIfClause(clause, context) {
   return null;
 }
 
-function filterRunnerContextsForStep(stepIfNode, runnerContexts) {
+function filterRunnerContextsForStep(stepIfNode, runnerContexts, eventNames = null) {
   if (!stepIfNode || stepIfNode.kind !== "scalar" || runnerContexts.length === 0) {
     return runnerContexts;
   }
   const rawIf = String(stepIfNode.value).trim();
-  if (!rawIf || rawIf.includes("||")) {
+  if (!rawIf) {
     return runnerContexts;
   }
-  const clauses = rawIf.split("&&");
+  const eventsToCheck = Array.isArray(eventNames) && eventNames.length > 0 ? eventNames : [null];
   return runnerContexts.filter((context) =>
-    clauses.every((clause) => {
-      const verdict = evaluateStepIfClause(clause, context);
-      return verdict === null ? true : verdict;
-    }),
+    eventsToCheck.some(
+      (eventName) => evaluateGuardForEventAndContext(rawIf, eventName, context) !== false,
+    ),
   );
 }
 
@@ -1023,6 +1032,108 @@ function splitTopLevelLogicalOp(expr, operator) {
   return parts;
 }
 
+function splitTopLevelEqualityOp(expr) {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let splitIndex = -1;
+  let op = null;
+  for (let i = 0; i < expr.length; i += 1) {
+    const ch = expr[i];
+    if (inSingle) {
+      if (ch === "'") {
+        if (expr[i + 1] === "'") {
+          i += 1;
+        } else {
+          inSingle = false;
+        }
+      }
+      continue;
+    }
+    if (inDouble) {
+      if (ch === "\\" && i + 1 < expr.length) {
+        i += 1;
+      } else if (ch === '"') {
+        inDouble = false;
+      }
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+    } else if (ch === '"') {
+      inDouble = true;
+    } else if (ch === "(") {
+      depth += 1;
+    } else if (ch === ")") {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0 && (expr.startsWith("==", i) || expr.startsWith("!=", i))) {
+      // Actions `==`/`!=` are left-associative; split at the last top-level operator.
+      splitIndex = i;
+      op = expr.slice(i, i + 2);
+      i += 1;
+    }
+  }
+  if (splitIndex === -1) {
+    return null;
+  }
+  return {
+    lhs: expr.slice(0, splitIndex).trim(),
+    op,
+    rhs: expr.slice(splitIndex + 2).trim(),
+  };
+}
+
+function resolveGuardOperand(rawOperand, eventName, runnerContext) {
+  const operand = stripBalancedOuterParens(stripOuterExpressionWrapper(rawOperand));
+  if (!operand) {
+    return null;
+  }
+  const literal = parseActionsGuardLiteral(operand);
+  if (literal) {
+    return { kind: "scalar", ...literal };
+  }
+  if (operand.startsWith("!") && !operand.startsWith("!=")) {
+    const inner = evaluateGuardForEventAndContext(operand.slice(1), eventName, runnerContext);
+    if (inner === null) {
+      return null;
+    }
+    return { kind: "scalar", value: inner ? "false" : "true", scalarType: "boolean" };
+  }
+  if (/^(?:github\.event_name|github\[(?:'event_name'|"event_name")\])$/iu.test(operand)) {
+    return typeof eventName === "string" && eventName.length > 0
+      ? { kind: "scalar", value: eventName, scalarType: "string" }
+      : null;
+  }
+  if (/^runner\.os$/iu.test(operand)) {
+    return runnerContext?.runnerOs
+      ? { kind: "scalar", value: runnerContext.runnerOs, scalarType: "string" }
+      : null;
+  }
+  const matrixMatch = /^matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)$/iu.exec(
+    operand,
+  );
+  if (matrixMatch && runnerContext?.row) {
+    const resolvedNode = resolveMatrixNode(
+      runnerContext.row,
+      parseMatrixPathSegments(matrixMatch.groups.path),
+    );
+    if (resolvedNode) {
+      if (resolvedNode.kind === "scalar") {
+        return {
+          kind: "scalar",
+          value: String(resolvedNode.value),
+          scalarType: resolvedNode.scalarType ?? "string",
+        };
+      }
+      return { kind: "non-scalar" };
+    }
+    return runnerContext.row.hasUnknownProperties
+      ? null
+      : { kind: "scalar", value: "", scalarType: "null" };
+  }
+  return null;
+}
+
 function evaluateEventExprForName(rawExpr, eventName) {
   const expr = stripBalancedOuterParens(stripOuterExpressionWrapper(rawExpr));
   if (!expr) {
@@ -1059,30 +1170,25 @@ function evaluateEventExprForName(rawExpr, eventName) {
     return allTrue ? true : null;
   }
 
+  const topEq = splitTopLevelEqualityOp(expr);
+  if (topEq) {
+    const l = resolveGuardOperand(topEq.lhs, eventName, null);
+    const r = resolveGuardOperand(topEq.rhs, eventName, null);
+    if (l?.kind === "scalar" && r?.kind === "scalar") {
+      const eq = actionsScalarsEqual(l, r);
+      return topEq.op === "==" ? eq : !eq;
+    }
+    return null;
+  }
+
   if (expr.startsWith("!") && !expr.startsWith("!=")) {
     const inner = evaluateEventExprForName(expr.slice(1), eventName);
     return inner === null ? null : !inner;
   }
 
   const lowerEvent = eventName.toLowerCase();
-  const lhsEq =
-    /^(?:github\.event_name|github\[(?:'event_name'|"event_name")\])\s*(?<op>==|!=)\s*(?:'(?<sq>[^']*)'|"(?<dq>[^"]*)")$/iu.exec(
-      expr,
-    );
-  if (lhsEq) {
-    const expected = (lhsEq.groups.sq ?? lhsEq.groups.dq ?? "").toLowerCase();
-    const equal = lowerEvent === expected;
-    return lhsEq.groups.op === "==" ? equal : !equal;
-  }
-
-  const rhsEq =
-    /^(?:'(?<sq>[^']*)'|"(?<dq>[^"]*)")\s*(?<op>==|!=)\s*(?:github\.event_name|github\[(?:'event_name'|"event_name")\])$/iu.exec(
-      expr,
-    );
-  if (rhsEq) {
-    const expected = (rhsEq.groups.sq ?? rhsEq.groups.dq ?? "").toLowerCase();
-    const equal = lowerEvent === expected;
-    return rhsEq.groups.op === "==" ? equal : !equal;
+  if (/^(?:github\.event_name|github\[(?:'event_name'|"event_name")\])$/iu.test(expr)) {
+    return lowerEvent.length > 0;
   }
 
   const fnMatch =
@@ -1155,6 +1261,27 @@ function evaluateGuardForEventAndContext(rawExpr, eventName, runnerContext) {
     return allTrue ? true : null;
   }
 
+  // Unary `!` binds tighter than `==`/`!=` in Actions expressions, so split
+  // top-level equality before checking for a leading `!`.
+  const topEq = splitTopLevelEqualityOp(expr);
+  if (topEq) {
+    const l = resolveGuardOperand(topEq.lhs, eventName, runnerContext);
+    const r = resolveGuardOperand(topEq.rhs, eventName, runnerContext);
+    if (l && r) {
+      if (l.kind === "scalar" && r.kind === "scalar") {
+        const eq = actionsScalarsEqual(l, r);
+        return topEq.op === "==" ? eq : !eq;
+      }
+      if (
+        (l.kind === "non-scalar" && r.kind === "scalar" && r.scalarType === "null") ||
+        (r.kind === "non-scalar" && l.kind === "scalar" && l.scalarType === "null")
+      ) {
+        return topEq.op === "!=";
+      }
+    }
+    return null;
+  }
+
   if (expr.startsWith("!") && !expr.startsWith("!=")) {
     const inner = evaluateGuardForEventAndContext(expr.slice(1), eventName, runnerContext);
     return inner === null ? null : !inner;
@@ -1175,17 +1302,42 @@ function evaluateGuardForEventAndContext(rawExpr, eventName, runnerContext) {
     const numVal = Number(expr);
     return numVal !== 0 && !Number.isNaN(numVal);
   }
-  const litEqMatch =
-    /^(?<lhs>'(?:[^']|'')*'|true|false|null|-?(?:\d+(?:\.\d+)?|\.\d+))\s*(?<op>==|!=)\s*(?<rhs>'(?:[^']|'')*'|true|false|null|-?(?:\d+(?:\.\d+)?|\.\d+))$/iu.exec(
-      expr,
+  if (
+    /^(?:github\.event_name|github\[(?:'event_name'|"event_name")\])$/iu.test(expr) &&
+    typeof eventName === "string" &&
+    eventName.length > 0
+  ) {
+    return true;
+  }
+  if (/^runner\.os$/iu.test(expr) && runnerContext?.runnerOs) {
+    return runnerContext.runnerOs.length > 0;
+  }
+  const matrixOnlyMatch = /^matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)$/iu.exec(
+    expr,
+  );
+  if (matrixOnlyMatch && runnerContext?.row) {
+    const resolvedNode = resolveMatrixNode(
+      runnerContext.row,
+      parseMatrixPathSegments(matrixOnlyMatch.groups.path),
     );
-  if (litEqMatch) {
-    const l = parseActionsGuardLiteral(litEqMatch.groups.lhs);
-    const r = parseActionsGuardLiteral(litEqMatch.groups.rhs);
-    if (l && r) {
-      const eq = actionsScalarsEqual(l, r);
-      return litEqMatch.groups.op === "==" ? eq : !eq;
+    if (resolvedNode) {
+      if (resolvedNode.kind !== "scalar") {
+        return true;
+      }
+      const st = resolvedNode.scalarType ?? "string";
+      if (st === "null") {
+        return false;
+      }
+      if (st === "boolean") {
+        return String(resolvedNode.value).toLowerCase() === "true";
+      }
+      if (st === "number") {
+        const num = Number(resolvedNode.value);
+        return num !== 0 && !Number.isNaN(num);
+      }
+      return String(resolvedNode.value).length > 0;
     }
+    return runnerContext.row.hasUnknownProperties ? null : false;
   }
   if (typeof eventName === "string" && eventName.length > 0) {
     const eventVerdict = evaluateEventExprForName(expr, eventName);
@@ -4354,7 +4506,7 @@ function lookupCaseInsensitiveMapEntry(map, key) {
   return null;
 }
 
-function resolveMatrixPath(rowMap, segments) {
+function resolveMatrixNode(rowMap, segments) {
   let current = { kind: "map", value: rowMap };
   for (const segment of segments) {
     if (current?.kind !== "map") {
@@ -4366,6 +4518,11 @@ function resolveMatrixPath(rowMap, segments) {
     }
     current = found.value;
   }
+  return current ?? null;
+}
+
+function resolveMatrixPath(rowMap, segments) {
+  const current = resolveMatrixNode(rowMap, segments);
   if (current?.kind === "scalar") {
     return {
       value: String(current.value),
@@ -6360,12 +6517,15 @@ function inspectShellText(
         localVars: new Map(),
         activeFunctions: new Set([fnDef.name]),
         fnDepth: 1,
+        suppressSideEffects: true,
       });
       scopeStack.pop();
     }
   };
 
   const processEvents = (eventsList, fnContext = null) => {
+    const suppressSideEffects = Boolean(fnContext?.suppressSideEffects);
+    const fnCallConditional = Boolean(fnContext?.callConditional);
     const recordLocalBinding = (varName, targetFrame) => {
       if (!fnContext || fnContext.localVars.has(varName)) {
         return;
@@ -6503,45 +6663,49 @@ function inspectShellText(
       }
 
       if (event.kind === "github-env-heredoc") {
-        const isConditional = frame.branches.length > 0 || event.conditional;
-        for (const assignment of parseGithubEnvPayload(event.lines, event.startLine)) {
-          const resolved = event.quoted
-            ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
-            : resolveImageTokenCandidates(
-                assignment.value,
-                stepEnv,
-                frame.vars,
-                assignment.line,
-                shellMode,
-              );
-          recordGithubEnvWrite(
-            emittedGithubEnv,
-            assignment.name,
-            candidatesToVarEntries(resolved, assignment.line),
-            isConditional,
-          );
+        if (!suppressSideEffects) {
+          const isConditional = fnCallConditional || frame.branches.length > 0 || event.conditional;
+          for (const assignment of parseGithubEnvPayload(event.lines, event.startLine)) {
+            const resolved = event.quoted
+              ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
+              : resolveImageTokenCandidates(
+                  assignment.value,
+                  stepEnv,
+                  frame.vars,
+                  assignment.line,
+                  shellMode,
+                );
+            recordGithubEnvWrite(
+              emittedGithubEnv,
+              assignment.name,
+              candidatesToVarEntries(resolved, assignment.line),
+              isConditional,
+            );
+          }
         }
         continue;
       }
 
       if (event.kind === "github-output-heredoc") {
-        const isConditional = frame.branches.length > 0 || event.conditional;
-        for (const assignment of parseGithubOutputPayload(event.lines, event.startLine)) {
-          const resolved = event.quoted
-            ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
-            : resolveImageTokenCandidates(
-                assignment.value,
-                stepEnv,
-                frame.vars,
-                assignment.line,
-                shellMode,
-              );
-          const sanitized = sanitizeGithubOutputEntries(
-            candidatesToVarEntries(resolved, assignment.line),
-            shellMode,
-          );
-          if (sanitized.length > 0) {
-            recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
+        if (!suppressSideEffects) {
+          const isConditional = fnCallConditional || frame.branches.length > 0 || event.conditional;
+          for (const assignment of parseGithubOutputPayload(event.lines, event.startLine)) {
+            const resolved = event.quoted
+              ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
+              : resolveImageTokenCandidates(
+                  assignment.value,
+                  stepEnv,
+                  frame.vars,
+                  assignment.line,
+                  shellMode,
+                );
+            const sanitized = sanitizeGithubOutputEntries(
+              candidatesToVarEntries(resolved, assignment.line),
+              shellMode,
+            );
+            if (sanitized.length > 0) {
+              recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
+            }
           }
         }
         continue;
@@ -6559,7 +6723,7 @@ function inspectShellText(
           matrixRows,
           filePath,
           problems,
-          emittedGithubEnv,
+          suppressSideEffects ? null : emittedGithubEnv,
           shellMode,
           depth + 1,
           buildFileContext
@@ -6571,7 +6735,7 @@ function inspectShellText(
                 rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
               }
             : null,
-          emittedGithubOutput,
+          suppressSideEffects ? null : emittedGithubOutput,
         );
       }
 
@@ -7141,6 +7305,8 @@ function inspectShellText(
               localVars: new Map(),
               activeFunctions: nextActive,
               fnDepth: curFnDepth + 1,
+              suppressSideEffects,
+              callConditional: fnCallConditional || isCallConditional,
             });
             inspectUncalledFunctions(scopeStack.at(-1));
             scopeStack.pop();
@@ -7184,6 +7350,8 @@ function inspectShellText(
               localVars: callLocalVars,
               activeFunctions: nextActive,
               fnDepth: curFnDepth + 1,
+              suppressSideEffects,
+              callConditional: fnCallConditional || isCallConditional,
             });
             for (const [vName, saved] of callLocalVars) {
               if (saved.hadVar) {
@@ -7234,42 +7402,46 @@ function inspectShellText(
 
       const githubEnvLines = extractRedirectedWriteLines(tokens, cursor, isGithubEnvTarget);
       if (githubEnvLines) {
-        const isConditional = frame.branches.length > 0 || conditional;
-        for (const assignment of parseGithubEnvPayload(githubEnvLines, lineNumber)) {
-          const resolved = resolveImageTokenCandidates(
-            assignment.value,
-            stepEnv,
-            frame.vars,
-            lineNumber,
-            shellMode,
-          );
-          recordGithubEnvWrite(
-            emittedGithubEnv,
-            assignment.name,
-            candidatesToVarEntries(resolved, lineNumber),
-            isConditional,
-          );
+        if (!suppressSideEffects) {
+          const isConditional = fnCallConditional || frame.branches.length > 0 || conditional;
+          for (const assignment of parseGithubEnvPayload(githubEnvLines, lineNumber)) {
+            const resolved = resolveImageTokenCandidates(
+              assignment.value,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            recordGithubEnvWrite(
+              emittedGithubEnv,
+              assignment.name,
+              candidatesToVarEntries(resolved, lineNumber),
+              isConditional,
+            );
+          }
         }
         continue;
       }
 
       const githubOutputLines = extractRedirectedWriteLines(tokens, cursor, isGithubOutputTarget);
       if (githubOutputLines) {
-        const isConditional = frame.branches.length > 0 || conditional;
-        for (const assignment of parseGithubOutputPayload(githubOutputLines, lineNumber)) {
-          const resolved = resolveImageTokenCandidates(
-            assignment.value,
-            stepEnv,
-            frame.vars,
-            lineNumber,
-            shellMode,
-          );
-          const sanitized = sanitizeGithubOutputEntries(
-            candidatesToVarEntries(resolved, lineNumber),
-            shellMode,
-          );
-          if (sanitized.length > 0) {
-            recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
+        if (!suppressSideEffects) {
+          const isConditional = fnCallConditional || frame.branches.length > 0 || conditional;
+          for (const assignment of parseGithubOutputPayload(githubOutputLines, lineNumber)) {
+            const resolved = resolveImageTokenCandidates(
+              assignment.value,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            const sanitized = sanitizeGithubOutputEntries(
+              candidatesToVarEntries(resolved, lineNumber),
+              shellMode,
+            );
+            if (sanitized.length > 0) {
+              recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
+            }
           }
         }
         continue;
@@ -9446,7 +9618,11 @@ function checkStepsList(
     }
     const stepShellNode = getMapField(stepNode, "shell");
     const stepWorkingDirNode = getMapField(stepNode, "working-directory");
-    const applicableContexts = filterRunnerContextsForStep(stepIfNode, runnerContexts);
+    const applicableContexts = filterRunnerContextsForStep(
+      stepIfNode,
+      runnerContexts,
+      effectiveEventNames,
+    );
     if (runnerContexts.length > 0 && applicableContexts.length === 0) {
       continue;
     }
