@@ -19,7 +19,10 @@ import { createAssetServer, type ModuleLoader } from "remix/assets";
 import { SourceMapConsumer } from "source-map-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isCompiledCatalog } from "@palamedes/core/compiled";
-import { compileCatalogArtifactSelected } from "@palamedes/core-node";
+import {
+  compileCatalogArtifactSelected,
+  compileCatalogArtifactSelectedAsync,
+} from "@palamedes/core-node";
 import { transformPalamedesMacros } from "@palamedes/transform";
 import type * as CoreNodeModule from "@palamedes/core-node";
 import type * as TransformModule from "@palamedes/transform";
@@ -41,6 +44,7 @@ vi.mock("@palamedes/core-node", async (importOriginal) => {
   return {
     ...actual,
     compileCatalogArtifactSelected: vi.fn(actual.compileCatalogArtifactSelected),
+    compileCatalogArtifactSelectedAsync: vi.fn(actual.compileCatalogArtifactSelectedAsync),
   };
 });
 
@@ -1249,6 +1253,60 @@ describe("createPalamedesRemixAssetLoader", () => {
       expect(devResponse?.status).toBe(500);
       expect(await devResponse?.text()).toContain(fixture.modulePath);
       expect(errorSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.close?.();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("compiles fragments asynchronously via serveAsync with in-flight deduplication and retry after failure", async () => {
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    const fixture = createAssetFixture("concurrent.ts", source);
+    writeFragmentCatalogFixture(fixture.rootDir);
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const compileAsync = vi.mocked(compileCatalogArtifactSelectedAsync);
+    const compileSync = vi.mocked(compileCatalogArtifactSelected);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const ids = transformPalamedesMacros(source, fixture.modulePath).compiledIds;
+      const key = registry.register(fixture.modulePath, ids);
+      const makeRequest = () =>
+        new Request(`https://example.test${registry.sidecarUrl(key)}?fragment=1&locale=de`);
+
+      expect(
+        await registry.serveAsync(new Request("https://example.test/assets/other.js")),
+      ).toBeUndefined();
+
+      compileAsync.mockClear();
+      compileSync.mockClear();
+      compileAsync.mockRejectedValueOnce(new Error("transient native failure"));
+      vi.stubEnv("NODE_ENV", "production");
+      const failed = await registry.serveAsync(makeRequest());
+      expect(failed?.status).toBe(500);
+      expect(await failed?.text()).toBe("Palamedes catalog fragment failed.");
+      expect(compileAsync).toHaveBeenCalledTimes(1);
+
+      // A failed compilation must not poison the in-flight or asset cache;
+      // concurrent retries share one async compilation and warm the shared cache.
+      compileAsync.mockClear();
+      const [first, second] = await Promise.all([
+        registry.serveAsync(makeRequest()),
+        registry.serveAsync(makeRequest()),
+      ]);
+      expect(first?.status).toBe(200);
+      expect(second?.status).toBe(200);
+      expect(await first?.text()).toBe(await second?.text());
+      expect(compileAsync).toHaveBeenCalledTimes(1);
+      expect(compileSync).not.toHaveBeenCalled();
+
+      // Sync serve() hits the warmed cache without recompiling.
+      const syncHit = registry.serve(makeRequest());
+      expect(syncHit?.status).toBe(200);
+      expect(compileSync).not.toHaveBeenCalled();
     } finally {
       registry.close?.();
       errorSpy.mockRestore();

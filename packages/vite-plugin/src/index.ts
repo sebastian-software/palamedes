@@ -55,6 +55,9 @@ export type PalamedesFramework = "react" | "solid" | "none";
 const PO_FILE_REGEX = /(\.po|\.fcl|\?palamedes)$/;
 const MDX_FILE_REGEX = /\.mdx$/i;
 const COMPONENT_FILE_REGEX = /\.(vue|svelte)$/i;
+const COMPONENT_SUBREQUEST_PARAMS = ["vue", "svelte", "raw", "url"] as const;
+const PALAMEDES_MACRO_PACKAGE_SET: ReadonlySet<string> = new Set(PALAMEDES_MACRO_PACKAGES);
+const MAX_CANONICAL_PATH_CACHE_SIZE = 4096;
 const MDX_HOOK_ID_REGEX = /\.mdx(?:\?.*)?$/i;
 const VIRTUAL_MACRO_ERROR_PREFIX = "\0palamedes:macro-error:";
 const VIRTUAL_MESSAGES_PREFIX = "virtual:palamedes-messages/";
@@ -220,13 +223,18 @@ function stripQuery(id: string): string {
   return id.split("?")[0] ?? id;
 }
 
-function catalogLocaleForResource(config: LoadedPalamedesConfig, resourcePath: string): string {
-  const canonicalResourcePath = canonicalPath(resourcePath);
+function catalogLocaleForResource(
+  config: LoadedPalamedesConfig,
+  resourcePath: string,
+  resolveCanonicalPath: (value: string) => string = canonicalPath,
+): string {
+  const canonicalResourcePath = resolveCanonicalPath(resourcePath);
   return (
     config.locales.find((locale) =>
       config.catalogs.some(
         (catalog) =>
-          canonicalPath(catalogResourcePath(config, catalog, locale)) === canonicalResourcePath,
+          resolveCanonicalPath(catalogResourcePath(config, catalog, locale)) ===
+          canonicalResourcePath,
       ),
     ) ?? path.basename(resourcePath, path.extname(resourcePath))
   );
@@ -245,9 +253,13 @@ function isWindowsPath(value: string): boolean {
   return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\");
 }
 
-function canonicalRelativePath(rootDir: string, sourceId: string): string {
-  const canonicalRootDir = canonicalPath(rootDir);
-  const canonicalSourceId = canonicalPath(sourceId);
+function canonicalRelativePath(
+  rootDir: string,
+  sourceId: string,
+  resolveCanonicalPath: (value: string) => string = canonicalPath,
+): string {
+  const canonicalRootDir = resolveCanonicalPath(rootDir);
+  const canonicalSourceId = resolveCanonicalPath(sourceId);
   const usesWindowsPaths = isWindowsPath(canonicalRootDir) || isWindowsPath(canonicalSourceId);
   const pathImplementation = usesWindowsPaths ? path.win32 : path;
 
@@ -315,14 +327,15 @@ function resolveLocaleChain(cfg: LoadedPalamedesConfig, locale: string): string[
 function affectedForCatalogFiles(
   cfg: LoadedPalamedesConfig,
   changedFiles: Iterable<string>,
+  resolveCanonicalPath: (value: string) => string = canonicalPath,
 ): { locales: string[]; catalogs: PalamedesCatalogConfig[] } {
-  const canonicalChanged = new Set([...changedFiles].map(canonicalPath));
+  const canonicalChanged = new Set([...changedFiles].map(resolveCanonicalPath));
   const directLocales = new Set<string>();
   const matchedCatalogs = new Set<PalamedesCatalogConfig>();
 
   for (const catalog of cfg.catalogs) {
     for (const locale of cfg.locales) {
-      if (canonicalChanged.has(canonicalPath(catalogResourcePath(cfg, catalog, locale)))) {
+      if (canonicalChanged.has(resolveCanonicalPath(catalogResourcePath(cfg, catalog, locale)))) {
         directLocales.add(locale);
         matchedCatalogs.add(catalog);
       }
@@ -533,8 +546,21 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   let configDependencies = new Set<string>();
   let filter: PalamedesSourceFilter | null = null;
   let mdxFilter: PalamedesSourceFilter | null = null;
-  let macroIds: Set<string> | null = null;
   const mdxModuleIds = new Set<string>();
+  const canonicalPathCache = new Map<string, string>();
+
+  function cachedCanonicalPath(value: string): string {
+    const cached = canonicalPathCache.get(value);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const resolved = canonicalPath(value);
+    if (canonicalPathCache.size >= MAX_CANONICAL_PATH_CACHE_SIZE) {
+      canonicalPathCache.delete(canonicalPathCache.keys().next().value!);
+    }
+    canonicalPathCache.set(value, resolved);
+    return resolved;
+  }
 
   /*
    * Message sidecar registry for automatic catalog delivery, keyed by a
@@ -549,7 +575,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   async function sidecarKey(sourceId: string): Promise<string> {
     const cfg = await getConfigLazy();
-    const modulePath = canonicalRelativePath(cfg.rootDir, sourceId);
+    const modulePath = canonicalRelativePath(cfg.rootDir, sourceId, cachedCanonicalPath);
     return createHash("sha256").update(modulePath).digest("hex").slice(0, 12);
   }
 
@@ -803,6 +829,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const { locales: affectedLocales, catalogs: affectedCatalogs } = affectedForCatalogFiles(
           cfg,
           filesToValidate,
+          cachedCanonicalPath,
         );
         const activeSourceEntries = [...sidecarModules.values()].filter(
           (entry) =>
@@ -960,14 +987,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       });
       if (experimentalCatalogHmr && epoch !== reactCatalogEpoch) return getConfigLazy();
       config = loaded;
-      configDependencies = new Set(getConfigDependencies(config).map(canonicalPath));
-      macroIds = new Set(PALAMEDES_MACRO_PACKAGES);
+      configDependencies = new Set(getConfigDependencies(config).map(cachedCanonicalPath));
     }
     return config;
   }
 
   function isConfigChange(id: string): boolean {
-    return configDependencies.has(canonicalPath(stripQuery(id)));
+    return configDependencies.has(cachedCanonicalPath(stripQuery(id)));
   }
 
   function addConfigWatchFiles(
@@ -979,6 +1005,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
 
   function resetConfig(): void {
     config = null;
+    canonicalPathCache.clear();
   }
 
   function resetConfigOnChange(id: string): void {
@@ -1080,15 +1107,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     enforce: "pre" as const,
 
     resolveId(id) {
-      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES);
-      if (ids.has(id)) {
+      if (PALAMEDES_MACRO_PACKAGE_SET.has(id)) {
         return `${VIRTUAL_MACRO_ERROR_PREFIX}${id}`;
       }
     },
 
     resolveDynamicImport(id) {
-      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES);
-      if (ids.has(id as string)) {
+      if (typeof id === "string" && PALAMEDES_MACRO_PACKAGE_SET.has(id)) {
         throw new Error(
           `The macro you imported from "${id}" cannot be dynamically imported.\n` +
             `Palamedes macros must be statically imported.`,
@@ -1152,6 +1177,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const cleanId = stripQuery(id);
         if (change.event === "delete") {
           mdxModuleIds.delete(cleanId);
+        }
+        if (change.event === "create" || change.event === "delete") {
+          canonicalPathCache.clear();
+        } else {
+          canonicalPathCache.delete(id);
+          canonicalPathCache.delete(cleanId);
         }
       },
 
@@ -1267,7 +1298,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       }
     },
 
-    watchChange(id) {
+    watchChange(id, change) {
+      if (change?.event === "create" || change?.event === "delete") {
+        canonicalPathCache.clear();
+      } else {
+        canonicalPathCache.delete(id);
+        canonicalPathCache.delete(stripQuery(id));
+      }
       resetConfigOnChange(id);
     },
 
@@ -1275,14 +1312,22 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       order: "pre",
       async handler(context) {
         if (!experimentalCatalogHmr) return;
-        const file = canonicalPath(context.file);
+        if (context.type === "create" || context.type === "delete") {
+          canonicalPathCache.clear();
+        } else {
+          canonicalPathCache.delete(context.file);
+          canonicalPathCache.delete(stripQuery(context.file));
+        }
+        const file = cachedCanonicalPath(context.file);
         const reloadKey = `${file}:${context.timestamp}:${context.type}`;
         if (lastReactReload === reloadKey) return [];
         if (reactCatalogRestarting) return [];
         if (
           isConfigChange(file) ||
           (context.type === "delete" &&
-            [...sidecarModules.values()].some((entry) => canonicalPath(entry.sourceId) === file))
+            [...sidecarModules.values()].some(
+              (entry) => cachedCanonicalPath(entry.sourceId) === file,
+            ))
         ) {
           lastReactReload = reloadKey;
           if (isConfigChange(file)) {
@@ -1296,7 +1341,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             return [];
           }
           for (const [key, entry] of sidecarModules)
-            if (canonicalPath(entry.sourceId) === file) sidecarModules.delete(key);
+            if (cachedCanonicalPath(entry.sourceId) === file) sidecarModules.delete(key);
           resetConfigOnChange(file);
           context.server.environments.client?.hot.send({ type: "full-reload" });
           return [];
@@ -1304,7 +1349,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const cfg = await getConfigLazy();
         const isCatalog = cfg.catalogs.some((catalog) =>
           cfg.locales.some(
-            (locale) => canonicalPath(catalogResourcePath(cfg, catalog, locale)) === file,
+            (locale) => cachedCanonicalPath(catalogResourcePath(cfg, catalog, locale)) === file,
           ),
         );
         if (!isCatalog) return;
@@ -1319,8 +1364,6 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       resolvedIncludeSourceMetadata = includeSourceMetadata ?? false;
       stripNonEssentialProps = env.command === "build";
       isBuildCommand = env.command === "build";
-      const ids = new Set(PALAMEDES_MACRO_PACKAGES);
-      macroIds = ids;
 
       // Installed packages are externalized by default, unlike workspace links.
       // Keep the server adapter and its virtual catalog imports in Vite's graph.
@@ -1342,7 +1385,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       }
       viteConfig.optimizeDeps.exclude = viteConfig.optimizeDeps.exclude || [];
 
-      for (const macroId of ids) {
+      for (const macroId of PALAMEDES_MACRO_PACKAGES) {
         viteConfig.optimizeDeps.exclude.push(macroId);
       }
     },
@@ -1384,16 +1427,17 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     },
 
     transform(code, id) {
-      const cleanId = stripQuery(id);
+      const queryStart = id.indexOf("?");
+      const cleanId = queryStart === -1 ? id : id.slice(0, queryStart);
+      const isComponentFile = COMPONENT_FILE_REGEX.test(cleanId);
 
       // Host compilers own component subrequests. Transform only the original
       // component before the Vue or Svelte Vite plugin compiles it.
-      const query = new URLSearchParams(id.split("?", 2)[1]);
-      if (
-        COMPONENT_FILE_REGEX.test(cleanId) &&
-        ["vue", "svelte", "raw", "url"].some((key) => query.has(key))
-      ) {
-        return null;
+      if (isComponentFile && queryStart !== -1) {
+        const query = new URLSearchParams(id.slice(queryStart + 1));
+        if (COMPONENT_SUBREQUEST_PARAMS.some((key) => query.has(key))) {
+          return null;
+        }
       }
 
       // Check file extension and filter
@@ -1402,13 +1446,12 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       }
 
       // Quick check: skip if no macro imports
-      const ids = macroIds ?? new Set(PALAMEDES_MACRO_PACKAGES);
-      const hasAnyMacroImport = [...ids].some((macroId) => code.includes(macroId));
+      const hasAnyMacroImport = PALAMEDES_MACRO_PACKAGES.some((macroId) => code.includes(macroId));
       if (!hasAnyMacroImport) {
         return null;
       }
 
-      if (COMPONENT_FILE_REGEX.test(cleanId)) {
+      if (isComponentFile) {
         // Import the runtime getter through the message dependency. This keeps
         // the dependency inside the native-edited script block and preserves
         // its source map, rather than appending JavaScript outside the SFC.
@@ -2010,7 +2053,7 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         const cfg = await getConfigLazy();
         addConfigWatchFiles(cfg, (file) => this.addWatchFile(file));
         const cleanId = stripQuery(id);
-        const locale = catalogLocaleForResource(cfg, cleanId);
+        const locale = catalogLocaleForResource(cfg, cleanId, cachedCanonicalPath);
         const result = await compileCatalogModuleAsync(catalogArtifactConfig(cfg), cleanId, {
           locale,
           pseudoLocale: cfg.pseudoLocale,

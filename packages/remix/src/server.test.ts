@@ -4,6 +4,7 @@ import { createI18n as createCoreI18n, defineCompiledCatalog } from "@palamedes/
 import { defineLocaleControls } from "@palamedes/core/locale";
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
 import { transformPalamedesMacros } from "@palamedes/transform";
+import { AcceptLanguage } from "remix/headers";
 import { createRouter } from "remix/router";
 
 import { createPalamedesRemixCatalogAssetRegistry } from "./index";
@@ -946,6 +947,77 @@ describe("createRemixI18nServer", () => {
     }
   });
 
+  it("compiles cold client catalog assets asynchronously via serveClientCatalogAssetAsync with deduplication and retry", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "palamedes-remix-async-catalog-"));
+    const localePath = path.join(root, "de.po");
+    writeFileSync(
+      path.join(root, "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "greeting"\nmsgstr "Hello"\n',
+    );
+    writeFileSync(localePath, 'msgid ""\nmsgstr ""\n\nmsgid "greeting"\nmsgstr "Hallo"\n');
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      let shouldFail = true;
+      const resolvePath = vi.fn(() => {
+        if (shouldFail) {
+          throw new Error("temporary failure");
+        }
+        return localePath;
+      });
+      const remixI18n = createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({ greeting: "Hallo" }),
+        catalogAssets: {
+          config: {
+            rootDir: root,
+            locales: ["en", "de", "es"],
+            sourceLocale: "en",
+            catalogs: [{ path: "{locale}", include: ["."] }],
+          },
+          resolvePath,
+        },
+      });
+      const makeRequest = () =>
+        new Request("https://example.test/assets/__palamedes/catalog/de.js");
+
+      expect(
+        await remixI18n.serveClientCatalogAssetAsync(
+          new Request("https://example.test/assets/other.js"),
+        ),
+      ).toBeUndefined();
+
+      const failed = await remixI18n.serveClientCatalogAssetAsync(makeRequest());
+      expect(failed?.status).toBe(500);
+      expect(resolvePath).toHaveBeenCalledTimes(1);
+
+      shouldFail = false;
+      resolvePath.mockClear();
+      const [first, second] = await Promise.all([
+        remixI18n.serveClientCatalogAssetAsync(makeRequest()),
+        remixI18n.serveClientCatalogAssetAsync(makeRequest()),
+      ]);
+      expect(first?.status).toBe(200);
+      expect(second?.status).toBe(200);
+      expect(await first?.text()).toBe(await second?.text());
+      expect(resolvePath).toHaveBeenCalledTimes(1);
+
+      // Warm cache serves 304 and shares cache with synchronous serveClientCatalogAsset().
+      const notModified = await remixI18n.serveClientCatalogAssetAsync(
+        new Request("https://example.test/assets/__palamedes/catalog/de.js", {
+          headers: { "if-none-match": first?.headers.get("etag") ?? "" },
+        }),
+      );
+      expect(notModified?.status).toBe(304);
+      const syncResponse = remixI18n.serveClientCatalogAsset(makeRequest());
+      expect(syncResponse?.status).toBe(200);
+      expect(resolvePath).toHaveBeenCalledTimes(1);
+    } finally {
+      errorSpy.mockRestore();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("validates cookieName, cookieMaxAge, and serializeLocaleCookie inputs and supports Secure", () => {
     for (const invalidName of [
       "",
@@ -1055,6 +1127,37 @@ describe("createRemixI18nServer", () => {
         }),
       ),
     ).toStrictEqual({ locale: "en", source: "default" });
+  });
+
+  it("skips Accept-Language parsing when a higher-priority strategy resolves the locale", () => {
+    const acceptLanguageSpy = vi.spyOn(AcceptLanguage, "from");
+    try {
+      const remixI18n = createRemixI18nServer({
+        locales,
+        strategy: "cookie",
+        loadMessages: () => defineCompiledCatalog({}),
+      });
+
+      expect(
+        remixI18n.resolveLocale(
+          new Request("https://example.test/", {
+            headers: { cookie: "locale=es", "accept-language": "de-DE,de;q=0.9,en;q=0.8" },
+          }),
+        ),
+      ).toStrictEqual({ locale: "es", source: "cookie" });
+      expect(acceptLanguageSpy).not.toHaveBeenCalled();
+
+      expect(
+        remixI18n.resolveLocale(
+          new Request("https://example.test/", {
+            headers: { "accept-language": "de-DE,de;q=0.9,en;q=0.8" },
+          }),
+        ),
+      ).toStrictEqual({ locale: "de", source: "accept-language" });
+      expect(acceptLanguageSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      acceptLanguageSpy.mockRestore();
+    }
   });
 });
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

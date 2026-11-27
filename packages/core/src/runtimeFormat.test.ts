@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { formatMessageArgument, selectPluralCategory } from "./runtimeFormat";
+import {
+  formatMessageArgument,
+  replacePoundPlaceholders,
+  selectPluralCategory,
+} from "./runtimeFormat";
 
 describe("formatter reuse", () => {
   it("keeps locale and style changes isolated when alternating number formats", () => {
@@ -41,5 +45,26 @@ describe("formatter reuse", () => {
     const category = selectPluralCategory(2, "en", "selectordinal");
     expect(() => selectPluralCategory(2, "!invalid", "selectordinal")).toThrow(RangeError);
     expect(selectPluralCategory(2, "en", "selectordinal")).toBe(category);
+  });
+
+  it("short-circuits replacePoundPlaceholders when no # placeholder is present", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Intl.NumberFormat.prototype, "format")!;
+    let formatReads = 0;
+    Object.defineProperty(Intl.NumberFormat.prototype, "format", {
+      ...descriptor,
+      get() {
+        formatReads += 1;
+        return descriptor.get!.call(this);
+      },
+    });
+    try {
+      expect(replacePoundPlaceholders("One item", 1, "!invalid")).toBe("One item");
+      expect(replacePoundPlaceholders("One item", 1, "en-US")).toBe("One item");
+      expect(formatReads).toBe(0);
+      expect(replacePoundPlaceholders("# items", 1234, "en-US")).toBe("1,234 items");
+      expect(formatReads).toBe(1);
+    } finally {
+      Object.defineProperty(Intl.NumberFormat.prototype, "format", descriptor);
+    }
   });
 });

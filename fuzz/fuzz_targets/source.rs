@@ -11,6 +11,7 @@ fn rich_transform_options() -> NativeTransformOptions {
         runtime_import_name: Some("getI18n".to_owned()),
         strip_non_essential_props: Some(true),
         include_source_metadata: Some(true),
+        source_map: Some(true),
         server_functions: Some(ServerFunctionTransformOptions {
             initializer_module: "./i18n/server".to_owned(),
             initializer_export: "initServerI18n".to_owned(),

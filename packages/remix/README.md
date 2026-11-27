@@ -136,7 +136,7 @@ const assetServer = createAssetServer({
   scripts: { loaders: [createPalamedesRemixAssetLoader({ catalogAssets })] },
 });
 // In the request listener, before assetServer.fetch(request):
-const fragment = catalogAssets.serve(request);
+const fragment = await catalogAssets.serveAsync(request);
 if (fragment) return fragment;
 ```
 
@@ -152,7 +152,7 @@ messages after source compilation produces a registration error. No request supp
 Pass the same `catalogAssets` to `createRemixI18nServer`, render
 `renderClientCatalog(locale)` into the document head, and send matching
 `/assets/__palamedes/catalog/:locale.js` requests to
-`serveClientCatalogAsset(request)` before the normal Remix asset server. The adapter starts the application after its document catalog is ready:
+`await serveClientCatalogAssetAsync(request)` (or synchronous `serveClientCatalogAsset(request)`) before the normal Remix asset server. The adapter starts the application after its document catalog is ready:
 
 ```ts
 const entry = await remixI18n.renderClientEntry("app/public/client.tsx", { assetServer });

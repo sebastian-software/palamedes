@@ -72,6 +72,28 @@ describe("affected chunk closure", () => {
       "static/chunks/top.js",
     ]);
   });
+
+  it("handles deep chains, cycles, and missing marked keys in linear BFS", () => {
+    const entries: Record<string, string> = {
+      "static/chunks/n0.js": `x(${marker(KEY_A)})`,
+    };
+    for (let i = 1; i <= 50; i += 1) {
+      entries[`static/chunks/n${i}.js`] = `e.l("static/chunks/n${i - 1}.js")`;
+    }
+    entries["static/chunks/cycle-a.js"] = `e.l("static/chunks/cycle-b.js")`;
+    entries["static/chunks/cycle-b.js"] =
+      `e.l("static/chunks/cycle-a.js"); e.l("static/chunks/n50.js")`;
+    entries["static/chunks/isolated.js"] = "export const ok = true;";
+    const chunks = graph(entries);
+
+    const affected = affectedChunks(chunks, ["static/chunks/n0.js"]);
+    expect(affected.size).toBe(53);
+    expect(affected.has("static/chunks/n50.js")).toBe(true);
+    expect(affected.has("static/chunks/cycle-a.js")).toBe(true);
+    expect(affected.has("static/chunks/cycle-b.js")).toBe(true);
+    expect(affected.has("static/chunks/isolated.js")).toBe(false);
+    expect(affectedChunks(chunks, []).size).toBe(0);
+  });
 });
 
 describe("variant rendering", () => {
@@ -240,6 +262,43 @@ globalThis.__RSC_MANIFEST["/[locale]/page"] = ${JSON.stringify({
     ]);
     locale = "fr";
     expect(() => route.entryJSFiles!.layout).toThrow(/no chunk permutation/u);
+  });
+
+  it("matches exact slash-delimited suffixes without matching partial prefixes, hashes, or prototype keys", () => {
+    const manifest = `globalThis.__RSC_MANIFEST = { route: {
+      valid: [
+        "static/chunks/page.js",
+        "/_next/static/chunks/page.js?dpl=d1",
+        "https://cdn.example/app/_next/static/chunks/page.js?v=2&x=1"
+      ],
+      nonMatching: [
+        "my-static/chunks/page.js",
+        "static/chunks/page.js.map",
+        "static/chunks/page.js#hash",
+        "toString",
+        "constructor"
+      ]
+    } };`;
+    const context: Record<string, unknown> = { process: { env: {} } };
+    const coverage = vm.runInNewContext(
+      manifest + renderManifestAdapter(["de", "en"], "en", variants),
+      context,
+    );
+    expect(coverage).toEqual(["static/chunks/page.js"]);
+    (context.__PALAMEDES_CLIENT_CATALOG_BIND as (fn: () => string) => void)(() => "de");
+    const route = (context.__RSC_MANIFEST as Record<string, Record<string, string[]>>).route!;
+    expect(route.valid).toEqual([
+      "static/chunks/page.de-1.js",
+      "/_next/static/chunks/page.de-1.js?dpl=d1",
+      "https://cdn.example/app/_next/static/chunks/page.de-1.js?v=2&x=1",
+    ]);
+    expect(route.nonMatching).toEqual([
+      "my-static/chunks/page.js",
+      "static/chunks/page.js.map",
+      "static/chunks/page.js#hash",
+      "toString",
+      "constructor",
+    ]);
   });
 });
 

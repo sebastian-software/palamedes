@@ -1,20 +1,34 @@
 import { createLocaleFormatterCache } from "./localeFormatterCache";
 
+function isEmptyOptions(options: object | undefined): boolean {
+  if (options === undefined) return true;
+  const prototype = Object.getPrototypeOf(options);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  return Object.getOwnPropertyNames(options).length === 0;
+}
+
 /** Snapshot Intl's option properties, including inherited and non-enumerable ones. */
 export function createIntlFormatterCache<TOptions extends object, TFormatter>(
   create: (locale: string | undefined, options: TOptions) => TFormatter,
   keys: readonly string[],
-): (locale: string | undefined, options: TOptions, overrides?: Partial<TOptions>) => TFormatter {
+): (
+  locale: string | undefined,
+  options: TOptions | undefined,
+  overrides?: Partial<TOptions>,
+) => TFormatter {
   const get = createLocaleFormatterCache((locale, key: string) =>
     create(locale, JSON.parse(key) as TOptions),
   );
 
   return (locale, options, overrides) => {
+    if (overrides === undefined && isEmptyOptions(options)) {
+      return get(locale, "{}");
+    }
     const snapshot: Record<string, unknown> = Object.create(null);
     let cacheable = true;
     for (const key of keys) {
       const source = overrides && Object.hasOwn(overrides, key) ? overrides : options;
-      const value = (source as Record<string, unknown>)[key];
+      const value = source === undefined ? undefined : (source as Record<string, unknown>)[key];
       if (value === undefined) continue;
       snapshot[key] = value;
       // Preserve Intl's coercion/errors for untyped inputs. JSON would conflate
