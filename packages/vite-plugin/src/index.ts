@@ -277,6 +277,83 @@ function canonicalRelativePath(rootDir: string, sourceId: string): string {
   return (relativePath || ".").replaceAll("\\", "/");
 }
 
+function resolveLocaleChain(cfg: LoadedPalamedesConfig, locale: string): string[] {
+  const chain = [locale];
+  const { fallbackLocales } = cfg;
+  if (Array.isArray(fallbackLocales)) {
+    for (const fallback of fallbackLocales) {
+      if (fallback !== locale && !chain.includes(fallback)) {
+        chain.push(fallback);
+      }
+    }
+  } else if (fallbackLocales && typeof fallbackLocales === "object") {
+    const specific = Object.hasOwn(fallbackLocales, locale) ? fallbackLocales[locale] : undefined;
+    if (Array.isArray(specific)) {
+      for (const fallback of specific) {
+        if (fallback !== locale && !chain.includes(fallback)) {
+          chain.push(fallback);
+        }
+      }
+    }
+    const defaults = Object.hasOwn(fallbackLocales, "default")
+      ? fallbackLocales.default
+      : undefined;
+    if (Array.isArray(defaults)) {
+      for (const fallback of defaults) {
+        if (fallback !== locale && !chain.includes(fallback)) {
+          chain.push(fallback);
+        }
+      }
+    }
+  }
+  if (cfg.sourceLocale && !chain.includes(cfg.sourceLocale)) {
+    chain.push(cfg.sourceLocale);
+  }
+  return chain;
+}
+
+function affectedForCatalogFile(
+  cfg: LoadedPalamedesConfig,
+  changedFile: string,
+): { locales: string[]; catalogs: PalamedesCatalogConfig[] } {
+  const canonicalChanged = canonicalPath(changedFile);
+  const directLocales = new Set<string>();
+  const matchedCatalogs = new Set<PalamedesCatalogConfig>();
+
+  for (const catalog of cfg.catalogs) {
+    for (const locale of cfg.locales) {
+      if (canonicalPath(catalogResourcePath(cfg, catalog, locale)) === canonicalChanged) {
+        directLocales.add(locale);
+        matchedCatalogs.add(catalog);
+      }
+    }
+  }
+
+  if (
+    directLocales.size === 0 ||
+    (cfg.fallbackLocales !== undefined &&
+      !Array.isArray(cfg.fallbackLocales) &&
+      typeof cfg.fallbackLocales !== "object")
+  ) {
+    return { locales: [...cfg.locales], catalogs: [...cfg.catalogs] };
+  }
+
+  const affectedLocales = cfg.locales.filter(
+    (locale) =>
+      directLocales.has(locale) ||
+      resolveLocaleChain(cfg, locale).some((fallback) => directLocales.has(fallback)),
+  );
+
+  return { locales: affectedLocales, catalogs: [...matchedCatalogs] };
+}
+
+function missingEntryId(entry: unknown): string | undefined {
+  if (!entry || typeof entry !== "object") return undefined;
+  if ("compiledId" in entry && typeof entry.compiledId === "string") return entry.compiledId;
+  if ("id" in entry && typeof entry.id === "string") return entry.id;
+  return undefined;
+}
+
 function catalogArtifactConfig(
   cfg: LoadedPalamedesConfig,
   catalogs: PalamedesCatalogConfig[] = cfg.catalogs,
@@ -513,14 +590,18 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
     cfg: LoadedPalamedesConfig,
     locale: string,
     addWatchFile: (file: string) => void = () => {},
-    warn: (message: string) => void = (message) => devServer?.config.logger.warn(message),
+    warn: (message: string) => void = (message) => devServer?.config?.logger.warn(message),
   ): Promise<ReactCatalogSnapshot> {
+    const artifacts = await Promise.all(
+      cfg.catalogs.map((catalog) =>
+        compileCatalogArtifactAsync(
+          catalogArtifactConfig(cfg, [catalog]),
+          catalogResourcePath(cfg, catalog, locale),
+        ),
+      ),
+    );
     const messages: Record<string, string> = {};
-    for (const catalog of cfg.catalogs) {
-      const artifact = await compileCatalogArtifactAsync(
-        catalogArtifactConfig(cfg, [catalog]),
-        catalogResourcePath(cfg, catalog, locale),
-      );
+    for (const artifact of artifacts) {
       artifact.watchFiles.forEach(addWatchFile);
       const validated = createCatalogLoaderResult(artifact, {
         locale,
@@ -543,6 +624,8 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   }
 
   type SidecarEntry = { sourceId: string; compiledIds: string[] };
+  type SelectedCatalogArtifact = Awaited<ReturnType<typeof compileCatalogArtifactSelectedAsync>>;
+  type MissingArtifactEntry = SelectedCatalogArtifact["missing"][number];
 
   // Duplicate compiled IDs warn once per locale and ID, however many
   // sidecars or rebuilds meet them.
@@ -551,58 +634,153 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
   // `warn` is required rather than optional: an omitted channel would
   // silently disable the `failOnMissing` gate below along with the warning,
   // and every caller has a plugin context that provides one.
-  async function compileSidecarLocale(
+  //
+  // Each `(catalog, locale)` compiles once for the union of `compiledIds`
+  // referenced by matching sidecars, then each sidecar slices its own IDs in
+  // JS. This avoids O(sidecars * locales) serial N-API roundtrips while
+  // preserving per-sidecar missing-translation attribution, catalog override
+  // precedence, and deterministic warning/error ordering.
+  async function compileBatchedSidecarLocales(
     cfg: LoadedPalamedesConfig,
-    entry: SidecarEntry,
-    locale: string,
+    entries: readonly SidecarEntry[],
+    locales: readonly string[],
     context: { addWatchFile?: (file: string) => void; warn: (message: string) => void },
-  ): Promise<Record<string, string> | null> {
-    const catalogs = cfg.catalogs.filter((catalog) =>
-      catalogMatchesSource(cfg, catalog, entry.sourceId),
+  ): Promise<Map<string, Map<SidecarEntry, Record<string, string>>>> {
+    const resultsByLocale = new Map<string, Map<SidecarEntry, Record<string, string>>>(
+      locales.map((locale) => [locale, new Map()]),
     );
-    if (catalogs.length === 0) {
-      throw new Error(
-        `Palamedes message source ${entry.sourceId} is not included in a configured catalog.`,
-      );
+    if (entries.length === 0 || locales.length === 0) {
+      return resultsByLocale;
     }
 
-    const selected: Record<string, string> = {};
-    for (const catalog of catalogs) {
-      const artifactConfig = catalogArtifactConfig(cfg, [catalog]);
-      const resourcePath = catalogResourcePath(cfg, catalog, locale);
-      const result = await compileCatalogArtifactSelectedAsync(
-        artifactConfig,
-        resourcePath,
-        entry.compiledIds,
-      );
-      result.watchFiles.forEach((file: string) => context.addWatchFile?.(file));
-      if (result.missing.length > 0) {
-        const message =
-          `${createMissingErrorMessage(locale, result.missing)}\n\n` +
-          `Referenced by ${entry.sourceId}.`;
-        if (failOnMissing) {
-          throw new Error(message);
-        }
-        context.warn(message);
-      }
-      for (const [id, message] of Object.entries(result.messages)) {
-        // Catalogs apply in configuration order and the last one wins, so the
-        // result is deterministic; the warning only makes the override visible.
-        if (Object.hasOwn(selected, id) && selected[id] !== message) {
-          const key = `${locale}\0${id}`;
-          if (!warnedDuplicateIds.has(key)) {
-            warnedDuplicateIds.add(key);
-            context.warn(
-              `Palamedes compiled message ID "${id}" has different ${locale} values in more than one catalog ` +
-                `(seen again in ${catalog.path}); the last catalog in the configuration wins. ` +
-                "Give the messages distinct IDs or make the catalogs agree.",
-            );
+    const uniqueEntries = [...new Set(entries)];
+    const entryCatalogIndices = new Map<SidecarEntry, number[]>();
+    const catalogEntries = new Map<number, SidecarEntry[]>();
+    for (const entry of uniqueEntries) {
+      const matchedIndices: number[] = [];
+      for (const [catalogIndex, catalog] of cfg.catalogs.entries()) {
+        if (catalogMatchesSource(cfg, catalog, entry.sourceId)) {
+          matchedIndices.push(catalogIndex);
+          let bucket = catalogEntries.get(catalogIndex);
+          if (!bucket) {
+            bucket = [];
+            catalogEntries.set(catalogIndex, bucket);
           }
+          bucket.push(entry);
         }
-        selected[id] = message;
+      }
+      if (matchedIndices.length === 0) {
+        throw new Error(
+          `Palamedes message source ${entry.sourceId} is not included in a configured catalog.`,
+        );
+      }
+      entryCatalogIndices.set(entry, matchedIndices);
+    }
+
+    const activeCatalogIndices = [...catalogEntries.keys()].sort((a, b) => a - b);
+    const artifactResults = new Map<string, SelectedCatalogArtifact>();
+    await Promise.all(
+      activeCatalogIndices.flatMap((catalogIndex) => {
+        const catalog = cfg.catalogs[catalogIndex]!;
+        const artifactConfig = catalogArtifactConfig(cfg, [catalog]);
+        const unionIds = [
+          ...new Set(catalogEntries.get(catalogIndex)!.flatMap((entry) => entry.compiledIds)),
+        ].sort();
+        return locales.map(async (locale) => {
+          const resourcePath = catalogResourcePath(cfg, catalog, locale);
+          const result = await compileCatalogArtifactSelectedAsync(
+            artifactConfig,
+            resourcePath,
+            unionIds,
+          );
+          artifactResults.set(`${catalogIndex}\0${locale}`, result);
+        });
+      }),
+    );
+
+    const missingIndex = new Map<
+      string,
+      { byId: Map<string, MissingArtifactEntry[]>; unkeyed: MissingArtifactEntry[] }
+    >();
+    for (const catalogIndex of activeCatalogIndices) {
+      for (const locale of locales) {
+        const key = `${catalogIndex}\0${locale}`;
+        const result = artifactResults.get(key)!;
+        result.watchFiles.forEach((file: string) => context.addWatchFile?.(file));
+        if (result.missing.length > 0) {
+          const byId = new Map<string, MissingArtifactEntry[]>();
+          const unkeyed: MissingArtifactEntry[] = [];
+          for (const item of result.missing) {
+            const id = missingEntryId(item);
+            if (id === undefined) {
+              unkeyed.push(item);
+            } else {
+              let list = byId.get(id);
+              if (!list) {
+                list = [];
+                byId.set(id, list);
+              }
+              list.push(item);
+            }
+          }
+          missingIndex.set(key, { byId, unkeyed });
+        }
       }
     }
-    return selected;
+
+    for (const locale of locales) {
+      const localeSelections = resultsByLocale.get(locale)!;
+      for (const entry of uniqueEntries) {
+        const uniqueIds = [...new Set(entry.compiledIds)];
+        const matchedIndices = entryCatalogIndices.get(entry)!;
+        const selected: Record<string, string> = {};
+        for (const catalogIndex of matchedIndices) {
+          const catalog = cfg.catalogs[catalogIndex]!;
+          const resultKey = `${catalogIndex}\0${locale}`;
+          const result = artifactResults.get(resultKey)!;
+          const indexedMissing = missingIndex.get(resultKey);
+          if (indexedMissing) {
+            const entryMissing: MissingArtifactEntry[] = [];
+            for (const id of uniqueIds) {
+              const matched = indexedMissing.byId.get(id);
+              if (matched) entryMissing.push(...matched);
+            }
+            if (indexedMissing.unkeyed.length > 0) {
+              entryMissing.push(...indexedMissing.unkeyed);
+            }
+            if (entryMissing.length > 0) {
+              const message =
+                `${createMissingErrorMessage(locale, entryMissing)}\n\n` +
+                `Referenced by ${entry.sourceId}.`;
+              if (failOnMissing) {
+                throw new Error(message);
+              }
+              context.warn(message);
+            }
+          }
+          for (const id of uniqueIds) {
+            if (!Object.hasOwn(result.messages, id)) continue;
+            const message = result.messages[id]!;
+            // Catalogs apply in configuration order and the last one wins, so the
+            // result is deterministic; the warning only makes the override visible.
+            if (Object.hasOwn(selected, id) && selected[id] !== message) {
+              const duplicateKey = `${locale}\0${id}`;
+              if (!warnedDuplicateIds.has(duplicateKey)) {
+                warnedDuplicateIds.add(duplicateKey);
+                context.warn(
+                  `Palamedes compiled message ID "${id}" has different ${locale} values in more than one catalog ` +
+                    `(seen again in ${catalog.path}); the last catalog in the configuration wins. ` +
+                    "Give the messages distinct IDs or make the catalogs agree.",
+                );
+              }
+            }
+            selected[id] = message;
+          }
+        }
+        localeSelections.set(entry, selected);
+      }
+    }
+    return resultsByLocale;
   }
 
   function queueReactCatalogUpdate(file: string, timestamp: number): void {
@@ -618,24 +796,28 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
       try {
         const cfg = await getConfigLazy();
         const client = server.environments.client;
+        const { locales: affectedLocales, catalogs: affectedCatalogs } = affectedForCatalogFile(
+          cfg,
+          file,
+        );
         const sourceEntries = [...sidecarModules.values()].filter(
           (entry) =>
-            cfg.catalogs.some((catalog) => catalogMatchesSource(cfg, catalog, entry.sourceId)) &&
+            affectedCatalogs.some((catalog) =>
+              catalogMatchesSource(cfg, catalog, entry.sourceId),
+            ) &&
             [...(client?.moduleGraph.getModulesByFile(entry.sourceId) ?? [])].some(
               (module) => module.importedModules.size > 0,
             ),
         );
         // Preserve production's source/catalog and selected-ID contract before
         // a complete snapshot can make an unrelated catalog's message visible.
-        for (const entry of sourceEntries)
-          for (const locale of cfg.locales)
-            await compileSidecarLocale(cfg, entry, locale, {
-              warn: (message) => server.config.logger.warn(message),
-            });
-        // Validate every snapshot before changing the browser generation. A
-        // broken edit keeps the running UI and its state behind Vite's overlay.
+        await compileBatchedSidecarLocales(cfg, sourceEntries, affectedLocales, {
+          warn: (message) => server.config?.logger.warn(message),
+        });
+        // Validate every affected snapshot before changing the browser generation.
+        // A broken edit keeps the running UI and its state behind Vite's overlay.
         const snapshots = await Promise.all(
-          cfg.locales.map(
+          affectedLocales.map(
             async (locale) => [locale, await compileReactCatalogSnapshot(cfg, locale)] as const,
           ),
         );
@@ -648,9 +830,11 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         if (epoch !== reactCatalogEpoch || reactCatalogGeneration !== ownedGeneration) return;
         reactCatalogGeneration += 1;
         ownedGeneration = reactCatalogGeneration;
-        reactCatalogSnapshots = new Map(
-          snapshots.map(([locale, code]) => [locale, Promise.resolve(code)]),
-        );
+        const nextSnapshots = new Map(reactCatalogSnapshots);
+        for (const [locale, snapshot] of snapshots) {
+          nextSnapshots.set(locale, Promise.resolve(snapshot));
+        }
+        reactCatalogSnapshots = nextSnapshots;
         const sourceModules = new Set(
           sourceEntries.flatMap((entry) =>
             [...(client?.moduleGraph.getModulesByFile(entry.sourceId) ?? [])].filter(
@@ -687,8 +871,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
         });
         // Refresh the application's existing React boundaries instead of
         // remounting its root or introducing subscriptions into getI18n().
-        if (experimentalReactCatalogHmr)
-          for (const module of sourceModules) await client!.reloadModule(module);
+        if (experimentalReactCatalogHmr && client) {
+          await Promise.all([...sourceModules].map((module) => client.reloadModule(module)));
+        }
       } catch (error) {
         if (epoch !== reactCatalogEpoch || reactCatalogGeneration !== ownedGeneration) return;
         if (experimentalSolidCatalogHmr) solidCatalogError = true;
@@ -1471,10 +1656,9 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
             // The complete snapshot owns catalog watch dependencies. Attaching
             // them here would let Vite invalidate React source boundaries
             // before the catalog transaction captures them for refresh.
-            for (const name of locales)
-              await compileSidecarLocale(cfg, entry, name, {
-                warn: (message) => this.warn(message),
-              });
+            await compileBatchedSidecarLocales(cfg, [entry], locales, {
+              warn: (message) => this.warn(message),
+            });
             return {
               code: `${initialize}import { loadDevelopmentCatalog } from ${JSON.stringify(REACT_CATALOG_HMR)};\nawait loadDevelopmentCatalog(${reactCatalogGeneration});\n${runtimeExport}`,
               map: null,
@@ -1503,12 +1687,13 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           this.error(`Palamedes message sidecar "${key}" requested unknown locale "${locale}".`);
         }
 
-        let selected: Record<string, string> | null = null;
+        let selected: Record<string, string> | undefined;
         try {
-          selected = await compileSidecarLocale(cfg, entry, locale, {
+          const compiled = await compileBatchedSidecarLocales(cfg, [entry], [locale], {
             addWatchFile: (file) => this.addWatchFile(file),
             warn: (message) => this.warn(message),
           });
+          selected = compiled.get(locale)?.get(entry);
         } catch (error) {
           this.error(error instanceof Error ? error.message : String(error));
         }
@@ -1591,15 +1776,20 @@ export function palamedes(options: PalamedesPluginOptions = {}): Plugin[] {
           if (!grouped.has(key)) groups.push([key]);
         }
 
+        const orderedEntries = groups.flatMap((keys) =>
+          keys.map((key) => sidecarModules.get(key)!),
+        );
+        const compiledByLocale = await compileBatchedSidecarLocales(cfg, orderedEntries, locales, {
+          warn: (message) => this.warn(message),
+        });
+
         for (const keys of groups) {
           for (const locale of locales) {
-            const selections: [string, Record<string, string>][] = [];
-            for (const key of keys) {
-              const selected = await compileSidecarLocale(cfg, sidecarModules.get(key)!, locale, {
-                warn: (message) => this.warn(message),
-              });
-              selections.push([key, selected ?? {}]);
-            }
+            const localeSelections = compiledByLocale.get(locale)!;
+            const selections: [string, Record<string, string>][] = keys.map((key) => [
+              key,
+              localeSelections.get(sidecarModules.get(key)!) ?? {},
+            ]);
             const union = mergeSelections(selections.map(([, selected]) => selected));
             const assets: [string, Record<string, string>, string[]][] = union
               ? [[messageGroupName(keys), union, keys]]
