@@ -757,7 +757,7 @@ function resolveRunnerShellContexts(jobNode, jobEnv, jobMatrixRows) {
     return {
       row,
       runnerOs,
-      defaultShell: runnerOs === "Windows" ? "pwsh" : "posix",
+      defaultShell: runnerOs === "Windows" ? "pwsh" : runnerOs ? "posix" : null,
     };
   });
 }
@@ -902,11 +902,46 @@ function filterRunnerContextsForStep(stepIfNode, runnerContexts, eventNames = nu
     return runnerContexts;
   }
   const eventsToCheck = Array.isArray(eventNames) && eventNames.length > 0 ? eventNames : [null];
-  return runnerContexts.filter((context) =>
-    eventsToCheck.some(
-      (eventName) => evaluateGuardForEventAndContext(rawIf, eventName, context) !== false,
-    ),
-  );
+  const filtered = [];
+  for (const context of runnerContexts) {
+    if (context.runnerOs !== null) {
+      if (
+        eventsToCheck.some(
+          (eventName) => evaluateGuardForEventAndContext(rawIf, eventName, context) !== false,
+        )
+      ) {
+        filtered.push(context);
+      }
+      continue;
+    }
+    const matchingOs = [];
+    for (const candidateOs of ["Linux", "macOS", "Windows"]) {
+      const candidateContext = { ...context, runnerOs: candidateOs };
+      if (
+        eventsToCheck.some(
+          (eventName) =>
+            evaluateGuardForEventAndContext(rawIf, eventName, candidateContext) !== false,
+        )
+      ) {
+        matchingOs.push(candidateOs);
+      }
+    }
+    if (matchingOs.length === 0) {
+      continue;
+    }
+    if (matchingOs.length === 1 && matchingOs[0] === "Windows") {
+      filtered.push({ ...context, runnerOs: "Windows", defaultShell: "pwsh" });
+    } else if (!matchingOs.includes("Windows")) {
+      filtered.push({
+        ...context,
+        runnerOs: matchingOs.length === 1 ? matchingOs[0] : "Linux",
+        defaultShell: "posix",
+      });
+    } else {
+      filtered.push(context);
+    }
+  }
+  return filtered;
 }
 
 function stripOuterExpressionWrapper(expr) {
@@ -2761,6 +2796,20 @@ function parseWorkflowYaml(source) {
 
 // --- Whole-script shell lexer (multiline quotes, heredocs, subshells) --------
 
+const NON_SHELL_SCRIPT_INTERPRETERS = new Set([
+  "node",
+  "nodejs",
+  "python",
+  "python3",
+  "py",
+  "perl",
+  "ruby",
+  "bun",
+  "deno",
+  "php",
+  "lua",
+]);
+
 function isShellInterpreterCommand(tokens) {
   let cursor = 0;
   while (cursor < tokens.length) {
@@ -2776,6 +2825,123 @@ function isShellInterpreterCommand(tokens) {
     return false;
   }
   return SHELL_INTERPRETERS.has(path.basename(cmd));
+}
+
+function isNonShellInterpreterCommand(tokens) {
+  let cursor = 0;
+  while (cursor < tokens.length) {
+    const token = tokens[cursor];
+    if (SHELL_COMMAND_PREFIXES.has(token) || ENV_PREFIX_ASSIGNMENT_PATTERN.test(token)) {
+      cursor += 1;
+      continue;
+    }
+    break;
+  }
+  const cmd = tokens[cursor];
+  if (!cmd) {
+    return false;
+  }
+  const base = path
+    .basename(cmd)
+    .toLowerCase()
+    .replace(/\.exe$/u, "");
+  return NON_SHELL_SCRIPT_INTERPRETERS.has(base);
+}
+
+function inspectNonShellScript(
+  scriptText,
+  startLine,
+  filePath,
+  problems,
+  emittedGithubEnv = null,
+  emittedGithubOutput = null,
+) {
+  // Strip line/block comments outside quoted strings so comments mentioning
+  // Docker or GitHub files do not trigger false failures.
+  let codeOnly = "";
+  let q = null;
+  let triple = false;
+  for (let i = 0; i < scriptText.length; i += 1) {
+    const ch = scriptText[i];
+    if (q) {
+      codeOnly += ch;
+      if (ch === "\\" && i + 1 < scriptText.length) {
+        codeOnly += scriptText[i + 1];
+        i += 1;
+        continue;
+      }
+      if (triple) {
+        if (scriptText.slice(i, i + 3) === q.repeat(3)) {
+          codeOnly += q.repeat(2);
+          i += 2;
+          q = null;
+          triple = false;
+        }
+      } else if (ch === q) {
+        q = null;
+      }
+      continue;
+    }
+    if (ch === "#") {
+      while (i < scriptText.length && scriptText[i] !== "\n") {
+        i += 1;
+      }
+      codeOnly += "\n";
+      continue;
+    }
+    if (ch === "/" && scriptText[i + 1] === "/") {
+      while (i < scriptText.length && scriptText[i] !== "\n") {
+        i += 1;
+      }
+      codeOnly += "\n";
+      continue;
+    }
+    if (ch === "/" && scriptText[i + 1] === "*") {
+      i += 2;
+      while (i < scriptText.length && !(scriptText[i] === "*" && scriptText[i + 1] === "/")) {
+        if (scriptText[i] === "\n") {
+          codeOnly += "\n";
+        }
+        i += 1;
+      }
+      i += 1;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      if (scriptText.slice(i, i + 3) === ch.repeat(3)) {
+        q = ch;
+        triple = true;
+        codeOnly += ch.repeat(3);
+        i += 2;
+        continue;
+      }
+      q = ch;
+      triple = false;
+      codeOnly += ch;
+      continue;
+    }
+    codeOnly += ch;
+  }
+
+  const hasExecOrSdkCall =
+    /\b(?:subprocess|os\.system|os\.popen|os\.spawn\w*|os\.exec\w*|pty\.spawn|asyncio\.create_subprocess\w*|child_process|execSync|execFileSync|spawnSync|execFile\s*\(|spawn\s*\(|exec\s*\(|Bun\.spawn|Bun\.\$|Deno\.Command|Deno\.run|dockerode|system\s*\(|popen\s*\(|open3|Open3|shell_exec|proc_open|passthru|import\s+docker|from\s+docker|import\s+podman|from\s+podman|import\s+python_on_whales|from\s+python_on_whales)\b|(?:%x|qx)\s*[[({/<]/u.test(
+      codeOnly,
+    );
+  const invokesContainerTool =
+    hasExecOrSdkCall &&
+    /\b(?:docker|podman|buildah|docker-compose|podman-compose)\b/iu.test(codeOnly);
+  if (invokesContainerTool) {
+    problems.push(
+      `${filePath}:${startLine}: container tool invocation in non-shell run step cannot be verified statically`,
+    );
+  }
+  const opaqueEntries = [{ value: OPAQUE_UNVERIFIED_SENTINEL, line: startLine }];
+  if (emittedGithubOutput && /\bGITHUB_OUTPUT\b/u.test(codeOnly)) {
+    recordGithubEnvWrite(emittedGithubOutput, "*", opaqueEntries, false);
+  }
+  if (emittedGithubEnv && /\bGITHUB_ENV\b/u.test(codeOnly)) {
+    recordGithubEnvWrite(emittedGithubEnv, OPAQUE_ENV_KEY, opaqueEntries, false);
+  }
 }
 
 const MAX_SHELL_NESTING_DEPTH = 8;
@@ -3894,6 +4060,13 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         events.push({ kind: "enter-subshell" });
         events.push(...lexShellScript(bodyText, bodyStartLine, "posix"));
         events.push({ kind: "exit-subshell" });
+      } else if (spec.nonShellExecutable && spec.isStdinFd) {
+        events.push({
+          kind: "non-shell-heredoc",
+          body: bodyText,
+          startLine: bodyStartLine,
+          conditional: spec.conditional,
+        });
       } else {
         if (!spec.quoted) {
           const heredocSubs = extractUnquotedHeredocSubstitutions(bodyText, bodyStartLine);
@@ -4321,6 +4494,8 @@ function lexShellScript(text, startLine, shellMode = "posix") {
           quoted: delimQuoted,
           isStdinFd,
           executable: isShellInterpreterCommand(tokens),
+          nonShellExecutable:
+            !isShellInterpreterCommand(tokens) && isNonShellInterpreterCommand(tokens),
           ownerTokens: tokens,
           conditional: commandConditional,
         });
@@ -7115,93 +7290,14 @@ function inspectShellText(
   }
 
   if (shellMode === "unsupported") {
-    // Strip line/block comments outside quoted strings so comments mentioning
-    // Docker or GitHub files do not trigger false failures.
-    let codeOnly = "";
-    let q = null;
-    let triple = false;
-    for (let i = 0; i < scriptText.length; i += 1) {
-      const ch = scriptText[i];
-      if (q) {
-        codeOnly += ch;
-        if (ch === "\\" && i + 1 < scriptText.length) {
-          codeOnly += scriptText[i + 1];
-          i += 1;
-          continue;
-        }
-        if (triple) {
-          if (scriptText.slice(i, i + 3) === q.repeat(3)) {
-            codeOnly += q.repeat(2);
-            i += 2;
-            q = null;
-            triple = false;
-          }
-        } else if (ch === q) {
-          q = null;
-        }
-        continue;
-      }
-      if (ch === "#") {
-        while (i < scriptText.length && scriptText[i] !== "\n") {
-          i += 1;
-        }
-        codeOnly += "\n";
-        continue;
-      }
-      if (ch === "/" && scriptText[i + 1] === "/") {
-        while (i < scriptText.length && scriptText[i] !== "\n") {
-          i += 1;
-        }
-        codeOnly += "\n";
-        continue;
-      }
-      if (ch === "/" && scriptText[i + 1] === "*") {
-        i += 2;
-        while (i < scriptText.length && !(scriptText[i] === "*" && scriptText[i + 1] === "/")) {
-          if (scriptText[i] === "\n") {
-            codeOnly += "\n";
-          }
-          i += 1;
-        }
-        i += 1;
-        continue;
-      }
-      if (ch === "'" || ch === '"') {
-        if (scriptText.slice(i, i + 3) === ch.repeat(3)) {
-          q = ch;
-          triple = true;
-          codeOnly += ch.repeat(3);
-          i += 2;
-          continue;
-        }
-        q = ch;
-        triple = false;
-        codeOnly += ch;
-        continue;
-      }
-      codeOnly += ch;
-    }
-
-    const invokesContainerTool =
-      (/\b(?:subprocess|os\.system|os\.popen|os\.spawn\w*|os\.exec\w*|pty\.spawn|asyncio\.create_subprocess\w*|child_process|execSync|execFileSync|spawnSync|spawn|system|popen|open3|import\s+docker|from\s+docker|import\s+podman|from\s+podman)\b/u.test(
-        codeOnly,
-      ) &&
-        /\b(?:docker|podman|buildah|docker-compose|podman-compose)\b/iu.test(codeOnly)) ||
-      /\b(?:docker|podman|buildah|docker-compose|podman-compose)\s+(?:pull|run|create|build|buildx|image|container|service|compose|bud|from|bake)\b/iu.test(
-        codeOnly,
-      );
-    if (invokesContainerTool) {
-      problems.push(
-        `${filePath}:${startLine}: container tool invocation in non-shell run step cannot be verified statically`,
-      );
-    }
-    const opaqueEntries = [{ value: OPAQUE_UNVERIFIED_SENTINEL, line: startLine }];
-    if (emittedGithubOutput && /\bGITHUB_OUTPUT\b/u.test(codeOnly)) {
-      recordGithubEnvWrite(emittedGithubOutput, "*", opaqueEntries, false);
-    }
-    if (emittedGithubEnv && /\bGITHUB_ENV\b/u.test(codeOnly)) {
-      recordGithubEnvWrite(emittedGithubEnv, OPAQUE_ENV_KEY, opaqueEntries, false);
-    }
+    inspectNonShellScript(
+      scriptText,
+      startLine,
+      filePath,
+      problems,
+      emittedGithubEnv,
+      emittedGithubOutput,
+    );
     return;
   }
 
@@ -7525,6 +7621,7 @@ function inspectShellText(
       if (
         ev.kind === "stdin-containerfile-heredoc" ||
         ev.kind === "nested-shell-heredoc" ||
+        ev.kind === "non-shell-heredoc" ||
         ev.redirectTarget === "github-env" ||
         ev.redirectTarget === "github-output"
       ) {
@@ -7768,6 +7865,18 @@ function inspectShellText(
           frame.vars = cloneVarMap(top.entryVars);
           top.sawArmBody = false;
         }
+        continue;
+      }
+
+      if (event.kind === "non-shell-heredoc") {
+        inspectNonShellScript(
+          event.body,
+          event.startLine,
+          filePath,
+          problems,
+          suppressSideEffects ? null : emittedGithubEnv,
+          suppressSideEffects ? null : emittedGithubOutput,
+        );
         continue;
       }
 
@@ -9558,6 +9667,42 @@ function inspectShellText(
                 problems.push(message);
               }
             }
+          }
+        }
+        continue;
+      }
+
+      if (NON_SHELL_SCRIPT_INTERPRETERS.has(normalizedCli)) {
+        const evalFlags =
+          normalizedCli === "python" || normalizedCli === "python3" || normalizedCli === "py"
+            ? new Set(["-c"])
+            : new Set(["-e", "--eval", "-p", "--print"]);
+        for (let idx = cursor + 1; idx < tokens.length; idx += 1) {
+          const tok = tokens[idx];
+          if (tok === "--") {
+            break;
+          }
+          if (evalFlags.has(tok) && tokens[idx + 1] !== undefined) {
+            inspectNonShellScript(
+              tokens[idx + 1],
+              lineNumber,
+              filePath,
+              problems,
+              suppressSideEffects ? null : emittedGithubEnv,
+              suppressSideEffects ? null : emittedGithubOutput,
+            );
+            idx += 1;
+            continue;
+          }
+          if (tok.startsWith("--eval=")) {
+            inspectNonShellScript(
+              tok.slice("--eval=".length),
+              lineNumber,
+              filePath,
+              problems,
+              suppressSideEffects ? null : emittedGithubEnv,
+              suppressSideEffects ? null : emittedGithubOutput,
+            );
           }
         }
         continue;
@@ -11503,6 +11648,7 @@ function resolveStepExecutionGroups(
   root,
   actionWsRelDir = null,
   deferUnresolvedInputs = false,
+  runScriptText = "",
 ) {
   const expandShellTemplate = (template, fallbackLine, row, rowStepEnv) => {
     const rowList = row ? [row] : [];
@@ -11519,14 +11665,25 @@ function resolveStepExecutionGroups(
     }
     return modes.length > 0 ? modes : ["posix"];
   };
+  const inferUnknownRunnerShell = (script) => {
+    if (
+      script &&
+      /(?:^|\n)\s*\$[A-Za-z_][A-Za-z0-9_]*\s*=|\$env:|`\r?\n|\b(?:Write-Output|Add-Content|Set-Content|Out-File)\b/iu.test(
+        script,
+      )
+    ) {
+      return "pwsh";
+    }
+    return "posix";
+  };
 
   const groups = new Map();
   const contexts =
     applicableContexts.length > 0
       ? applicableContexts
       : matrixRows.length > 0
-        ? matrixRows.map((row) => ({ row, runnerOs: null, defaultShell: "posix" }))
-        : [{ row: null, runnerOs: null, defaultShell: "posix" }];
+        ? matrixRows.map((row) => ({ row, runnerOs: null, defaultShell: null }))
+        : [{ row: null, runnerOs: null, defaultShell: null }];
 
   for (const ctx of contexts) {
     const rowStepEnv = getRowStepEnv(ctx.row);
@@ -11541,7 +11698,7 @@ function resolveStepExecutionGroups(
     } else if (explicitDefaultShell) {
       modes = expandShellTemplate(explicitDefaultShell, 1, ctx.row, rowStepEnv);
     } else {
-      modes = [ctx.defaultShell];
+      modes = [ctx.defaultShell ?? inferUnknownRunnerShell(runScriptText)];
     }
     const workingDirs = resolveWorkingDirsForRow(
       stepWorkingDirNode,
@@ -12795,6 +12952,7 @@ function checkStepsList(
       }
     }
 
+    const runNode = getMapField(stepNode, "run");
     const executionGroups = resolveStepExecutionGroups(
       stepShellNode,
       explicitDefaultShell,
@@ -12806,9 +12964,9 @@ function checkStepsList(
       buildFileContext?.root ?? null,
       buildFileContext?.actionWsRelDir ?? null,
       Boolean(buildFileContext?.deferUnresolvedInputs),
+      runNode?.kind === "scalar" ? String(runNode.value) : "",
     );
 
-    const runNode = getMapField(stepNode, "run");
     if (runNode?.kind === "scalar") {
       const seenAcrossStepRuns = new Set();
       for (const { shellMode, workingDir, rows } of executionGroups) {

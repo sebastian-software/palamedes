@@ -4851,6 +4851,47 @@ describe("workflow contracts", () => {
       "<memory>:27: container image reference depends on an unverified non-shell output or environment variable",
       "<memory>:37: $a exceeds expansion limit and cannot be verified exhaustively",
     ]);
+    // Interpreter heredocs (`node <<'NODE'` / `python3 <<'PY'`) and inline
+    // `-e`/`-c` snippets go through the non-shell checker, custom runners like
+    // `runs-on: self-hosted` preserve Windows/PowerShell when guarded by
+    // `runner.os == 'Windows'` or PowerShell syntax, and print-only Python
+    // steps mentioning Docker instructions pass without false positives.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r67-self-hosted:",
+          "    runs-on: self-hosted",
+          "    steps:",
+          "      - if: runner.os == 'Windows'",
+          "        run: |",
+          '          $image = "alpine:3.20"',
+          '          docker pull "$image"',
+          "      - shell: python",
+          '        run: print("See docker build --help")',
+          "      - run: |",
+          "          node <<'NODE'",
+          "          console.log(`See docker run --help`);",
+          "          NODE",
+          "      - run: |",
+          "          node <<'NODE'",
+          '          const { execFileSync } = require("node:child_process");',
+          '          execFileSync("docker", ["pull", "node:24"]);',
+          "          NODE",
+          "      - run: |",
+          "          python3 <<'PY'",
+          "          import subprocess",
+          '          subprocess.run(["docker", "pull", "debian:12"], check=True)',
+          "          PY",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:8: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:18: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:23: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
