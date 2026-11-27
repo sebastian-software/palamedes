@@ -4059,11 +4059,24 @@ mod platform {
             let Ok(c_name) = CString::new(raw_name) else {
                 continue;
             };
-            if attrs.contains_key(&c_name) {
-                continue;
-            }
-            if let Some(value) = read_linux_xattr(fd, &c_name)? {
-                attrs.insert(c_name, value);
+            match super::classify_linux_security_xattr(raw_name) {
+                super::LinuxSecurityXattrKind::CopyableAccessLabel => {
+                    if attrs.contains_key(&c_name) {
+                        continue;
+                    }
+                    if let Some(value) = read_linux_xattr(fd, &c_name)? {
+                        attrs.insert(c_name, value);
+                    }
+                }
+                super::LinuxSecurityXattrKind::UnpreservableIntegrityOrUnknown => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        format!(
+                            "cannot safely preserve Linux integrity or unrecognized security attribute {} across atomic replacement",
+                            c_name.to_string_lossy()
+                        ),
+                    ));
+                }
             }
         }
         Ok(attrs.into_iter().collect())
@@ -5627,6 +5640,27 @@ mod platform {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LinuxSecurityXattrKind {
+    CopyableAccessLabel,
+    UnpreservableIntegrityOrUnknown,
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn classify_linux_security_xattr(name: &[u8]) -> LinuxSecurityXattrKind {
+    match name {
+        b"security.selinux"
+        | b"security.SMACK64"
+        | b"security.SMACK64EXEC"
+        | b"security.SMACK64MMAP"
+        | b"security.SMACK64TRANSMUTE"
+        | b"security.apparmor"
+        | b"security.capability" => LinuxSecurityXattrKind::CopyableAccessLabel,
+        _ => LinuxSecurityXattrKind::UnpreservableIntegrityOrUnknown,
+    }
+}
+
 #[cfg(any(windows, test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum WindowsTxfOpenDisposition {
@@ -5756,6 +5790,7 @@ mod platform {
     const FILE_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
     const OBJ_CASE_INSENSITIVE: u32 = 0x0000_0040;
     const FILE_BASIC_INFORMATION_CLASS: u32 = 4;
+    const FILE_EA_INFORMATION_CLASS: u32 = 7;
     const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
     const FILE_DISPOSITION_INFORMATION_CLASS: u32 = 13;
     const FILE_STREAM_INFORMATION_CLASS: u32 = 22;
@@ -5780,6 +5815,11 @@ mod platform {
         change_time: i64,
         file_attributes: u32,
         _padding: u32,
+    }
+
+    #[repr(C)]
+    struct FileEaInformation {
+        ea_size: u32,
     }
 
     #[repr(C)]
@@ -5811,6 +5851,7 @@ mod platform {
         file_attributes: u32,
         is_encrypted: bool,
         has_named_streams: bool,
+        has_extended_attributes: bool,
     }
 
     struct WindowsTempFileGuard {
@@ -6810,6 +6851,7 @@ mod platform {
                     (!has_security_descriptors || security.sacl_accessible)
                         && !security.is_encrypted
                         && !security.has_named_streams
+                        && !security.has_extended_attributes
                         && (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) == 0
                 });
                 if !can_atomic_replace {
@@ -6884,6 +6926,7 @@ mod platform {
                     (has_security_descriptors && !security.sacl_accessible)
                         || security.is_encrypted
                         || security.has_named_streams
+                        || security.has_extended_attributes
                         || (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) != 0
                 });
                 if needs_transacted_update {
@@ -6908,6 +6951,11 @@ mod platform {
                                     .is_some_and(|security| security.has_named_streams)
                                 {
                                     "cannot safely preserve Windows NTFS named data streams across atomic replacement"
+                                } else if existing_security
+                                    .as_ref()
+                                    .is_some_and(|security| security.has_extended_attributes)
+                                {
+                                    "cannot safely preserve Windows NTFS extended attributes across atomic replacement"
                                 } else if existing_security.as_ref().is_some_and(|security| {
                                     (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES)
                                         != 0
@@ -7094,6 +7142,8 @@ mod platform {
             let security = if for_replace {
                 let is_encrypted = (info.file_attributes & FILE_ATTRIBUTE_ENCRYPTED) != 0;
                 let has_named_streams = has_windows_named_streams(handle.as_raw_handle())?;
+                let has_extended_attributes =
+                    has_windows_extended_attributes(handle.as_raw_handle())?;
                 let owner_sd =
                     read_security_descriptor(handle.as_raw_handle(), OWNER_SECURITY_INFORMATION)?;
                 let dacl_sd =
@@ -7139,6 +7189,7 @@ mod platform {
                     file_attributes: info.file_attributes,
                     is_encrypted,
                     has_named_streams,
+                    has_extended_attributes,
                 })
             } else {
                 None
@@ -7773,6 +7824,37 @@ mod platform {
                 })
     }
 
+    fn has_windows_extended_attributes(handle: *mut c_void) -> io::Result<bool> {
+        let mut iosb = IoStatusBlock {
+            status_or_pointer: 0,
+            information: 0,
+        };
+        let mut info = FileEaInformation { ea_size: 0 };
+        // SAFETY: `handle` is open and `info` is valid for its size.
+        let status = unsafe {
+            NtQueryInformationFile(
+                handle,
+                &mut iosb,
+                (&mut info as *mut FileEaInformation).cast::<c_void>(),
+                u32::try_from(std::mem::size_of::<FileEaInformation>()).unwrap_or(4),
+                FILE_EA_INFORMATION_CLASS,
+            )
+        };
+        if matches!(
+            status,
+            STATUS_INVALID_DEVICE_REQUEST
+                | STATUS_NOT_SUPPORTED
+                | STATUS_NOT_IMPLEMENTED
+                | STATUS_INVALID_PARAMETER
+        ) {
+            return Ok(false);
+        }
+        if status < 0 {
+            return Err(nt_status_to_io_error(status));
+        }
+        Ok(info.ea_size > 0)
+    }
+
     fn has_windows_named_streams(handle: *mut c_void) -> io::Result<bool> {
         let mut buf_bytes = 4096usize;
         let max_bytes = 1024 * 1024;
@@ -8085,6 +8167,7 @@ mod platform {
             (Some(exp), Some(act)) => {
                 if exp.is_encrypted != act.is_encrypted
                     || exp.has_named_streams != act.has_named_streams
+                    || exp.has_extended_attributes != act.has_extended_attributes
                     || exp.sacl_accessible != act.sacl_accessible
                     || exp.file_attributes != act.file_attributes
                 {
@@ -9903,6 +9986,40 @@ mod tests {
                 WindowsTxfOpenDisposition::Error,
                 "expected Error for NTSTATUS 0x{:08X}",
                 u32::from_ne_bytes(hard_error.to_ne_bytes())
+            );
+        }
+    }
+
+    #[test]
+    fn linux_security_xattr_classification_separates_access_labels_from_integrity_metadata() {
+        use super::{LinuxSecurityXattrKind, classify_linux_security_xattr};
+
+        for label in [
+            b"security.selinux".as_slice(),
+            b"security.SMACK64".as_slice(),
+            b"security.SMACK64EXEC".as_slice(),
+            b"security.SMACK64MMAP".as_slice(),
+            b"security.SMACK64TRANSMUTE".as_slice(),
+            b"security.apparmor".as_slice(),
+            b"security.capability".as_slice(),
+        ] {
+            assert_eq!(
+                classify_linux_security_xattr(label),
+                LinuxSecurityXattrKind::CopyableAccessLabel,
+                "expected CopyableAccessLabel for {}",
+                String::from_utf8_lossy(label)
+            );
+        }
+        for unpreservable in [
+            b"security.ima".as_slice(),
+            b"security.evm".as_slice(),
+            b"security.custom_unknown".as_slice(),
+        ] {
+            assert_eq!(
+                classify_linux_security_xattr(unpreservable),
+                LinuxSecurityXattrKind::UnpreservableIntegrityOrUnknown,
+                "expected UnpreservableIntegrityOrUnknown for {}",
+                String::from_utf8_lossy(unpreservable)
             );
         }
     }

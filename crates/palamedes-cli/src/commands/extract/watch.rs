@@ -779,6 +779,11 @@ catalogs:
         assert!(!matchers.matches(&app.join("src/locales/en/.pmds-ltmp-123-0")));
         assert!(!matchers.matches(&app.join("src/locales/en/.pmds-ctmp-123-0")));
         assert!(!matchers.matches(&app.join("src/locales/en/.pmds-claim-42-0")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-probe-123-0/a")));
+        assert!(
+            matchers.matches(&app.join("src/.pmds-probe-worktree/page.tsx")),
+            "user directories with similar probe prefix must still trigger watch extraction"
+        );
         assert!(
             matchers.matches(&app.join("src/.pmds-tmp-worktree/page.tsx")),
             "user directories with similar prefixes must still trigger watch extraction"

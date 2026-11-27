@@ -243,6 +243,9 @@ pub(super) fn is_internal_palamedes_component(name: &std::ffi::OsStr) -> bool {
     if let Some(rest) = name.strip_prefix(".pmds-claim-") {
         return matches_two_uints(rest);
     }
+    if let Some(rest) = name.strip_prefix(".pmds-probe-") {
+        return matches_two_uints(rest);
+    }
     false
 }
 
@@ -916,6 +919,7 @@ mod tests {
             "src/locales/en/.pmds-ltmp-123-0",
             "src/locales/en/.pmds-ctmp-123-0",
             "src/locales/en/.pmds-claim-42-0",
+            "src/locales/en/.pmds-probe-123-0/a",
             "src/locales/en/.pmds-stage-123-0-0123456789abcdef/staged.tsx",
         ] {
             let full = checkout.join(relative);

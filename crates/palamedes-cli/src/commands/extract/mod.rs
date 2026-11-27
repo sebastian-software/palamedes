@@ -1415,6 +1415,19 @@ fn reject_colliding_extract_targets(
     write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
     config: &LoadedConfig,
 ) -> Result<(), CliError> {
+    let mut targets = Vec::with_capacity(write_jobs.len());
+    for (catalog, _, locale) in write_jobs {
+        let catalog_path =
+            config.resolve_contained_catalog_path(&catalog.path, locale, catalog.format)?;
+        targets.push((catalog.path.as_str(), catalog_path));
+    }
+    reject_colliding_catalog_targets(&config.root_dir, &targets)
+}
+
+pub(crate) fn reject_colliding_catalog_targets(
+    root_dir: &Path,
+    targets: &[(&str, PathBuf)],
+) -> Result<(), CliError> {
     type SeenBucket<'a> = Vec<(&'a str, Vec<OsString>, OsString)>;
 
     let mut dir_eq_cache: HashMap<FileIdentity, (DirFilenameEquivalence, bool)> = HashMap::new();
@@ -1422,24 +1435,19 @@ fn reject_colliding_extract_targets(
         HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
 
-    for (catalog, _, locale) in write_jobs {
-        let catalog_path =
-            config.resolve_contained_catalog_path(&catalog.path, locale, catalog.format)?;
-        let (relative_parent, file_name) =
-            split_relative_catalog_path(&config.root_dir, &catalog_path).map_err(|error| {
-                CliError::Io {
-                    path: catalog_path.clone(),
-                    source: error.into_io_error(),
-                }
-            })?;
-
-        let mut current =
-            ContainedDir::open_root(&config.root_dir).map_err(|error| CliError::Io {
-                path: config.root_dir.clone(),
+    for (scope, catalog_path) in targets {
+        let (relative_parent, file_name) = split_relative_catalog_path(root_dir, catalog_path)
+            .map_err(|error| CliError::Io {
+                path: catalog_path.clone(),
                 source: error.into_io_error(),
             })?;
+
+        let mut current = ContainedDir::open_root(root_dir).map_err(|error| CliError::Io {
+            path: root_dir.to_path_buf(),
+            source: error.into_io_error(),
+        })?;
         let mut current_id = current.self_identity().map_err(|error| CliError::Io {
-            path: config.root_dir.clone(),
+            path: root_dir.to_path_buf(),
             source: error.into_io_error(),
         })?;
         let (mut current_eq, mut current_eq_confirmed) =
@@ -1512,21 +1520,16 @@ fn reject_colliding_extract_targets(
                 })
         {
             return Err(CliError::Io {
-                path: catalog_path,
+                path: catalog_path.clone(),
                 source: std::io::Error::new(
                     std::io::ErrorKind::AlreadyExists,
                     format!(
-                        "multiple catalog scopes ({first_scope:?} and {:?}) resolve to the same target file",
-                        catalog.path
+                        "multiple catalog scopes ({first_scope:?} and {scope:?}) resolve to the same target file",
                     ),
                 ),
             });
         }
-        bucket.push((
-            catalog.path.as_str(),
-            raw_remaining_segments,
-            file_name.clone(),
-        ));
+        bucket.push((*scope, raw_remaining_segments, file_name.clone()));
         if !hit_missing
             && let Some(identity) =
                 current
@@ -1536,15 +1539,14 @@ fn reject_colliding_extract_targets(
                         source: error.into_io_error(),
                     })?
             && let Some((first_scope, _)) =
-                seen_identities.insert(identity, (catalog.path.as_str(), catalog_path.clone()))
+                seen_identities.insert(identity, (*scope, catalog_path.clone()))
         {
             return Err(CliError::Io {
-                path: catalog_path,
+                path: catalog_path.clone(),
                 source: std::io::Error::new(
                     std::io::ErrorKind::AlreadyExists,
                     format!(
-                        "multiple catalog scopes ({first_scope:?} and {:?}) resolve to the same on-disk catalog file",
-                        catalog.path
+                        "multiple catalog scopes ({first_scope:?} and {scope:?}) resolve to the same on-disk catalog file",
                     ),
                 ),
             });

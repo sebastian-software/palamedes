@@ -87,6 +87,16 @@ impl Command for ConvertOptions {
                 let mut converted = 0usize;
                 let mut skipped = 0usize;
                 let mut durability_warnings = Vec::new();
+                let target_format = target_catalog_format(self.to);
+
+                struct PlannedConversion<'a> {
+                    scope: &'a str,
+                    locale: &'a str,
+                    input: PathBuf,
+                    output: PathBuf,
+                }
+
+                let mut planned = Vec::new();
                 for catalog in &config.catalogs {
                     if catalog.format != palamedes::PalamedesCatalogFormat::Po {
                         skipped += config.locales.len();
@@ -98,103 +108,188 @@ impl Command for ConvertOptions {
                             locale,
                             catalog.format,
                         )?;
-                        let (input_parent, input_file) =
-                            split_relative_catalog_path(&config.root_dir, &input).map_err(
-                                |error| CliError::Io {
-                                    path: input.clone(),
-                                    source: error.into_io_error(),
-                                },
-                            )?;
-                        let Some(input_dir) =
-                            ContainedDir::open_subpath(&config.root_dir, &input_parent, false)
-                                .map_err(|error| CliError::Io {
-                                    path: input.clone(),
-                                    source: error.into_io_error(),
-                                })?
-                        else {
-                            skipped += 1;
-                            continue;
-                        };
-                        let Some(source) =
-                            input_dir.read_optional_file(&input_file).map_err(|error| {
-                                CliError::Io {
-                                    path: input.clone(),
-                                    source: error.into_io_error(),
-                                }
-                            })?
-                        else {
-                            skipped += 1;
-                            continue;
-                        };
-                        let input_identity =
-                            input_dir
-                                .file_identity(&input_file)
-                                .map_err(|error| CliError::Io {
-                                    path: input.clone(),
-                                    source: error.into_io_error(),
-                                })?;
                         let output = config.resolve_contained_catalog_path(
                             &catalog.path,
                             locale,
-                            target_catalog_format(self.to),
+                            target_format,
                         )?;
                         if input == output {
                             return Err(CliError::ConvertOutputIsInput);
                         }
-                        let (output_parent, output_file) =
-                            split_relative_catalog_path(&config.root_dir, &output).map_err(
-                                |error| CliError::Io {
-                                    path: output.clone(),
+                        planned.push(PlannedConversion {
+                            scope: catalog.path.as_str(),
+                            locale: locale.as_str(),
+                            input,
+                            output,
+                        });
+                    }
+                }
+
+                let planned_outputs: Vec<(&str, PathBuf)> = planned
+                    .iter()
+                    .map(|job| (job.scope, job.output.clone()))
+                    .collect();
+                crate::commands::extract::reject_colliding_catalog_targets(
+                    &config.root_dir,
+                    &planned_outputs,
+                )?;
+
+                for job in planned {
+                    let (input_parent, input_file) =
+                        split_relative_catalog_path(&config.root_dir, &job.input).map_err(
+                            |error| CliError::Io {
+                                path: job.input.clone(),
+                                source: error.into_io_error(),
+                            },
+                        )?;
+                    let Some(input_dir) =
+                        ContainedDir::open_subpath(&config.root_dir, &input_parent, false)
+                            .map_err(|error| CliError::Io {
+                                path: job.input.clone(),
+                                source: error.into_io_error(),
+                            })?
+                    else {
+                        skipped += 1;
+                        continue;
+                    };
+                    if input_dir
+                        .file_identity(&input_file)
+                        .map_err(|error| CliError::Io {
+                            path: job.input.clone(),
+                            source: error.into_io_error(),
+                        })?
+                        .is_none()
+                    {
+                        skipped += 1;
+                        continue;
+                    }
+                    let (output_parent, output_file) =
+                        split_relative_catalog_path(&config.root_dir, &job.output).map_err(
+                            |error| CliError::Io {
+                                path: job.output.clone(),
+                                source: error.into_io_error(),
+                            },
+                        )?;
+                    let (output_dir, _locks) = if input_parent == output_parent {
+                        let lock =
+                            input_dir
+                                .lock_target(&output_file)
+                                .map_err(|error| CliError::Io {
+                                    path: job.output.clone(),
                                     source: error.into_io_error(),
-                                },
-                            )?;
-                        let output_dir =
+                                })?;
+                        (None, vec![lock])
+                    } else {
+                        let out_dir =
                             ContainedDir::open_subpath(&config.root_dir, &output_parent, true)
                                 .map_err(|error| CliError::Io {
-                                    path: output.clone(),
+                                    path: job.output.clone(),
                                     source: error.into_io_error(),
                                 })?
                                 .expect("create_missing always opens destination directory");
-                        let _target_lock =
-                            output_dir
-                                .lock_target(&output_file)
-                                .map_err(|error| CliError::Io {
-                                    path: output.clone(),
-                                    source: error.into_io_error(),
-                                })?;
-                        let output_identity =
-                            output_dir.file_identity(&output_file).map_err(|error| {
+                        let in_key = input_dir.target_lock_key(&input_file).map_err(|error| {
+                            CliError::Io {
+                                path: job.input.clone(),
+                                source: error.into_io_error(),
+                            }
+                        })?;
+                        let out_key = out_dir.target_lock_key(&output_file).map_err(|error| {
+                            CliError::Io {
+                                path: job.output.clone(),
+                                source: error.into_io_error(),
+                            }
+                        })?;
+                        let locks = if in_key == out_key {
+                            vec![out_dir.lock_target(&output_file).map_err(|error| {
                                 CliError::Io {
-                                    path: output.clone(),
+                                    path: job.output.clone(),
                                     source: error.into_io_error(),
                                 }
-                            })?;
-                        if input_identity.is_some() && input_identity == output_identity {
-                            return Err(CliError::ConvertOutputIsInput);
-                        }
-                        let converted_content = convert_catalog_content(
-                            &source,
-                            PalamedesCatalogFormat::Po,
-                            target_catalog_format(self.to),
-                            &config.source_locale,
-                            Some(locale),
-                        )?;
-                        if let ContainedWriteOutcome::CommittedWithoutDirSync(source) = output_dir
-                            .write_file_atomically(
-                                &output_file,
-                                converted_content.as_bytes(),
-                                ContainedNewFileMode::Private,
-                                ContainedWriteDurability::Full,
-                            )
-                            .map_err(|error| CliError::Io {
-                                path: output.clone(),
+                            })?]
+                        } else if in_key < out_key {
+                            vec![
+                                input_dir.lock_target(&input_file).map_err(|error| {
+                                    CliError::Io {
+                                        path: job.input.clone(),
+                                        source: error.into_io_error(),
+                                    }
+                                })?,
+                                out_dir.lock_target(&output_file).map_err(|error| {
+                                    CliError::Io {
+                                        path: job.output.clone(),
+                                        source: error.into_io_error(),
+                                    }
+                                })?,
+                            ]
+                        } else {
+                            vec![
+                                out_dir.lock_target(&output_file).map_err(|error| {
+                                    CliError::Io {
+                                        path: job.output.clone(),
+                                        source: error.into_io_error(),
+                                    }
+                                })?,
+                                input_dir.lock_target(&input_file).map_err(|error| {
+                                    CliError::Io {
+                                        path: job.input.clone(),
+                                        source: error.into_io_error(),
+                                    }
+                                })?,
+                            ]
+                        };
+                        (Some(out_dir), locks)
+                    };
+                    let output_dir_ref = output_dir.as_ref().unwrap_or(&input_dir);
+                    let Some(source) =
+                        input_dir.read_optional_file(&input_file).map_err(|error| {
+                            CliError::Io {
+                                path: job.input.clone(),
                                 source: error.into_io_error(),
-                            })?
-                        {
-                            durability_warnings.push((output.clone(), source.to_string()));
-                        }
-                        converted += 1;
+                            }
+                        })?
+                    else {
+                        skipped += 1;
+                        continue;
+                    };
+                    let input_identity =
+                        input_dir
+                            .file_identity(&input_file)
+                            .map_err(|error| CliError::Io {
+                                path: job.input.clone(),
+                                source: error.into_io_error(),
+                            })?;
+                    let output_identity =
+                        output_dir_ref
+                            .file_identity(&output_file)
+                            .map_err(|error| CliError::Io {
+                                path: job.output.clone(),
+                                source: error.into_io_error(),
+                            })?;
+                    if input_identity.is_some() && input_identity == output_identity {
+                        return Err(CliError::ConvertOutputIsInput);
                     }
+                    let converted_content = convert_catalog_content(
+                        &source,
+                        PalamedesCatalogFormat::Po,
+                        target_format,
+                        &config.source_locale,
+                        Some(job.locale),
+                    )?;
+                    if let ContainedWriteOutcome::CommittedWithoutDirSync(source) = output_dir_ref
+                        .write_file_atomically(
+                            &output_file,
+                            converted_content.as_bytes(),
+                            ContainedNewFileMode::Private,
+                            ContainedWriteDurability::Full,
+                        )
+                        .map_err(|error| CliError::Io {
+                            path: job.output.clone(),
+                            source: error.into_io_error(),
+                        })?
+                    {
+                        durability_warnings.push((job.output.clone(), source.to_string()));
+                    }
+                    converted += 1;
                 }
                 Ok(ConvertReport::Configured {
                     converted,
@@ -576,5 +671,150 @@ catalogs:
         ));
         assert_eq!(fs::read_to_string(&input).expect("read input"), original);
         assert_eq!(fs::read_to_string(&output).expect("read output"), original);
+    }
+
+    #[test]
+    fn configured_conversion_rejects_duplicate_fcl_destinations_before_writing() {
+        let fixture = temp_dir("convert-duplicate-fcl-destination");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+  - path: 'locales\{locale}\messages.fcl'
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        fs::write(
+            catalog_dir.join("messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"First\"\nmsgstr \"First\"\n",
+        )
+        .expect("write first catalog");
+        fs::write(
+            catalog_dir.join("messages.fcl.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Second\"\nmsgstr \"Second\"\n",
+        )
+        .expect("write second catalog");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+
+        let error = options
+            .run(&Context::with_cwd(&fixture))
+            .expect_err("colliding FCL destinations must fail before writing any output");
+        assert!(
+            matches!(
+                error,
+                crate::error::CliError::Io { ref source, .. }
+                    if source.kind() == std::io::ErrorKind::AlreadyExists
+            ),
+            "expected AlreadyExists collision error, got {error:?}"
+        );
+        assert!(
+            !catalog_dir.join("messages.fcl").exists(),
+            "no FCL output should be written when configured destinations collide"
+        );
+    }
+
+    #[test]
+    fn configured_conversion_reads_source_po_under_directory_lock() {
+        use std::ffi::OsStr;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let fixture = temp_dir("convert-reads-under-lock");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        let po_path = catalog_dir.join("messages.po");
+        fs::write(
+            &po_path,
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Old\"\nmsgstr \"Old\"\n",
+        )
+        .expect("write initial po");
+
+        let dir = palamedes::ContainedDir::open_root(&catalog_dir).expect("open catalog dir");
+        let guard = dir
+            .lock_target(OsStr::new("messages.fcl"))
+            .expect("hold directory lock");
+
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker_fixture = fixture;
+        let worker_config = config_path;
+        let worker = std::thread::spawn(move || {
+            let options = ConvertOptions {
+                input: None,
+                config: Some(worker_config),
+                to: ConvertFormat::Fcl,
+                output: None,
+                source_locale: "en".to_owned(),
+                locale: None,
+            };
+            started_tx.send(()).expect("signal start");
+            let result = options.run(&Context::with_cwd(&worker_fixture));
+            done_tx.send(result).expect("send result");
+        });
+
+        started_rx.recv().expect("worker started");
+        assert!(
+            matches!(
+                done_rx.recv_timeout(Duration::from_millis(80)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ),
+            "converter must block on directory lock before reading and converting PO"
+        );
+        // Update the PO file while holding the lock, then release the lock.
+        fs::write(
+            &po_path,
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Fresh\"\nmsgstr \"Fresh\"\n",
+        )
+        .expect("update po while locked");
+        drop(guard);
+
+        let report = done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("converter completes after lock release")
+            .expect("conversion succeeds");
+        worker.join().expect("join worker");
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 1,
+                skipped: 0,
+                ..
+            }
+        ));
+        let fcl = fs::read_to_string(catalog_dir.join("messages.fcl")).expect("read fcl");
+        assert!(
+            fcl.contains("Fresh"),
+            "converted FCL must reflect PO content read under the lock, got:\n{fcl}"
+        );
+        assert!(
+            !fcl.contains("Old"),
+            "converted FCL must not contain stale pre-lock PO content, got:\n{fcl}"
+        );
     }
 }
