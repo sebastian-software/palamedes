@@ -1791,27 +1791,48 @@ function extractTurbopackFactoryTableFromArrayNode(
   arrayNode: JsAstNode,
   source: string,
   groups: TurbopackFactoryGroup[],
+  options: { allowLeadingNestedTable: boolean },
   depth = 0,
 ): boolean {
   if (depth > 2 || !Array.isArray(arrayNode.elements)) return false;
   // Turbopack's `installCompressedModuleFactories` walks a flat array of one or
   // more consecutive module IDs followed by their shared factory function
-  // (`[3042, 77420, (a, b) => ...]`). Only actual spread elements (`...[...]`
-  // or `...(() => { "use strict"; return [...]; })()`) flatten into that array;
-  // an unspread nested array is a single non-factory element and must fail closed.
+  // (`[3042, 77420, (a, b) => ...]`). Actual spread elements (`...[...]` or
+  // `...(() => { "use strict"; return [...]; })()`) always flatten at runtime;
+  // an unspread leading nested array is only flattened when the installed
+  // Next.js runtime (such as Next 16.4.1) explicitly checks `Array.isArray` in
+  // `installCompressedModuleFactories`.
   let pendingIds: string[] = [];
-  for (const elem of arrayNode.elements as Array<JsAstNode | null>) {
+  for (let elemIndex = 0; elemIndex < arrayNode.elements.length; elemIndex += 1) {
+    const elem = arrayNode.elements[elemIndex] as JsAstNode | null;
     if (!elem) return false;
     if (elem.type === "SpreadElement") {
       if (pendingIds.length !== 0 || !isAstNode(elem.argument)) return false;
       const nestedArray = unwrapTurbopackArrayNode(elem.argument);
       if (
         !nestedArray ||
-        !extractTurbopackFactoryTableFromArrayNode(nestedArray, source, groups, depth + 1)
+        !extractTurbopackFactoryTableFromArrayNode(nestedArray, source, groups, options, depth + 1)
       ) {
         return false;
       }
       continue;
+    }
+    if (options.allowLeadingNestedTable && elemIndex === 0 && pendingIds.length === 0) {
+      const leadingNestedArray = unwrapTurbopackArrayNode(elem);
+      if (leadingNestedArray) {
+        if (
+          !extractTurbopackFactoryTableFromArrayNode(
+            leadingNestedArray,
+            source,
+            groups,
+            options,
+            depth + 1,
+          )
+        ) {
+          return false;
+        }
+        continue;
+      }
     }
     const numericId = getNumberLiteralValue(elem);
     if (numericId !== undefined && numericId >= 0) {
@@ -1832,12 +1853,17 @@ function extractTurbopackFactoryTableFromArrayNode(
 
 function extractTurbopackModulesFromSource(
   source: string,
-  options: { requireTable: boolean; resolveFromDir?: string } = { requireTable: true },
+  options: {
+    requireTable: boolean;
+    resolveFromDir?: string;
+    allowLeadingNestedTable?: boolean;
+  } = { requireTable: true },
 ): TurbopackExtractedChunk | null {
   const program = parseJsProgram(source, options.resolveFromDir);
   if (!program || !Array.isArray(program.body)) return null;
   let liveGroups: TurbopackFactoryGroup[] | null = null;
   let invalid = false;
+  const tableOptions = { allowLeadingNestedTable: Boolean(options.allowLeadingNestedTable) };
 
   const topLevelTables = new Set<JsAstNode>();
   for (const stmt of program.body as JsAstNode[]) {
@@ -1857,7 +1883,9 @@ function extractTurbopackModulesFromSource(
         const arrayNode = unwrapTurbopackArrayNode(expr.right);
         if (arrayNode) {
           const nextGroups: TurbopackFactoryGroup[] = [];
-          if (!extractTurbopackFactoryTableFromArrayNode(arrayNode, source, nextGroups)) {
+          if (
+            !extractTurbopackFactoryTableFromArrayNode(arrayNode, source, nextGroups, tableOptions)
+          ) {
             return null;
           }
           // CommonJS `require()` returns only the final unconditional
@@ -1952,6 +1980,7 @@ function createTurbopackModuleResolver(
   chunkPaths: readonly string[] = [],
   chunkCache?: TurbopackChunkModuleCache,
   resolveFromDir?: string,
+  allowLeadingNestedTable = false,
 ): TurbopackModuleResolver {
   const inlineGroups: TurbopackFactoryGroup[] = [];
   let hasUnparseableSource = false;
@@ -1959,6 +1988,7 @@ function createTurbopackModuleResolver(
     const extracted = extractTurbopackModulesFromSource(source, {
       requireTable: false,
       resolveFromDir,
+      allowLeadingNestedTable,
     });
     if (!extracted) {
       hasUnparseableSource = true;
@@ -1973,19 +2003,21 @@ function createTurbopackModuleResolver(
     if (resolvedMap === undefined) {
       const allGroups: TurbopackFactoryGroup[] = [...inlineGroups];
       for (const chunkPath of chunkPaths) {
-        let extracted = chunkCache?.get(chunkPath);
+        const cacheKey = allowLeadingNestedTable ? `nested:${chunkPath}` : chunkPath;
+        let extracted = chunkCache?.get(cacheKey);
         if (extracted === undefined) {
           try {
             extracted = extractTurbopackModulesFromSource(readFileSync(chunkPath, "utf8"), {
               requireTable: true,
               resolveFromDir,
+              allowLeadingNestedTable,
             });
           } catch {
             // Unreadable or unparseable sibling chunks could register a
             // conflicting factory; fail closed by treating lookups as ambiguous.
             extracted = null;
           }
-          chunkCache?.set(chunkPath, extracted);
+          chunkCache?.set(cacheKey, extracted);
         }
         if (extracted) {
           allGroups.push(...extracted.groups);
@@ -3186,11 +3218,459 @@ function isIdentifierReference(node: JsAstNode, parent: JsAstNode | undefined): 
   return true;
 }
 
+function unwrapIndirectCalleeIdent(callee: JsAstNode): string | undefined {
+  if (callee.type === "Identifier" && typeof callee.name === "string") return callee.name;
+  if (
+    callee.type === "SequenceExpression" &&
+    Array.isArray(callee.expressions) &&
+    callee.expressions.length === 2
+  ) {
+    const [first, second] = callee.expressions as [JsAstNode, JsAstNode];
+    if (
+      isAstNode(first) &&
+      getNumberLiteralValue(first) === 0 &&
+      isAstNode(second) &&
+      second.type === "Identifier" &&
+      typeof second.name === "string"
+    ) {
+      return second.name;
+    }
+  }
+  return;
+}
+
+function isRouteModuleRenderCall(callee: JsAstNode, routeModVar: string): boolean {
+  if (callee.type !== "MemberExpression" || callee.computed) return false;
+  if (!isAstNode(callee.object) || callee.object.type !== "Identifier") return false;
+  if (callee.object.name !== routeModVar) return false;
+  const propName = getMemberPropertyName(callee);
+  return propName === "render" || propName === "prerender";
+}
+
+function collectLexicalScopeRefs(
+  root: JsAstNode,
+  targetName: string,
+  skipNode: JsAstNode | undefined,
+): Array<{ node: JsAstNode; ancestors: JsAstNode[] }> {
+  const refs: Array<{ node: JsAstNode; ancestors: JsAstNode[] }> = [];
+  const visit = (node: JsAstNode, ancestors: JsAstNode[], shadowed: boolean): void => {
+    if (shadowed || node === skipNode) return;
+
+    if (
+      node.type === "FunctionDeclaration" ||
+      node.type === "FunctionExpression" ||
+      node.type === "ArrowFunctionExpression" ||
+      node.type === "ObjectMethod" ||
+      node.type === "ClassMethod" ||
+      node.type === "ClassPrivateMethod"
+    ) {
+      if (
+        (node.type === "ObjectMethod" || node.type === "ClassMethod") &&
+        node.computed &&
+        isAstNode(node.key)
+      ) {
+        visit(node.key, [...ancestors, node], false);
+      }
+      if (
+        node.type === "FunctionExpression" &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        node.id.name === targetName
+      ) {
+        return;
+      }
+      const paramNames = new Set<string>();
+      if (Array.isArray(node.params)) {
+        for (const p of node.params) {
+          if (isAstNode(p)) collectPatternBindingNames(p, paramNames);
+        }
+      }
+      if (paramNames.has(targetName)) return;
+      const nextAncestors = [...ancestors, node];
+      if (Array.isArray(node.params)) {
+        for (const p of node.params) {
+          if (isAstNode(p)) visitPattern(p, nextAncestors);
+        }
+      }
+      if (isAstNode(node.body)) {
+        const hoisted = new Set<string>();
+        collectHoistedVarBindings(node.body, hoisted);
+        if (!hoisted.has(targetName)) {
+          visit(node.body, nextAncestors, false);
+        }
+      }
+      return;
+    }
+
+    if (node.type === "BlockStatement" || node.type === "StaticBlock") {
+      if (node !== root && Array.isArray(node.body)) {
+        const blockNames = new Set<string>();
+        collectLexicalStatementBindings(node.body, blockNames);
+        if (blockNames.has(targetName)) return;
+      }
+      walkChildren(node, [...ancestors, node]);
+      return;
+    }
+
+    if (node.type === "SwitchStatement") {
+      if (isAstNode(node.discriminant)) visit(node.discriminant, [...ancestors, node], false);
+      if (Array.isArray(node.cases)) {
+        const switchNames = new Set<string>();
+        for (const c of node.cases) {
+          if (isAstNode(c) && Array.isArray(c.consequent)) {
+            collectLexicalStatementBindings(c.consequent, switchNames);
+          }
+        }
+        if (switchNames.has(targetName)) return;
+        const nextAncestors = [...ancestors, node];
+        for (const c of node.cases) {
+          if (isAstNode(c)) visit(c, nextAncestors, false);
+        }
+      }
+      return;
+    }
+
+    if (node.type === "ForStatement") {
+      if (
+        isAstNode(node.init) &&
+        node.init.type === "VariableDeclaration" &&
+        node.init.kind !== "var"
+      ) {
+        const loopNames = new Set<string>();
+        collectLexicalStatementBindings([node.init], loopNames);
+        if (loopNames.has(targetName)) return;
+      }
+      walkChildren(node, [...ancestors, node]);
+      return;
+    }
+
+    if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
+      if (
+        isAstNode(node.left) &&
+        node.left.type === "VariableDeclaration" &&
+        node.left.kind !== "var"
+      ) {
+        const loopNames = new Set<string>();
+        collectLexicalStatementBindings([node.left], loopNames);
+        if (loopNames.has(targetName)) return;
+      }
+      walkChildren(node, [...ancestors, node]);
+      return;
+    }
+
+    if (node.type === "CatchClause") {
+      if (isAstNode(node.param)) {
+        const catchNames = new Set<string>();
+        collectPatternBindingNames(node.param, catchNames);
+        if (catchNames.has(targetName)) return;
+        visitPattern(node.param, [...ancestors, node]);
+      }
+      if (isAstNode(node.body)) visit(node.body, [...ancestors, node], false);
+      return;
+    }
+
+    if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
+      if (isAstNode(node.superClass)) visit(node.superClass, [...ancestors, node], false);
+      if (
+        node.type === "ClassExpression" &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        node.id.name === targetName
+      ) {
+        return;
+      }
+      if (isAstNode(node.body)) visit(node.body, [...ancestors, node], false);
+      return;
+    }
+
+    if (node.type === "VariableDeclaration" && Array.isArray(node.declarations)) {
+      const nextAncestors = [...ancestors, node];
+      for (const decl of node.declarations) {
+        if (!isAstNode(decl) || decl === skipNode) continue;
+        if (isAstNode(decl.id)) visitPattern(decl.id, [...nextAncestors, decl]);
+        if (isAstNode(decl.init)) visit(decl.init, [...nextAncestors, decl], false);
+      }
+      return;
+    }
+
+    const parent = ancestors.at(-1);
+    if (isIdentifierReference(node, parent) && node.name === targetName) {
+      refs.push({ node, ancestors });
+      return;
+    }
+
+    walkChildren(node, [...ancestors, node]);
+  };
+
+  const visitPattern = (pattern: JsAstNode, ancestors: JsAstNode[]): void => {
+    switch (pattern.type) {
+      case "Identifier":
+        return;
+      case "RestElement":
+      case "SpreadElement":
+        if (isAstNode(pattern.argument)) visitPattern(pattern.argument, [...ancestors, pattern]);
+        return;
+      case "AssignmentPattern":
+        if (isAstNode(pattern.right)) visit(pattern.right, [...ancestors, pattern], false);
+        if (isAstNode(pattern.left)) visitPattern(pattern.left, [...ancestors, pattern]);
+        return;
+      case "ArrayPattern":
+        if (Array.isArray(pattern.elements)) {
+          const next = [...ancestors, pattern];
+          for (const elem of pattern.elements) {
+            if (isAstNode(elem)) visitPattern(elem, next);
+          }
+        }
+        return;
+      case "ObjectPattern":
+        if (Array.isArray(pattern.properties)) {
+          const next = [...ancestors, pattern];
+          for (const prop of pattern.properties) {
+            if (!isAstNode(prop)) continue;
+            if (prop.type === "RestElement" && isAstNode(prop.argument)) {
+              visitPattern(prop.argument, [...next, prop]);
+            } else if (prop.type === "ObjectProperty") {
+              if (prop.computed && isAstNode(prop.key)) visit(prop.key, [...next, prop], false);
+              if (isAstNode(prop.value)) visitPattern(prop.value, [...next, prop]);
+            }
+          }
+        }
+        return;
+      default:
+        visit(pattern, ancestors, false);
+    }
+  };
+
+  const walkChildren = (node: JsAstNode, ancestors: JsAstNode[]): void => {
+    for (const [key, value] of Object.entries(node)) {
+      if (AST_METADATA_KEYS.has(key)) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (isAstNode(item)) visit(item, ancestors, false);
+        }
+      } else if (isAstNode(value)) {
+        visit(value, ancestors, false);
+      }
+    }
+  };
+
+  visit(root, [], false);
+  return refs;
+}
+
+function isWriteContext(node: JsAstNode, parent: JsAstNode | undefined): boolean {
+  if (!parent) return false;
+  if (parent.type === "AssignmentExpression" && parent.left === node) return true;
+  if (parent.type === "UpdateExpression" && parent.argument === node) return true;
+  if (
+    parent.type === "UnaryExpression" &&
+    parent.operator === "delete" &&
+    parent.argument === node
+  ) {
+    return true;
+  }
+  if (
+    (parent.type === "ForInStatement" || parent.type === "ForOfStatement") &&
+    parent.left === node
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function verifyReadOnlyTreeAliasInHandler(
+  fnDecl: JsAstNode,
+  treeRef: JsAstNode,
+  treeAncestors: JsAstNode[],
+  interopParam: string,
+  routeModVar: string,
+): boolean {
+  // Next's `handleRequest` wraps `tree` into `const ComponentMod = { ...entryBase, tree, ... }`,
+  // embeds `ComponentMod` and `interopDefault(ComponentMod)` in `context.renderOpts`,
+  // and passes `context` directly to `routeModule.render`/`prerender` (or a local
+  // `invokeRouteModule` helper that forwards its context parameter untouched).
+  // Reject any other alias or escape so the handler cannot mutate `tree` through an alias.
+  const propNode = treeAncestors.at(-1);
+  const compObj = treeAncestors.at(-2);
+  const compDecl = treeAncestors.at(-3);
+  if (
+    !propNode ||
+    propNode.type !== "ObjectProperty" ||
+    !(propNode.value === treeRef || (propNode.key === treeRef && Boolean(propNode.shorthand))) ||
+    !compObj ||
+    compObj.type !== "ObjectExpression" ||
+    !compDecl ||
+    compDecl.type !== "VariableDeclarator" ||
+    !isAstNode(compDecl.id) ||
+    compDecl.id.type !== "Identifier" ||
+    typeof compDecl.id.name !== "string"
+  ) {
+    return false;
+  }
+  const compModVar = compDecl.id.name;
+  // Find the nearest enclosing BlockStatement containing `compDecl`.
+  let compScopeBlock: JsAstNode | undefined;
+  for (let i = treeAncestors.length - 4; i >= 0; i -= 1) {
+    const anc = treeAncestors[i]!;
+    if (anc.type === "BlockStatement") {
+      compScopeBlock = anc;
+      break;
+    }
+  }
+  if (!compScopeBlock) return false;
+
+  const isVerifiedRenderCall = (
+    callNode: JsAstNode,
+    argNode: JsAstNode,
+    searchRoot: JsAstNode,
+  ): boolean => {
+    if (
+      callNode.type !== "CallExpression" ||
+      !isAstNode(callNode.callee) ||
+      !Array.isArray(callNode.arguments)
+    ) {
+      return false;
+    }
+    const argIndex = (callNode.arguments as JsAstNode[]).indexOf(argNode);
+    if (argIndex === -1) return false;
+    if (isRouteModuleRenderCall(callNode.callee, routeModVar)) return true;
+
+    const helperName = unwrapIndirectCalleeIdent(callNode.callee);
+    if (!helperName) return false;
+    // Locate a unique un-reassigned local helper function inside `searchRoot`.
+    const helperDefs: Array<{ fn: JsAstNode; declNode: JsAstNode }> = [];
+    walkJsAst(searchRoot, undefined, (node) => {
+      if (
+        node.type === "FunctionDeclaration" &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        node.id.name === helperName
+      ) {
+        helperDefs.push({ fn: node, declNode: node });
+        return false;
+      }
+      if (
+        node.type === "VariableDeclarator" &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        node.id.name === helperName &&
+        isAstNode(node.init) &&
+        (node.init.type === "ArrowFunctionExpression" || node.init.type === "FunctionExpression")
+      ) {
+        helperDefs.push({ fn: node.init, declNode: node });
+        return false;
+      }
+      return;
+    });
+    if (helperDefs.length !== 1) return false;
+    const { fn: helperFn, declNode } = helperDefs[0]!;
+    // Ensure `helperName` is never reassigned anywhere in `searchRoot`.
+    for (const ref of collectLexicalScopeRefs(searchRoot, helperName, declNode)) {
+      if (isWriteContext(ref.node, ref.ancestors.at(-1))) return false;
+    }
+    if (!Array.isArray(helperFn.params) || argIndex >= helperFn.params.length) return false;
+    const paramNode = helperFn.params[argIndex];
+    if (
+      !isAstNode(paramNode) ||
+      paramNode.type !== "Identifier" ||
+      typeof paramNode.name !== "string" ||
+      !isAstNode(helperFn.body)
+    ) {
+      return false;
+    }
+    const paramName = paramNode.name;
+    const paramRefs = collectLexicalScopeRefs(helperFn.body, paramName, undefined);
+    if (paramRefs.length === 0) return false;
+    for (const pRef of paramRefs) {
+      const pParent = pRef.ancestors.at(-1);
+      if (
+        !pParent ||
+        pParent.type !== "CallExpression" ||
+        !isAstNode(pParent.callee) ||
+        !isRouteModuleRenderCall(pParent.callee, routeModVar) ||
+        !Array.isArray(pParent.arguments) ||
+        !(pParent.arguments as JsAstNode[]).includes(pRef.node)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const ctxTargets: Array<{ ctxVar: string; ctxDecl: JsAstNode; ctxScope: JsAstNode }> = [];
+  const compRefs = collectLexicalScopeRefs(compScopeBlock, compModVar, compDecl);
+  for (const ref of compRefs) {
+    const parent = ref.ancestors.at(-1);
+    if (!parent || isWriteContext(ref.node, parent)) return false;
+    // Allow `interopDefault(ComponentMod)` (exact 1-argument call).
+    if (
+      parent.type === "CallExpression" &&
+      isAstNode(parent.callee) &&
+      unwrapIndirectCalleeIdent(parent.callee) === interopParam &&
+      Array.isArray(parent.arguments) &&
+      parent.arguments.length === 1 &&
+      parent.arguments[0] === ref.node
+    ) {
+      continue;
+    }
+    // Allow embedding `ComponentMod` inside `renderOpts: { ..., ComponentMod, ... }`
+    // of a `context` object passed straight to `routeModule.render`/`prerender`.
+    const renderOptsObj = ref.ancestors.at(-2);
+    const renderOptsProp = ref.ancestors.at(-3);
+    const ctxObj = ref.ancestors.at(-4);
+    const ctxOwner = ref.ancestors.at(-5);
+    if (
+      parent.type === "ObjectProperty" &&
+      (parent.value === ref.node || (parent.key === ref.node && Boolean(parent.shorthand))) &&
+      renderOptsObj?.type === "ObjectExpression" &&
+      renderOptsProp?.type === "ObjectProperty" &&
+      renderOptsProp.value === renderOptsObj &&
+      ctxObj?.type === "ObjectExpression" &&
+      ctxOwner
+    ) {
+      if (
+        ctxOwner.type === "VariableDeclarator" &&
+        isAstNode(ctxOwner.id) &&
+        ctxOwner.id.type === "Identifier" &&
+        typeof ctxOwner.id.name === "string"
+      ) {
+        let ctxScope: JsAstNode | undefined;
+        for (let i = ref.ancestors.length - 6; i >= 0; i -= 1) {
+          const anc = ref.ancestors[i]!;
+          if (anc.type === "BlockStatement") {
+            ctxScope = anc;
+            break;
+          }
+        }
+        if (!ctxScope) return false;
+        ctxTargets.push({ ctxVar: ctxOwner.id.name, ctxDecl: ctxOwner, ctxScope });
+        continue;
+      }
+      if (isVerifiedRenderCall(ctxOwner, ctxObj, fnDecl)) {
+        continue;
+      }
+    }
+    return false;
+  }
+
+  for (const { ctxVar, ctxDecl, ctxScope } of ctxTargets) {
+    const ctxRefs = collectLexicalScopeRefs(ctxScope, ctxVar, ctxDecl);
+    for (const cRef of ctxRefs) {
+      const cParent = cRef.ancestors.at(-1);
+      if (!cParent || isWriteContext(cRef.node, cParent)) return false;
+      if (!isVerifiedRenderCall(cParent, cRef.node, fnDecl)) return false;
+    }
+  }
+
+  return true;
+}
+
 function verifyEntrypointRuntimeBodyUses(
   fnBody: string,
   treeParam: string,
   routeModVar: string,
   routeModDeclOffset: number,
+  interopParam: string,
 ): boolean {
   const program = parseJsProgram(fnBody);
   if (!program || !Array.isArray(program.body) || program.body.length === 0) return false;
@@ -3249,25 +3729,31 @@ function verifyEntrypointRuntimeBodyUses(
   }
 
   let ok = true;
+  let currentFnDecl: JsAstNode | undefined;
   const checkNode = (
     node: JsAstNode,
-    parent: JsAstNode | undefined,
+    ancestors: JsAstNode[],
     shadowed: ReadonlySet<string>,
     mode: "top-level" | "fn-decl",
   ): void => {
     if (!ok) return;
+    const parent = ancestors.at(-1);
 
     // Skip binding identifiers in variable/function/class declarations while
     // still inspecting executable expressions (defaults, computed keys, inits).
     if (node.type === "VariableDeclaration" && Array.isArray(node.declarations)) {
+      const nextAncestors = [...ancestors, node];
       for (const decl of node.declarations) {
         if (!ok || !isAstNode(decl)) continue;
         if (decl === routeModDeclarator) {
-          checkNode(ctorNew, decl, shadowed, mode);
+          checkNode(ctorNew, [...nextAncestors, decl], shadowed, mode);
           continue;
         }
-        if (isAstNode(decl.id)) checkPatternExprs(decl.id, shadowed, mode);
-        if (ok && isAstNode(decl.init)) checkNode(decl.init, decl, shadowed, mode);
+        if (isAstNode(decl.id))
+          checkPatternExprs(decl.id, [...nextAncestors, decl], shadowed, mode);
+        if (ok && isAstNode(decl.init)) {
+          checkNode(decl.init, [...nextAncestors, decl], shadowed, mode);
+        }
       }
       return;
     }
@@ -3280,12 +3766,13 @@ function verifyEntrypointRuntimeBodyUses(
       node.type === "ClassMethod" ||
       node.type === "ClassPrivateMethod"
     ) {
+      const nextAncestors = [...ancestors, node];
       if (
         (node.type === "ObjectMethod" || node.type === "ClassMethod") &&
         node.computed &&
         isAstNode(node.key)
       ) {
-        checkNode(node.key, node, shadowed, mode);
+        checkNode(node.key, nextAncestors, shadowed, mode);
         if (!ok) return;
       }
       const nextShadowed = new Set(shadowed);
@@ -3302,13 +3789,13 @@ function verifyEntrypointRuntimeBodyUses(
           if (isAstNode(param)) collectPatternBindingNames(param, nextShadowed);
         }
         for (const param of node.params) {
-          if (ok && isAstNode(param)) checkPatternExprs(param, nextShadowed, mode);
+          if (ok && isAstNode(param)) checkPatternExprs(param, nextAncestors, nextShadowed, mode);
         }
       }
       if (ok && isAstNode(node.body)) {
         const bodyShadowed = new Set(nextShadowed);
         collectHoistedVarBindings(node.body, bodyShadowed);
-        checkNode(node.body, node, bodyShadowed, mode);
+        checkNode(node.body, nextAncestors, bodyShadowed, mode);
       }
       return;
     }
@@ -3316,12 +3803,13 @@ function verifyEntrypointRuntimeBodyUses(
     if (node.type === "BlockStatement" || node.type === "StaticBlock") {
       const nextShadowed = new Set(shadowed);
       if (Array.isArray(node.body)) collectLexicalStatementBindings(node.body, nextShadowed);
-      walkChildren(node, nextShadowed, mode);
+      walkChildren(node, [...ancestors, node], nextShadowed, mode);
       return;
     }
 
     if (node.type === "SwitchStatement") {
-      if (isAstNode(node.discriminant)) checkNode(node.discriminant, node, shadowed, mode);
+      const nextAncestors = [...ancestors, node];
+      if (isAstNode(node.discriminant)) checkNode(node.discriminant, nextAncestors, shadowed, mode);
       if (!ok || !Array.isArray(node.cases)) return;
       const nextShadowed = new Set(shadowed);
       for (const c of node.cases) {
@@ -3330,7 +3818,7 @@ function verifyEntrypointRuntimeBodyUses(
         }
       }
       for (const c of node.cases) {
-        if (ok && isAstNode(c)) checkNode(c, node, nextShadowed, mode);
+        if (ok && isAstNode(c)) checkNode(c, nextAncestors, nextShadowed, mode);
       }
       return;
     }
@@ -3344,7 +3832,7 @@ function verifyEntrypointRuntimeBodyUses(
       ) {
         collectLexicalStatementBindings([node.init], nextShadowed);
       }
-      walkChildren(node, nextShadowed, mode);
+      walkChildren(node, [...ancestors, node], nextShadowed, mode);
       return;
     }
 
@@ -3357,22 +3845,24 @@ function verifyEntrypointRuntimeBodyUses(
       ) {
         collectLexicalStatementBindings([node.left], nextShadowed);
       }
-      walkChildren(node, nextShadowed, mode);
+      walkChildren(node, [...ancestors, node], nextShadowed, mode);
       return;
     }
 
     if (node.type === "CatchClause") {
+      const nextAncestors = [...ancestors, node];
       const nextShadowed = new Set(shadowed);
       if (isAstNode(node.param)) {
         collectPatternBindingNames(node.param, nextShadowed);
-        checkPatternExprs(node.param, nextShadowed, mode);
+        checkPatternExprs(node.param, nextAncestors, nextShadowed, mode);
       }
-      if (ok && isAstNode(node.body)) checkNode(node.body, node, nextShadowed, mode);
+      if (ok && isAstNode(node.body)) checkNode(node.body, nextAncestors, nextShadowed, mode);
       return;
     }
 
     if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
-      if (isAstNode(node.superClass)) checkNode(node.superClass, node, shadowed, mode);
+      const nextAncestors = [...ancestors, node];
+      if (isAstNode(node.superClass)) checkNode(node.superClass, nextAncestors, shadowed, mode);
       if (!ok) return;
       const nextShadowed = new Set(shadowed);
       if (
@@ -3383,7 +3873,7 @@ function verifyEntrypointRuntimeBodyUses(
       ) {
         nextShadowed.add(node.id.name);
       }
-      if (isAstNode(node.body)) checkNode(node.body, node, nextShadowed, mode);
+      if (isAstNode(node.body)) checkNode(node.body, nextAncestors, nextShadowed, mode);
       return;
     }
 
@@ -3406,10 +3896,16 @@ function verifyEntrypointRuntimeBodyUses(
             return;
           }
         } else if (name === treeParam) {
-          const isReadOnlyObjPropValue =
-            parent?.type === "ObjectProperty" &&
-            (parent.value === node || (parent.key === node && Boolean(parent.shorthand)));
-          if (!isReadOnlyObjPropValue) {
+          if (
+            !currentFnDecl ||
+            !verifyReadOnlyTreeAliasInHandler(
+              currentFnDecl,
+              node,
+              ancestors,
+              interopParam,
+              routeModVar,
+            )
+          ) {
             ok = false;
             return;
           }
@@ -3437,11 +3933,12 @@ function verifyEntrypointRuntimeBodyUses(
       }
     }
 
-    walkChildren(node, shadowed, mode);
+    walkChildren(node, [...ancestors, node], shadowed, mode);
   };
 
   const checkPatternExprs = (
     pattern: JsAstNode,
+    ancestors: JsAstNode[],
     shadowed: ReadonlySet<string>,
     mode: "top-level" | "fn-decl",
   ): void => {
@@ -3451,41 +3948,52 @@ function verifyEntrypointRuntimeBodyUses(
         return;
       case "RestElement":
       case "SpreadElement":
-        if (isAstNode(pattern.argument)) checkPatternExprs(pattern.argument, shadowed, mode);
+        if (isAstNode(pattern.argument)) {
+          checkPatternExprs(pattern.argument, [...ancestors, pattern], shadowed, mode);
+        }
         return;
       case "AssignmentPattern":
-        if (isAstNode(pattern.right)) checkNode(pattern.right, pattern, shadowed, mode);
-        if (ok && isAstNode(pattern.left)) checkPatternExprs(pattern.left, shadowed, mode);
+        if (isAstNode(pattern.right)) {
+          checkNode(pattern.right, [...ancestors, pattern], shadowed, mode);
+        }
+        if (ok && isAstNode(pattern.left)) {
+          checkPatternExprs(pattern.left, [...ancestors, pattern], shadowed, mode);
+        }
         return;
       case "ArrayPattern":
         if (Array.isArray(pattern.elements)) {
+          const next = [...ancestors, pattern];
           for (const elem of pattern.elements) {
-            if (ok && isAstNode(elem)) checkPatternExprs(elem, shadowed, mode);
+            if (ok && isAstNode(elem)) checkPatternExprs(elem, next, shadowed, mode);
           }
         }
         return;
       case "ObjectPattern":
         if (Array.isArray(pattern.properties)) {
+          const next = [...ancestors, pattern];
           for (const prop of pattern.properties) {
             if (!ok || !isAstNode(prop)) continue;
             if (prop.type === "RestElement" && isAstNode(prop.argument)) {
-              checkPatternExprs(prop.argument, shadowed, mode);
+              checkPatternExprs(prop.argument, [...next, prop], shadowed, mode);
             } else if (prop.type === "ObjectProperty") {
               if (prop.computed && isAstNode(prop.key)) {
-                checkNode(prop.key, prop, shadowed, mode);
+                checkNode(prop.key, [...next, prop], shadowed, mode);
               }
-              if (ok && isAstNode(prop.value)) checkPatternExprs(prop.value, shadowed, mode);
+              if (ok && isAstNode(prop.value)) {
+                checkPatternExprs(prop.value, [...next, prop], shadowed, mode);
+              }
             }
           }
         }
         return;
       default:
-        checkNode(pattern, undefined, shadowed, mode);
+        checkNode(pattern, ancestors, shadowed, mode);
     }
   };
 
   const walkChildren = (
     node: JsAstNode,
+    ancestors: JsAstNode[],
     shadowed: ReadonlySet<string>,
     mode: "top-level" | "fn-decl",
   ): void => {
@@ -3495,10 +4003,10 @@ function verifyEntrypointRuntimeBodyUses(
       if (Array.isArray(value)) {
         for (const item of value) {
           if (!ok) return;
-          if (isAstNode(item)) checkNode(item, node, shadowed, mode);
+          if (isAstNode(item)) checkNode(item, ancestors, shadowed, mode);
         }
       } else if (isAstNode(value)) {
-        checkNode(value, node, shadowed, mode);
+        checkNode(value, ancestors, shadowed, mode);
       }
     }
   };
@@ -3508,9 +4016,11 @@ function verifyEntrypointRuntimeBodyUses(
     if (!ok) return false;
     if (stmt === finalReturn) continue;
     if (stmt.type === "FunctionDeclaration") {
-      checkNode(stmt, program, emptyShadowed, "fn-decl");
+      currentFnDecl = stmt;
+      checkNode(stmt, [program], emptyShadowed, "fn-decl");
+      currentFnDecl = undefined;
     } else {
-      checkNode(stmt, program, emptyShadowed, "top-level");
+      checkNode(stmt, [program], emptyShadowed, "top-level");
     }
   }
   return ok;
@@ -3618,7 +4128,15 @@ function verifyTurbopackAppPageRuntimeExport(
   const routeModDeclOffset = beforeRouteMod!.length;
   if (hasWriteToIdentifier(fnBody, treeParam)) return false;
   if (hasWriteToIdentifier(fnBody, routeModVar!, routeModDeclOffset)) return false;
-  if (!verifyEntrypointRuntimeBodyUses(fnBody, treeParam, routeModVar!, routeModDeclOffset)) {
+  if (
+    !verifyEntrypointRuntimeBodyUses(
+      fnBody,
+      treeParam,
+      routeModVar!,
+      routeModDeclOffset,
+      interopParam,
+    )
+  ) {
     return false;
   }
 
@@ -5284,9 +5802,60 @@ const TURBOPACK_JS_CHUNK_URL_PATTERN = /\.js(?:\?[^#]*)?(?:#.*)?$/u;
 
 type ParsedTurbopackPageEntry = {
   runtimeVar?: string;
+  runtimeFile?: string;
   expectedModuleId?: string;
   loadedChunks: string[];
 };
+
+function runtimeSupportsLeadingNestedFactoryTable(
+  runtimeFile: string | undefined,
+  distDir: string,
+): boolean {
+  if (!runtimeFile || !existsSync(runtimeFile)) return false;
+  let runtimeSource: string;
+  try {
+    runtimeSource = readFileSync(runtimeFile, "utf8");
+  } catch {
+    return false;
+  }
+  const program = parseJsProgram(runtimeSource, distDir);
+  if (!program) return false;
+  let supportsNested = false;
+  walkJsAst(program, undefined, (node) => {
+    if (supportsNested) return false;
+    if (
+      node.type === "FunctionDeclaration" &&
+      isAstNode(node.id) &&
+      node.id.type === "Identifier" &&
+      node.id.name === "installCompressedModuleFactories" &&
+      isAstNode(node.body)
+    ) {
+      // Next 16.4.1's `installCompressedModuleFactories` checks
+      // `Array.isArray(chunkModules[...])` to recursively install a leading
+      // nested strict-mode factory array; Next 16.4.6 expects a flat array.
+      walkJsAst(node.body, node, (inner) => {
+        if (supportsNested) return false;
+        if (
+          inner.type === "CallExpression" &&
+          isAstNode(inner.callee) &&
+          inner.callee.type === "MemberExpression" &&
+          !inner.callee.computed &&
+          isAstNode(inner.callee.object) &&
+          inner.callee.object.type === "Identifier" &&
+          inner.callee.object.name === "Array" &&
+          getMemberPropertyName(inner.callee) === "isArray"
+        ) {
+          supportsNested = true;
+          return false;
+        }
+        return;
+      });
+      return false;
+    }
+    return;
+  });
+  return supportsNested;
+}
 
 function getMemberPropertyName(node: JsAstNode): string | undefined {
   if (node.type !== "MemberExpression" || !isAstNode(node.property)) return;
@@ -5299,11 +5868,13 @@ function getMemberPropertyName(node: JsAstNode): string | undefined {
 function parseTurbopackPageEntry(
   entrySource: string,
   distDir: string,
+  pageEntryPath: string,
 ): ParsedTurbopackPageEntry | undefined {
   const program = parseJsProgram(entrySource, distDir);
   if (!program || !Array.isArray(program.body)) return;
 
   let turbopackRequireVar: string | undefined;
+  let runtimeFile: string | undefined;
   let lastModuleExportsRhs: JsAstNode | undefined;
   const topLevelExportsAssignments = new Set<JsAstNode>();
 
@@ -5332,6 +5903,16 @@ function parseTurbopackPageEntry(
           const specifier = getStringLiteralValue(reqCall.arguments[0]);
           if (specifier && specifier.includes("turbopack")) {
             turbopackRequireVar = decl.id.name as string;
+            const candidateRuntime = path.resolve(path.dirname(pageEntryPath), specifier);
+            const relFromDist = path.relative(distDir, candidateRuntime);
+            if (
+              relFromDist &&
+              relFromDist !== ".." &&
+              !relFromDist.startsWith(`..${path.sep}`) &&
+              !path.isAbsolute(relFromDist)
+            ) {
+              runtimeFile = candidateRuntime;
+            }
           }
         }
       }
@@ -5472,7 +6053,7 @@ function parseTurbopackPageEntry(
   });
 
   if (invalid) return;
-  return { runtimeVar, expectedModuleId, loadedChunks };
+  return { runtimeVar, runtimeFile, expectedModuleId, loadedChunks };
 }
 
 export function compiledRouteHasOptionalRootLocale(
@@ -5495,9 +6076,10 @@ export function compiledRouteHasOptionalRootLocale(
   }
 
   const expectedPage = `/${manifestRelativePath.replace(/_client-reference-manifest\.js$/u, "")}`;
-  const parsedEntry = parseTurbopackPageEntry(entrySource, distDir);
+  const parsedEntry = parseTurbopackPageEntry(entrySource, distDir, pageEntry);
   if (!parsedEntry) return;
-  const { runtimeVar, expectedModuleId, loadedChunks } = parsedEntry;
+  const { runtimeVar, runtimeFile, expectedModuleId, loadedChunks } = parsedEntry;
+  const allowLeadingNestedTable = runtimeSupportsLeadingNestedFactoryTable(runtimeFile, distDir);
 
   // Identify the route entrypoint strictly by the live module ID exported by
   // `page.js` (`module.exports = R.m(<id>).exports`) across its loaded chunks
@@ -5507,7 +6089,13 @@ export function compiledRouteHasOptionalRootLocale(
     if (expectedModuleId === undefined) return;
     const normalizedExpectedId = normalizeTurbopackModuleId(expectedModuleId);
     if (!normalizedExpectedId) return;
-    const resolveModule = createTurbopackModuleResolver([], loadedChunks, chunkCache, distDir);
+    const resolveModule = createTurbopackModuleResolver(
+      [],
+      loadedChunks,
+      chunkCache,
+      distDir,
+      allowLeadingNestedTable,
+    );
     const entryFactory = resolveModule(normalizedExpectedId);
     if (typeof entryFactory !== "string") return;
     return compiledLoaderTreeHasOptionalRootLocale(
@@ -5518,7 +6106,13 @@ export function compiledRouteHasOptionalRootLocale(
     );
   }
   if (runtimeVar !== undefined && expectedModuleId === undefined) return;
-  const resolveEntryModule = createTurbopackModuleResolver([entrySource], [], chunkCache, distDir);
+  const resolveEntryModule = createTurbopackModuleResolver(
+    [entrySource],
+    [],
+    chunkCache,
+    distDir,
+    allowLeadingNestedTable,
+  );
   return compiledLoaderTreeHasOptionalRootLocale(
     entrySource,
     expectedPage,

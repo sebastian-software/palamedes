@@ -1516,7 +1516,9 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
         );
         expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
 
-        // An unspread nested array does not flatten at runtime and must fail closed.
+        // An unspread nested array fails closed under Next 16.4.6's flat
+        // runtime, but is accepted at index 0 when the installed runtime's
+        // `installCompressedModuleFactories` checks `Array.isArray(...)` (Next 16.4.1).
         writeFileSync(
           templateChunk,
           `module.exports = [
@@ -1525,6 +1527,31 @@ __turbopack_context__.s(["__next_app__", 0, __next_app__, "handler", 0, handler,
 ];\n`,
         );
         expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+
+        const runtimeFile = path.join(distDir, "server/chunks/ssr/[turbopack]_runtime.js");
+        try {
+          writeFileSync(
+            runtimeFile,
+            `function installCompressedModuleFactories(chunkModules, offset, moduleFactories) {
+  if (Array.isArray(chunkModules[offset])) {
+    installCompressedModuleFactories(chunkModules[offset], 0, moduleFactories);
+    offset++;
+  }
+}\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBe(false);
+          // Even under Next 16.4.1, a non-leading unspread nested array is rejected.
+          writeFileSync(
+            templateChunk,
+            `module.exports = [
+'[project]/first-mod', a => { a.s([]); },
+['${namedEntryId}', a => { "use strict"; let c = a.i('${namedRuntimeId}'); let j = ["", { children: ["[[...locale]]", { children: ["__PAGE__", {}, { page: [pg, "[project]/app/[[...locale]]/page.tsx"] }, []] }, {}, []] }, { layout: [ly, "[project]/app/layout.tsx"] }, []]; let m = (0, c.f)({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: k, loadChunk: lc, interopDefault: d.interopDefault }), n = m.__next_app__, o = m.routeModule, p = m.handler; a.s(["__next_app__", 0, n, "handler", 0, p, "routeModule", 0, o]); }]
+];\n`,
+          );
+          expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+        } finally {
+          rmSync(runtimeFile, { force: true });
+        }
 
         // When a chunk unconditionally reassigns `module.exports` at top level,
         // CommonJS `require()` returns only the final table; an earlier dead
@@ -1696,6 +1723,9 @@ module.exports = [
             `const { [c = "x"]: y } = {}; return y;`,
             `Object.assign(r.userland, { loaderTree: tampered }); return null;`,
             `Object.assign(c, tampered); return null;`,
+            `const box = { tree: c }; box.tree[2] = {}; return null;`,
+            `const box = { tree: c }; mutate(box); return null;`,
+            `const box = { tree: c }; const ctx = { renderOpts: { ComponentMod: box } }; ctx.renderOpts.ComponentMod.tree[2] = {}; return r.render(req, res, ctx);`,
           ]) {
             writeFileSync(
               namedRuntimeChunk,
