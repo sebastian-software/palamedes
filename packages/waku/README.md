@@ -100,9 +100,14 @@ export default cspInterceptor;
 Always generate the nonce per request on the server (or strip and regenerate it
 in a trusted edge proxy), and ensure any CDN or reverse proxy respects
 `Cache-Control: private, no-store` so nonce-bearing HTML is never cached across
-visitors. Do not derive a CSP nonce from an arbitrary client-supplied request
-header such as `x-csp-nonce`: an attacker could supply a predictable value and
-bypass the script policy. See the
+visitors. Note that in Waku `1.0.0-rc.4`, Waku's default fallback HTML shell
+(served when no route matches, such as a missing `/` route or missing custom
+`404` page) renders outside router handler interceptors and therefore receives
+no `unstable_setNonce` value; define request-rendered `/` and custom `404`
+routes through the router (or serve the fallback shell with its own CSP) so the
+nonce policy does not block fallback startup. Do not derive a CSP nonce from an
+arbitrary client-supplied request header such as `x-csp-nonce`: an attacker
+could supply a predictable value and bypass the script policy. See the
 [deployment security guide](../../docs/security.md#csp-nonces-and-script-delivery).
 
 The middleware transforms HTML document streams after Waku renders them. RSC
