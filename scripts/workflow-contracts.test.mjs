@@ -4892,6 +4892,47 @@ describe("workflow contracts", () => {
       "<memory>:18: container tool invocation in non-shell run step cannot be verified statically",
       "<memory>:23: container tool invocation in non-shell run step cannot be verified statically",
     ]);
+    // Multiline env expressions in `setup-buildx-action` `driver-opts` split
+    // after expansion before extracting `image=`, and non-shell exec detection
+    // inspects the actual invoked command rather than unrelated print strings.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r68:",
+          "    runs-on: ubuntu-latest",
+          "    env:",
+          "      DRIVER_OPTS: |",
+          "        network=host",
+          `        image=moby/buildkit:v0.35.1@${digest}`,
+          "      BAD_DRIVER_OPTS: |",
+          "        network=host",
+          "        image=moby/buildkit:v0.35.1",
+          "    steps:",
+          `      - uses: docker/setup-buildx-action@${"b".repeat(40)}`,
+          "        with:",
+          "          driver-opts: ${{ env.DRIVER_OPTS }}",
+          `      - uses: docker/setup-buildx-action@${"b".repeat(40)}`,
+          "        with:",
+          "          driver-opts: ${{ env.BAD_DRIVER_OPTS }}",
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["git", "status"], check=True)',
+          '          print("See docker build --help")',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          cmd = ["docker", "pull", "node:24"]',
+          "          subprocess.run(cmd, check=True)",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:10: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
+      "<memory>:26: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

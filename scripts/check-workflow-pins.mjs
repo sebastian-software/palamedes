@@ -2923,13 +2923,131 @@ function inspectNonShellScript(
     codeOnly += ch;
   }
 
-  const hasExecOrSdkCall =
-    /\b(?:subprocess|os\.system|os\.popen|os\.spawn\w*|os\.exec\w*|pty\.spawn|asyncio\.create_subprocess\w*|child_process|execSync|execFileSync|spawnSync|execFile\s*\(|spawn\s*\(|exec\s*\(|Bun\.spawn|Bun\.\$|Deno\.Command|Deno\.run|dockerode|system\s*\(|popen\s*\(|open3|Open3|shell_exec|proc_open|passthru|import\s+docker|from\s+docker|import\s+podman|from\s+podman|import\s+python_on_whales|from\s+python_on_whales)\b|(?:%x|qx)\s*[[({/<]/u.test(
+  const CONTAINER_CLI_WORD = /\b(?:docker|podman|buildah|docker-compose|podman-compose)\b/iu;
+  const hasContainerSdkImport =
+    /\b(?:import\s+(?:docker|podman|python_on_whales)\b|from\s+(?:docker|podman|python_on_whales)\b|require\s*\(\s*['"](?:dockerode|podman)['"]\s*\)|from\s+['"](?:dockerode|podman)['"])/u.test(
       codeOnly,
     );
-  const invokesContainerTool =
-    hasExecOrSdkCall &&
-    /\b(?:docker|podman|buildah|docker-compose|podman-compose)\b/iu.test(codeOnly);
+
+  const extractBalancedSlice = (src, openIndex, openChar, closeChar) => {
+    let depth = 0;
+    let strQuote = null;
+    let strTriple = false;
+    for (let i = openIndex; i < src.length; i += 1) {
+      const ch = src[i];
+      if (strQuote) {
+        if (ch === "\\" && i + 1 < src.length) {
+          i += 1;
+          continue;
+        }
+        if (strTriple) {
+          if (src.slice(i, i + 3) === strQuote.repeat(3)) {
+            i += 2;
+            strQuote = null;
+            strTriple = false;
+          }
+        } else if (ch === strQuote) {
+          strQuote = null;
+        }
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === "`") {
+        if (ch !== "`" && src.slice(i, i + 3) === ch.repeat(3)) {
+          strQuote = ch;
+          strTriple = true;
+          i += 2;
+          continue;
+        }
+        strQuote = ch;
+        strTriple = false;
+        continue;
+      }
+      if (ch === openChar) {
+        depth += 1;
+      } else if (ch === closeChar) {
+        depth -= 1;
+        if (depth === 0) {
+          return src.slice(openIndex + 1, i);
+        }
+      }
+    }
+    return src.slice(openIndex + 1);
+  };
+
+  // Track variables assigned values mentioning a container CLI (including
+  // multiline array/call initializers like `cmd = [\n "docker", "pull", ... \n]`).
+  const containerVarNames = new Set();
+  const assignPattern =
+    /(?:^|[;\n])\s*(?:(?:const|let|var|my|local)\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\+?=\s*/gu;
+  for (const match of codeOnly.matchAll(assignPattern)) {
+    const rhsStart = match.index + match[0].length;
+    const firstCh = codeOnly[rhsStart];
+    let rhsText;
+    if (firstCh === "[") {
+      rhsText = extractBalancedSlice(codeOnly, rhsStart, "[", "]");
+    } else if (firstCh === "(") {
+      rhsText = extractBalancedSlice(codeOnly, rhsStart, "(", ")");
+    } else if (firstCh === "{") {
+      rhsText = extractBalancedSlice(codeOnly, rhsStart, "{", "}");
+    } else {
+      const nl = codeOnly.indexOf("\n", rhsStart);
+      rhsText = nl === -1 ? codeOnly.slice(rhsStart) : codeOnly.slice(rhsStart, nl);
+    }
+    if (CONTAINER_CLI_WORD.test(rhsText)) {
+      containerVarNames.add(match.groups.name);
+    }
+  }
+
+  const argInvokesContainerCli = (argText) => {
+    if (CONTAINER_CLI_WORD.test(argText)) {
+      return true;
+    }
+    if (containerVarNames.size > 0) {
+      for (const identMatch of argText.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/gu)) {
+        if (containerVarNames.has(identMatch[0])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  let invokesContainerTool = hasContainerSdkImport;
+  if (!invokesContainerTool) {
+    const execCallPattern =
+      /\b(?:subprocess\.(?:run|Popen|call|check_call|check_output|getoutput|getstatusoutput)|os\.(?:system|popen|spawn\w*|exec\w*)|pty\.spawn|asyncio\.create_subprocess\w*|(?:child_process\.)?(?:execSync|execFileSync|spawnSync|execFile|spawn|exec)|Bun\.spawn\w*|Deno\.(?:Command|run)|Open3\.\w+|system|popen|shell_exec|proc_open|passthru)\s*\(/gu;
+    for (const match of codeOnly.matchAll(execCallPattern)) {
+      const openParenIdx = match.index + match[0].length - 1;
+      const argText = extractBalancedSlice(codeOnly, openParenIdx, "(", ")");
+      if (argInvokesContainerCli(argText)) {
+        invokesContainerTool = true;
+        break;
+      }
+    }
+  }
+  if (!invokesContainerTool) {
+    for (const match of codeOnly.matchAll(/\bBun\.\$`(?<body>[^`]*)`/gu)) {
+      if (argInvokesContainerCli(match.groups.body)) {
+        invokesContainerTool = true;
+        break;
+      }
+    }
+  }
+  if (!invokesContainerTool) {
+    for (const match of codeOnly.matchAll(/(?:%x|qx)\s*(?<open>[[({/])(?<body>[^\n]*)/gu)) {
+      const openCh = match.groups.open;
+      const closeCh = openCh === "[" ? "]" : openCh === "(" ? ")" : openCh === "{" ? "}" : openCh;
+      const openIdx = match.index + match[0].indexOf(openCh);
+      const bodyText =
+        openCh === closeCh
+          ? (match.groups.body.split(closeCh)[0] ?? "")
+          : extractBalancedSlice(codeOnly, openIdx, openCh, closeCh);
+      if (argInvokesContainerCli(bodyText)) {
+        invokesContainerTool = true;
+        break;
+      }
+    }
+  }
   if (invokesContainerTool) {
     problems.push(
       `${filePath}:${startLine}: container tool invocation in non-shell run step cannot be verified statically`,
@@ -12057,19 +12175,41 @@ function checkStepsList(
             );
           }
           const lineImages = [];
+          let candidateMissingImage = false;
           for (const envCandidate of expandedOpt.candidates) {
             for (const candidate of expandMatrixReferences(
               envCandidate.text,
               rowList,
               envCandidate.line,
             )) {
-              for (const imageRef of extractDriverOptImages(candidate.text)) {
-                lineImages.push({ text: imageRef, line: candidate.line });
+              let lastCandidateImages = [];
+              for (const expandedLine of candidate.text.split(/\r?\n/u)) {
+                const subLine = expandedLine.trim();
+                if (!subLine || subLine.startsWith("#")) {
+                  continue;
+                }
+                const subImages = extractDriverOptImages(subLine);
+                if (subImages.length > 0) {
+                  lastCandidateImages = subImages.map((imageRef) => ({
+                    text: imageRef,
+                    line: candidate.line,
+                  }));
+                }
+              }
+              if (lastCandidateImages.length > 0) {
+                lineImages.push(...lastCandidateImages);
+              } else {
+                candidateMissingImage = true;
               }
             }
           }
           if (lineImages.length > 0) {
-            effectiveImageCandidates = lineImages;
+            effectiveImageCandidates = candidateMissingImage
+              ? [...effectiveImageCandidates, ...lineImages]
+              : lineImages;
+            if (candidateMissingImage && effectiveImageCandidates.length === lineImages.length) {
+              effectiveImageCandidates.push({ text: "", line: fallbackLine });
+            }
           }
         }
 
