@@ -1712,6 +1712,45 @@ module.exports = [
           );
           expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
 
+          // Minified Next 16.4.1 builds can reuse the same single-letter helper
+          // name (`l`) in an unrelated sibling block inside `handleRequest`.
+          // Resolve the render helper lexically from the call site while still
+          // rejecting a shadowed or reassigned helper in the call site's scope.
+          writeFileSync(
+            namedRuntimeChunk,
+            `module.exports = ([
+'${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function({tree:c,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},r=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:c}}); async function W(){ let bd = { tree: c }; if (cond) { let l = () => null; l(); } try { let l = async (a, ctx, op) => op === "prerender" ? r.prerender(req, res, ctx) : r.render(req, res, ctx); let n = { renderOpts: { ComponentMod: bd, Component: T(bd) } }; return await l(span, n, op); } catch (e) { return null; } } return {__next_app__:U,routeModule:r,handler:W}; }], '${namedRuntimeId}'); },
+'${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
+'${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
+]);\n`,
+          );
+          const sharedRuntimeCache = new Map();
+          expect(
+            compiledRouteHasOptionalRootLocale(distDir, manifestPath, sharedRuntimeCache),
+          ).toBe(false);
+          // Reusing the shared build cache across routes must still fail closed
+          // when a second route loads a conflicting external AppPageRouteModule.
+          const badExternalChunk = path.join(distDir, "server/chunks/ssr/bad_external_override.js");
+          try {
+            writeFileSync(
+              badExternalChunk,
+              `module.exports = ['${namedExternalId}', (a, b) => { b.exports = a.x("custom-wrapper", () => require("custom-wrapper")); }];\n`,
+            );
+            writeFileSync(
+              path.join(distDir, "server/app/[[...locale]]/page.js"),
+              `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/bad_external_override.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+            );
+            expect(
+              compiledRouteHasOptionalRootLocale(distDir, manifestPath, sharedRuntimeCache),
+            ).toBeUndefined();
+          } finally {
+            rmSync(badExternalChunk, { force: true });
+            writeFileSync(
+              path.join(distDir, "server/app/[[...locale]]/page.js"),
+              `var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/[[...locale]]/page.js")\nR.c("server/chunks/ssr/next_named_runtime.js")\nR.c("server/chunks/ssr/next_dist_esm_build_templates_app-page_abc.js")\nmodule.exports=R.m(${JSON.stringify(namedEntryId)}).exports\n`,
+            );
+          }
+
           // Block-local function declarations inside `if (...) { function c() {} }`
           // do not shadow `c` in sibling statements of a strict-mode function,
           // writes inside destructuring defaults or computed keys must fail closed,

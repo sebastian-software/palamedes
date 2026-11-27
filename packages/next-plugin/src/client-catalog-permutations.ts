@@ -1584,6 +1584,16 @@ type TurbopackFactoryGroup = { ids: string[]; factory: string };
 type TurbopackExtractedChunk = { groups: TurbopackFactoryGroup[] };
 type TurbopackChunkModuleCache = Map<string, TurbopackExtractedChunk | null>;
 
+const RUNTIME_EXPORT_VERIFY_CACHE = new WeakMap<
+  TurbopackChunkModuleCache,
+  Map<string, string | null>
+>();
+const RUNTIME_NESTED_TABLE_CACHE = new WeakMap<TurbopackChunkModuleCache, Map<string, boolean>>();
+const RESOLVER_RUNTIME_VERIFY_CACHE = new WeakMap<
+  TurbopackModuleResolver,
+  Map<string, string | null>
+>();
+
 type JsAstNode = {
   type: string;
   start: number;
@@ -1999,7 +2009,7 @@ function createTurbopackModuleResolver(
 
   let resolvedMap: Map<string, string | null> | undefined;
 
-  return (moduleId: string): string | null | undefined => {
+  const resolver: TurbopackModuleResolver = (moduleId: string): string | null | undefined => {
     if (resolvedMap === undefined) {
       const allGroups: TurbopackFactoryGroup[] = [...inlineGroups];
       for (const chunkPath of chunkPaths) {
@@ -2030,6 +2040,15 @@ function createTurbopackModuleResolver(
     if (hasUnparseableSource) return null;
     return resolvedMap.get(moduleId);
   };
+  if (chunkCache) {
+    let runtimeVerifyCache = RUNTIME_EXPORT_VERIFY_CACHE.get(chunkCache);
+    if (!runtimeVerifyCache) {
+      runtimeVerifyCache = new Map();
+      RUNTIME_EXPORT_VERIFY_CACHE.set(chunkCache, runtimeVerifyCache);
+    }
+    RESOLVER_RUNTIME_VERIFY_CACHE.set(resolver, runtimeVerifyCache);
+  }
+  return resolver;
 }
 
 function resolveUniqueTopLevelImportSource(
@@ -3509,20 +3528,132 @@ function verifyReadOnlyTreeAliasInHandler(
   }
   const compModVar = compDecl.id.name;
   // Find the nearest enclosing BlockStatement containing `compDecl`.
-  let compScopeBlock: JsAstNode | undefined;
+  let compScopeIdx = -1;
   for (let i = treeAncestors.length - 4; i >= 0; i -= 1) {
-    const anc = treeAncestors[i]!;
-    if (anc.type === "BlockStatement") {
-      compScopeBlock = anc;
+    if (treeAncestors[i]!.type === "BlockStatement") {
+      compScopeIdx = i;
       break;
     }
   }
-  if (!compScopeBlock) return false;
+  if (compScopeIdx === -1) return false;
+  const compScopeBlock = treeAncestors[compScopeIdx]!;
+  const compScopePrefix = treeAncestors.slice(0, compScopeIdx);
+
+  const resolveLexicalHelperFunction = (
+    helperName: string,
+    callAncestors: readonly JsAstNode[],
+  ): JsAstNode | undefined => {
+    // Walk lexical scopes outward from the call site to `fnDecl` so a minified
+    // name reused in an unrelated sibling block cannot shadow or conflict with
+    // the binding actually invoked at this call site.
+    for (let i = callAncestors.length - 1; i >= 0; i -= 1) {
+      const scope = callAncestors[i]!;
+      if (
+        scope.type === "FunctionDeclaration" ||
+        scope.type === "FunctionExpression" ||
+        scope.type === "ArrowFunctionExpression" ||
+        scope.type === "ObjectMethod" ||
+        scope.type === "ClassMethod" ||
+        scope.type === "ClassPrivateMethod"
+      ) {
+        const paramNames = new Set<string>();
+        if (Array.isArray(scope.params)) {
+          for (const p of scope.params) {
+            if (isAstNode(p)) collectPatternBindingNames(p, paramNames);
+          }
+        }
+        if (paramNames.has(helperName)) return;
+        if (
+          scope.type === "FunctionExpression" &&
+          isAstNode(scope.id) &&
+          scope.id.type === "Identifier" &&
+          scope.id.name === helperName
+        ) {
+          return scope;
+        }
+        if (scope === fnDecl) break;
+        continue;
+      }
+
+      if (scope.type === "CatchClause") {
+        if (isAstNode(scope.param)) {
+          const catchNames = new Set<string>();
+          collectPatternBindingNames(scope.param, catchNames);
+          if (catchNames.has(helperName)) return;
+        }
+        continue;
+      }
+
+      if (scope.type === "BlockStatement" && Array.isArray(scope.body)) {
+        const matches: Array<{ fn: JsAstNode; declNode: JsAstNode }> = [];
+        for (const stmt of scope.body as JsAstNode[]) {
+          if (
+            stmt.type === "FunctionDeclaration" &&
+            isAstNode(stmt.id) &&
+            stmt.id.type === "Identifier" &&
+            stmt.id.name === helperName
+          ) {
+            matches.push({ fn: stmt, declNode: stmt });
+          } else if (
+            stmt.type === "ClassDeclaration" &&
+            isAstNode(stmt.id) &&
+            stmt.id.type === "Identifier" &&
+            stmt.id.name === helperName
+          ) {
+            return;
+          } else if (stmt.type === "VariableDeclaration" && Array.isArray(stmt.declarations)) {
+            for (const decl of stmt.declarations) {
+              if (!isAstNode(decl) || !isAstNode(decl.id)) continue;
+              const bound = new Set<string>();
+              collectPatternBindingNames(decl.id, bound);
+              if (!bound.has(helperName)) continue;
+              if (
+                decl.id.type === "Identifier" &&
+                decl.id.name === helperName &&
+                isAstNode(decl.init) &&
+                (decl.init.type === "ArrowFunctionExpression" ||
+                  decl.init.type === "FunctionExpression")
+              ) {
+                matches.push({ fn: decl.init, declNode: decl });
+              } else {
+                return;
+              }
+            }
+          }
+        }
+        if (matches.length > 1) return;
+        if (matches.length === 1) {
+          const { fn, declNode } = matches[0]!;
+          for (const ref of collectLexicalScopeRefs(scope, helperName, declNode)) {
+            if (isWriteContext(ref.node, ref.ancestors.at(-1))) return;
+          }
+          return fn;
+        }
+        // If this block is a function body, also check for hoisted `var`
+        // declarations inside nested blocks so we fail closed if shadowed.
+        const scopeParent = i > 0 ? callAncestors[i - 1] : undefined;
+        if (
+          scopeParent &&
+          (scopeParent.type === "FunctionDeclaration" ||
+            scopeParent.type === "FunctionExpression" ||
+            scopeParent.type === "ArrowFunctionExpression" ||
+            scopeParent.type === "ObjectMethod" ||
+            scopeParent.type === "ClassMethod" ||
+            scopeParent.type === "ClassPrivateMethod")
+        ) {
+          const hoistedVars = new Set<string>();
+          collectHoistedVarBindings(scope, hoistedVars);
+          if (hoistedVars.has(helperName)) return;
+        }
+      }
+    }
+    return;
+  };
 
   const isVerifiedRenderCall = (
     callNode: JsAstNode,
+    callAncestors: readonly JsAstNode[],
     argNode: JsAstNode,
-    searchRoot: JsAstNode,
   ): boolean => {
     if (
       callNode.type !== "CallExpression" ||
@@ -3537,37 +3668,8 @@ function verifyReadOnlyTreeAliasInHandler(
 
     const helperName = unwrapIndirectCalleeIdent(callNode.callee);
     if (!helperName) return false;
-    // Locate a unique un-reassigned local helper function inside `searchRoot`.
-    const helperDefs: Array<{ fn: JsAstNode; declNode: JsAstNode }> = [];
-    walkJsAst(searchRoot, undefined, (node) => {
-      if (
-        node.type === "FunctionDeclaration" &&
-        isAstNode(node.id) &&
-        node.id.type === "Identifier" &&
-        node.id.name === helperName
-      ) {
-        helperDefs.push({ fn: node, declNode: node });
-        return false;
-      }
-      if (
-        node.type === "VariableDeclarator" &&
-        isAstNode(node.id) &&
-        node.id.type === "Identifier" &&
-        node.id.name === helperName &&
-        isAstNode(node.init) &&
-        (node.init.type === "ArrowFunctionExpression" || node.init.type === "FunctionExpression")
-      ) {
-        helperDefs.push({ fn: node.init, declNode: node });
-        return false;
-      }
-      return;
-    });
-    if (helperDefs.length !== 1) return false;
-    const { fn: helperFn, declNode } = helperDefs[0]!;
-    // Ensure `helperName` is never reassigned anywhere in `searchRoot`.
-    for (const ref of collectLexicalScopeRefs(searchRoot, helperName, declNode)) {
-      if (isWriteContext(ref.node, ref.ancestors.at(-1))) return false;
-    }
+    const helperFn = resolveLexicalHelperFunction(helperName, callAncestors);
+    if (!helperFn) return false;
     if (!Array.isArray(helperFn.params) || argIndex >= helperFn.params.length) return false;
     const paramNode = helperFn.params[argIndex];
     if (
@@ -3597,7 +3699,12 @@ function verifyReadOnlyTreeAliasInHandler(
     return true;
   };
 
-  const ctxTargets: Array<{ ctxVar: string; ctxDecl: JsAstNode; ctxScope: JsAstNode }> = [];
+  const ctxTargets: Array<{
+    ctxVar: string;
+    ctxDecl: JsAstNode;
+    ctxScope: JsAstNode;
+    ctxScopePrefix: JsAstNode[];
+  }> = [];
   const compRefs = collectLexicalScopeRefs(compScopeBlock, compModVar, compDecl);
   for (const ref of compRefs) {
     const parent = ref.ancestors.at(-1);
@@ -3634,31 +3741,45 @@ function verifyReadOnlyTreeAliasInHandler(
         ctxOwner.id.type === "Identifier" &&
         typeof ctxOwner.id.name === "string"
       ) {
-        let ctxScope: JsAstNode | undefined;
+        let ctxScopeIdx = -1;
         for (let i = ref.ancestors.length - 6; i >= 0; i -= 1) {
-          const anc = ref.ancestors[i]!;
-          if (anc.type === "BlockStatement") {
-            ctxScope = anc;
+          if (ref.ancestors[i]!.type === "BlockStatement") {
+            ctxScopeIdx = i;
             break;
           }
         }
-        if (!ctxScope) return false;
-        ctxTargets.push({ ctxVar: ctxOwner.id.name, ctxDecl: ctxOwner, ctxScope });
+        if (ctxScopeIdx === -1) return false;
+        ctxTargets.push({
+          ctxVar: ctxOwner.id.name,
+          ctxDecl: ctxOwner,
+          ctxScope: ref.ancestors[ctxScopeIdx]!,
+          ctxScopePrefix: [...compScopePrefix, ...ref.ancestors.slice(0, ctxScopeIdx)],
+        });
         continue;
       }
-      if (isVerifiedRenderCall(ctxOwner, ctxObj, fnDecl)) {
+      if (
+        isVerifiedRenderCall(ctxOwner, [...compScopePrefix, ...ref.ancestors.slice(0, -5)], ctxObj)
+      ) {
         continue;
       }
     }
     return false;
   }
 
-  for (const { ctxVar, ctxDecl, ctxScope } of ctxTargets) {
+  for (const { ctxVar, ctxDecl, ctxScope, ctxScopePrefix } of ctxTargets) {
     const ctxRefs = collectLexicalScopeRefs(ctxScope, ctxVar, ctxDecl);
     for (const cRef of ctxRefs) {
       const cParent = cRef.ancestors.at(-1);
       if (!cParent || isWriteContext(cRef.node, cParent)) return false;
-      if (!isVerifiedRenderCall(cParent, cRef.node, fnDecl)) return false;
+      if (
+        !isVerifiedRenderCall(
+          cParent,
+          [...ctxScopePrefix, ...cRef.ancestors.slice(0, -1)],
+          cRef.node,
+        )
+      ) {
+        return false;
+      }
     }
   }
 
@@ -4026,31 +4147,29 @@ function verifyEntrypointRuntimeBodyUses(
   return ok;
 }
 
-function verifyTurbopackAppPageRuntimeExport(
+function extractVerifiedAppPageModuleIdFromRuntimeFactory(
+  factory: string,
   runtimeModuleId: string,
   exportName: string,
-  resolveModule: TurbopackModuleResolver,
-): boolean {
-  const factory = resolveModule(runtimeModuleId);
-  if (typeof factory !== "string") return false;
+): string | null {
   const parsed = parseTurbopackFactory(factory);
-  if (!parsed) return false;
+  if (!parsed) return null;
   const fnSource = extractTurbopackExportedFunction(
     parsed.body,
     parsed.param,
     runtimeModuleId,
     exportName,
   );
-  if (!fnSource) return false;
+  if (!fnSource) return null;
 
   // Verify signature: `function({ tree: O, page: P, pathname: Q, require: R, loadChunk: S, interopDefault: T }) { ... }`
   const openParen = fnSource.indexOf("(");
-  if (openParen === -1) return false;
+  if (openParen === -1) return null;
   const closeParen = scanBalancedEnd(fnSource, openParen);
-  if (closeParen === -1) return false;
+  if (closeParen === -1) return null;
   const paramText = fnSource.slice(openParen + 1, closeParen - 1).trim();
   const paramProps = parseTopLevelObjectProperties(paramText);
-  if (!paramProps) return false;
+  if (!paramProps) return null;
   const treeParam = paramProps.get("tree");
   const pageParam = paramProps.get("page");
   const pathnameParam = paramProps.get("pathname");
@@ -4072,13 +4191,13 @@ function verifyTurbopackAppPageRuntimeExport(
     !identRe.test(loadChunkParam) ||
     !identRe.test(interopParam)
   ) {
-    return false;
+    return null;
   }
 
   const bodyOpen = skipWhitespaceAndComments(fnSource, closeParen);
-  if (fnSource[bodyOpen] !== "{") return false;
+  if (fnSource[bodyOpen] !== "{") return null;
   const bodyClose = scanBalancedEnd(fnSource, bodyOpen);
-  if (bodyClose !== fnSource.length) return false;
+  if (bodyClose !== fnSource.length) return null;
   const fnBody = fnSource.slice(bodyOpen + 1, bodyClose - 1);
 
   // Verify the straight-line prefix at function entry constructs Next's
@@ -4089,33 +4208,33 @@ function verifyTurbopackAppPageRuntimeExport(
     `^(\\s*(?:["']use strict["']\\s*;?\\s*)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*\\{\\s*require\\s*:\\s*${escapeRegExpLiteral(reqParam)}\\s*,\\s*loadChunk\\s*:\\s*${escapeRegExpLiteral(loadChunkParam)}\\s*,?\\s*\\}\\s*(?:,\\s*|;\\s*(?:const|let|var)\\s+))([A-Za-z_$][\\w$]*)\\s*=\\s*new\\s+([A-Za-z_$][\\w$]*)\\s*(?:\\.\\s*AppPageRouteModule|\\[\\s*["']AppPageRouteModule["']\\s*\\])\\s*\\(`,
     "u",
   ).exec(fnBody);
-  if (!prefixMatch) return false;
+  if (!prefixMatch) return null;
   const [, beforeRouteMod, nextAppVar, routeModVar, appPageNs] = prefixMatch;
   const ctorParen = prefixMatch[0].length - 1;
   const ctorEnd = scanBalancedEnd(fnBody, ctorParen);
-  if (ctorEnd === -1) return false;
+  if (ctorEnd === -1) return null;
   const ctorArgsText = fnBody.slice(ctorParen + 1, ctorEnd - 1).trim();
   const ctorArgs = parseTopLevelObjectProperties(ctorArgsText);
-  if (!ctorArgs) return false;
+  if (!ctorArgs) return null;
   const defProps = parseTopLevelObjectProperties(ctorArgs.get("definition") ?? "");
   const userlandProps = parseTopLevelObjectProperties(ctorArgs.get("userland") ?? "");
-  if (!defProps || !userlandProps) return false;
-  if (userlandProps.get("loaderTree")?.trim() !== treeParam) return false;
-  if (defProps.get("page")?.trim() !== pageParam) return false;
-  if (defProps.get("pathname")?.trim() !== pathnameParam) return false;
+  if (!defProps || !userlandProps) return null;
+  if (userlandProps.get("loaderTree")?.trim() !== treeParam) return null;
+  if (defProps.get("page")?.trim() !== pageParam) return null;
+  if (defProps.get("pathname")?.trim() !== pathnameParam) return null;
   if (
     !/^(?:[A-Za-z_$][\w$]*\s*(?:\.\s*RouteKind|\[\s*["']RouteKind["']\s*\])|RouteKind)\s*(?:\.\s*APP_PAGE|\[\s*["']APP_PAGE["']\s*\])$/u.test(
       defProps.get("kind") ?? "",
     )
   ) {
-    return false;
+    return null;
   }
 
   // Verify the function returns `{ __next_app__: nextAppVar, routeModule: routeModVar, handler: ... }`
   // and neither `treeParam` nor `routeModVar` is mutated, reassigned, or
   // indirectly tampered with via calls (such as `Object.assign`).
   const returnMatch = /return\s*(\{[^{}]*\})\s*;?\s*$/u.exec(fnBody);
-  if (!returnMatch) return false;
+  if (!returnMatch) return null;
   const returnProps = parseTopLevelObjectProperties(returnMatch[1]!);
   if (
     !returnProps ||
@@ -4123,11 +4242,11 @@ function verifyTurbopackAppPageRuntimeExport(
     returnProps.get("routeModule")?.trim() !== routeModVar ||
     !identRe.test(returnProps.get("handler")?.trim() ?? "")
   ) {
-    return false;
+    return null;
   }
   const routeModDeclOffset = beforeRouteMod!.length;
-  if (hasWriteToIdentifier(fnBody, treeParam)) return false;
-  if (hasWriteToIdentifier(fnBody, routeModVar!, routeModDeclOffset)) return false;
+  if (hasWriteToIdentifier(fnBody, treeParam)) return null;
+  if (hasWriteToIdentifier(fnBody, routeModVar!, routeModDeclOffset)) return null;
   if (
     !verifyEntrypointRuntimeBodyUses(
       fnBody,
@@ -4137,13 +4256,34 @@ function verifyTurbopackAppPageRuntimeExport(
       interopParam,
     )
   ) {
-    return false;
+    return null;
   }
 
-  // Finally, prove `appPageNs` in `runtimeModuleId` resolves to Next's real
-  // external `AppPageRouteModule` runtime module.
-  const appPageModId = resolveUniqueTopLevelImportSource(parsed.body, appPageNs!, parsed.param);
+  return resolveUniqueTopLevelImportSource(parsed.body, appPageNs!, parsed.param) ?? null;
+}
+
+function verifyTurbopackAppPageRuntimeExport(
+  runtimeModuleId: string,
+  exportName: string,
+  resolveModule: TurbopackModuleResolver,
+): boolean {
+  const factory = resolveModule(runtimeModuleId);
+  if (typeof factory !== "string") return false;
+  const runtimeVerifyCache = RESOLVER_RUNTIME_VERIFY_CACHE.get(resolveModule);
+  const cacheKey = `${runtimeModuleId}\0${exportName}\0${factory}`;
+  let appPageModId = runtimeVerifyCache?.get(cacheKey);
+  if (appPageModId === undefined) {
+    appPageModId = extractVerifiedAppPageModuleIdFromRuntimeFactory(
+      factory,
+      runtimeModuleId,
+      exportName,
+    );
+    runtimeVerifyCache?.set(cacheKey, appPageModId);
+  }
   if (!appPageModId) return false;
+  // Always prove `appPageModId` resolves to Next's real external
+  // `AppPageRouteModule` runtime module using this route's own resolver so
+  // route-specific ambiguity or conflicting chunks still fail closed.
   return isNextAppPageExternalModule(appPageModId, resolveModule);
 }
 
@@ -5810,8 +5950,13 @@ type ParsedTurbopackPageEntry = {
 function runtimeSupportsLeadingNestedFactoryTable(
   runtimeFile: string | undefined,
   distDir: string,
+  chunkCache?: TurbopackChunkModuleCache,
 ): boolean {
-  if (!runtimeFile || !existsSync(runtimeFile)) return false;
+  if (!runtimeFile) return false;
+  let nestedTableCache = chunkCache ? RUNTIME_NESTED_TABLE_CACHE.get(chunkCache) : undefined;
+  const cached = nestedTableCache?.get(runtimeFile);
+  if (cached !== undefined) return cached;
+  if (!existsSync(runtimeFile)) return false;
   let runtimeSource: string;
   try {
     runtimeSource = readFileSync(runtimeFile, "utf8");
@@ -5854,6 +5999,13 @@ function runtimeSupportsLeadingNestedFactoryTable(
     }
     return;
   });
+  if (chunkCache) {
+    if (!nestedTableCache) {
+      nestedTableCache = new Map();
+      RUNTIME_NESTED_TABLE_CACHE.set(chunkCache, nestedTableCache);
+    }
+    nestedTableCache.set(runtimeFile, supportsNested);
+  }
   return supportsNested;
 }
 
@@ -6079,7 +6231,11 @@ export function compiledRouteHasOptionalRootLocale(
   const parsedEntry = parseTurbopackPageEntry(entrySource, distDir, pageEntry);
   if (!parsedEntry) return;
   const { runtimeVar, runtimeFile, expectedModuleId, loadedChunks } = parsedEntry;
-  const allowLeadingNestedTable = runtimeSupportsLeadingNestedFactoryTable(runtimeFile, distDir);
+  const allowLeadingNestedTable = runtimeSupportsLeadingNestedFactoryTable(
+    runtimeFile,
+    distDir,
+    chunkCache,
+  );
 
   // Identify the route entrypoint strictly by the live module ID exported by
   // `page.js` (`module.exports = R.m(<id>).exports`) across its loaded chunks
