@@ -2841,11 +2841,7 @@ function isNonShellInterpreterCommand(tokens) {
   if (!cmd) {
     return false;
   }
-  const base = path
-    .basename(cmd)
-    .toLowerCase()
-    .replace(/\.exe$/u, "");
-  return NON_SHELL_SCRIPT_INTERPRETERS.has(base);
+  return NON_SHELL_SCRIPT_INTERPRETERS.has(normalizeExecutableName(cmd));
 }
 
 function inspectNonShellScript(
@@ -3060,22 +3056,111 @@ function inspectNonShellScript(
     return null;
   };
 
-  const isContainerExecutableName = (rawName) => {
-    const base = path
-      .basename(rawName.trim())
-      .toLowerCase()
-      .replace(/\.exe$/u, "");
-    return CONTAINER_CLI_BASENAMES.has(base);
-  };
+  const isContainerExecutableName = (rawName) =>
+    CONTAINER_CLI_BASENAMES.has(normalizeExecutableName(rawName.trim()));
 
   const isShellExecutableName = (rawName) => {
-    const base = path
-      .basename(rawName.trim())
-      .toLowerCase()
-      .replace(/\.exe$/u, "");
+    const base = normalizeExecutableName(rawName.trim());
     return (
       SHELL_INTERPRETERS.has(base) || base === "pwsh" || base === "powershell" || base === "cmd"
     );
+  };
+
+  const literalShellCommandInvokesContainer = (shellCmd, depth = 0) => {
+    if (depth > 3 || !shellCmd) {
+      return false;
+    }
+    const events = lexShellScript(shellCmd, 1, "posix");
+    for (const ev of events) {
+      if (ev.kind !== "command") {
+        continue;
+      }
+      if (ev.substitutions && ev.substitutions.length > 0) {
+        for (const sub of ev.substitutions) {
+          if (literalShellCommandInvokesContainer(sub.script, depth + 1)) {
+            return true;
+          }
+        }
+      }
+      const evTokens = ev.tokens ?? [];
+      let cur = 0;
+      while (cur < evTokens.length) {
+        const redirSkip = consumeShellRedirection(
+          evTokens,
+          cur,
+          null,
+          ev.tokenQuoted,
+          ev.tokenOffsets,
+        );
+        if (redirSkip > 0) {
+          cur += redirSkip;
+          continue;
+        }
+        const tok = evTokens[cur];
+        if (
+          tok === "if" ||
+          tok === "then" ||
+          tok === "else" ||
+          tok === "elif" ||
+          tok === "do" ||
+          tok === "fi" ||
+          tok === "done" ||
+          tok === "esac" ||
+          tok === "!"
+        ) {
+          cur += 1;
+          continue;
+        }
+        if (ENV_PREFIX_ASSIGNMENT_PATTERN.test(tok)) {
+          cur += 1;
+          continue;
+        }
+        const norm = normalizeExecutableName(tok);
+        if (norm === "command") {
+          let cmdIdx = cur + 1;
+          let isLookup = false;
+          while (cmdIdx < evTokens.length && evTokens[cmdIdx].startsWith("-")) {
+            if (evTokens[cmdIdx] === "--") {
+              cmdIdx += 1;
+              break;
+            }
+            if (evTokens[cmdIdx].includes("v") || evTokens[cmdIdx].includes("V")) {
+              isLookup = true;
+            }
+            cmdIdx += 1;
+          }
+          if (isLookup) {
+            cur = evTokens.length;
+            break;
+          }
+          cur = cmdIdx;
+          continue;
+        }
+        if (SHELL_COMMAND_PREFIXES.has(norm)) {
+          cur += 1;
+          while (cur < evTokens.length && evTokens[cur].startsWith("-")) {
+            cur += 1;
+          }
+          continue;
+        }
+        if (CONTAINER_CLI_BASENAMES.has(norm)) {
+          return true;
+        }
+        if (isShellExecutableName(tok)) {
+          const dashC = extractShellDashCScriptInfo(
+            evTokens,
+            ev.tokenSingleQuoted,
+            ev.tokenEscapedDollarOffsets,
+            cur,
+          );
+          if (dashC && literalShellCommandInvokesContainer(dashC.script, depth + 1)) {
+            return true;
+          }
+        }
+        break;
+      }
+    }
+    return false;
   };
 
   const referencesContainerVar = (expr, containerVarNames) => {
@@ -3100,10 +3185,29 @@ function inspectNonShellScript(
       if (lit === null) {
         return referencesContainerVar(elements[idx], containerVarNames);
       }
-      const base = path
-        .basename(lit.trim())
-        .toLowerCase()
-        .replace(/\.exe$/u, "");
+      const base = normalizeExecutableName(lit.trim());
+      if (base === "command") {
+        idx += 1;
+        let isLookup = false;
+        while (idx < elements.length) {
+          const flagLit = unquoteSimpleLiteral(elements[idx]);
+          if (flagLit === null || !flagLit.startsWith("-")) {
+            break;
+          }
+          if (flagLit === "--") {
+            idx += 1;
+            break;
+          }
+          if (flagLit.includes("v") || flagLit.includes("V")) {
+            isLookup = true;
+          }
+          idx += 1;
+        }
+        if (isLookup) {
+          return false;
+        }
+        continue;
+      }
       if (SHELL_COMMAND_PREFIXES.has(base) || ENV_PREFIX_ASSIGNMENT_PATTERN.test(lit)) {
         idx += 1;
         continue;
@@ -3115,7 +3219,7 @@ function inspectNonShellScript(
         for (let sIdx = idx + 1; sIdx < elements.length; sIdx += 1) {
           const argLit = unquoteSimpleLiteral(elements[sIdx]);
           if (argLit !== null) {
-            if (CONTAINER_SHELL_CMD_PATTERN.test(argLit)) {
+            if (literalShellCommandInvokesContainer(argLit)) {
               return true;
             }
           } else if (referencesContainerVar(elements[sIdx], containerVarNames)) {
@@ -3153,7 +3257,7 @@ function inspectNonShellScript(
       const lit = unquoteSimpleLiteral(rhsText);
       if (
         (lit !== null &&
-          (isContainerExecutableName(lit) || CONTAINER_SHELL_CMD_PATTERN.test(lit))) ||
+          (isContainerExecutableName(lit) || literalShellCommandInvokesContainer(lit))) ||
         (lit === null &&
           (CONTAINER_SHELL_CMD_PATTERN.test(rhsText) ||
             referencesContainerVar(rhsText, containerVarNames)))
@@ -3163,8 +3267,15 @@ function inspectNonShellScript(
     }
   }
 
-  const shellStringInvokesContainer = (text) =>
-    CONTAINER_SHELL_CMD_PATTERN.test(text) || referencesContainerVar(text, containerVarNames);
+  const shellStringInvokesContainer = (text) => {
+    const lit = unquoteSimpleLiteral(text);
+    if (lit !== null) {
+      return literalShellCommandInvokesContainer(lit);
+    }
+    return (
+      CONTAINER_SHELL_CMD_PATTERN.test(text) || referencesContainerVar(text, containerVarNames)
+    );
+  };
 
   const SHELL_STRING_CALLEES = new Set([
     "os.system",
@@ -3189,10 +3300,6 @@ function inspectNonShellScript(
       /\bshell\s*(?:=|:)\s*(?:True|true|['"])/u.test(argText) ||
       ((callee === "system" || callee === "popen") && args.length === 1);
     if (usesShellMode) {
-      const firstLit = unquoteSimpleLiteral(args[0]);
-      if (firstLit !== null) {
-        return CONTAINER_SHELL_CMD_PATTERN.test(firstLit);
-      }
       return shellStringInvokesContainer(args[0]);
     }
 
@@ -3213,7 +3320,7 @@ function inspectNonShellScript(
       if (isShellExecutableName(firstLit) && args.length > 1) {
         return args.slice(1).some((arg) => shellStringInvokesContainer(arg));
       }
-      if (SHELL_COMMAND_PREFIXES.has(path.basename(firstLit).toLowerCase()) && args.length > 1) {
+      if (SHELL_COMMAND_PREFIXES.has(normalizeExecutableName(firstLit)) && args.length > 1) {
         const secondArg = args[1].trim();
         if (secondArg.startsWith("[") && secondArg.endsWith("]")) {
           return argvListInvokesContainer(
@@ -13416,6 +13523,7 @@ function checkStepsList(
                 emittedGithubEnv: actionEmittedEnv,
                 emittedActionOutputs: actionEmittedOutputs,
                 callerEventNames: effectiveEventNames,
+                callerEventInputs: buildFileContext.callerEventInputs ?? null,
               },
             )) {
               pushCompositeProblem(actionProblem);
@@ -14270,6 +14378,55 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
       bareExpression,
     });
   };
+  const scanLocalActionEventInputs = (rawUses, visited = new Set(), depth = 0) => {
+    if (!root || depth >= MAX_LOCAL_CALL_DEPTH || !rawUses.startsWith("./")) {
+      return;
+    }
+    const resolvedDir = resolveContainedPath(rawUses, root, root);
+    if (!resolvedDir) {
+      return;
+    }
+    let manifestFile = null;
+    for (const manifestName of ["action.yml", "action.yaml"]) {
+      const candidate = resolveSafeContainerFile(path.join(resolvedDir, manifestName), root, []);
+      if (candidate) {
+        manifestFile = candidate;
+        break;
+      }
+    }
+    if (!manifestFile || visited.has(manifestFile)) {
+      return;
+    }
+    visited.add(manifestFile);
+    let actionSource;
+    try {
+      actionSource = readFileSync(manifestFile, "utf8");
+    } catch {
+      return;
+    }
+    const { doc: actionDoc } = parseWorkflowYaml(actionSource);
+    if (actionDoc?.kind !== "map") {
+      return;
+    }
+    collectReferencedInputNames(actionDoc, referenced, new Set(), {
+      includeEventInputs: true,
+      onlyEventInputs: true,
+    });
+    const actionRuns = getMapField(actionDoc, "runs");
+    const actionSteps = actionRuns?.kind === "map" ? getMapField(actionRuns, "steps") : null;
+    if (actionSteps?.kind === "seq") {
+      for (const actionStep of actionSteps.value) {
+        if (actionStep?.kind !== "map") {
+          continue;
+        }
+        const nestedUses = getMapField(actionStep, "uses");
+        if (nestedUses?.kind === "scalar") {
+          scanLocalActionEventInputs(String(nestedUses.value).trim(), visited, depth + 1);
+        }
+      }
+    }
+  };
+
   const scanReusableCalleeEventInputs = (rawUses, visited = new Set(), depth = 0) => {
     if (!root || depth >= MAX_LOCAL_CALL_DEPTH || !rawUses.startsWith("./")) {
       return;
@@ -14306,6 +14463,18 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
         const nestedUses = getMapField(calleeJob, "uses");
         if (nestedUses?.kind === "scalar") {
           scanReusableCalleeEventInputs(String(nestedUses.value).trim(), visited, depth + 1);
+        }
+        const calleeSteps = getMapField(calleeJob, "steps");
+        if (calleeSteps?.kind === "seq") {
+          for (const calleeStep of calleeSteps.value) {
+            if (calleeStep?.kind !== "map") {
+              continue;
+            }
+            const stepUses = getMapField(calleeStep, "uses");
+            if (stepUses?.kind === "scalar") {
+              scanLocalActionEventInputs(String(stepUses.value).trim(), visited, depth + 1);
+            }
+          }
         }
       }
     }
@@ -14493,7 +14662,9 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
         collectFromPinNode(getMapField(stepNode, "with"));
         const stepEnv = getMapField(stepNode, "env");
         if (usesText.startsWith("./")) {
-          // Local composite actions can consume arbitrary caller env variables.
+          // Local composite actions can consume arbitrary caller env variables
+          // and the workflow's `github.event.inputs.*`.
+          scanLocalActionEventInputs(usesText);
           collectFromPinNode(stepEnv);
           for (const parentEnv of parentEnvNodes) {
             collectFromPinNode(parentEnv);
@@ -15208,7 +15379,12 @@ export function unpinnedWorkflowContainerReferences(
     const effectiveCallerEventInputs =
       explicitEventInputs ?? (includeEventInputs ? effectiveWorkflowInputs : null);
     const ctxBuildFileContext = buildFileContext
-      ? { ...buildFileContext, deferUnresolvedInputs, eventNames }
+      ? {
+          ...buildFileContext,
+          deferUnresolvedInputs,
+          eventNames,
+          callerEventInputs: effectiveCallerEventInputs,
+        }
       : null;
     const substitutionMemo = new Map();
     const applyWorkflowInputs = (node) =>
@@ -15350,8 +15526,12 @@ export function unpinnedWorkflowContainerReferences(
       }
       const actionMemo = new Map();
       const effectiveRunsNode =
-        effectiveInputs.size > 0
-          ? substituteInputsInAstNode(runsNode, effectiveInputs, actionMemo)
+        effectiveInputs.size > 0 ||
+        (effectiveCallerEventInputs !== null && effectiveCallerEventInputs.size > 0)
+          ? substituteInputsInAstNode(runsNode, effectiveInputs, actionMemo, {
+              includeEventInputs: false,
+              eventInputValues: effectiveCallerEventInputs,
+            })
           : runsNode;
       const runsImageNode = getMapField(effectiveRunsNode, "image");
       checkImageField(runsImageNode, workflowEnv, [], filePath, ctxProblems, {
@@ -15395,6 +15575,8 @@ export function unpinnedWorkflowContainerReferences(
           actionRepoDir,
           actionWsRelDir,
           deferUnresolvedInputs: !inputOverrides,
+          eventNames,
+          callerEventInputs: effectiveCallerEventInputs,
         };
       }
       const compositeFinalEnv = emittedActionOutputs ? new Map() : null;
@@ -15415,8 +15597,13 @@ export function unpinnedWorkflowContainerReferences(
       if (emittedActionOutputs) {
         const outputsNode = getMapField(doc, "outputs");
         const effectiveOutputsNode =
-          outputsNode && effectiveInputs.size > 0
-            ? substituteInputsInAstNode(outputsNode, effectiveInputs, actionMemo)
+          outputsNode &&
+          (effectiveInputs.size > 0 ||
+            (effectiveCallerEventInputs !== null && effectiveCallerEventInputs.size > 0))
+            ? substituteInputsInAstNode(outputsNode, effectiveInputs, actionMemo, {
+                includeEventInputs: false,
+                eventInputValues: effectiveCallerEventInputs,
+              })
             : outputsNode;
         if (effectiveOutputsNode?.kind === "map") {
           for (const [outputName, outputDefNode] of effectiveOutputsNode.value) {

@@ -4972,6 +4972,68 @@ describe("workflow contracts", () => {
       "<memory>:15: busybox:1.36 is not pinned to a sha256 digest",
       "<memory>:22: container tool invocation in non-shell run step cannot be verified statically",
     ]);
+    // Composite actions receive `github.event.inputs.*` separately from their
+    // own `inputs.*`, Windows `docker.exe` paths in non-shell subprocesses are
+    // recognized on Linux/macOS hosts, and `command -v docker` lookups pass.
+    const r70Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r70-"));
+    try {
+      await mkdir(join(r70Fixture, ".github", "actions", "pull-dispatch"), { recursive: true });
+      await writeFile(
+        join(r70Fixture, ".github", "actions", "pull-dispatch", "action.yml"),
+        [
+          "name: pull-dispatch",
+          "inputs:",
+          "  image:",
+          "    required: false",
+          `    default: node:24@${digest}`,
+          "runs:",
+          "  using: composite",
+          "  steps:",
+          "    - shell: bash",
+          '      run: docker pull "${{ inputs.image }}"',
+          "    - shell: bash",
+          '      run: docker pull "${{ github.event.inputs.image }}"',
+          "",
+        ].join("\n"),
+      );
+      const r70Workflow = [
+        "on:",
+        "  workflow_dispatch:",
+        "    inputs:",
+        "      image:",
+        "        type: choice",
+        "        required: true",
+        `        default: node:24@${digest}`,
+        "        options:",
+        `          - node:24@${digest}`,
+        "          - alpine:3.20",
+        "jobs:",
+        "  r70:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - uses: ./.github/actions/pull-dispatch",
+        "      - shell: python",
+        "        run: |",
+        "          import subprocess",
+        '          subprocess.getoutput("command -v docker")',
+        '          subprocess.getoutput("which docker")',
+        "      - shell: python",
+        "        run: |",
+        "          import subprocess",
+        '          subprocess.run(["C:\\\\Program Files\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe", "pull", "node:24"], check=True)',
+        "",
+      ].join("\n");
+      expect(
+        unpinnedWorkflowContainerReferences(r70Workflow, ".github/workflows/r70.yml", {
+          root: r70Fixture,
+        }),
+      ).toEqual([
+        ".github/workflows/r70.yml:23: container tool invocation in non-shell run step cannot be verified statically",
+        ".github/actions/pull-dispatch/action.yml:12: alpine:3.20 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r70Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
