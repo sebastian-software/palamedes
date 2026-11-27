@@ -101,7 +101,12 @@ function isSafeRelativeCatalogPath(value: string): boolean {
     if (segment === ".") {
       continue;
     }
-    if (segment === ".." || isReservedLockSegment(segment)) {
+    if (
+      segment === ".." ||
+      isReservedLockSegment(segment) ||
+      /^[A-Za-z]:/.test(segment) ||
+      /^[A-Za-z]:/.test(segment.replaceAll("{locale}", "a"))
+    ) {
       return false;
     }
     if (firstNormal === undefined) {

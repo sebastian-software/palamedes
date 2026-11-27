@@ -87,6 +87,16 @@ pub fn validate_catalog_path_pattern(catalog_path: &str) -> Result<(), &'static 
     if portable.split('/').rfind(|segment| !segment.is_empty()) == Some(".") {
         return Err("catalog path must not end with a current-directory ('.') segment");
     }
+    for segment in portable.split('/') {
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if has_windows_drive_prefix(segment)
+            || has_windows_drive_prefix(&segment.replace("{locale}", "a"))
+        {
+            return Err("catalog path must not contain Windows drive prefixes");
+        }
+    }
     let mut has_normal = false;
     for component in Path::new(&portable).components() {
         match component {
@@ -338,10 +348,10 @@ pub fn resolve_catalog_file_path(
     locale: &str,
     format: PalamedesCatalogFormat,
 ) -> PathBuf {
-    let is_absolute_or_prefixed = catalog_path.starts_with('/')
+    let portable_catalog_path = if catalog_path.starts_with('/')
         || catalog_path.starts_with('\\')
-        || has_windows_drive_prefix(catalog_path);
-    let portable_catalog_path = if is_absolute_or_prefixed {
+        || has_windows_drive_prefix(catalog_path)
+    {
         catalog_path.replace('\\', "/")
     } else {
         let normalized = normalize_relative_catalog_pattern(catalog_path);
@@ -351,18 +361,7 @@ pub fn resolve_catalog_file_path(
             normalized
         }
     };
-    let expanded_pattern = portable_catalog_path.replace("{locale}", locale);
-    let expanded = if is_absolute_or_prefixed {
-        root_dir.join(&expanded_pattern)
-    } else {
-        let mut path = root_dir.to_path_buf();
-        for segment in expanded_pattern.split('/') {
-            if !segment.is_empty() {
-                path.push(segment);
-            }
-        }
-        path
-    };
+    let expanded = root_dir.join(portable_catalog_path.replace("{locale}", locale));
     let extension = format.extension();
     let configured_extension = Path::new(&portable_catalog_path)
         .extension()

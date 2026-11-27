@@ -236,10 +236,15 @@ fn resolve_catalog_request(
                     .iter()
                     .any(|configured| configured == &locale)
                 {
+                    let primary_file = if resource_path.strip_prefix(root_dir).is_ok() {
+                        resource_path.to_path_buf()
+                    } else {
+                        expected_primary
+                    };
                     return Ok(ResolvedCatalogRequest {
                         locale,
                         catalog_index,
-                        primary_file: expected_primary,
+                        primary_file,
                     });
                 }
                 if deferred_error.is_none() {
@@ -270,6 +275,11 @@ fn resolve_catalog_request(
                 }
             }
             if let Some((locale, primary_file)) = matched {
+                let primary_file = if resource_path.strip_prefix(root_dir).is_ok() {
+                    resource_path.to_path_buf()
+                } else {
+                    primary_file
+                };
                 return Ok(ResolvedCatalogRequest {
                     locale,
                     catalog_index,

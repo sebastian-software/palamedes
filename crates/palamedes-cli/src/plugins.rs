@@ -216,7 +216,7 @@ fn run_invocation(
                 format!("Could not serialize the resolved Palamedes config: {error}"),
             )
         })?,
-        "catalogs": plugin_catalogs(&config),
+        "catalogs": plugin_catalogs(&config)?,
     });
     let run_resolved = prepare_selected_plugin_for_run(plugin, &config.config_path)?;
     let mut print_output = |text: &str| println!("{text}");
@@ -2475,6 +2475,96 @@ mod unix_pinned_plugin {
         }
     }
 
+    pub(super) fn pin_direct_executable(
+        specifier: &str,
+        candidate: &Path,
+    ) -> Result<(PathBuf, PathBuf, Arc<PinnedPluginBinary>), PluginFailure> {
+        let invocation_path = candidate.to_path_buf();
+        if is_blocked_script_extension(&invocation_path) {
+            return Err(script_plugin_failure(specifier, &invocation_path));
+        }
+        let c_path = cstr_path(candidate.as_os_str(), specifier)?;
+        // Follow symlinks for direct executable path specifiers (matching
+        // `candidate.is_file()`), opening read-only first and falling back to
+        // execute-only / path descriptors when read permission is absent
+        // (mode `0111`).
+        let mut readable = true;
+        // SAFETY: `c_path` is NUL-terminated.
+        let mut raw = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
+        if raw < 0 && io::Error::last_os_error().kind() == io::ErrorKind::PermissionDenied {
+            readable = false;
+            #[cfg(target_os = "linux")]
+            {
+                // SAFETY: `c_path` is NUL-terminated.
+                raw = unsafe { libc::open(c_path.as_ptr(), libc::O_PATH | libc::O_CLOEXEC) };
+            }
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            {
+                // SAFETY: `c_path` is NUL-terminated.
+                raw = unsafe { libc::open(c_path.as_ptr(), DARWIN_O_EXEC | libc::O_CLOEXEC) };
+            }
+            #[cfg(target_os = "freebsd")]
+            {
+                // SAFETY: `c_path` is NUL-terminated.
+                raw = unsafe { libc::open(c_path.as_ptr(), libc::O_EXEC | libc::O_CLOEXEC) };
+            }
+        }
+        if raw < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::NotFound {
+                return Err(PluginFailure::new(
+                    "PLUGIN_BINARY_MISSING",
+                    format!(
+                        "Configured plugin \"{specifier}\" has no executable at {}.",
+                        invocation_path.display()
+                    ),
+                ));
+            }
+            return Err(PluginFailure::new(
+                "PLUGIN_INVALID",
+                format!(
+                    "Could not pin binary plugin \"{specifier}\" executable at {}: {error}",
+                    invocation_path.display()
+                ),
+            ));
+        }
+        // SAFETY: `raw` is a newly opened valid file descriptor.
+        let file_fd = unsafe { OwnedFd::from_raw_fd(raw) };
+        let stat = fstat_fd(file_fd.as_raw_fd()).map_err(|error| {
+            PluginFailure::new(
+                "PLUGIN_INVALID",
+                format!(
+                    "Could not inspect pinned binary plugin \"{specifier}\" at {}: {error}",
+                    invocation_path.display()
+                ),
+            )
+        })?;
+        #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+        if ((stat.st_mode as libc::mode_t) & libc::S_IFMT) != libc::S_IFREG {
+            return Err(PluginFailure::new(
+                "PLUGIN_BINARY_MISSING",
+                format!(
+                    "Configured plugin \"{specifier}\" has no executable at {}.",
+                    invocation_path.display()
+                ),
+            ));
+        }
+        #[allow(clippy::unnecessary_cast)]
+        let pinned = Arc::new(PinnedPluginBinary {
+            file_fd,
+            dev: stat.st_dev as u64,
+            ino: stat.st_ino as u64,
+            readable,
+        });
+        let canonical_binary = live_pinned_binary_path(&pinned)
+            .or_else(|| fs::canonicalize(candidate).ok())
+            .unwrap_or_else(|| invocation_path.clone());
+        if is_blocked_script_extension(&canonical_binary) {
+            return Err(script_plugin_failure(specifier, &canonical_binary));
+        }
+        Ok((canonical_binary, invocation_path, pinned))
+    }
+
     pub(super) fn live_pinned_binary_path(pinned: &PinnedPluginBinary) -> Option<PathBuf> {
         let fd = pinned.file_fd.as_raw_fd();
         #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -2668,13 +2758,13 @@ fn windows_parent_wide_path(units: &[u16]) -> Option<&[u16]> {
 
 #[cfg(windows)]
 mod windows_pinned_plugin {
-    use std::ffi::{OsString, c_void};
+    use std::ffi::{OsStr, OsString, c_void};
     use std::fs::{self, File, OpenOptions};
     use std::io::{self, Read};
-    use std::os::windows::ffi::OsStringExt;
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use std::os::windows::fs::OpenOptionsExt;
-    use std::os::windows::io::{AsRawHandle, OwnedHandle};
-    use std::path::{Path, PathBuf};
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use std::path::{Component, Path, PathBuf};
     use std::sync::Arc;
 
     use super::{
@@ -2685,6 +2775,7 @@ mod windows_pinned_plugin {
 
     const FILE_READ_DATA: u32 = 0x0000_0001;
     const FILE_EXECUTE: u32 = 0x0000_0020;
+    const FILE_TRAVERSE: u32 = 0x0000_0020;
     const FILE_READ_ATTRIBUTES: u32 = 0x0000_0080;
     const SYNCHRONIZE: u32 = 0x0010_0000;
     const FILE_SHARE_READ: u32 = 0x0000_0001;
@@ -2693,9 +2784,208 @@ mod windows_pinned_plugin {
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
     const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0000_0010;
+    const FILE_ATTRIBUTE_NORMAL: u32 = 0x0000_0080;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
     const FILE_NAME_NORMALIZED: u32 = 0x0;
     const FILE_ID_INFO_CLASS: i32 = 18;
+    const OBJ_CASE_INSENSITIVE: u32 = 0x0000_0040;
+    const FILE_OPEN: u32 = 1;
+    const FILE_DIRECTORY_FILE: u32 = 0x0000_0001;
+    const FILE_NON_DIRECTORY_FILE: u32 = 0x0000_0040;
+    const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x0000_0020;
+    const FILE_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    #[allow(clippy::cast_possible_wrap)]
+    const STATUS_OBJECT_NAME_NOT_FOUND: i32 = 0xC000_0034_u32 as i32;
+    #[allow(clippy::cast_possible_wrap)]
+    const STATUS_OBJECT_PATH_NOT_FOUND: i32 = 0xC000_003A_u32 as i32;
+
+    #[repr(C)]
+    struct UnicodeString {
+        length: u16,
+        maximum_length: u16,
+        buffer: *mut u16,
+    }
+
+    #[repr(C)]
+    struct ObjectAttributes {
+        length: u32,
+        root_directory: *mut c_void,
+        object_name: *mut UnicodeString,
+        attributes: u32,
+        security_descriptor: *mut c_void,
+        security_quality_of_service: *mut c_void,
+    }
+
+    #[repr(C)]
+    struct IoStatusBlock {
+        status_or_pointer: usize,
+        information: usize,
+    }
+
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtCreateFile(
+            file_handle: *mut *mut c_void,
+            desired_access: u32,
+            object_attributes: *mut ObjectAttributes,
+            io_status_block: *mut IoStatusBlock,
+            allocation_size: *mut i64,
+            file_attributes: u32,
+            share_access: u32,
+            create_disposition: u32,
+            create_options: u32,
+            ea_buffer: *mut c_void,
+            ea_length: u32,
+        ) -> i32;
+        fn RtlNtStatusToDosError(status: i32) -> u32;
+    }
+
+    fn nt_status_to_io_error(status: i32) -> io::Error {
+        // SAFETY: `RtlNtStatusToDosError` is a pure status-code conversion.
+        let dos = unsafe { RtlNtStatusToDosError(status) };
+        #[allow(clippy::cast_possible_wrap)]
+        io::Error::from_raw_os_error(dos as i32)
+    }
+
+    fn nt_open_relative(
+        root_handle: *mut c_void,
+        segment: &OsStr,
+        desired_access: u32,
+        file_attributes: u32,
+        share_access: u32,
+        create_options: u32,
+    ) -> Result<OwnedHandle, i32> {
+        let mut wide: Vec<u16> = segment.encode_wide().collect();
+        if wide.is_empty() || wide.contains(&0) {
+            return Err(STATUS_OBJECT_PATH_NOT_FOUND);
+        }
+        let byte_len = u16::try_from(wide.len().saturating_mul(2))
+            .map_err(|_| STATUS_OBJECT_PATH_NOT_FOUND)?;
+        let mut unicode = UnicodeString {
+            length: byte_len,
+            maximum_length: byte_len,
+            buffer: wide.as_mut_ptr(),
+        };
+        let mut attributes = ObjectAttributes {
+            length: u32::try_from(std::mem::size_of::<ObjectAttributes>()).unwrap_or(0),
+            root_directory: root_handle,
+            object_name: &mut unicode,
+            attributes: OBJ_CASE_INSENSITIVE,
+            security_descriptor: std::ptr::null_mut(),
+            security_quality_of_service: std::ptr::null_mut(),
+        };
+        let mut iosb = IoStatusBlock {
+            status_or_pointer: 0,
+            information: 0,
+        };
+        let mut handle: *mut c_void = std::ptr::null_mut();
+        // SAFETY: all pointers remain valid for the duration of `NtCreateFile`.
+        let status = unsafe {
+            NtCreateFile(
+                &mut handle,
+                desired_access,
+                &mut attributes,
+                &mut iosb,
+                std::ptr::null_mut(),
+                file_attributes,
+                share_access,
+                FILE_OPEN,
+                create_options,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if status < 0 {
+            return Err(status);
+        }
+        // SAFETY: `NtCreateFile` succeeded and returned a newly opened handle.
+        Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
+    }
+
+    /// Walks `relative` strictly handle-relative to `root_dir` via
+    /// `NtCreateFile(..., FILE_OPEN_REPARSE_POINT)` and rejects any reparse
+    /// point along the way, guaranteeing containment even on volumes/shares
+    /// that do not implement 128-bit `FileIdInfo`.
+    fn open_relative_file_no_reparse(
+        root_dir: *mut c_void,
+        relative: &Path,
+        desired_access: u32,
+        share_access: u32,
+    ) -> io::Result<File> {
+        let mut segments = Vec::new();
+        for component in relative.components() {
+            match component {
+                Component::Normal(part) => segments.push(part),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "relative path contains non-normal component",
+                    ));
+                }
+            }
+        }
+        let Some((leaf, parents)) = segments.split_last() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "relative path is empty",
+            ));
+        };
+        let mut held_dir: Option<OwnedHandle> = None;
+        for parent in parents {
+            let current_root = held_dir
+                .as_ref()
+                .map_or(root_dir, std::os::windows::io::AsRawHandle::as_raw_handle);
+            let next_dir = nt_open_relative(
+                current_root,
+                parent,
+                FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE,
+                FILE_ATTRIBUTE_DIRECTORY,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+            )
+            .map_err(nt_status_to_io_error)?;
+            let info = handle_info(next_dir.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "refusing to traverse reparse point without volume file identity",
+                ));
+            }
+            if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "intermediate component is not a directory",
+                ));
+            }
+            held_dir = Some(next_dir);
+        }
+        let leaf_root = held_dir
+            .as_ref()
+            .map_or(root_dir, std::os::windows::io::AsRawHandle::as_raw_handle);
+        let leaf_handle = nt_open_relative(
+            leaf_root,
+            leaf,
+            desired_access,
+            FILE_ATTRIBUTE_NORMAL,
+            share_access,
+            FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+        )
+        .map_err(|status| {
+            if status == STATUS_OBJECT_NAME_NOT_FOUND || status == STATUS_OBJECT_PATH_NOT_FOUND {
+                io::Error::new(io::ErrorKind::NotFound, "file not found")
+            } else {
+                nt_status_to_io_error(status)
+            }
+        })?;
+        let info = handle_info(leaf_handle.as_raw_handle())?;
+        if (info.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "target is a directory or reparse point",
+            ));
+        }
+        Ok(File::from(leaf_handle))
+    }
 
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     struct FileIdentity {
@@ -2903,17 +3193,122 @@ mod windows_pinned_plugin {
         Some(PathBuf::from(OsString::from_wide(&units)))
     }
 
+    pub(super) fn pin_direct_executable(
+        specifier: &str,
+        candidate: &Path,
+    ) -> Result<(PathBuf, PathBuf, Arc<PinnedPluginBinary>), PluginFailure> {
+        let invocation_path = candidate.to_path_buf();
+        if is_blocked_script_extension(&invocation_path) {
+            return Err(script_plugin_failure(specifier, &invocation_path));
+        }
+        let (bin_file, readable) = match OpenOptions::new()
+            .access_mode(FILE_EXECUTE | FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+            .share_mode(FILE_SHARE_READ)
+            .open(candidate)
+        {
+            Ok(file) => (file, true),
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                match OpenOptions::new()
+                    .access_mode(FILE_EXECUTE | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                    .share_mode(FILE_SHARE_READ)
+                    .open(candidate)
+                {
+                    Ok(file) => (file, false),
+                    Err(exec_error) => {
+                        return Err(PluginFailure::new(
+                            "PLUGIN_INVALID",
+                            format!(
+                                "Could not pin binary plugin \"{specifier}\" executable at {}: {exec_error}",
+                                invocation_path.display()
+                            ),
+                        ));
+                    }
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Err(PluginFailure::new(
+                    "PLUGIN_BINARY_MISSING",
+                    format!(
+                        "Configured plugin \"{specifier}\" has no executable at {}.",
+                        invocation_path.display()
+                    ),
+                ));
+            }
+            Err(error) => {
+                return Err(PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not pin binary plugin \"{specifier}\" executable at {}: {error}",
+                        invocation_path.display()
+                    ),
+                ));
+            }
+        };
+        let info = handle_info(bin_file.as_raw_handle()).map_err(|error| {
+            PluginFailure::new(
+                "PLUGIN_INVALID",
+                format!(
+                    "Could not inspect pinned binary plugin \"{specifier}\" at {}: {error}",
+                    invocation_path.display()
+                ),
+            )
+        })?;
+        if (info.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0 {
+            return Err(PluginFailure::new(
+                "PLUGIN_BINARY_MISSING",
+                format!(
+                    "Configured plugin \"{specifier}\" has no executable at {}.",
+                    invocation_path.display()
+                ),
+            ));
+        }
+        let canonical_binary = final_path_units(bin_file.as_raw_handle())
+            .ok()
+            .map(|units| PathBuf::from(OsString::from_wide(&units)))
+            .or_else(|| fs::canonicalize(candidate).ok())
+            .unwrap_or_else(|| invocation_path.clone());
+        if is_blocked_script_extension(&canonical_binary) {
+            return Err(script_plugin_failure(specifier, &canonical_binary));
+        }
+        let windows_identity = pinned_handle_identity(bin_file.as_raw_handle()).ok();
+        Ok((
+            canonical_binary,
+            invocation_path,
+            Arc::new(PinnedPluginBinary {
+                pinned_handle: OwnedHandle::from(bin_file),
+                windows_identity,
+                readable,
+            }),
+        ))
+    }
+
     pub(super) struct PinnedPackageDir {
         dir_file: File,
-        dir_id: FileIdentity,
+        dir_id: Option<FileIdentity>,
         package_dir: PathBuf,
         canonical_dir: PathBuf,
     }
 
     impl PinnedPackageDir {
         pub(super) fn open(specifier: &str, package_dir: &Path) -> Result<Self, PluginFailure> {
+            Self::open_inner(specifier, package_dir, true)
+        }
+
+        #[cfg(test)]
+        pub(super) fn open_without_file_id(
+            specifier: &str,
+            package_dir: &Path,
+        ) -> Result<Self, PluginFailure> {
+            Self::open_inner(specifier, package_dir, false)
+        }
+
+        fn open_inner(
+            specifier: &str,
+            package_dir: &Path,
+            use_file_id: bool,
+        ) -> Result<Self, PluginFailure> {
             let dir_file = OpenOptions::new()
-                .access_mode(FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                .access_mode(FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE)
                 .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
                 .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
                 .open(package_dir)
@@ -2944,25 +3339,19 @@ mod windows_pinned_plugin {
                     ),
                 ));
             }
-            let dir_id = handle_identity(dir_file.as_raw_handle()).map_err(|error| {
-                PluginFailure::new(
-                    "PLUGIN_INVALID",
-                    format!(
-                        "Could not read 128-bit identity for binary plugin package directory \"{specifier}\" at {}: {error}",
-                        package_dir.display()
-                    ),
-                )
-            })?;
-            let dir_final = final_path_units(dir_file.as_raw_handle()).map_err(|error| {
-                PluginFailure::new(
-                    "PLUGIN_INVALID",
-                    format!(
-                        "Could not resolve binary plugin package directory \"{specifier}\" at {}: {error}",
-                        package_dir.display()
-                    ),
-                )
-            })?;
-            let canonical_dir = PathBuf::from(OsString::from_wide(&dir_final));
+            // Volumes or network shares that do not implement 128-bit
+            // `FileIdInfo` fall back to handle-relative `NtCreateFile` walks
+            // with `FILE_OPEN_REPARSE_POINT` rather than failing discovery.
+            let dir_id = if use_file_id {
+                handle_identity(dir_file.as_raw_handle()).ok()
+            } else {
+                None
+            };
+            let canonical_dir = final_path_units(dir_file.as_raw_handle())
+                .ok()
+                .map(|units| PathBuf::from(OsString::from_wide(&units)))
+                .or_else(|| fs::canonicalize(package_dir).ok())
+                .unwrap_or_else(|| package_dir.to_path_buf());
             Ok(Self {
                 dir_file,
                 dir_id,
@@ -2976,30 +3365,42 @@ mod windows_pinned_plugin {
         }
 
         pub(super) fn read_manifest(&self) -> io::Result<PackageManifest> {
-            let dir_final = final_path_units(self.dir_file.as_raw_handle())?;
-            let manifest_path = PathBuf::from(OsString::from_wide(&dir_final)).join("package.json");
-            let mut file = OpenOptions::new()
-                .access_mode(FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
-                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
-                .open(&manifest_path)?;
-            let info = handle_info(file.as_raw_handle())?;
-            if (info.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))
-                != 0
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "package.json is not a regular file",
-                ));
-            }
-            let manifest_final = final_path_units(file.as_raw_handle())?;
-            if !is_strict_descendant_of_dir(self.dir_id, &manifest_final)?
-                || final_path_units(file.as_raw_handle())? != manifest_final
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    "package.json escapes package directory",
-                ));
-            }
+            let mut file = if let Some(dir_id) = self.dir_id {
+                let dir_final = final_path_units(self.dir_file.as_raw_handle())?;
+                let manifest_path =
+                    PathBuf::from(OsString::from_wide(&dir_final)).join("package.json");
+                let file = OpenOptions::new()
+                    .access_mode(FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                    .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                    .open(&manifest_path)?;
+                let info = handle_info(file.as_raw_handle())?;
+                if (info.file_attributes
+                    & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))
+                    != 0
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "package.json is not a regular file",
+                    ));
+                }
+                let manifest_final = final_path_units(file.as_raw_handle())?;
+                if !is_strict_descendant_of_dir(dir_id, &manifest_final)?
+                    || final_path_units(file.as_raw_handle())? != manifest_final
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "package.json escapes package directory",
+                    ));
+                }
+                file
+            } else {
+                open_relative_file_no_reparse(
+                    self.dir_file.as_raw_handle(),
+                    Path::new("package.json"),
+                    FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                )?
+            };
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
             serde_json::from_str(&contents).map_err(io::Error::other)
@@ -3015,6 +3416,74 @@ mod windows_pinned_plugin {
             if is_blocked_script_extension(&invocation_path) {
                 return Err(script_plugin_failure(specifier, &invocation_path));
             }
+            let Some(dir_id) = self.dir_id else {
+                // Handle-relative containment walk for volumes/shares without
+                // 128-bit `FileIdInfo`: every component is opened relative to
+                // the pinned package directory handle with
+                // `FILE_OPEN_REPARSE_POINT`, rejecting any reparse point.
+                let (bin_file, readable) = match open_relative_file_no_reparse(
+                    self.dir_file.as_raw_handle(),
+                    &relative,
+                    FILE_EXECUTE | FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_SHARE_READ,
+                ) {
+                    Ok(file) => (file, true),
+                    Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                        match open_relative_file_no_reparse(
+                            self.dir_file.as_raw_handle(),
+                            &relative,
+                            FILE_EXECUTE | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                            FILE_SHARE_READ,
+                        ) {
+                            Ok(file) => (file, false),
+                            Err(exec_error) => {
+                                return Err(PluginFailure::new(
+                                    "PLUGIN_INVALID",
+                                    format!(
+                                        "Could not pin binary plugin \"{specifier}\" executable at {}: {exec_error}",
+                                        invocation_path.display()
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                        return Err(PluginFailure::new(
+                            "PLUGIN_BINARY_MISSING",
+                            format!(
+                                "Configured plugin \"{specifier}\" has no executable at {}.",
+                                invocation_path.display()
+                            ),
+                        ));
+                    }
+                    Err(error) => {
+                        return Err(PluginFailure::new(
+                            "PLUGIN_INVALID",
+                            format!(
+                                "Could not pin binary plugin \"{specifier}\" executable at {}: {error}",
+                                invocation_path.display()
+                            ),
+                        ));
+                    }
+                };
+                let canonical_binary = final_path_units(bin_file.as_raw_handle())
+                    .ok()
+                    .map(|units| PathBuf::from(OsString::from_wide(&units)))
+                    .unwrap_or_else(|| self.canonical_dir.join(&relative));
+                if is_blocked_script_extension(&canonical_binary) {
+                    return Err(script_plugin_failure(specifier, &canonical_binary));
+                }
+                let windows_identity = pinned_handle_identity(bin_file.as_raw_handle()).ok();
+                return Ok((
+                    canonical_binary,
+                    invocation_path,
+                    Arc::new(PinnedPluginBinary {
+                        pinned_handle: OwnedHandle::from(bin_file),
+                        windows_identity,
+                        readable,
+                    }),
+                ));
+            };
             let dir_final = final_path_units(self.dir_file.as_raw_handle()).map_err(|error| {
                 PluginFailure::new(
                     "PLUGIN_INVALID",
@@ -3110,15 +3579,14 @@ mod windows_pinned_plugin {
                     format!("Could not verify pinned executable for \"{specifier}\": {error}"),
                 )
             })?;
-            let contained =
-                is_strict_descendant_of_dir(self.dir_id, &bin_final).map_err(|error| {
-                    PluginFailure::new(
-                        "PLUGIN_INVALID",
-                        format!(
-                            "Could not verify pinned package ancestry for \"{specifier}\": {error}"
-                        ),
-                    )
-                })?;
+            let contained = is_strict_descendant_of_dir(dir_id, &bin_final).map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not verify pinned package ancestry for \"{specifier}\": {error}"
+                    ),
+                )
+            })?;
             if !contained {
                 return Err(PluginFailure::new(
                     "PLUGIN_INVALID",
@@ -3811,7 +4279,11 @@ fn validate_plugin_binary_relative_path(
     }
     let mut normalized = PathBuf::new();
     for segment in relative.split(['/', '\\']) {
-        if segment.is_empty() || segment == "." || segment == ".." {
+        if segment.is_empty()
+            || segment == "."
+            || segment == ".."
+            || has_windows_drive_prefix(segment)
+        {
             return Err(invalid());
         }
         let mut components = Path::new(segment).components();
@@ -3858,8 +4330,33 @@ fn resolved_executable(
     specifier: &str,
     binary_path: PathBuf,
 ) -> Result<ResolvedPlugin, PluginFailure> {
-    let invocation_path = binary_path.clone();
-    resolved_executable_with_invocation(specifier, binary_path, invocation_path, None)
+    #[cfg(unix)]
+    {
+        let (canonical_binary, invocation_path, pinned_binary) =
+            unix_pinned_plugin::pin_direct_executable(specifier, &binary_path)?;
+        resolved_executable_with_invocation(
+            specifier,
+            canonical_binary,
+            invocation_path,
+            Some(pinned_binary),
+        )
+    }
+    #[cfg(windows)]
+    {
+        let (canonical_binary, invocation_path, pinned_binary) =
+            windows_pinned_plugin::pin_direct_executable(specifier, &binary_path)?;
+        resolved_executable_with_invocation(
+            specifier,
+            canonical_binary,
+            invocation_path,
+            Some(pinned_binary),
+        )
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let invocation_path = binary_path.clone();
+        resolved_executable_with_invocation(specifier, binary_path, invocation_path, None)
+    }
 }
 
 fn resolved_executable_with_invocation(
@@ -4002,28 +4499,42 @@ fn is_kebab_name(value: &str) -> bool {
         })
 }
 
-fn plugin_catalogs(config: &LoadedConfig) -> Value {
-    Value::Array(
-        config
-            .catalogs
-            .iter()
-            .map(|catalog| {
-                json!({
-                    "path": catalog.path,
-                    "format": catalog.format,
-                    "include": catalog.include,
-                    "exclude": catalog.exclude,
-                    // The protocol documents these as real files, so they carry
-                    // the storage extension the extraction pass writes.
-                    "locales": config.locales.iter().map(|locale| json!({
-                        "locale": locale,
-                        "path": config
-                            .resolve_catalog_path(&catalog.path, locale, catalog.format),
-                    })).collect::<Vec<_>>(),
-                })
-            })
-            .collect(),
-    )
+fn plugin_catalogs(config: &LoadedConfig) -> Result<Value, PluginFailure> {
+    let mut catalogs = Vec::with_capacity(config.catalogs.len());
+    for catalog in &config.catalogs {
+        let mut locales = Vec::with_capacity(config.locales.len());
+        for locale in &config.locales {
+            let resolved_path = palamedes::try_resolve_catalog_file_path(
+                &config.root_dir,
+                &catalog.path,
+                locale,
+                catalog.format,
+            )
+            .map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_HOST_FAILED",
+                    format!(
+                        "Could not resolve safe catalog path for \"{}\" ({locale}): {error}",
+                        catalog.path
+                    ),
+                )
+            })?;
+            locales.push(json!({
+                "locale": locale,
+                "path": resolved_path,
+            }));
+        }
+        catalogs.push(json!({
+            "path": catalog.path,
+            "format": catalog.format,
+            "include": catalog.include,
+            "exclude": catalog.exclude,
+            // The protocol documents these as real files, so they carry
+            // the storage extension the extraction pass writes.
+            "locales": locales,
+        }));
+    }
+    Ok(Value::Array(catalogs))
 }
 
 /// Version of the `pmds <plugin> <command> --json` envelope (`schemaVersion`).
@@ -5629,7 +6140,7 @@ catalogs:
         .expect("write config");
         let config = load_config(&root, Some(&config_path)).expect("load config");
 
-        let catalogs = plugin_catalogs(&config);
+        let catalogs = plugin_catalogs(&config).expect("resolve plugin catalogs");
 
         assert_eq!(
             catalogs[0]["locales"][1]["path"],
@@ -6028,31 +6539,40 @@ catalogs:
         }
         fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o111))
             .expect("chmod 0111 binary");
+        let effectively_unreadable = matches!(
+            fs::File::open(&target_bin),
+            Err(ref err) if err.kind() == std::io::ErrorKind::PermissionDenied
+        );
         let config_path = root.join("palamedes.yaml");
         fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
 
         let resolved = super::resolve_binary_plugin("acme-execonly", &config_path)
             .expect("execute-only 0111 native plugin must resolve and pin without read permission");
         // Execute-only pinned plugins without a reusable cached digest must skip
-        // caching without attempting to reopen or hash the pathname.
-        let exec_only_hashed = std::sync::atomic::AtomicBool::new(false);
-        assert!(
-            super::plugin_cache_identity_for_resolved(
-                &resolved,
-                &resolved.binary_path,
-                None,
-                &|source| {
-                    exec_only_hashed.store(true, std::sync::atomic::Ordering::SeqCst);
-                    super::hash_plugin_source(source)
-                },
-            )
-            .is_none(),
-            "execute-only pinned plugin without reusable digest must skip caching"
-        );
-        assert!(
-            !exec_only_hashed.load(std::sync::atomic::Ordering::SeqCst),
-            "execute-only pinned plugin must not invoke binary hasher"
-        );
+        // caching without attempting to reopen or hash the pathname. When
+        // running as root / CAP_DAC_OVERRIDE, `chmod 0111` remains readable so
+        // only assert the unreadable skip branch when read access is actually
+        // denied.
+        if effectively_unreadable {
+            let exec_only_hashed = std::sync::atomic::AtomicBool::new(false);
+            assert!(
+                super::plugin_cache_identity_for_resolved(
+                    &resolved,
+                    &resolved.binary_path,
+                    None,
+                    &|source| {
+                        exec_only_hashed.store(true, std::sync::atomic::Ordering::SeqCst);
+                        super::hash_plugin_source(source)
+                    },
+                )
+                .is_none(),
+                "execute-only pinned plugin without reusable digest must skip caching"
+            );
+            assert!(
+                !exec_only_hashed.load(std::sync::atomic::Ordering::SeqCst),
+                "execute-only pinned plugin must not invoke binary hasher"
+            );
+        }
         let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
             .expect("execute-only 0111 native plugin must run");
         assert_eq!(manifest.name, "execonly");
@@ -6547,5 +7067,92 @@ catalogs:
         let err = super::prepare_selected_plugin_for_run(&loaded, &config_path)
             .expect_err("re-pin without digest or kernel file identity must fail closed");
         assert_eq!(err.code, "PLUGIN_BINARY_CHANGED");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_only_direct_executable_specifier_pins_and_repins_for_dispatch() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("direct-exec-only-plugin");
+        let source_path = root.join("plugin.c");
+        let target_bin = root.join("direct-exec-only");
+        fs::write(
+            &source_path,
+            concat!(
+                "#include <stdio.h>\n",
+                "int main(void) {\n",
+                "  puts(\"{\\\"event\\\":\\\"manifest\\\",\\\"name\\\":\\\"directexec\\\",\\\"protocolVersion\\\":1,\\\"commands\\\":{\\\"ping\\\":{}}}\");\n",
+                "  return 0;\n",
+                "}\n",
+            ),
+        )
+        .expect("write C fixture");
+        let compiled = std::process::Command::new("cc")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&target_bin)
+            .status()
+            .is_ok_and(|status| status.success());
+        if !compiled {
+            return;
+        }
+        fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o111))
+            .expect("chmod 0111 direct binary");
+        let config_path = root.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [src]\nplugins:\n  - ./direct-exec-only\n",
+        )
+        .expect("write config");
+        let config = load_config(&root, Some(&config_path)).expect("load config");
+        let registry = super::load_registry(&config, &root, Path::new("pmds"), false)
+            .expect("load registry for execute-only direct executable");
+        let loaded = registry
+            .plugins
+            .get("directexec")
+            .expect("execute-only direct executable must register");
+        let repinned = super::prepare_selected_plugin_for_run(loaded, &config.config_path)
+            .expect("execute-only direct executable must re-pin cleanly for dispatch");
+        assert!(
+            repinned.pinned_binary.is_some(),
+            "direct executable must be pinned for dispatch"
+        );
+        let manifest = super::describe_resolved_plugin(&repinned, &root, Path::new("pmds"))
+            .expect("execute-only direct executable must run after re-pin");
+        assert_eq!(manifest.name, "directexec");
+        let _ = fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_package_discovery_works_without_file_id_info() {
+        let root = temp_dir("windows-pkg-no-file-id");
+        let pkg_dir = root.join("plugin");
+        fs::create_dir_all(pkg_dir.join("bin")).expect("create bin dir");
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./bin/acme.exe"}}"#,
+        )
+        .expect("write manifest");
+        fs::write(pkg_dir.join("bin/acme.exe"), "fixture").expect("write fixture");
+
+        let pinned_dir = super::windows_pinned_plugin::PinnedPackageDir::open_without_file_id(
+            "./plugin", &pkg_dir,
+        )
+        .expect("package discovery must succeed without 128-bit FileIdInfo");
+        let manifest = pinned_dir
+            .read_manifest()
+            .expect("read_manifest must succeed via handle-relative walk");
+        let binary = manifest
+            .palamedes
+            .and_then(|p| p.plugin_binary)
+            .expect("pluginBinary");
+        let (canonical, invocation, pinned_bin) = pinned_dir
+            .resolve_and_pin_binary("./plugin", &binary)
+            .expect("resolve_and_pin_binary must succeed via handle-relative walk");
+        assert!(canonical.ends_with("acme.exe"));
+        assert!(invocation.ends_with("acme.exe"));
+        assert!(pinned_bin.readable);
     }
 }

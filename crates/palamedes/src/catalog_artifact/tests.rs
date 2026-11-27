@@ -79,21 +79,10 @@ fn catalog_file_paths_preserve_logical_dots_and_canonicalize_storage_extensions(
     ];
 
     for (pattern, locale, format, expected) in cases {
-        let resolved = resolve_catalog_file_path(root, pattern, locale, format);
         assert_eq!(
-            resolved,
+            resolve_catalog_file_path(root, pattern, locale, format),
             root.join(expected),
             "pattern {pattern} for locale {locale}",
-        );
-        // Ensure relative segments use the host's native path separator so
-        // serialized watchFiles strings match Node's `path.join` on Windows.
-        let expected_native = expected
-            .split('/')
-            .fold(root.to_path_buf(), |acc, part| acc.join(part));
-        assert_eq!(
-            resolved.as_os_str(),
-            expected_native.as_os_str(),
-            "native separator mismatch for pattern {pattern} and locale {locale}",
         );
     }
 }

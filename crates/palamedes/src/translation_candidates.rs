@@ -908,10 +908,25 @@ where
             let parent_dir = match ContainedDir::open_subpath(root_dir, unpatched_rel_parent, false)
             {
                 Ok(Some(dir)) => Some(dir),
-                Ok(None) | Err(ContainedFsError::Containment(_) | ContainedFsError::Io(_)) => None,
+                Ok(None) => None,
+                Err(ContainedFsError::Containment(reason)) => {
+                    return Err(PalamedesError::UnsafeCatalogPath {
+                        path: root_dir
+                            .join(unpatched_rel_parent)
+                            .to_string_lossy()
+                            .into_owned(),
+                        reason,
+                    });
+                }
+                Err(ContainedFsError::Io(source)) => {
+                    return Err(PalamedesError::ReadFile {
+                        path: root_dir.join(unpatched_rel_parent),
+                        source,
+                    });
+                }
             };
             // Check source-locale entries before non-source entries so a target
-            // aliasing a source catalog always reports `source_locale_read_only`.
+            // aliasing a source catalog always reports `translation.source_locale`.
             let ordered_entries = entries
                 .iter()
                 .filter(|(_, is_source)| *is_source)
@@ -921,10 +936,27 @@ where
                 if !seen_identities.is_empty()
                     && !simulate_missing_file_identity
                     && let Some(ref dir) = parent_dir
-                    && let Ok(Some(identity)) = dir.file_identity(file_name)
-                    && let Some(indexes) = seen_identities.get(&identity)
                 {
-                    colliding_patch_indexes.extend_from_slice(indexes);
+                    let identity = dir.file_identity(file_name).map_err(|error| {
+                        let target_path = root_dir.join(unpatched_rel_parent).join(file_name);
+                        match error {
+                            ContainedFsError::Containment(reason) => {
+                                PalamedesError::UnsafeCatalogPath {
+                                    path: target_path.to_string_lossy().into_owned(),
+                                    reason,
+                                }
+                            }
+                            ContainedFsError::Io(source) => PalamedesError::ReadFile {
+                                path: target_path,
+                                source,
+                            },
+                        }
+                    })?;
+                    if let Some(identity) = identity
+                        && let Some(indexes) = seen_identities.get(&identity)
+                    {
+                        colliding_patch_indexes.extend_from_slice(indexes);
+                    }
                 }
                 if !unidentified_trie.is_empty() {
                     let segments = resolve_unidentified_patch_segments(
@@ -6092,6 +6124,121 @@ mod tests {
                 .any(|diag| diag.code == "translation.source_locale"),
             "expected translation.source_locale on case-folded unpatched source catalog, got {:?}",
             ci_result.diagnostics
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn patch_rejects_when_unpatched_source_catalog_is_symlink_to_target() {
+        use std::os::unix::fs::symlink;
+
+        // 1. Unpatched source catalog file symlinked to the patched target catalog.
+        let file_fixture = tempfile::tempdir().expect("symlinked source file fixture");
+        let de_path = file_fixture.path().join("locales/de/messages.po");
+        let en_dir = file_fixture.path().join("locales/en");
+        fs::create_dir_all(&en_dir).expect("create en dir");
+        write_po_fixture(&de_path, "de");
+        let before = fs::read_to_string(&de_path).expect("read de before");
+        symlink(&de_path, en_dir.join("messages.po")).expect("symlink en -> de");
+
+        let config = CatalogArtifactConfig {
+            root_dir: file_fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}/messages".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        };
+        let mut writes = 0usize;
+        let err = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config,
+                po: None,
+                patches: vec![TranslationPatch {
+                    id: TranslationCandidateId {
+                        catalog: "locales/{locale}/messages".to_owned(),
+                        locale: "de".to_owned(),
+                        message: "Hello".to_owned(),
+                        context: None,
+                    },
+                    fingerprint: "placeholder".to_owned(),
+                    translation: TranslationValue::Singular {
+                        value: "Hallo".to_owned(),
+                    },
+                    machine: None,
+                }],
+            },
+            |catalog, source_locale, po| {
+                writes += 1;
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+        )
+        .expect_err("symlinked unpatched source catalog file must abort before writing");
+        assert!(
+            matches!(err, PalamedesError::UnsafeCatalogPath { .. }),
+            "expected UnsafeCatalogPath for symlinked source file, got {err:?}"
+        );
+        assert_eq!(writes, 0);
+        assert_eq!(fs::read_to_string(&de_path).expect("read de after"), before);
+
+        // 2. Unpatched source catalog directory symlinked to the patched target directory.
+        let dir_fixture = tempfile::tempdir().expect("symlinked source dir fixture");
+        let de_dir_path = dir_fixture.path().join("locales/de/messages.po");
+        write_po_fixture(&de_dir_path, "de");
+        let before_dir = fs::read_to_string(&de_dir_path).expect("read de dir before");
+        symlink(
+            dir_fixture.path().join("locales/de"),
+            dir_fixture.path().join("locales/en"),
+        )
+        .expect("symlink en dir -> de dir");
+
+        let dir_config = CatalogArtifactConfig {
+            root_dir: dir_fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}/messages".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        };
+        let mut dir_writes = 0usize;
+        let dir_err = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config: dir_config,
+                po: None,
+                patches: vec![TranslationPatch {
+                    id: TranslationCandidateId {
+                        catalog: "locales/{locale}/messages".to_owned(),
+                        locale: "de".to_owned(),
+                        message: "Hello".to_owned(),
+                        context: None,
+                    },
+                    fingerprint: "placeholder".to_owned(),
+                    translation: TranslationValue::Singular {
+                        value: "Hallo".to_owned(),
+                    },
+                    machine: None,
+                }],
+            },
+            |catalog, source_locale, po| {
+                dir_writes += 1;
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+        )
+        .expect_err("symlinked unpatched source catalog directory must abort before writing");
+        assert!(
+            matches!(dir_err, PalamedesError::UnsafeCatalogPath { .. }),
+            "expected UnsafeCatalogPath for symlinked source dir, got {dir_err:?}"
+        );
+        assert_eq!(dir_writes, 0);
+        assert_eq!(
+            fs::read_to_string(&de_dir_path).expect("read de dir after"),
+            before_dir
         );
     }
 }

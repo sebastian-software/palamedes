@@ -889,6 +889,12 @@ function validateCatalogPathPattern(catalogPath: string): string | undefined {
     if (isReservedLockSegment(segment)) {
       return "catalog path must not use the reserved '.pmds-lock' lock name";
     }
+    if (
+      hasWindowsDrivePrefix(segment) ||
+      hasWindowsDrivePrefix(segment.replaceAll("{locale}", "a"))
+    ) {
+      return "catalog path must not contain Windows drive prefixes";
+    }
     if (firstNormal === undefined) {
       firstNormal = segment;
     }
