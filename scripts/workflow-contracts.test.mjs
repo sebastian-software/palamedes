@@ -4489,6 +4489,66 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r58Fixture, { recursive: true, force: true });
     }
+    // Unrelated job guards do not trigger workflow_dispatch combination limits;
+    // dynamic tag overrides with a literal `@sha256:` digest are accepted; and
+    // required digest `ARG`s without a default (`FROM node@sha256:${DIGEST}`)
+    // are validated at build invocations without false failures in the
+    // standalone Containerfile pass.
+    const r59Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r59-"));
+    try {
+      await mkdir(join(r59Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(
+        join(r59Fixture, "Dockerfile"),
+        [
+          "ARG BASE_TAG=24",
+          "ARG DIGEST",
+          `FROM node:\${BASE_TAG}@${digest} AS one`,
+          "FROM node@sha256:${DIGEST} AS two",
+          "",
+        ].join("\n"),
+      );
+      const sevenChoices = ["a", "b", "c"]
+        .map((k) => `      ${k}:\n        type: choice\n        options: [a, b, c, d, e, f, g]`)
+        .join("\n");
+      await writeFile(
+        join(r59Fixture, ".github", "workflows", "r59.yml"),
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          sevenChoices,
+          "jobs:",
+          "  unrelated:",
+          "    runs-on: ubuntu-latest",
+          "    if: inputs.a && inputs.b && inputs.c",
+          "    steps:",
+          "      - run: echo hello",
+          "  build-pinned:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          `      - run: docker build --build-arg BASE_TAG="\${{ github.ref_name }}" --build-arg DIGEST=${"a".repeat(64)} .`,
+          "",
+        ].join("\n"),
+      );
+      expect(checkWorkflowPins(r59Fixture).problems).toEqual([]);
+      await writeFile(
+        join(r59Fixture, ".github", "workflows", "r59-bad.yml"),
+        [
+          "on: push",
+          "jobs:",
+          "  build-bad:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: docker build --build-arg DIGEST=not-hex .",
+          "",
+        ].join("\n"),
+      );
+      expect(checkWorkflowPins(r59Fixture).problems).toEqual([
+        "Dockerfile:4: node@sha256:not-hex is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r59Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

@@ -11965,7 +11965,7 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
     jobStrategyNode = null,
   ) => {
     if (stepsNode?.kind !== "seq") {
-      return;
+      return false;
     }
     let hasContainerOrActionStep = false;
     for (const stepNode of stepsNode.value) {
@@ -11987,7 +11987,7 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
       }
     }
     if (!hasContainerOrActionStep) {
-      return;
+      return false;
     }
     const referencedEnvNames = new Set();
     const matrixNeeded = { needed: false };
@@ -12058,6 +12058,7 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
       addFromNode(jobStrategyNode);
       collectReferencedNeedsOutputKeys(jobStrategyNode, referencedJobOutputs);
     }
+    return true;
   };
 
   const workflowEnvNode = getMapField(doc, "env");
@@ -12075,15 +12076,15 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
         continue;
       }
       const jobIfNode = getMapField(jobNode, "if");
-      if (jobIfNode) {
-        addFromNode(jobIfNode, { bareExpression: true });
-      }
       const jobEnvNode = getMapField(jobNode, "env");
       const jobStrategyNode = getMapField(jobNode, "strategy");
       const jobDefaultsNode = getMapField(jobNode, "defaults");
       const jobContainerNode = getMapField(jobNode, "container");
       const jobServicesNode = getMapField(jobNode, "services");
       if (jobContainerNode || jobServicesNode) {
+        if (jobIfNode) {
+          addFromNode(jobIfNode, { bareExpression: true });
+        }
         const envNames = new Set();
         const matrixNeeded = { needed: false };
         for (const node of [jobContainerNode, jobServicesNode]) {
@@ -12111,6 +12112,9 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
       }
       const jobUsesNode = getMapField(jobNode, "uses");
       if (jobUsesNode?.kind === "scalar" && String(jobUsesNode.value).trim().startsWith("./")) {
+        if (jobIfNode) {
+          addFromNode(jobIfNode, { bareExpression: true });
+        }
         scanReusableCalleeEventInputs(String(jobUsesNode.value).trim());
         const envNames = new Set();
         const matrixNeeded = { needed: false };
@@ -12130,12 +12134,15 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
         }
         continue;
       }
-      inspectStepsForRelevantInputs(
+      const hasRelevantSteps = inspectStepsForRelevantInputs(
         getMapField(jobNode, "steps"),
         [workflowEnvNode, jobEnvNode],
         [workflowDefaultsNode, jobDefaultsNode],
         jobStrategyNode,
       );
+      if (hasRelevantSteps && jobIfNode) {
+        addFromNode(jobIfNode, { bareExpression: true });
+      }
     }
 
     // Transitively trace upstream `jobs.<id>.outputs.<name>` referenced by
@@ -12161,6 +12168,10 @@ function collectPinRelevantDispatchInputNames(doc, root = null) {
         const producerJob = jobsByLower.get(jobIdLower);
         if (!producerJob) {
           continue;
+        }
+        const producerIf = getMapField(producerJob, "if");
+        if (producerIf) {
+          addFromNode(producerIf, { bareExpression: true });
         }
         const producerEnv = getMapField(producerJob, "env");
         const producerStrategy = getMapField(producerJob, "strategy");
@@ -14010,14 +14021,36 @@ export function unpinnedContainerfileReferences(
         // Resolve against global ARGs (including any workflow `--build-arg`
         // overrides and BuildKit automatic platform ARGs) and check against
         // previously declared stages BEFORE registering the new stage alias.
+        const isUnsetRequiredDigestRef = (rawToken, resolvedRef, activeArgs) => {
+          if (!/@(?:sha256:)?$/iu.test(resolvedRef)) {
+            return false;
+          }
+          const atIdx = rawToken.lastIndexOf("@");
+          if (atIdx === -1) {
+            return false;
+          }
+          const digestPart = rawToken.slice(atIdx + 1);
+          for (const m of digestPart.matchAll(
+            /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu,
+          )) {
+            const argName = m.groups.braced ?? m.groups.bare;
+            if (!activeArgs.has(argName)) {
+              return true;
+            }
+          }
+          return false;
+        };
+        const fromDynamicArgs = new Set([...dynamicOverriddenArgs, ...globalAutomaticDynamicArgs]);
+        const expandedFrom = resolveBuildArgValues(imageToken, globalArgs, fromDynamicArgs);
         const dynamicOverrideName = referencesDynamicOverride(imageToken);
-        if (dynamicOverrideName && sourceFile && sourceLine) {
+        const allPinnedDespiteDynamic =
+          expandedFrom.values.length > 0 &&
+          expandedFrom.values.every((resolved) => isPinnedDigest(resolved));
+        if (dynamicOverrideName && sourceFile && sourceLine && !allPinnedDespiteDynamic) {
           pushProblem(
             `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
           );
         }
-        const fromDynamicArgs = new Set([...dynamicOverriddenArgs, ...globalAutomaticDynamicArgs]);
-        const expandedFrom = resolveBuildArgValues(imageToken, globalArgs, fromDynamicArgs);
         if (expandedFrom.truncated) {
           pushProblem(
             `${filePath}:${lineNumber}: ${imageToken} exceeds build-arg expansion limit and cannot be verified exhaustively`,
@@ -14030,6 +14063,7 @@ export function unpinnedContainerfileReferences(
             !stages.has(resolved.toLowerCase()) &&
             !namedContexts?.has(resolved.toLowerCase()) &&
             (!isDynamicReference(resolved) || hasProvablyUnpinnedLiteralSuffix(resolved)) &&
+            !isUnsetRequiredDigestRef(imageToken, resolved, globalArgs) &&
             !isPinnedDigest(resolved)
           ) {
             pushProblem(`${filePath}:${lineNumber}: ${resolved} is not pinned to a sha256 digest`);
@@ -14047,6 +14081,25 @@ export function unpinnedContainerfileReferences(
       const effectiveText = onbuildMatch ? onbuildMatch.groups.nested.trimStart() : text;
       const isExternalOnbuildImage = (ref) =>
         ref.includes(":") || ref.includes("/") || ref.includes("@");
+      const isUnsetRequiredDigestRef = (rawToken, resolvedRef, activeArgs) => {
+        if (!/@(?:sha256:)?$/iu.test(resolvedRef)) {
+          return false;
+        }
+        const atIdx = rawToken.lastIndexOf("@");
+        if (atIdx === -1) {
+          return false;
+        }
+        const digestPart = rawToken.slice(atIdx + 1);
+        for (const m of digestPart.matchAll(
+          /\$(?:\{(?<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?<bare>[A-Za-z_][A-Za-z0-9_]*))/gu,
+        )) {
+          const argName = m.groups.braced ?? m.groups.bare;
+          if (!activeArgs.has(argName)) {
+            return true;
+          }
+        }
+        return false;
+      };
 
       const rawCopySource = extractCopyFromSource(effectiveText);
       if (rawCopySource) {
@@ -14066,13 +14119,16 @@ export function unpinnedContainerfileReferences(
         }
         const mergedArgs = new Map([...globalArgs, ...stageArgs]);
         const stageDynamicArgs = new Set([...dynamicOverriddenArgs, ...stageAutomaticDynamicArgs]);
+        const expandedCopy = resolveBuildArgValues(rawCopySource, mergedArgs, stageDynamicArgs);
         const dynamicOverrideName = referencesDynamicOverride(rawCopySource);
-        if (dynamicOverrideName && sourceFile && sourceLine) {
+        const allCopyPinned =
+          expandedCopy.values.length > 0 &&
+          expandedCopy.values.every((sourceRef) => isPinnedDigest(sourceRef));
+        if (dynamicOverrideName && sourceFile && sourceLine && !allCopyPinned) {
           pushProblem(
             `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
           );
         }
-        const expandedCopy = resolveBuildArgValues(rawCopySource, mergedArgs, stageDynamicArgs);
         if (expandedCopy.truncated) {
           pushProblem(
             `${filePath}:${lineNumber}: ${rawCopySource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
@@ -14084,7 +14140,8 @@ export function unpinnedContainerfileReferences(
             /^\d+$/u.test(sourceRef) ||
             allStages.has(sourceRef.toLowerCase()) ||
             namedContexts?.has(sourceRef.toLowerCase()) ||
-            (isDynamicReference(sourceRef) && !hasProvablyUnpinnedLiteralSuffix(sourceRef))
+            (isDynamicReference(sourceRef) && !hasProvablyUnpinnedLiteralSuffix(sourceRef)) ||
+            isUnsetRequiredDigestRef(rawCopySource, sourceRef, mergedArgs)
           ) {
             continue;
           }
@@ -14112,13 +14169,16 @@ export function unpinnedContainerfileReferences(
             }
             continue;
           }
+          const expandedMount = resolveBuildArgValues(rawSource, mergedArgs, stageDynamicArgs);
           const dynamicOverrideName = referencesDynamicOverride(rawSource);
-          if (dynamicOverrideName && sourceFile && sourceLine) {
+          const allMountPinned =
+            expandedMount.values.length > 0 &&
+            expandedMount.values.every((sourceRef) => isPinnedDigest(sourceRef));
+          if (dynamicOverrideName && sourceFile && sourceLine && !allMountPinned) {
             pushProblem(
               `${sourceFile}:${sourceLine}: build-arg ${dynamicOverrideName} overrides ${filePath}:${lineNumber} dynamically and cannot be verified`,
             );
           }
-          const expandedMount = resolveBuildArgValues(rawSource, mergedArgs, stageDynamicArgs);
           if (expandedMount.truncated) {
             pushProblem(
               `${filePath}:${lineNumber}: ${rawSource} exceeds build-arg expansion limit and cannot be verified exhaustively`,
@@ -14130,7 +14190,8 @@ export function unpinnedContainerfileReferences(
               /^\d+$/u.test(sourceRef) ||
               allStages.has(sourceRef.toLowerCase()) ||
               namedContexts?.has(sourceRef.toLowerCase()) ||
-              (isDynamicReference(sourceRef) && !hasProvablyUnpinnedLiteralSuffix(sourceRef))
+              (isDynamicReference(sourceRef) && !hasProvablyUnpinnedLiteralSuffix(sourceRef)) ||
+              isUnsetRequiredDigestRef(rawSource, sourceRef, mergedArgs)
             ) {
               continue;
             }
