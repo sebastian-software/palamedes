@@ -78,7 +78,7 @@ impl<'a> TransformVisitor<'a> {
         loop {
             let id = self.next_trans_placeholder;
             self.next_trans_placeholder += 1;
-            let candidate = format!("__palamedesTransSlot{id}__");
+            let candidate = format!("\0__palamedesTransSlot{id}__\0");
             if !self.source.contains(&candidate) {
                 return candidate;
             }
@@ -157,6 +157,13 @@ impl<'a> TransformVisitor<'a> {
     pub(super) fn rebind_surviving_trans(&mut self, semantic: &Semantic<'_>) {
         let mut aliases = HashMap::<(String, SymbolId), String>::new();
         let mut reserved = self.imports.used_identifier_names.clone();
+        let runtime_import_name = self
+            .needs_runtime_import
+            .then_some(self.options.runtime_import_name.as_deref())
+            .flatten();
+        if let Some(name) = runtime_import_name {
+            reserved.insert(name.to_string());
+        }
         let mut plain_trans_module: Option<String> = None;
         for replacement in self.trans_replacements.clone() {
             let symbol_id = replacement.macro_symbol_id;
@@ -166,9 +173,10 @@ impl<'a> TransformVisitor<'a> {
             let reuses_trans_import =
                 self.imports
                     .can_reuse_trans_import_at(semantic, &module, reference_span);
-            let can_use_plain_trans = plain_trans_module
-                .as_deref()
-                .is_none_or(|existing| existing == module);
+            let can_use_plain_trans = runtime_import_name != Some("Trans")
+                && plain_trans_module
+                    .as_deref()
+                    .is_none_or(|existing| existing == module);
             let needs_alias = !can_use_plain_trans
                 || self.imports.has_surviving_reference(
                     semantic,
@@ -191,10 +199,12 @@ impl<'a> TransformVisitor<'a> {
                 reserved.insert("Trans".to_string());
                 "Trans".to_string()
             };
-            if let Some(target) = self.replacements.get_mut(replacement_index) {
-                target.text = target
+            if let Some(target) = self.replacements.get_mut(replacement_index)
+                && let Some(pos) = target.text.rfind(&replacement.placeholder)
+            {
+                target
                     .text
-                    .replacen(&replacement.placeholder, &local_name, 1);
+                    .replace_range(pos..pos + replacement.placeholder.len(), &local_name);
             }
             if local_name == "Trans" && reuses_trans_import {
                 self.reused_trans_imports.insert(module.clone());

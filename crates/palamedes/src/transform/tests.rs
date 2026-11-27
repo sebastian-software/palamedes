@@ -3330,6 +3330,65 @@ export function f() {
         transformed.code
     );
 
+    // Valid: escaped placeholder-like keys inside `<Trans>` values must never be rewritten by
+    // Trans rebinding, and custom runtime import names must be reserved against Trans aliases.
+    let escaped_slot_key = "import { Trans } from \"@palamedes/react/macro\";\nconst values: Record<string, string> = {};\nexport const el = <Trans>{values[\"__palamedesTransSlot\\u0030__\"]}<Button title={<Trans>Tooltip</Trans>} /></Trans>;\n";
+    let transformed = transform_macros_raw(escaped_slot_key, "escaped-slot.tsx", None)
+        .expect("escaped slot-like key inside Trans values should transform cleanly");
+    assert!(
+        transformed
+            .code
+            .contains("__palamedesTransSlot0__: values[\"__palamedesTransSlot\\u0030__\"]"),
+        "value key must stay intact:\n{}",
+        transformed.code
+    );
+    assert!(
+        transformed.code.contains("title={<Trans id="),
+        "inner Trans component must be rebound cleanly:\n{}",
+        transformed.code
+    );
+    assert!(!transformed.code.contains('\0'));
+
+    let custom_getter_collision = r#"import { Trans as ReactTrans } from "@palamedes/react/macro";
+import { Trans as RemixTrans } from "@palamedes/remix/macro";
+import { t } from "@palamedes/core/macro";
+export function f() {
+  return [<ReactTrans>React</ReactTrans>, <RemixTrans>Remix</RemixTrans>, t`Hi`];
+}
+"#;
+    let transformed = transform_macros_raw(
+        custom_getter_collision,
+        "custom-getter-collision.tsx",
+        Some(NativeTransformOptions {
+            runtime_module: Some("custom-i18n".to_string()),
+            runtime_import_name: Some("__palamedesTrans".to_string()),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("custom runtimeImportName matching __palamedesTrans must not collide with Trans alias");
+    assert!(
+        transformed
+            .code
+            .contains("import { __palamedesTrans } from \"custom-i18n\";")
+    );
+    assert!(
+        transformed
+            .code
+            .contains("import { Trans } from \"@palamedes/react/compiled\";")
+    );
+    assert!(
+        transformed
+            .code
+            .contains("import { Trans as __palamedesTrans2 } from \"@palamedes/remix/compiled\";")
+    );
+    let parsed = Parser::new(&allocator, &transformed.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "non-colliding runtime and Trans imports must be valid TSX: {:?}\n{}",
+        parsed.diagnostics,
+        transformed.code
+    );
+
     // Valid: direct runtime calls inside macro value expressions remain extractable and preserved.
     for (filename, source) in [
         (
