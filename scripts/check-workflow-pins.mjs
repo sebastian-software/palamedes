@@ -1380,8 +1380,12 @@ function evaluateActionsFormatCall(branch, stepEnv) {
   }
   const argOptionLists = [];
   let allArgsKnown = templateEval.known;
+  let truncated = Boolean(templateEval.truncated);
   for (let i = 1; i < rawArgs.length; i += 1) {
     const argEval = evaluateActionsValueVariants(rawArgs[i], stepEnv);
+    if (argEval?.truncated) {
+      truncated = true;
+    }
     if (!argEval || !argEval.known || argEval.values.length === 0) {
       allArgsKnown = false;
       argOptionLists.push(["${{ dynamic }}"]);
@@ -1392,14 +1396,17 @@ function evaluateActionsFormatCall(branch, stepEnv) {
   let combinations = [[]];
   for (const options of argOptionLists) {
     const next = [];
+    let exceeded = false;
     for (const combo of combinations) {
       for (const opt of options) {
         if (next.length >= MAX_TOKEN_EXPANSIONS) {
+          truncated = true;
+          exceeded = true;
           break;
         }
         next.push([...combo, opt]);
       }
-      if (next.length >= MAX_TOKEN_EXPANSIONS) {
+      if (exceeded) {
         break;
       }
     }
@@ -1411,18 +1418,23 @@ function evaluateActionsFormatCall(branch, stepEnv) {
     for (const combo of combinations) {
       const rendered = applyActionsFormatTemplate(tmpl, combo);
       if (!seen.has(rendered)) {
+        if (formatted.length >= MAX_TOKEN_EXPANSIONS) {
+          truncated = true;
+          continue;
+        }
         seen.add(rendered);
         formatted.push(rendered);
       }
     }
   }
-  if (!allArgsKnown && formatted.every((val) => val === "${{ dynamic }}")) {
+  if (!allArgsKnown && !truncated && formatted.every((val) => val === "${{ dynamic }}")) {
     return null;
   }
   return {
     known: allArgsKnown,
     values: formatted,
     mayBeEmpty: formatted.includes(""),
+    truncated,
   };
 }
 
@@ -1437,8 +1449,9 @@ function evaluateActionsValueVariants(rawExpr, stepEnv) {
     if (!entries) {
       return null;
     }
-    const vals = entries.map((e) => e.value);
-    return { known: true, values: vals, mayBeEmpty: vals.includes("") };
+    const truncated = entries.some((e) => e.truncated);
+    const vals = entries.filter((e) => !e.truncated).map((e) => e.value);
+    return { known: true, values: vals, mayBeEmpty: vals.includes(""), truncated };
   }
   const branchRes = evaluateActionsFallbackBranch(expr, stepEnv);
   if (!branchRes.known) {
@@ -1448,13 +1461,51 @@ function evaluateActionsValueVariants(rawExpr, stepEnv) {
   if (branchRes.falsyValue !== undefined && !vals.includes(branchRes.falsyValue)) {
     vals.push(branchRes.falsyValue);
   }
-  return { known: true, values: vals, mayBeEmpty: branchRes.mayBeEmpty };
+  return {
+    known: true,
+    values: vals,
+    mayBeEmpty: branchRes.mayBeEmpty,
+    truncated: Boolean(branchRes.truncated),
+  };
 }
 
 function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
   const branch = stripBalancedOuterParens(rawBranch.trim());
   if (!branch) {
     return { known: false, values: [], mayBeEmpty: true };
+  }
+
+  // Logical AND (`&&`) has lower precedence than unary negation (`!`), so split
+  // top-level `&&` before checking for a leading `!` (e.g. `!inputs.alt && 'img'`).
+  const andParts = splitTopLevelLogicalOp(branch, "&&");
+  if (andParts && andParts.length >= 2) {
+    let allPrefixTruthy = true;
+    let truncated = false;
+    for (let i = 0; i < andParts.length - 1; i += 1) {
+      const condResult = evaluateActionsFallbackBranch(andParts[i], stepEnv);
+      if (condResult.truncated) {
+        truncated = true;
+      }
+      if (condResult.known && condResult.values.every((v) => v.length === 0)) {
+        return { known: true, values: [], mayBeEmpty: true, truncated };
+      }
+      if (!condResult.known || condResult.mayBeEmpty) {
+        allPrefixTruthy = false;
+      }
+    }
+    const rhsResult = evaluateActionsFallbackBranch(andParts.at(-1), stepEnv);
+    if (rhsResult.truncated) {
+      truncated = true;
+    }
+    if (allPrefixTruthy) {
+      return { ...rhsResult, truncated };
+    }
+    return {
+      known: false,
+      values: rhsResult.values.filter((v) => v.length > 0),
+      mayBeEmpty: true,
+      truncated,
+    };
   }
 
   const literal = parseActionsSingleQuotedLiteral(branch);
@@ -1477,13 +1528,19 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
     if (inner.known) {
       const alwaysFalsy = inner.values.every((v) => v.length === 0);
       if (alwaysFalsy) {
-        return { known: true, values: ["true"], mayBeEmpty: false };
+        return { known: true, values: ["true"], mayBeEmpty: false, truncated: inner.truncated };
       }
       if (!inner.mayBeEmpty) {
-        return { known: true, values: [], falsyValue: "false", mayBeEmpty: true };
+        return {
+          known: true,
+          values: [],
+          falsyValue: "false",
+          mayBeEmpty: true,
+          truncated: inner.truncated,
+        };
       }
     }
-    return { known: false, values: [], mayBeEmpty: true };
+    return { known: false, values: [], mayBeEmpty: true, truncated: inner.truncated };
   }
   if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(branch)) {
     const numVal = Number(branch);
@@ -1508,8 +1565,9 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
     if (!entries || entries.length === 0) {
       return { known: false, values: [], mayBeEmpty: true };
     }
+    const truncated = entries.some((e) => e.truncated);
     const values = entries.filter((e) => !e.truncated).map((e) => (e.unset ? "" : e.value));
-    return { known: true, values, mayBeEmpty: values.includes("") };
+    return { known: true, values, mayBeEmpty: values.includes(""), truncated };
   }
 
   const stepOutMatch =
@@ -1531,8 +1589,9 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
     if (!entries || entries.length === 0) {
       return { known: false, values: [], mayBeEmpty: true };
     }
+    const truncated = entries.some((e) => e.truncated);
     const values = entries.filter((e) => !e.truncated).map((e) => (e.unset ? "" : e.value));
-    return { known: true, values, mayBeEmpty: values.includes("") };
+    return { known: true, values, mayBeEmpty: values.includes(""), truncated };
   }
 
   const needsOutMatch =
@@ -1554,31 +1613,9 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
     if (!entries || entries.length === 0) {
       return { known: false, values: [], mayBeEmpty: true };
     }
+    const truncated = entries.some((e) => e.truncated);
     const values = entries.filter((e) => !e.truncated).map((e) => (e.unset ? "" : e.value));
-    return { known: true, values, mayBeEmpty: values.includes("") };
-  }
-
-  const andParts = splitTopLevelLogicalOp(branch, "&&");
-  if (andParts && andParts.length >= 2) {
-    let allPrefixTruthy = true;
-    for (let i = 0; i < andParts.length - 1; i += 1) {
-      const condResult = evaluateActionsFallbackBranch(andParts[i], stepEnv);
-      if (condResult.known && condResult.values.every((v) => v.length === 0)) {
-        return { known: true, values: [], mayBeEmpty: true };
-      }
-      if (!condResult.known || condResult.mayBeEmpty) {
-        allPrefixTruthy = false;
-      }
-    }
-    const rhsResult = evaluateActionsFallbackBranch(andParts.at(-1), stepEnv);
-    if (allPrefixTruthy) {
-      return rhsResult;
-    }
-    return {
-      known: false,
-      values: rhsResult.values.filter((v) => v.length > 0),
-      mayBeEmpty: true,
-    };
+    return { known: true, values, mayBeEmpty: values.includes(""), truncated };
   }
 
   return { known: false, values: [], mayBeEmpty: true };
@@ -1596,8 +1633,12 @@ function evaluateActionsFallbackExpression(rawExpr, stepEnv, fallbackLine) {
   }
 
   const formatResult = evaluateActionsFormatCall(expr, stepEnv);
-  if (formatResult && formatResult.values.length > 0) {
-    return formatResult.values.map((value) => ({ value, line: fallbackLine }));
+  if (formatResult && (formatResult.values.length > 0 || formatResult.truncated)) {
+    const entries = formatResult.values.map((value) => ({ value, line: fallbackLine }));
+    if (formatResult.truncated) {
+      entries.push({ value: "", line: fallbackLine, truncated: true });
+    }
+    return entries;
   }
 
   const orParts = splitTopLevelLogicalOp(expr, "||");
@@ -1608,10 +1649,14 @@ function evaluateActionsFallbackExpression(rawExpr, stepEnv, fallbackLine) {
     }
     const andResult = evaluateActionsFallbackBranch(expr, stepEnv);
     const nonEmpty = andResult.values.filter((v) => v.length > 0);
-    if (nonEmpty.length === 0) {
+    if (nonEmpty.length === 0 && !andResult.truncated) {
       return null;
     }
-    return [...new Set(nonEmpty)].map((value) => ({ value, line: fallbackLine }));
+    const entries = [...new Set(nonEmpty)].map((value) => ({ value, line: fallbackLine }));
+    if (andResult.truncated) {
+      entries.push({ value: "", line: fallbackLine, truncated: true });
+    }
+    return entries;
   }
 
   const reachable = [];
@@ -1624,12 +1669,16 @@ function evaluateActionsFallbackExpression(rawExpr, stepEnv, fallbackLine) {
   };
 
   let canReachNext = true;
+  let truncated = false;
   for (let i = 0; i < orParts.length; i += 1) {
     if (!canReachNext) {
       break;
     }
     const isLast = i === orParts.length - 1;
     const result = evaluateActionsFallbackBranch(orParts[i], stepEnv);
+    if (result.truncated) {
+      truncated = true;
+    }
     for (const val of result.values) {
       if (val.length > 0 || isLast) {
         pushVal(val);
@@ -1641,6 +1690,9 @@ function evaluateActionsFallbackExpression(rawExpr, stepEnv, fallbackLine) {
     if (result.known && !result.mayBeEmpty) {
       canReachNext = false;
     }
+  }
+  if (truncated) {
+    reachable.push({ value: "", line: fallbackLine, truncated: true });
   }
   if (canReachNext && reachable.length === 0) {
     return null;
@@ -3862,21 +3914,74 @@ function matchesExcludePartial(row, excludeRows) {
   });
 }
 
-function extractJobMatrixRows(jobNode, filePath, problems) {
-  const strategyNode = getMapField(jobNode, "strategy");
-  const matrixNode = getMapField(strategyNode, "matrix");
-  if (matrixNode?.kind !== "map") {
-    return [];
+function jsonToYamlAstNode(value, line) {
+  if (Array.isArray(value)) {
+    return {
+      kind: "seq",
+      line,
+      value: value.map((item) => jsonToYamlAstNode(item, line)),
+    };
   }
+  if (value !== null && typeof value === "object") {
+    const map = new Map();
+    for (const [k, v] of Object.entries(value)) {
+      map.set(k, jsonToYamlAstNode(v, line));
+    }
+    return { kind: "map", line, value: map };
+  }
+  return {
+    kind: "scalar",
+    line,
+    value: value === null || value === undefined ? "" : String(value),
+  };
+}
 
+function decodeFromJsonScalarNodes(scalarNode, envMap) {
+  if (scalarNode?.kind !== "scalar") {
+    return null;
+  }
+  const trimmed = String(scalarNode.value).trim();
+  const expr = stripBalancedOuterParens(stripOuterExpressionWrapper(trimmed));
+  const prefix = /^fromJSON\s*\(/iu.exec(expr);
+  if (!prefix || !expr.endsWith(")")) {
+    return null;
+  }
+  const innerArg = expr.slice(prefix[0].length, -1).trim();
+  const argEval = evaluateActionsValueVariants(innerArg, envMap ?? new Map());
+  if (!argEval || argEval.values.length === 0) {
+    return null;
+  }
+  const decoded = [];
+  for (const jsonText of argEval.values) {
+    try {
+      decoded.push(jsonToYamlAstNode(JSON.parse(jsonText), scalarNode.line));
+    } catch {
+      return null;
+    }
+  }
+  return decoded.length > 0 ? decoded : null;
+}
+
+function expandSingleMatrixMap(matrixNode, filePath, problems, envMap) {
   const axes = [];
   const axisNamesLower = new Set();
   const includeRows = [];
   const excludeRows = [];
   let hasDynamicMatrixEntries = false;
 
-  for (const [key, entryNode] of matrixNode.value) {
+  for (const [key, rawEntryNode] of matrixNode.value) {
     const lowerKey = key.toLowerCase();
+    let entryNode = rawEntryNode;
+    if (entryNode?.kind === "scalar") {
+      const decodedSeqs = decodeFromJsonScalarNodes(entryNode, envMap);
+      if (decodedSeqs && decodedSeqs.every((n) => n.kind === "seq")) {
+        const mergedItems = [];
+        for (const seqNode of decodedSeqs) {
+          mergedItems.push(...seqNode.value);
+        }
+        entryNode = { kind: "seq", line: entryNode.line, value: mergedItems };
+      }
+    }
     if (lowerKey === "exclude") {
       if (entryNode?.kind === "seq") {
         for (const rowNode of entryNode.value) {
@@ -3998,6 +4103,31 @@ function extractJobMatrixRows(jobNode, filePath, problems) {
   }
 
   return allRows;
+}
+
+function extractJobMatrixRows(jobNode, filePath, problems, envMap = null) {
+  const strategyNode = getMapField(jobNode, "strategy");
+  const matrixNode = getMapField(strategyNode, "matrix");
+  if (!matrixNode) {
+    return [];
+  }
+  if (matrixNode.kind === "map") {
+    return expandSingleMatrixMap(matrixNode, filePath, problems, envMap);
+  }
+  if (matrixNode.kind === "scalar") {
+    const decodedMaps = decodeFromJsonScalarNodes(matrixNode, envMap);
+    if (!decodedMaps) {
+      return [];
+    }
+    const allRows = [];
+    for (const candidate of decodedMaps) {
+      if (candidate.kind === "map") {
+        allRows.push(...expandSingleMatrixMap(candidate, filePath, problems, envMap));
+      }
+    }
+    return allRows;
+  }
+  return [];
 }
 
 function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
@@ -9971,6 +10101,87 @@ function collectPinRelevantDispatchInputNames(doc) {
       usesText,
     );
 
+  const collectReferencedNeedsOutputKeys = (node, found, seen = new Set()) => {
+    if (!node || seen.has(node)) {
+      return;
+    }
+    seen.add(node);
+    if (node.kind === "scalar") {
+      const text = String(node.value);
+      for (const blockMatch of text.matchAll(
+        new RegExp(ACTIONS_EXPRESSION_BLOCK_PATTERN.source, "gu"),
+      )) {
+        const expr = blockMatch.groups.expr;
+        for (const match of expr.matchAll(
+          /(?<![A-Za-z0-9_.])needs(?:\.(?<jobDot>[A-Za-z0-9_-]+)|\[(?:'(?<jobSq>[^']+)'|"(?<jobDq>[^"]+)")\])\.outputs(?:\.(?<outDot>[A-Za-z0-9_-]+)|\[(?:'(?<outSq>[^']+)'|"(?<outDq>[^"]+)")\])/giu,
+        )) {
+          const jobId = (
+            match.groups.jobDot ??
+            match.groups.jobSq ??
+            match.groups.jobDq
+          ).toLowerCase();
+          const outName = (
+            match.groups.outDot ??
+            match.groups.outSq ??
+            match.groups.outDq
+          ).toLowerCase();
+          found.add(`${jobId}\0${outName}`);
+        }
+      }
+      return;
+    }
+    if (node.kind === "seq") {
+      for (const item of node.value) {
+        collectReferencedNeedsOutputKeys(item, found, seen);
+      }
+      return;
+    }
+    if (node.kind === "map") {
+      for (const val of node.value.values()) {
+        collectReferencedNeedsOutputKeys(val, found, seen);
+      }
+    }
+  };
+
+  const collectReferencedStepOutputIds = (node, found, seen = new Set()) => {
+    if (!node || seen.has(node)) {
+      return;
+    }
+    seen.add(node);
+    if (node.kind === "scalar") {
+      const text = String(node.value);
+      for (const blockMatch of text.matchAll(
+        new RegExp(ACTIONS_EXPRESSION_BLOCK_PATTERN.source, "gu"),
+      )) {
+        const expr = blockMatch.groups.expr;
+        for (const match of expr.matchAll(
+          /(?<![A-Za-z0-9_.])steps(?:\.(?<stepDot>[A-Za-z0-9_-]+)|\[(?:'(?<stepSq>[^']+)'|"(?<stepDq>[^"]+)")\])\.outputs/giu,
+        )) {
+          const stepId = (
+            match.groups.stepDot ??
+            match.groups.stepSq ??
+            match.groups.stepDq
+          ).toLowerCase();
+          found.add(stepId);
+        }
+      }
+      return;
+    }
+    if (node.kind === "seq") {
+      for (const item of node.value) {
+        collectReferencedStepOutputIds(item, found, seen);
+      }
+      return;
+    }
+    if (node.kind === "map") {
+      for (const val of node.value.values()) {
+        collectReferencedStepOutputIds(val, found, seen);
+      }
+    }
+  };
+
+  const referencedJobOutputs = new Set();
+
   const inspectStepsForRelevantInputs = (
     stepsNode,
     parentEnvNodes,
@@ -10010,6 +10221,7 @@ function collectPinRelevantDispatchInputNames(doc) {
       }
       addFromNode(node);
       collectReferencedEnvVarNames(node, referencedEnvNames);
+      collectReferencedNeedsOutputKeys(node, referencedJobOutputs);
       if (nodeReferencesMatrix(node)) {
         matrixNeeded.needed = true;
       }
@@ -10055,8 +10267,18 @@ function collectPinRelevantDispatchInputNames(doc) {
       }
     }
     traceEnvMaps([...parentEnvNodes, ...stepEnvNodes], referencedEnvNames, matrixNeeded);
+    for (const envMap of [...parentEnvNodes, ...stepEnvNodes]) {
+      if (envMap?.kind === "map") {
+        for (const [k, v] of envMap.value) {
+          if (referencedEnvNames.has(k.toLowerCase())) {
+            collectReferencedNeedsOutputKeys(v, referencedJobOutputs);
+          }
+        }
+      }
+    }
     if (matrixNeeded.needed && jobStrategyNode) {
       addFromNode(jobStrategyNode);
+      collectReferencedNeedsOutputKeys(jobStrategyNode, referencedJobOutputs);
     }
   };
 
@@ -10085,13 +10307,24 @@ function collectPinRelevantDispatchInputNames(doc) {
         for (const node of [jobContainerNode, jobServicesNode]) {
           addFromNode(node);
           collectReferencedEnvVarNames(node, envNames);
+          collectReferencedNeedsOutputKeys(node, referencedJobOutputs);
           if (nodeReferencesMatrix(node)) {
             matrixNeeded.needed = true;
           }
         }
         traceEnvMaps([workflowEnvNode, jobEnvNode], envNames, matrixNeeded);
+        for (const envMap of [workflowEnvNode, jobEnvNode]) {
+          if (envMap?.kind === "map") {
+            for (const [k, v] of envMap.value) {
+              if (envNames.has(k.toLowerCase())) {
+                collectReferencedNeedsOutputKeys(v, referencedJobOutputs);
+              }
+            }
+          }
+        }
         if (matrixNeeded.needed && jobStrategyNode) {
           addFromNode(jobStrategyNode);
+          collectReferencedNeedsOutputKeys(jobStrategyNode, referencedJobOutputs);
         }
       }
       const jobUsesNode = getMapField(jobNode, "uses");
@@ -10102,6 +10335,7 @@ function collectPinRelevantDispatchInputNames(doc) {
         for (const node of [jobUsesNode, jobWithNode]) {
           addFromNode(node);
           collectReferencedEnvVarNames(node, envNames);
+          collectReferencedNeedsOutputKeys(node, referencedJobOutputs);
           if (nodeReferencesMatrix(node)) {
             matrixNeeded.needed = true;
           }
@@ -10109,6 +10343,7 @@ function collectPinRelevantDispatchInputNames(doc) {
         traceEnvMaps([workflowEnvNode, jobEnvNode], envNames, matrixNeeded);
         if (matrixNeeded.needed && jobStrategyNode) {
           addFromNode(jobStrategyNode);
+          collectReferencedNeedsOutputKeys(jobStrategyNode, referencedJobOutputs);
         }
         continue;
       }
@@ -10118,6 +10353,93 @@ function collectPinRelevantDispatchInputNames(doc) {
         [workflowDefaultsNode, jobDefaultsNode],
         jobStrategyNode,
       );
+    }
+
+    // Transitively trace upstream `jobs.<id>.outputs.<name>` referenced by
+    // pin-relevant consumers so dispatch choices exposed via job outputs are
+    // enumerated too.
+    const jobsByLower = new Map();
+    for (const [jId, jNode] of jobsNode.value) {
+      if (jNode?.kind === "map") {
+        jobsByLower.set(jId.toLowerCase(), jNode);
+      }
+    }
+    const visitedJobOutputs = new Set();
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const key of referencedJobOutputs) {
+        if (visitedJobOutputs.has(key)) {
+          continue;
+        }
+        visitedJobOutputs.add(key);
+        changed = true;
+        const [jobIdLower, outNameLower] = key.split("\0");
+        const producerJob = jobsByLower.get(jobIdLower);
+        if (!producerJob) {
+          continue;
+        }
+        const producerEnv = getMapField(producerJob, "env");
+        const producerStrategy = getMapField(producerJob, "strategy");
+        const producerUses = getMapField(producerJob, "uses");
+        if (producerUses?.kind === "scalar" && String(producerUses.value).trim().startsWith("./")) {
+          addFromNode(producerUses);
+          addFromNode(getMapField(producerJob, "with"));
+          collectReferencedNeedsOutputKeys(getMapField(producerJob, "with"), referencedJobOutputs);
+        }
+        const outputsNode = getMapField(producerJob, "outputs");
+        const outValNode =
+          outputsNode?.kind === "map" ? getMapField(outputsNode, outNameLower) : null;
+        if (!outValNode) {
+          continue;
+        }
+        const envNames = new Set();
+        const matrixNeeded = { needed: false };
+        const stepIds = new Set();
+        addFromNode(outValNode);
+        collectReferencedEnvVarNames(outValNode, envNames);
+        collectReferencedNeedsOutputKeys(outValNode, referencedJobOutputs);
+        collectReferencedStepOutputIds(outValNode, stepIds);
+        if (nodeReferencesMatrix(outValNode)) {
+          matrixNeeded.needed = true;
+        }
+        const producerSteps = getMapField(producerJob, "steps");
+        const extraEnvNodes = [];
+        if (producerSteps?.kind === "seq" && stepIds.size > 0) {
+          for (const stepNode of producerSteps.value) {
+            if (stepNode?.kind !== "map") {
+              continue;
+            }
+            const idNode = getMapField(stepNode, "id");
+            if (
+              idNode?.kind !== "scalar" ||
+              !stepIds.has(String(idNode.value).trim().toLowerCase())
+            ) {
+              continue;
+            }
+            for (const field of ["run", "with", "uses"]) {
+              const fn = getMapField(stepNode, field);
+              if (fn) {
+                addFromNode(fn);
+                collectReferencedEnvVarNames(fn, envNames);
+                collectReferencedNeedsOutputKeys(fn, referencedJobOutputs);
+                if (nodeReferencesMatrix(fn)) {
+                  matrixNeeded.needed = true;
+                }
+              }
+            }
+            const stepEnv = getMapField(stepNode, "env");
+            if (stepEnv) {
+              extraEnvNodes.push(stepEnv);
+            }
+          }
+        }
+        traceEnvMaps([workflowEnvNode, producerEnv, ...extraEnvNodes], envNames, matrixNeeded);
+        if (matrixNeeded.needed && producerStrategy) {
+          addFromNode(producerStrategy);
+          collectReferencedNeedsOutputKeys(producerStrategy, referencedJobOutputs);
+        }
+      }
     }
   }
 
@@ -10906,7 +11228,7 @@ export function unpinnedWorkflowContainerReferences(
           }
         }
         const jobEnv = extractEnvMap(getMapField(jobNode, "env"), jobBaseEnv);
-        const jobMatrixRows = extractJobMatrixRows(jobNode, filePath, ctxProblems);
+        const jobMatrixRows = extractJobMatrixRows(jobNode, filePath, ctxProblems, jobEnv);
         const jobUsesNode = getMapField(jobNode, "uses");
         if (
           jobUsesNode?.kind === "scalar" &&

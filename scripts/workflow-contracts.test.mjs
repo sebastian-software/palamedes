@@ -3875,6 +3875,74 @@ describe("workflow contracts", () => {
       "<memory>:7: node:24 is not pinned to a sha256 digest",
       "<memory>:9: ghcr.io/${{ dynamic }}/app:latest is not pinned to a sha256 digest",
     ]);
+    // Unary `!` binds tighter than `&&` in Actions expressions, dispatch choices
+    // exposed via upstream job outputs are traced, static `fromJSON(...)` image
+    // matrices are decoded and checked, and truncated `format()` expansions fail
+    // closed.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      alternate:",
+          "        type: boolean",
+          "        default: false",
+          "      chosen_img:",
+          "        type: choice",
+          "        required: true",
+          "        options:",
+          `          - node:24@${digest}`,
+          "jobs:",
+          "  choose:",
+          "    runs-on: ubuntu-latest",
+          "    outputs:",
+          "      img: ${{ inputs.chosen_img }}",
+          "    steps:",
+          "      - run: echo ok",
+          "  negation-and-needs:",
+          "    needs: choose",
+          "    runs-on: ubuntu-latest",
+          `    container: \${{ !inputs.alternate && 'alpine:3.20@${digest}' || 'node:24@${digest}' }}`,
+          "    steps:",
+          "      - run: docker pull \"${{ needs.choose.outputs.img || 'unset' }}\"",
+          "  json-matrix:",
+          "    runs-on: ubuntu-latest",
+          "    strategy:",
+          `      matrix: \${{ fromJSON('{"include":[{"image":"node:24@${digest}"},{"image":"alpine:3.20"}]}') }}`,
+          "    container: ${{ matrix.image }}",
+          "    steps:",
+          "      - run: echo ok",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:28: alpine:3.20 is not pinned to a sha256 digest"]);
+    const nineChoices = Array.from({ length: 9 }, (_, i) => `a${i}`);
+    const makeConditionalEnv = (varName, values) => [
+      ...values.map((val, idx) =>
+        idx === 0
+          ? `if [ "$X" = "${idx}" ]; then echo "${varName}=${val}" >> "$GITHUB_ENV"`
+          : `elif [ "$X" = "${idx}" ]; then echo "${varName}=${val}" >> "$GITHUB_ENV"`,
+      ),
+      "fi",
+    ];
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  format-overflow:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: |",
+          ...makeConditionalEnv("A", nineChoices).map((line) => `          ${line}`),
+          ...makeConditionalEnv("B", nineChoices).map((line) => `          ${line}`),
+          `      - run: docker pull "\${{ format('{0}/{1}@${digest}', env.A, env.B) }}"`,
+          "",
+        ].join("\n"),
+      ),
+    ).toContain(
+      "<memory>:26: run script env expression exceeds expansion limit and cannot be verified exhaustively",
+    );
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
