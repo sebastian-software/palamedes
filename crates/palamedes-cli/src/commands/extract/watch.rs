@@ -1,13 +1,15 @@
 //! `pmds extract --watch`: one long-lived process that keeps a warm cache and
 //! re-extracts on relevant file changes.
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use ferralk::ferralk_glob::PatternSet;
-use notify::{RecursiveMode, Watcher};
+use notify::event::ModifyKind;
+use notify::{Event, EventKind, RecursiveMode, Watcher};
 use palamedes::{ExtractCache, PalamedesCatalogFormat};
 
 use crate::commands::extract::cache::{
@@ -19,7 +21,7 @@ use crate::commands::extract::sources::{
     is_internal_palamedes_relative, matches_source_pattern, normalized_include_patterns,
     walk_roots_for_patterns,
 };
-use crate::commands::extract::{ExtractOptions, run_extraction_with_cache};
+use crate::commands::extract::{ExtractOptions, run_extraction_with_cache_and_files};
 use crate::config::{LoadedConfig, load_config};
 use crate::error::CliError;
 
@@ -128,6 +130,25 @@ impl WatchMatchers {
             matches_source_pattern(include, path) && !matches_source_pattern(exclude, path)
         })
     }
+
+    fn is_known_source_path(&self, path: &Path, known_files: &HashSet<PathBuf>) -> bool {
+        if known_files.contains(path) {
+            return true;
+        }
+        self.aliases.iter().any(|(target, configured)| {
+            path.strip_prefix(target)
+                .ok()
+                .is_some_and(|suffix| known_files.contains(&configured.join(suffix)))
+        })
+    }
+}
+
+fn is_pure_content_modify(event: &Event) -> bool {
+    !event.need_rescan()
+        && matches!(
+            event.kind,
+            EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Any | ModifyKind::Metadata(_))
+        )
 }
 
 /// Whether a path is a catalog extraction itself writes. Include patterns that
@@ -237,13 +258,21 @@ fn run_watch_mode_impl(
     watcher.watch(&watched_config_path, RecursiveMode::NonRecursive)?;
 
     let mut matchers = WatchMatchers::build_with_aliases(&config, initial_watch_paths.aliases);
-    // Re-read after registration to cover config saves since the caller loaded
-    // it. The first extraction happens through the same reload path as later
-    // changes, while notifications accumulate during that extraction.
+    // Avoid a redundant startup config parse + glob/watch rebuild when the
+    // config file on disk still matches the bytes loaded by the caller; still
+    // reload if the file changed before the watcher was registered.
+    let startup_config_changed = match &config.config_raw_bytes {
+        Some(loaded_bytes) => fs::read(&config.config_path)
+            .map(|current| current != *loaded_bytes)
+            .unwrap_or(true),
+        None => true,
+    };
+    let mut cached_catalog_files: Option<Vec<Vec<PathBuf>>> = None;
+    let mut known_files: HashSet<PathBuf> = HashSet::new();
     let mut startup = true;
     loop {
-        let (mut config_changed, mut relevant) = if startup {
-            (true, true)
+        let (mut config_changed, mut relevant, mut can_reuse_discovery) = if startup {
+            (startup_config_changed, true, false)
         } else {
             let event = match rx.recv() {
                 Ok(Ok(event)) => event,
@@ -251,10 +280,21 @@ fn run_watch_mode_impl(
                 Err(_) => return Ok(()),
             };
             let changed = touches_config(&event.paths, &config.config_path, &watched_config_path);
-            (
-                changed,
-                changed || event.paths.iter().any(|path| matchers.matches(path)),
-            )
+            let mut reuse = !changed && cached_catalog_files.is_some() && !event.need_rescan();
+            let mut matched = changed;
+            for path in &event.paths {
+                if matchers.matches(path) {
+                    matched = true;
+                    if reuse
+                        && (!is_pure_content_modify(&event)
+                            || !path.is_file()
+                            || !matchers.is_known_source_path(path, &known_files))
+                    {
+                        reuse = false;
+                    }
+                }
+            }
+            (changed, matched, reuse)
         };
 
         // Debounce: editors and generators emit event bursts; keep draining
@@ -271,15 +311,27 @@ fn run_watch_mode_impl(
 
                 match rx.recv_timeout(WATCH_DEBOUNCE.min(remaining)) {
                     Ok(Ok(event)) => {
-                        config_changed = config_changed
-                            || touches_config(
-                                &event.paths,
-                                &config.config_path,
-                                &watched_config_path,
-                            );
-                        relevant = relevant
-                            || config_changed
-                            || event.paths.iter().any(|path| matchers.matches(path));
+                        let event_touches_config =
+                            touches_config(&event.paths, &config.config_path, &watched_config_path);
+                        config_changed = config_changed || event_touches_config;
+                        if event_touches_config || event.need_rescan() {
+                            can_reuse_discovery = false;
+                        }
+                        if event_touches_config {
+                            relevant = true;
+                        }
+                        for path in &event.paths {
+                            if matchers.matches(path) {
+                                relevant = true;
+                                if can_reuse_discovery
+                                    && (!is_pure_content_modify(&event)
+                                        || !path.is_file()
+                                        || !matchers.is_known_source_path(path, &known_files))
+                                {
+                                    can_reuse_discovery = false;
+                                }
+                            }
+                        }
                     }
                     Ok(Err(error)) => return Err(CliError::Watch(error)),
                     Err(_) => break,
@@ -292,6 +344,9 @@ fn run_watch_mode_impl(
         }
 
         if config_changed {
+            cached_catalog_files = None;
+            known_files.clear();
+            can_reuse_discovery = false;
             let previous_config = config.clone();
             match reload_config_for_watch(
                 &mut config,
@@ -380,12 +435,33 @@ fn run_watch_mode_impl(
         }
         #[cfg(test)]
         let mut stop = false;
-        run_watch_extraction_inner(&config, options, &mut cache, &mut cache_warnings, || {
-            #[cfg(test)]
-            {
-                stop = after_extraction(startup);
+        let pre_discovered = if can_reuse_discovery {
+            cached_catalog_files.as_deref()
+        } else {
+            None
+        };
+        if let Some(discovered) = run_watch_extraction_inner(
+            &config,
+            options,
+            &mut cache,
+            &mut cache_warnings,
+            pre_discovered,
+            || {
+                #[cfg(test)]
+                {
+                    stop = after_extraction(startup);
+                }
+            },
+        )? {
+            known_files.clear();
+            for list in &discovered {
+                known_files.extend(list.iter().cloned());
             }
-        })?;
+            cached_catalog_files = Some(discovered);
+        } else {
+            cached_catalog_files = None;
+            known_files.clear();
+        }
         if startup {
             println!("{}", tr!("Watching for changes..."));
         }
@@ -428,7 +504,7 @@ fn run_watch_extraction(
     cache: &mut ExtractCache,
     cache_warnings: &mut CachePersistenceWarnings,
 ) -> Result<(), CliError> {
-    run_watch_extraction_inner(config, options, cache, cache_warnings, || {})
+    run_watch_extraction_inner(config, options, cache, cache_warnings, None, || {}).map(|_| ())
 }
 
 fn run_watch_extraction_inner(
@@ -436,13 +512,14 @@ fn run_watch_extraction_inner(
     options: &ExtractOptions,
     cache: &mut ExtractCache,
     cache_warnings: &mut CachePersistenceWarnings,
+    pre_discovered_files: Option<&[Vec<PathBuf>]>,
     after_scan: impl FnOnce(),
-) -> Result<(), CliError> {
-    let result = run_extraction_with_cache(config, options, cache);
+) -> Result<Option<Vec<Vec<PathBuf>>>, CliError> {
+    let result = run_extraction_with_cache_and_files(config, options, cache, pre_discovered_files);
     after_scan();
     persist_extract_cache_for_watch(config, cache, cache_warnings);
     match result {
-        Ok(_) => Ok(()),
+        Ok((_, discovered)) => Ok(Some(discovered)),
         Err(error) => {
             eprintln!(
                 "{}",
@@ -451,7 +528,7 @@ fn run_watch_extraction_inner(
                     error = error.localized()
                 )
             );
-            Ok(())
+            Ok(None)
         }
     }
 }

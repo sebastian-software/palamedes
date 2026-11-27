@@ -1055,6 +1055,57 @@ describe("palamedes-loader.cjs", () => {
     expect(sourceMap).toEqual(originalSourceMap);
   });
 
+  it("skips source map offsetting and forwards sourceMap: false when loader source maps are disabled", async () => {
+    const inputSourceMap = {
+      version: 3,
+      sources: ["page.tsx"],
+      names: [],
+      mappings: "AAAA;AACA",
+    };
+    transformPalamedesMacros.mockReturnValue({
+      code: "const label = 1;\nexport const tail = true;",
+      map: null,
+      compiledIds: ["id-a"],
+    });
+
+    delete require.cache[require.resolve(loaderPath)];
+    const loader = require(loaderPath) as (
+      this: unknown,
+      source: string,
+      inputMap?: unknown,
+    ) => void;
+    const output = await new Promise<{ code: string; map: unknown }>((resolve, reject) => {
+      loader.call(
+        {
+          resourcePath: "/repo/src/page.tsx",
+          sourceMap: false,
+          getOptions() {
+            return { clientMessageSplitting: true };
+          },
+          async() {
+            return (error: Error | null, code?: string, map?: unknown) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+              resolve({ code: code ?? "", map });
+            };
+          },
+        },
+        'import { t } from "@palamedes/core/macro"; export function label() { return t`Hello` }',
+        inputSourceMap,
+      );
+    });
+
+    expect(transformPalamedesMacros).toHaveBeenCalledWith(
+      expect.any(String),
+      "/repo/src/page.tsx",
+      expect.objectContaining({ sourceMap: false }),
+    );
+    expect(output.map).toBeNull();
+    expect(output.code).toContain("__pmds_");
+  });
+
   it("does not add server message imports to a client transform", async () => {
     transformPalamedesMacros.mockReturnValue({
       code: "export const translated = true",

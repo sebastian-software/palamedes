@@ -4,7 +4,7 @@
 //! Palamedes consumes that tree to define translation units, rich
 //! placeholders, message identity, extraction records, and the runtime module.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::num::NonZeroUsize;
 
 use ferromark::ast::{
@@ -179,6 +179,26 @@ pub struct MdxAnalysisResult {
 /// Analyze and compile an MDX document using one native semantic pipeline.
 #[must_use]
 pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnalysisResult {
+    analyze_mdx_impl(source, filename, options, true)
+}
+
+/// Analyze an MDX document for extraction and source lint, skipping JSX
+/// codegen, `sourcesContent` cloning, and VLQ source-map encoding.
+#[must_use]
+pub(crate) fn analyze_mdx_for_extraction(
+    source: &str,
+    filename: &str,
+    options: MdxOptions,
+) -> MdxAnalysisResult {
+    analyze_mdx_impl(source, filename, options, false)
+}
+
+fn analyze_mdx_impl(
+    source: &str,
+    filename: &str,
+    options: MdxOptions,
+    emit_code: bool,
+) -> MdxAnalysisResult {
     let allocator = ferromark::Allocator::new();
     let parser_options = ParserOptions {
         mdx: true,
@@ -226,7 +246,7 @@ pub fn analyze_mdx(source: &str, filename: &str, options: MdxOptions) -> MdxAnal
     }
 
     let comments = mdx_source_comments(source, &document);
-    let compiler = MdxCompiler::new(source, filename, options);
+    let compiler = MdxCompiler::new(source, filename, options, emit_code);
     let mut result = compiler.compile(&document);
     result.comments = comments;
     result
@@ -241,7 +261,7 @@ pub fn extract_mdx_messages(
     filename: &str,
     options: MdxOptions,
 ) -> Result<Vec<ExtractedMessageRecord>, String> {
-    let result = analyze_mdx(source, filename, options);
+    let result = analyze_mdx_for_extraction(source, filename, options);
     if result.diagnostics.is_empty() {
         Ok(result.messages)
     } else {
@@ -481,11 +501,13 @@ struct MdxCompiler<'a> {
     source: &'a str,
     filename: &'a str,
     options: MdxOptions,
+    emit_code: bool,
     locator: SourceLocator<'a>,
     body: ModuleWriter,
     esm: Vec<(usize, String)>,
     messages: Vec<ExtractedMessageRecord>,
     compiled_ids: Vec<String>,
+    compiled_id_set: HashSet<String>,
     front_matter: BTreeMap<String, String>,
     translated_front_matter: BTreeMap<String, MessageReference>,
     needs_trans: bool,
@@ -495,16 +517,18 @@ struct MdxCompiler<'a> {
 }
 
 impl<'a> MdxCompiler<'a> {
-    fn new(source: &'a str, filename: &'a str, options: MdxOptions) -> Self {
+    fn new(source: &'a str, filename: &'a str, options: MdxOptions, emit_code: bool) -> Self {
         Self {
             source,
             filename,
             options,
+            emit_code,
             locator: SourceLocator::new(source),
             body: ModuleWriter::default(),
             esm: Vec::new(),
             messages: Vec::new(),
             compiled_ids: Vec::new(),
+            compiled_id_set: HashSet::new(),
             front_matter: BTreeMap::new(),
             translated_front_matter: BTreeMap::new(),
             needs_trans: false,
@@ -524,6 +548,17 @@ impl<'a> MdxCompiler<'a> {
             return MdxAnalysisResult {
                 messages: Vec::new(),
                 diagnostics: self.diagnostics,
+                code: None,
+                compiled_ids: Vec::new(),
+                map: None,
+                comments: Vec::new(),
+            };
+        }
+
+        if !self.emit_code {
+            return MdxAnalysisResult {
+                messages: self.messages,
+                diagnostics: Vec::new(),
                 code: None,
                 compiled_ids: Vec::new(),
                 map: None,
@@ -578,8 +613,10 @@ impl<'a> MdxCompiler<'a> {
 
     fn front_matter(&mut self, content: Span) {
         for scalar in parse_front_matter_scalars(self.source, content) {
-            self.front_matter
-                .insert(scalar.key.clone(), scalar.value.clone());
+            if self.emit_code {
+                self.front_matter
+                    .insert(scalar.key.clone(), scalar.value.clone());
+            }
             if self
                 .options
                 .front_matter_fields
@@ -589,8 +626,10 @@ impl<'a> MdxCompiler<'a> {
             {
                 let reference =
                     self.push_message(scalar.value, BTreeMap::new(), scalar.value_offset);
-                self.translated_front_matter.insert(scalar.key, reference);
-                self.needs_i18n = true;
+                if self.emit_code {
+                    self.translated_front_matter.insert(scalar.key, reference);
+                    self.needs_i18n = true;
+                }
             }
         }
     }
@@ -657,9 +696,17 @@ impl<'a> MdxCompiler<'a> {
     fn block(&mut self, node: &Node<'_>) {
         match node {
             Node::Paragraph(paragraph) => self.prose("p", &paragraph.children),
-            Node::Heading(heading) => self.prose(&format!("h{}", heading.depth), &heading.children),
+            Node::Heading(heading) => {
+                if self.emit_code {
+                    self.prose(&format!("h{}", heading.depth), &heading.children);
+                } else {
+                    self.prose("", &heading.children);
+                }
+            }
             Node::BlockQuote(quote) => {
-                self.body.append("<blockquote>\n");
+                if self.emit_code {
+                    self.body.append("<blockquote>\n");
+                }
                 if let Some(callout) = quote.callout(self.source) {
                     self.start_unit("<p>");
                     for (index, child) in callout.body.inlines.iter().enumerate() {
@@ -677,96 +724,126 @@ impl<'a> MdxCompiler<'a> {
                             self.inline(child);
                         }
                     }
-                    if self.finish_unit() {
+                    if self.finish_unit() && self.emit_code {
                         self.body.append("</p>\n");
                     }
                     self.blocks(callout.body.blocks);
                 } else {
                     self.blocks(&quote.children);
                 }
-                self.body.append("</blockquote>\n");
+                if self.emit_code {
+                    self.body.append("</blockquote>\n");
+                }
             }
             Node::List(list) => {
                 let tag = if list.ordered { "ol" } else { "ul" };
-                let start = list.start.unwrap_or(1);
-                if list.ordered && start != 1 {
-                    self.body.append(&format!("<ol start={{{start}}}>\n"));
-                } else {
-                    self.body.append(&format!("<{tag}>\n"));
+                if self.emit_code {
+                    let start = list.start.unwrap_or(1);
+                    if list.ordered && start != 1 {
+                        self.body.append(&format!("<ol start={{{start}}}>\n"));
+                    } else {
+                        self.body.append(&format!("<{tag}>\n"));
+                    }
                 }
                 for item in &list.children {
-                    self.body.append("<li>");
+                    if self.emit_code {
+                        self.body.append("<li>");
+                    }
                     self.blocks(&item.children);
-                    self.body.append("</li>\n");
+                    if self.emit_code {
+                        self.body.append("</li>\n");
+                    }
                 }
-                self.body.append(&format!("</{tag}>\n"));
+                if self.emit_code {
+                    self.body.append(&format!("</{tag}>\n"));
+                }
             }
             Node::CodeBlock(code) => {
-                if let Some(language) = code.lang.filter(|language| !language.is_empty()) {
-                    self.body.append(&format!(
-                        "<pre><code className={{{}}}>",
-                        js_string(&format!("language-{language}"))
-                    ));
-                } else {
-                    self.body.append("<pre><code>");
+                if self.emit_code {
+                    if let Some(language) = code.lang.filter(|language| !language.is_empty()) {
+                        self.body.append(&format!(
+                            "<pre><code className={{{}}}>",
+                            js_string(&format!("language-{language}"))
+                        ));
+                    } else {
+                        self.body.append("<pre><code>");
+                    }
+                    if !code.value.is_empty() {
+                        self.body.append_at(
+                            &format!("{{{}}}", js_string(code.value)),
+                            code.span.start as usize,
+                        );
+                    }
+                    self.body.append("</code></pre>\n");
                 }
-                if !code.value.is_empty() {
-                    self.body.append_at(
-                        &format!("{{{}}}", js_string(code.value)),
-                        code.span.start as usize,
-                    );
-                }
-                self.body.append("</code></pre>\n");
             }
             Node::Table(table) => {
-                self.body.append("<table>\n");
+                if self.emit_code {
+                    self.body.append("<table>\n");
+                }
                 for (row_index, row) in table.children.iter().enumerate() {
-                    if row_index == 0 {
-                        self.body.append("<thead>\n");
+                    if self.emit_code {
+                        if row_index == 0 {
+                            self.body.append("<thead>\n");
+                        }
+                        if row_index == 1 {
+                            self.body.append("<tbody>\n");
+                        }
+                        self.body.append("<tr>");
                     }
-                    if row_index == 1 {
-                        self.body.append("<tbody>\n");
-                    }
-                    self.body.append("<tr>");
                     let tag = if row_index == 0 { "th" } else { "td" };
                     let mut column = 0;
                     for cell in &row.children {
-                        let mut attrs = String::new();
-                        if cell.colspan > 1 {
-                            attrs.push_str(&format!(" colSpan={{{}}}", cell.colspan));
-                        }
-                        let alignment = match table.align.get(column) {
-                            Some(AlignKind::Left) => Some("left"),
-                            Some(AlignKind::Center) => Some("center"),
-                            Some(AlignKind::Right) => Some("right"),
-                            _ => None,
-                        };
-                        if let Some(alignment) = alignment {
-                            attrs.push_str(&format!(" align={{{}}}", js_string(alignment)));
-                        }
-                        self.start_unit(&format!("<{tag}{attrs}>"));
-                        self.inlines(&cell.children);
-                        if self.finish_unit() {
-                            self.body.append(&format!("</{tag}>"));
+                        if self.emit_code {
+                            let mut attrs = String::new();
+                            if cell.colspan > 1 {
+                                attrs.push_str(&format!(" colSpan={{{}}}", cell.colspan));
+                            }
+                            let alignment = match table.align.get(column) {
+                                Some(AlignKind::Left) => Some("left"),
+                                Some(AlignKind::Center) => Some("center"),
+                                Some(AlignKind::Right) => Some("right"),
+                                _ => None,
+                            };
+                            if let Some(alignment) = alignment {
+                                attrs.push_str(&format!(" align={{{}}}", js_string(alignment)));
+                            }
+                            self.start_unit(&format!("<{tag}{attrs}>"));
+                            self.inlines(&cell.children);
+                            if self.finish_unit() {
+                                self.body.append(&format!("</{tag}>"));
+                            } else {
+                                self.body.append(&format!("<{tag}{attrs}></{tag}>"));
+                            }
                         } else {
-                            self.body.append(&format!("<{tag}{attrs}></{tag}>"));
+                            self.start_unit("");
+                            self.inlines(&cell.children);
+                            self.finish_unit();
                         }
                         column += cell.colspan;
                     }
-                    self.body.append("</tr>\n");
-                    if row_index == 0 {
-                        self.body.append("</thead>\n");
+                    if self.emit_code {
+                        self.body.append("</tr>\n");
+                        if row_index == 0 {
+                            self.body.append("</thead>\n");
+                        }
                     }
                 }
-                if table.children.len() > 1 {
-                    self.body.append("</tbody>\n");
+                if self.emit_code {
+                    if table.children.len() > 1 {
+                        self.body.append("</tbody>\n");
+                    }
+                    self.body.append("</table>\n");
                 }
-                self.body.append("</table>\n");
             }
             Node::DefinitionList(list) => {
-                self.body.append("<dl>\n");
+                if self.emit_code {
+                    self.body.append("<dl>\n");
+                }
                 self.blocks(&list.children);
-                self.body.append("</dl>\n");
+                if self.emit_code {
+                    self.body.append("</dl>\n");
+                }
             }
             Node::DefinitionListTerm(term) => self.prose("dt", &term.children),
             Node::DefinitionListDefinition(definition) => {
@@ -779,17 +856,24 @@ impl<'a> MdxCompiler<'a> {
                 }
             }
             Node::ThematicBreak(range) => {
-                self.body.append_at("<hr />\n", range.span.start as usize)
+                if self.emit_code {
+                    self.body.append_at("<hr />\n", range.span.start as usize);
+                }
             }
-            Node::MdxjsEsm(esm) => self
-                .esm
-                .push((esm.span.start as usize, esm.value.to_owned())),
+            Node::MdxjsEsm(esm) => {
+                if self.emit_code {
+                    self.esm
+                        .push((esm.span.start as usize, esm.value.to_owned()));
+                }
+            }
             Node::MdxFlowExpression(expression) => {
-                self.body.append_at(
-                    range_text(self.source, expression.span).trim(),
-                    expression.span.start as usize,
-                );
-                self.body.append("\n");
+                if self.emit_code {
+                    self.body.append_at(
+                        range_text(self.source, expression.span).trim(),
+                        expression.span.start as usize,
+                    );
+                    self.body.append("\n");
+                }
             }
             Node::MdxJsxFlowElement(element) => {
                 let Some(opening) =
@@ -825,22 +909,26 @@ impl<'a> MdxCompiler<'a> {
                         element.self_closing,
                         element.span,
                     );
-                    if self.finish_unit() {
+                    if self.finish_unit() && self.emit_code {
                         self.body.append("</p>\n");
                     }
                 } else {
                     let markup = self.rewrite_jsx_tag(opening, &element.attributes);
-                    self.body.append_at(&markup, opening.start as usize);
-                    self.body.append("\n");
+                    if self.emit_code {
+                        self.body.append_at(&markup, opening.start as usize);
+                        self.body.append("\n");
+                    }
                     self.blocks(&element.children);
                     if !element.self_closing {
                         let raw = range_text(self.source, element.span);
                         if let Some(closing) = raw.rfind("</") {
-                            self.body.append_at(
-                                raw[closing..].trim_end(),
-                                element.span.start as usize + closing,
-                            );
-                            self.body.append("\n");
+                            if self.emit_code {
+                                self.body.append_at(
+                                    raw[closing..].trim_end(),
+                                    element.span.start as usize + closing,
+                                );
+                                self.body.append("\n");
+                            }
                         } else {
                             self.record_diagnostic(
                                 "InvalidClosingTag",
@@ -852,30 +940,42 @@ impl<'a> MdxCompiler<'a> {
                 }
             }
             Node::Html(html) if is_html_comment(html.value) => {}
-            Node::Html(html) => self.body.append_at(
-                &format!("{{{}}}", js_string(html.value)),
-                html.span.start as usize,
-            ),
+            Node::Html(html) => {
+                if self.emit_code {
+                    self.body.append_at(
+                        &format!("{{{}}}", js_string(html.value)),
+                        html.span.start as usize,
+                    );
+                }
+            }
             Node::Definition(_) => {}
             _ => self.prose("p", std::slice::from_ref(node)),
         }
     }
 
     fn prose(&mut self, tag: &str, nodes: &[Node<'_>]) {
-        self.start_unit(&if tag.is_empty() {
-            String::new()
+        if self.emit_code {
+            self.start_unit(&if tag.is_empty() {
+                String::new()
+            } else {
+                format!("<{tag}>")
+            });
+            self.inlines(nodes);
+            if self.finish_unit() && !tag.is_empty() {
+                self.body.append(&format!("</{tag}>\n"));
+            }
         } else {
-            format!("<{tag}>")
-        });
-        self.inlines(nodes);
-        if self.finish_unit() && !tag.is_empty() {
-            self.body.append(&format!("</{tag}>\n"));
+            self.start_unit("");
+            self.inlines(nodes);
+            self.finish_unit();
         }
     }
 
     fn start_unit(&mut self, opening: &str) {
         let checkpoint = self.body.checkpoint();
-        self.body.append(opening);
+        if self.emit_code {
+            self.body.append(opening);
+        }
         self.unit = Some(RichUnit::new(checkpoint));
     }
 
@@ -1139,8 +1239,10 @@ impl<'a> MdxCompiler<'a> {
             is_ignored_unit(self.source, source_offset, &self.options.ignore_directive)
         });
         if ignored {
-            self.body
-                .append_at(&fallback_jsx(&unit.roots), source_offset);
+            if self.emit_code {
+                self.body
+                    .append_at(&fallback_jsx(&unit.roots), source_offset);
+            }
             return true;
         }
 
@@ -1153,8 +1255,10 @@ impl<'a> MdxCompiler<'a> {
             &mut components,
         );
         if joined.message.trim().is_empty() || plain_text(&unit.roots).trim().is_empty() {
-            self.body
-                .append_at(&fallback_jsx(&unit.roots), source_offset);
+            if self.emit_code {
+                self.body
+                    .append_at(&fallback_jsx(&unit.roots), source_offset);
+            }
             return true;
         }
         let placeholders = unit.values.iter().cloned().collect::<BTreeMap<_, _>>();
@@ -1168,6 +1272,9 @@ impl<'a> MdxCompiler<'a> {
             placeholders,
             source_offset,
         );
+        if !self.emit_code {
+            return true;
+        }
         self.needs_trans = true;
         let mut props = vec![format!("id={{{}}}", js_string(&reference.id))];
         if self.options.include_source_metadata {
@@ -1255,10 +1362,15 @@ impl<'a> MdxCompiler<'a> {
         placeholders: BTreeMap<String, String>,
         source_offset: usize,
     ) -> MessageReference {
-        let id = compiled_message_key(&message, None);
-        if !self.compiled_ids.iter().any(|existing| existing == &id) {
-            self.compiled_ids.push(id.clone());
-        }
+        let id = if self.emit_code {
+            let id = compiled_message_key(&message, None);
+            if self.compiled_id_set.insert(id.clone()) {
+                self.compiled_ids.push(id.clone());
+            }
+            id
+        } else {
+            String::new()
+        };
         let (line, column) = self.locator.location(source_offset);
         let comment = preceding_comment(self.source, source_offset, &self.options.ignore_directive);
         self.messages.push(ExtractedMessageRecord {
@@ -3110,7 +3222,7 @@ See ![Diagram label](./d.png) here.
         }
 
         // Unexpected block node routed into inline() records a diagnostic instead of unreachable!().
-        let mut compiler = super::MdxCompiler::new("---\n", "doc.mdx", MdxOptions::default());
+        let mut compiler = super::MdxCompiler::new("---\n", "doc.mdx", MdxOptions::default(), true);
         compiler.prose(
             "p",
             &[Node::ThematicBreak(ThematicBreak {
@@ -3128,7 +3240,7 @@ See ![Diagram label](./d.png) here.
 
         // Literal attribute lacking `=` in source records a diagnostic instead of panicking.
         let source = "<img alt \"missing-equals\" />";
-        let mut compiler = super::MdxCompiler::new(source, "doc.mdx", MdxOptions::default());
+        let mut compiler = super::MdxCompiler::new(source, "doc.mdx", MdxOptions::default(), true);
         let attrs = [MdxJsxAttributeEntry::Attribute(MdxJsxAttribute {
             name: "alt",
             value: Some(MdxJsxAttributeValue::Literal("missing-equals")),
@@ -3147,7 +3259,7 @@ See ![Diagram label](./d.png) here.
         // Non-self-closing JSX flow element without `</` in source records InvalidClosingTag.
         let allocator = ferromark::Allocator::new();
         let source = "<Box>hello";
-        let mut compiler = super::MdxCompiler::new(source, "doc.mdx", MdxOptions::default());
+        let mut compiler = super::MdxCompiler::new(source, "doc.mdx", MdxOptions::default(), true);
         let element = Node::MdxJsxFlowElement(ferromark::allocator::Box::new_in(
             MdxJsxFlowElement {
                 name: Some("Box"),
@@ -3167,5 +3279,46 @@ See ![Diagram label](./d.png) here.
             "expected InvalidClosingTag diagnostic, got: {:?}",
             compiler.diagnostics
         );
+    }
+
+    #[test]
+    fn extraction_mode_matches_full_mdx_analysis_without_codegen_or_sourcemap() {
+        let source = r#"---
+title: Welcome Guide
+---
+import { Callout } from "./Callout";
+
+<!-- palamedes-lint-disable-next-line pmds/no-placeholder-only-message -->
+# Getting Started
+
+Hello **world** with {name} and [a link](https://example.com) and ![diagram](hero.png).
+
+<Callout title="Heads up">
+  Nested *rich* paragraph.
+</Callout>
+
+> [!NOTE]
+> Callout body text.
+"#;
+        let options = MdxOptions {
+            front_matter_fields: vec!["title".to_owned()],
+            translatable_attributes: vec!["alt".to_owned(), "title".to_owned()],
+            ..MdxOptions::default()
+        };
+        let full = super::analyze_mdx(source, "guide.mdx", options.clone());
+        let extracted = super::analyze_mdx_for_extraction(source, "guide.mdx", options);
+
+        assert!(full.code.is_some());
+        assert!(full.map.is_some());
+        assert!(!full.compiled_ids.is_empty());
+        assert!(extracted.code.is_none());
+        assert!(extracted.map.is_none());
+        assert!(extracted.compiled_ids.is_empty());
+        assert_eq!(
+            serde_json::to_vec(&extracted.messages).expect("extracted messages"),
+            serde_json::to_vec(&full.messages).expect("full messages")
+        );
+        assert_eq!(extracted.comments, full.comments);
+        assert_eq!(extracted.diagnostics.len(), full.diagnostics.len());
     }
 }

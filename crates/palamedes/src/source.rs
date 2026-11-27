@@ -1,6 +1,7 @@
 #[cfg(test)]
 use std::cell::Cell;
 use std::cell::OnceCell;
+use std::collections::BTreeSet;
 
 use oxc_diagnostics::OxcDiagnostic;
 use serde::{Deserialize, Serialize};
@@ -190,6 +191,222 @@ pub struct SourceAnalysisResult {
     pub diagnostics: Vec<SourceDiagnostic>,
     /// Parsed comments in deterministic source order.
     pub comments: Vec<SourceComment>,
+}
+
+/// One parsed `palamedes-lint-disable-*` suppression directive.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LintSuppression {
+    /// One-based target source line suppressed by this directive.
+    pub line: usize,
+    /// Exact Palamedes diagnostic code suppressed on `line`.
+    pub code: String,
+    /// Directive span used when reporting `pmds/unused-suppression`.
+    pub primary: SourceRange,
+}
+
+/// Final source-lint diagnostics and suppression count for one file.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceLintFileResult {
+    /// Surviving diagnostics (including suppression-directive diagnostics) for the file.
+    pub diagnostics: Vec<SourceDiagnostic>,
+    /// Number of diagnostics suppressed by directives in this file.
+    pub suppressed: usize,
+}
+
+/// Parses `palamedes-lint-disable-*` directives from parser-owned comments.
+#[must_use]
+pub fn parse_lint_suppressions_from_comments(
+    source: &str,
+    filename: &str,
+    comments: &[SourceComment],
+) -> (Vec<LintSuppression>, Vec<SourceDiagnostic>) {
+    const DIRECTIVES: &[(&str, usize)] = &[
+        ("palamedes-lint-disable-next-line", 1),
+        ("palamedes-lint-disable-line", 0),
+    ];
+
+    if !source.contains("palamedes-lint-disable-") {
+        return (Vec::new(), Vec::new());
+    }
+
+    let mut suppressions = Vec::new();
+    let mut diagnostics = Vec::new();
+    for comment in comments {
+        let Some((directive_start, directive_source)) = comment_directive_source(source, comment)
+        else {
+            continue;
+        };
+        let Some((directive, line_delta)) = DIRECTIVES
+            .iter()
+            .find(|(directive, _)| directive_source.starts_with(*directive))
+        else {
+            continue;
+        };
+        let rest = directive_source[directive.len()..].trim();
+        let codes = rest
+            .split([',', ' ', '\t'])
+            .filter(|code| !code.is_empty())
+            .collect::<BTreeSet<_>>();
+        let range = suppression_source_range(source, directive_start, directive.len());
+        if codes.is_empty() {
+            diagnostics.push(suppression_diagnostic(
+                filename,
+                range,
+                "pmds/invalid-suppression",
+                "This suppression does not name a diagnostic code.",
+                "Add one or more exact Palamedes diagnostic codes after the directive.",
+            ));
+            continue;
+        }
+        for code in codes {
+            if SOURCE_DIAGNOSTIC_CODES.contains(&code) {
+                suppressions.push(LintSuppression {
+                    line: suppression_line(
+                        source,
+                        comment,
+                        directive_start,
+                        range.line,
+                        *line_delta,
+                    ),
+                    code: code.to_owned(),
+                    primary: range.clone(),
+                });
+            } else {
+                diagnostics.push(suppression_diagnostic(
+                    filename,
+                    range.clone(),
+                    "pmds/unknown-suppression-code",
+                    &format!("Unknown Palamedes suppression code `{code}`."),
+                    "Use a diagnostic code emitted by `pmds lint`; suppressions are code-specific.",
+                ));
+            }
+        }
+    }
+    (suppressions, diagnostics)
+}
+
+/// Applies pre-parsed lint suppressions to a file's diagnostics and rewrites
+/// diagnostic file paths to `filename`.
+#[must_use]
+pub fn apply_lint_suppressions(
+    filename: &str,
+    diagnostics: Vec<SourceDiagnostic>,
+    suppressions: &[LintSuppression],
+    suppression_diagnostics: &[SourceDiagnostic],
+) -> SourceLintFileResult {
+    let mut output = Vec::with_capacity(diagnostics.len() + suppression_diagnostics.len());
+    for diagnostic in suppression_diagnostics {
+        let mut diagnostic = diagnostic.clone();
+        diagnostic.file = filename.to_owned();
+        output.push(diagnostic);
+    }
+    let mut used = vec![false; suppressions.len()];
+    let mut suppressed = 0usize;
+    for mut diagnostic in diagnostics {
+        if let Some(index) = suppressions.iter().position(|suppression| {
+            suppression.line == diagnostic.primary.line && suppression.code == diagnostic.code
+        }) {
+            used[index] = true;
+            suppressed += 1;
+        } else {
+            diagnostic.file = filename.to_owned();
+            output.push(diagnostic);
+        }
+    }
+    for (suppression, is_used) in suppressions.iter().zip(used) {
+        if !is_used {
+            output.push(suppression_diagnostic(
+                filename,
+                suppression.primary.clone(),
+                "pmds/unused-suppression",
+                &format!("Unused suppression for `{}`.", suppression.code),
+                "Remove the directive or move it to the exact line that emits this diagnostic.",
+            ));
+        }
+    }
+    SourceLintFileResult {
+        diagnostics: output,
+        suppressed,
+    }
+}
+
+fn comment_directive_source<'a>(
+    source: &'a str,
+    comment: &SourceComment,
+) -> Option<(usize, &'a str)> {
+    source.get(comment.range.start..comment.range.end)?;
+    let (opening_width, closing_width) = match comment.kind {
+        SourceCommentKind::Line => (2, 0),
+        SourceCommentKind::Block => (2, 2),
+        SourceCommentKind::Html => (4, 3),
+    };
+    let content_start = comment.range.start.checked_add(opening_width)?;
+    let content_end = comment.range.end.checked_sub(closing_width)?;
+    let content = source.get(content_start..content_end)?;
+    let directive_source = content.trim_start();
+    let directive_start = content_start + content.len() - directive_source.len();
+    Some((directive_start, directive_source))
+}
+
+fn suppression_source_range(source: &str, start: usize, length: usize) -> SourceRange {
+    let prefix = source.get(..start).unwrap_or_else(|| {
+        let mut clamped = start.min(source.len());
+        while clamped > 0 && !source.is_char_boundary(clamped) {
+            clamped -= 1;
+        }
+        &source[..clamped]
+    });
+    let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
+    let line_prefix = prefix.get(line_start..).unwrap_or_default();
+    SourceRange {
+        start,
+        end: start.saturating_add(length),
+        line: prefix.bytes().filter(|byte| *byte == b'\n').count() + 1,
+        column: line_prefix.chars().count() + 1,
+    }
+}
+
+fn suppression_line(
+    source: &str,
+    comment: &SourceComment,
+    directive_start: usize,
+    directive_line: usize,
+    line_delta: usize,
+) -> usize {
+    if line_delta == 0 {
+        return directive_line;
+    }
+    if comment.kind == SourceCommentKind::Line {
+        return directive_line + 1;
+    }
+    directive_line
+        + source
+            .get(directive_start..comment.range.end)
+            .unwrap_or_default()
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count()
+        + 1
+}
+
+fn suppression_diagnostic(
+    filename: &str,
+    primary: SourceRange,
+    code: &str,
+    message: &str,
+    help: &str,
+) -> SourceDiagnostic {
+    SourceDiagnostic {
+        code: code.to_owned(),
+        severity: SourceDiagnosticSeverity::Warning,
+        file: filename.to_owned(),
+        primary,
+        message: message.to_owned(),
+        help: help.to_owned(),
+        related: None,
+    }
 }
 
 /// Source text and structured result produced by one cached file analysis.

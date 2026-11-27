@@ -59,6 +59,9 @@ pub struct NativeTransformOptions {
     /// Instruments recognized Server Functions with a request initializer.
     #[serde(rename = "serverFunctions")]
     pub server_functions: Option<ServerFunctionTransformOptions>,
+    /// Generates a source map when the module changes. Defaults to `true`.
+    #[serde(rename = "sourceMap")]
+    pub source_map: Option<bool>,
 }
 
 /// Configuration for framework Server Function instrumentation.
@@ -75,6 +78,10 @@ pub struct ServerFunctionTransformOptions {
 impl NativeTransformOptions {
     fn include_source_metadata(&self) -> bool {
         self.include_source_metadata.unwrap_or(false)
+    }
+
+    fn source_map(&self) -> bool {
+        self.source_map.unwrap_or(true)
     }
 }
 
@@ -143,64 +150,140 @@ pub fn transform_macros(
 ) -> PalamedesResult<NativeTransformResult> {
     let options = options.unwrap_or_default();
     validate_transform_options(&options)?;
+    let include_source_map = options.source_map();
+    let runtime_module = options
+        .runtime_module
+        .as_deref()
+        .unwrap_or("@palamedes/runtime");
+    let runtime_import_name = options.runtime_import_name.as_deref().unwrap_or("getI18n");
 
     if crate::component::is_component(filename) {
-        let scripts = crate::component::script_blocks(source, filename)?;
-        // Component compilers hoist imports from both script kinds into one module.
-        // Reserve identifiers from the other block too, so an injected getter
-        // cannot collide with its module declarations or component bindings.
-        let allocator = Allocator::default();
-        let mut reserved_names = std::collections::HashSet::new();
-        for script in &scripts {
-            let masked = crate::component::masked_source(source, &script.range);
-            let parsed = Parser::new(&allocator, &masked, script.source_type).parse();
-            let mut collector = ImportCollector::new("@palamedes/runtime", "getI18n");
-            collector.visit_program(&parsed.program);
-            reserved_names.extend(collector.used_identifier_names);
+        let component = crate::component::scan(source, filename)?;
+        let scripts = component.scripts();
+        if scripts.is_empty() {
+            return Ok(unchanged_result(source));
         }
+
+        // Parse each SFC script block once so reserved identifiers, template
+        // macro-exposure checks, and code edits all share the same ASTs and
+        // `ComponentScan`.
+        let masked_sources: Vec<_> = scripts
+            .iter()
+            .map(|script| crate::component::masked_source(source, &script.range))
+            .collect();
+        let allocator = Allocator::default();
+        let mut parsed_scripts = Vec::with_capacity(scripts.len());
+        let mut reserved_names = std::collections::HashSet::new();
+        let mut markup_macros = std::collections::HashMap::new();
+        for (script, masked) in scripts.iter().zip(&masked_sources) {
+            let parsed = Parser::new(&allocator, masked, script.source_type).parse();
+            let mut collector = ImportCollector::new(runtime_module, runtime_import_name);
+            collector.visit_program(&parsed.program);
+            reserved_names.extend(collector.used_identifier_names.iter().cloned());
+            if component.exposes_script(script) {
+                markup_macros.extend(
+                    collector
+                        .macro_imports
+                        .iter()
+                        .map(|(local, imported)| (local.clone(), imported.imported_name.clone())),
+                );
+            }
+            parsed_scripts.push((script, parsed, collector));
+        }
+
         let mut replacements = Vec::new();
         let mut compiled_ids = Vec::new();
-        for script in scripts {
-            let result = transform_javascript(
+        for (script, parsed, collector) in parsed_scripts {
+            let output = collect_javascript_edits(
                 source,
                 filename,
                 options.clone(),
-                &script,
+                script,
+                &parsed,
+                collector,
                 Some(&mut reserved_names),
             )?;
-            replacements.extend(result.edits.into_iter().map(|edit| Replacement {
-                start: edit.start,
-                end: edit.end,
-                text: edit.text,
-            }));
-            compiled_ids.extend(result.compiled_ids);
+            replacements.extend(output.replacements);
+            compiled_ids.extend(output.compiled_ids);
         }
-        crate::component::reject_markup_macro_uses(source, filename)?;
+        drop(allocator);
+        drop(masked_sources);
+
+        component.reject_markup_macro_uses(source, filename, &markup_macros)?;
+        if replacements.is_empty() {
+            return Ok(unchanged_result(source));
+        }
         compiled_ids.sort();
         compiled_ids.dedup();
-        return render_transform(source, filename, replacements, compiled_ids);
+        return render_transform(
+            source,
+            filename,
+            replacements,
+            compiled_ids,
+            include_source_map,
+        );
     }
 
-    transform_javascript(
+    let script = crate::component::ScriptBlock {
+        range: 0..source.len(),
+        source_type: SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx()),
+        instance: false,
+    };
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, source, script.source_type).parse();
+    let mut collector = ImportCollector::new(runtime_module, runtime_import_name);
+    collector.visit_program(&parsed.program);
+    let output =
+        collect_javascript_edits(source, filename, options, &script, &parsed, collector, None)?;
+    if output.replacements.is_empty() {
+        return Ok(unchanged_result(source));
+    }
+    render_transform(
         source,
         filename,
-        options,
-        &crate::component::ScriptBlock {
-            range: 0..source.len(),
-            source_type: SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx()),
-            instance: false,
-        },
-        None,
+        output.replacements,
+        output.compiled_ids,
+        include_source_map,
     )
 }
 
-fn transform_javascript(
+struct ScriptTransformOutput {
+    replacements: Vec<Replacement>,
+    compiled_ids: Vec<String>,
+}
+
+fn collect_javascript_edits<'a>(
     source: &str,
     filename: &str,
-    options: NativeTransformOptions,
+    mut options: NativeTransformOptions,
     script: &crate::component::ScriptBlock,
+    parsed: &oxc_parser::ParserReturn<'a>,
+    mut collector: ImportCollector,
     mut reserved_names: Option<&mut std::collections::HashSet<String>>,
-) -> PalamedesResult<NativeTransformResult> {
+) -> PalamedesResult<ScriptTransformOutput> {
+    if !parsed.diagnostics.is_empty() {
+        let filename = display_filename(filename).to_owned();
+        return Err(PalamedesError::ParseModuleSource {
+            messages: format_parser_diagnostics(source, &filename, &parsed.diagnostics),
+            filename,
+        });
+    }
+
+    if let Some((macro_name, offset)) = collector.removed_macro_import.as_ref() {
+        return Err(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: macro_name.clone(),
+            location: source_location(source, filename, *offset),
+            detail: "this deferred message macro has been removed; translate at the point of use with `t`".to_string(),
+        });
+    }
+
+    if collector.macro_imports.is_empty() && options.server_functions.is_none() {
+        return Ok(ScriptTransformOutput {
+            replacements: Vec::new(),
+            compiled_ids: Vec::new(),
+        });
+    }
+
     let runtime_module = options
         .runtime_module
         .clone()
@@ -210,26 +293,12 @@ fn transform_javascript(
         .clone()
         .unwrap_or_else(|| "getI18n".to_string());
 
-    let allocator = Allocator::default();
-    let parse_source = crate::component::masked_source(source, &script.range);
-    let parsed = Parser::new(&allocator, &parse_source, script.source_type).parse();
-
-    if !parsed.diagnostics.is_empty() {
-        let filename = display_filename(filename).to_owned();
-        return Err(PalamedesError::ParseModuleSource {
-            messages: format_parser_diagnostics(source, &filename, &parsed.diagnostics),
-            filename,
-        });
-    }
-
     let semantic = SemanticBuilder::new()
         .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
 
-    let mut collector = ImportCollector::new(&runtime_module, &runtime_import_name);
-    collector.visit_program(&parsed.program);
-    collector.resolve_references(&semantic);
+    collector.resolve_references(&parsed.program, &semantic);
     if let Some(names) = reserved_names.as_deref() {
         collector
             .used_identifier_names
@@ -248,20 +317,7 @@ fn transform_javascript(
     } else {
         runtime_import_name.clone()
     };
-    let mut options = options;
     options.runtime_import_name = Some(effective_runtime_import_name.clone());
-
-    if let Some((macro_name, offset)) = collector.removed_macro_import.as_ref() {
-        return Err(PalamedesError::UnsupportedMacroSyntax {
-            macro_name: macro_name.clone(),
-            location: source_location(source, filename, *offset),
-            detail: "this deferred message macro has been removed; translate at the point of use with `t`".to_string(),
-        });
-    }
-
-    if collector.macro_imports.is_empty() && options.server_functions.is_none() {
-        return Ok(unchanged_result(source));
-    }
 
     if !collector.macro_imports.is_empty() && !script.instance {
         validate_translation_macro_scopes(
@@ -317,7 +373,10 @@ fn transform_javascript(
     }
 
     if replacements.is_empty() {
-        return Ok(unchanged_result(source));
+        return Ok(ScriptTransformOutput {
+            replacements: Vec::new(),
+            compiled_ids: Vec::new(),
+        });
     }
 
     let mut prefix = String::new();
@@ -389,7 +448,10 @@ fn transform_javascript(
         });
     }
 
-    render_transform(source, filename, replacements, visitor.compiled_ids)
+    Ok(ScriptTransformOutput {
+        replacements,
+        compiled_ids: visitor.compiled_ids,
+    })
 }
 
 fn render_transform(
@@ -397,6 +459,7 @@ fn render_transform(
     filename: &str,
     mut replacements: Vec<Replacement>,
     compiled_ids: Vec<String>,
+    include_source_map: bool,
 ) -> PalamedesResult<NativeTransformResult> {
     replacements.sort_by(|a, b| b.start.cmp(&a.start).then(b.end.cmp(&a.end)));
     let edits = replacements
@@ -415,7 +478,7 @@ fn render_transform(
 
     let code = magic_string.to_string();
     let has_changed = code != source;
-    let map = has_changed.then(|| {
+    let map = (has_changed && include_source_map).then(|| {
         let mut map = magic_string.source_map(SourceMapOptions {
             include_content: true,
             source: filename.into(),

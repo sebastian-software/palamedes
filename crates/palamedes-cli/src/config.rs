@@ -77,6 +77,10 @@ pub struct LoadedConfig {
     pub extract_cache: bool,
     /// Explicit binary plugins resolved only for external command namespaces.
     pub plugins: Vec<ConfigPluginDeclaration>,
+    /// Raw config file bytes observed at load time, used by watch mode to avoid
+    /// a redundant startup reload when the file has not changed.
+    #[serde(skip)]
+    pub(crate) config_raw_bytes: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -211,6 +215,7 @@ const fn default_true() -> bool {
 
 pub fn load_config(cwd: &Path, explicit_path: Option<&Path>) -> Result<LoadedConfig, ConfigError> {
     let config_path = resolve_config_path(cwd, explicit_path)?;
+    let config_raw_bytes = std::fs::read(&config_path).ok();
     let value = config_rs::Config::builder()
         .add_source(config_rs::File::from(config_path.as_path()))
         .build()
@@ -220,7 +225,9 @@ pub fn load_config(cwd: &Path, explicit_path: Option<&Path>) -> Result<LoadedCon
             source: Box::new(source),
         })?;
     let raw = parse_config_value(value, &config_path)?;
-    normalize_config(raw, config_path)
+    let mut loaded = normalize_config(raw, config_path)?;
+    loaded.config_raw_bytes = config_raw_bytes;
+    Ok(loaded)
 }
 
 /// Parse and validate data without resolving paths, reading files, or loading plugins.
@@ -683,6 +690,7 @@ fn normalize_config(raw: RawConfig, config_path: PathBuf) -> Result<LoadedConfig
         extract_threads: raw.extract_threads,
         extract_cache: raw.extract_cache,
         plugins: raw.plugins,
+        config_raw_bytes: None,
     })
 }
 

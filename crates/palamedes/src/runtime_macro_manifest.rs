@@ -7,8 +7,10 @@
 //! to the compiled lookup key and placeholder names the transform would have
 //! produced, so the runtime never hashes or parses (ADR-005, ADR-006, ADR-020).
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::collections::btree_map::Entry as BTreeEntry;
+use std::path::{Path, PathBuf};
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -18,13 +20,14 @@ use oxc_ast::ast::{
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::SourceFileAnalysisRequest;
 use crate::choice::is_plural_format;
 use crate::descriptor::{descriptor_property_value, descriptor_static_property};
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::extract::{MacroCollector, MacroResolution};
+use crate::extract::{DEFAULT_EXTRACT_THREADS, MacroCollector, MacroResolution};
 use crate::icu_text::compiled_message_key;
 use crate::placeholder_name::expression_name;
 use crate::source::{SourceLocator, display_filename, format_parser_diagnostics};
@@ -109,14 +112,14 @@ impl Entry {
     /// What the runtime can observe about the call; equal signatures must
     /// resolve to equal entries.
     fn signature(&self) -> String {
-        let value = match self {
-            Self::Template(template) => serde_json::json!(["template", template.strings]),
+        match self {
+            Self::Template(template) => serde_json::to_string(&("template", &template.strings)),
             Self::Descriptor(descriptor) => {
-                serde_json::json!(["descriptor", descriptor.message, descriptor.context])
+                serde_json::to_string(&("descriptor", &descriptor.message, &descriptor.context))
             }
-            Self::Choice(choice) => serde_json::json!([choice.kind, choice.options]),
-        };
-        value.to_string()
+            Self::Choice(choice) => serde_json::to_string(&(&choice.kind, &choice.options)),
+        }
+        .expect("runtime macro signature serialization is infallible")
     }
 }
 
@@ -131,6 +134,10 @@ impl PartialEq for Entry {
     }
 }
 
+thread_local! {
+    static MANIFEST_ARENA: RefCell<Allocator> = RefCell::new(Allocator::default());
+}
+
 /// Collect the runtime macro manifest for a set of source files.
 ///
 /// MDX files are skipped because their messages always go through a compiler.
@@ -143,28 +150,56 @@ impl PartialEq for Entry {
 pub fn collect_runtime_macro_manifest(
     files: &[SourceFileAnalysisRequest],
 ) -> PalamedesResult<RuntimeMacroManifest> {
+    collect_runtime_macro_manifest_with_threads(files, None)
+}
+
+/// Collect the runtime macro manifest using up to `max_threads` worker threads.
+///
+/// # Errors
+///
+/// Returns the same errors as [`collect_runtime_macro_manifest`].
+pub fn collect_runtime_macro_manifest_with_threads(
+    files: &[SourceFileAnalysisRequest],
+    max_threads: Option<usize>,
+) -> PalamedesResult<RuntimeMacroManifest> {
+    let available = std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(1);
+    let threads = max_threads
+        .unwrap_or(DEFAULT_EXTRACT_THREADS)
+        .max(1)
+        .min(available)
+        .min(files.len().max(1));
+
+    let per_file: Vec<PalamedesResult<Vec<(Entry, String)>>> = if threads <= 1 {
+        files.iter().map(collect_file_entries).collect()
+    } else {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .map_err(|source| PalamedesError::ExtractionPool {
+                message: source.to_string(),
+            })?
+            .install(|| files.par_iter().map(collect_file_entries).collect())
+    };
+
     let mut entries = BTreeMap::<String, (Entry, String)>::new();
-    for file in files {
-        if file.path.ends_with(".mdx") {
-            continue;
-        }
-        let source =
-            std::fs::read_to_string(&file.path).map_err(|source| PalamedesError::ReadFile {
-                path: PathBuf::from(&file.path),
-                source,
-            })?;
-        for (entry, location) in collect_source_entries(&source, &file.filename)? {
-            match entries.get(&entry.signature()) {
-                Some((existing, _)) if *existing == entry => {}
-                Some((existing, first)) => {
-                    return Err(PalamedesError::RuntimeMacroCollision {
-                        macro_name: existing.macro_name().to_owned(),
-                        first: first.clone(),
-                        second: location,
-                    });
+    for file_entries in per_file {
+        for (entry, location) in file_entries? {
+            let signature = entry.signature();
+            match entries.entry(signature) {
+                BTreeEntry::Occupied(occupied) => {
+                    let (existing, first) = occupied.get();
+                    if *existing != entry {
+                        return Err(PalamedesError::RuntimeMacroCollision {
+                            macro_name: existing.macro_name().to_owned(),
+                            first: first.clone(),
+                            second: location,
+                        });
+                    }
                 }
-                None => {
-                    entries.insert(entry.signature(), (entry, location));
+                BTreeEntry::Vacant(vacant) => {
+                    vacant.insert((entry, location));
                 }
             }
         }
@@ -184,10 +219,38 @@ pub fn collect_runtime_macro_manifest(
     Ok(manifest)
 }
 
-fn collect_source_entries(source: &str, filename: &str) -> PalamedesResult<Vec<(Entry, String)>> {
-    let allocator = Allocator::default();
+fn collect_file_entries(file: &SourceFileAnalysisRequest) -> PalamedesResult<Vec<(Entry, String)>> {
+    if Path::new(&file.path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("mdx"))
+    {
+        return Ok(Vec::new());
+    }
+    let source =
+        std::fs::read_to_string(&file.path).map_err(|source| PalamedesError::ReadFile {
+            path: PathBuf::from(&file.path),
+            source,
+        })?;
+    // Every runtime-executable macro call must import from `@palamedes/core/macro`.
+    if !source.contains("@palamedes") {
+        return Ok(Vec::new());
+    }
+    MANIFEST_ARENA.with(|arena| {
+        let mut arena = arena.borrow_mut();
+        let result = collect_source_entries_in(&arena, &source, &file.filename);
+        arena.reset();
+        result
+    })
+}
+
+fn collect_source_entries_in(
+    allocator: &Allocator,
+    source: &str,
+    filename: &str,
+) -> PalamedesResult<Vec<(Entry, String)>> {
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
-    let parsed = Parser::new(&allocator, source, source_type).parse();
+    let parsed = Parser::new(allocator, source, source_type).parse();
     if !parsed.diagnostics.is_empty() {
         let filename = display_filename(filename).to_owned();
         return Err(PalamedesError::ParseModuleSource {

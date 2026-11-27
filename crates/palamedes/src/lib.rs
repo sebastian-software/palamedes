@@ -62,8 +62,9 @@ pub use catalog_artifact::{
     CatalogArtifactConfig, CatalogArtifactDiagnostic, CatalogArtifactDiagnosticSeverity,
     CatalogArtifactMissingMessage, CatalogArtifactRequest, CatalogArtifactResult,
     CatalogArtifactSelectedRequest, CatalogArtifactSourceKey, CatalogCompilationCache,
-    CatalogConfig, FallbackLocales, PalamedesCatalogFormat, compile_catalog_artifact,
-    compile_catalog_artifact_selected, compile_catalog_artifact_selected_cached,
+    CatalogConfig, FallbackLocales, PalamedesCatalogFormat, SharedCatalogSet,
+    compile_catalog_artifact, compile_catalog_artifact_selected,
+    compile_catalog_artifact_selected_cached,
     compile_catalog_artifact_selected_cached_without_waiting,
     compile_catalog_artifact_with_source_keys, ensure_catalog_path_contained, is_valid_locale,
     parse_catalog_for_compile, resolve_catalog_file_path, resolve_contained_catalog_file_path,
@@ -129,7 +130,7 @@ pub use extract::{
     analyze_source, analyze_source_file_cached, analyze_source_files_cached,
     analyze_source_with_mdx_options, analyze_source_with_options, extract_catalog_messages_cached,
     extract_catalog_messages_from_files, extract_catalog_messages_from_files_with_options,
-    extract_messages, extract_messages_with_mdx_options,
+    extract_messages, extract_messages_with_mdx_options, lint_source_files_cached,
 };
 #[doc(hidden)]
 pub use extract_cache::{ExtractCache, default_cache_path};
@@ -154,6 +155,7 @@ pub use message_metadata::{
 pub use runtime_macro_manifest::{
     RUNTIME_MACRO_MANIFEST_VERSION, RuntimeMacroChoice, RuntimeMacroDescriptor,
     RuntimeMacroManifest, RuntimeMacroTemplate, collect_runtime_macro_manifest,
+    collect_runtime_macro_manifest_with_threads,
 };
 #[doc(hidden)]
 pub use runtime_message::{
@@ -162,12 +164,13 @@ pub use runtime_message::{
 };
 #[doc(hidden)]
 pub use source::{
-    SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
+    LintSuppression, SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_NO_PSEUDO_PLURAL,
     SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX, SOURCE_DIAGNOSTIC_CODES, SourceAnalysisOptions,
     SourceAnalysisResult, SourceComment, SourceCommentKind, SourceDiagnostic,
-    SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceRange, SourceRuleLevel,
-    SourceRuleOptions,
+    SourceDiagnosticSeverity, SourceFileAnalysisResult, SourceLintFileResult, SourceRange,
+    SourceRuleLevel, SourceRuleOptions, apply_lint_suppressions,
+    parse_lint_suppressions_from_comments,
 };
 #[doc(hidden)]
 pub use target_text::{
@@ -176,8 +179,8 @@ pub use target_text::{
 };
 #[doc(hidden)]
 pub use terminology::{
-    TerminologyEntry, TerminologyError, TerminologyKind, TerminologyMatch, TerminologyRequest,
-    match_terminology,
+    TerminologyEntry, TerminologyError, TerminologyKind, TerminologyMatch, TerminologyMatcher,
+    TerminologyRequest, match_terminology,
 };
 #[doc(hidden)]
 pub use transform::{

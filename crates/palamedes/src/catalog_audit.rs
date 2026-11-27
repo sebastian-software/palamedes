@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::contained_fs::read_optional_contained_catalog_file;
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::icu_compatibility::compare_runtime_icu;
+use crate::icu_compatibility::ParsedSourceIcu;
 use crate::icu_text::RUNTIME_ICU_SYNTAX_POLICY;
 use crate::message_metadata::MessageMetadataInput;
 
@@ -236,24 +236,40 @@ fn add_icu_compatibility_diagnostics(
         return;
     };
 
-    for target_locale in target_locales {
-        let Some(target_catalog) = loaded
-            .iter()
-            .find(|loaded| {
-                loaded.catalog.parsed_catalog().locale.as_deref() == Some(target_locale.as_str())
-            })
-            .map(|loaded| &loaded.catalog)
-        else {
-            continue;
-        };
-        let Some(target_path) = paths_by_locale.get(target_locale) else {
-            continue;
-        };
+    let targets: Vec<(&String, &NormalizedParsedCatalog, &PathBuf)> = target_locales
+        .iter()
+        .filter_map(|target_locale| {
+            let target_catalog = loaded
+                .iter()
+                .find(|loaded| {
+                    loaded.catalog.parsed_catalog().locale.as_deref()
+                        == Some(target_locale.as_str())
+                })
+                .map(|loaded| &loaded.catalog)?;
+            let target_path = paths_by_locale.get(target_locale)?;
+            Some((target_locale, target_catalog, target_path))
+        })
+        .collect();
+    if targets.is_empty() {
+        return;
+    }
 
-        for (key, source_message) in source_catalog.iter() {
-            if source_message.obsolete.is_some() {
-                continue;
-            }
+    // Parse each active source ICU message once per catalog instead of once
+    // per target locale. Malformed source messages are reported by Ferrocat's
+    // syntax audit and skipped here.
+    let parsed_sources: Vec<(&ferrocat::CatalogMessageKey, ParsedSourceIcu)> = source_catalog
+        .iter()
+        .filter(|(_, source_message)| source_message.obsolete.is_none())
+        .filter_map(|(key, _)| {
+            ParsedSourceIcu::parse(&key.msgid)
+                .ok()
+                .map(|icu| (key, icu))
+        })
+        .collect();
+
+    for (target_locale, target_catalog, target_path) in targets {
+        let target_path_display = target_path.to_string_lossy().into_owned();
+        for (key, parsed_source) in &parsed_sources {
             let Some(target_message) = target_catalog
                 .get(key)
                 .filter(|message| message.obsolete.is_none())
@@ -265,8 +281,8 @@ fn add_icu_compatibility_diagnostics(
             else {
                 continue;
             };
-            let Ok(diagnostics) = compare_runtime_icu(&key.msgid, target_value) else {
-                // Ferrocat's syntax audit reports malformed source and target messages.
+            let Ok(diagnostics) = parsed_source.compare_translation(target_value) else {
+                // Ferrocat's syntax audit reports malformed target messages.
                 continue;
             };
             for diagnostic in diagnostics {
@@ -280,7 +296,7 @@ fn add_icu_compatibility_diagnostics(
                     severity: diagnostic.severity.into(),
                     code: diagnostic.code.to_string(),
                     message: diagnostic.message,
-                    catalog_path: target_path.to_string_lossy().into_owned(),
+                    catalog_path: target_path_display.clone(),
                     locale: Some(target_locale.clone()),
                     source_key: Some(CatalogDiagnosticSourceKey {
                         message: key.msgid.clone(),

@@ -8,18 +8,19 @@ use crate::descriptor::{
     unsupported_macro_syntax,
 };
 use crate::error::{PalamedesError, PalamedesResult};
-use crate::extract_cache::{ExtractCache, ReadStartFingerprint};
+use crate::extract_cache::{CachedLintEntry, ExtractCache, ReadStartFingerprint};
 use crate::icu_text::catalog_icu_spelling;
 use crate::jsx_message::clean_jsx_text;
-use crate::mdx::{MdxOptions, analyze_mdx};
+use crate::mdx::{MdxOptions, analyze_mdx_for_extraction};
 use crate::placeholder_name::expression_name;
 use crate::source::{
-    DiagnosticLocation, SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
+    DiagnosticLocation, LintSuppression, SOURCE_DIAGNOSTIC_CODE_NO_EMPTY_COMPONENT_ONLY_MESSAGE,
     SOURCE_DIAGNOSTIC_CODE_NO_PLACEHOLDER_ONLY_MESSAGE, SOURCE_DIAGNOSTIC_CODE_NO_PSEUDO_PLURAL,
     SOURCE_DIAGNOSTIC_CODE_PREFER_TRANS_IN_JSX, SourceAnalysisOptions, SourceAnalysisResult,
     SourceComment, SourceCommentKind, SourceDiagnostic, SourceDiagnosticSeverity,
-    SourceFileAnalysisResult, SourceLocator, SourceRange, SourceRuleOptions, display_filename,
-    format_parser_diagnostics,
+    SourceFileAnalysisResult, SourceLintFileResult, SourceLocator, SourceRange, SourceRuleOptions,
+    apply_lint_suppressions, display_filename, format_parser_diagnostics,
+    parse_lint_suppressions_from_comments,
 };
 use crate::source_macros::{
     ImportedMacro, MacroImports, create_element_macro_error, create_element_type,
@@ -1799,18 +1800,13 @@ pub fn analyze_source_files_cached(
             .map(|file| analyze_one_source_file_cached(file, options, cache))
             .collect()
     } else {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|source| PalamedesError::ExtractionPool {
-                message: source.to_string(),
-            })?
-            .install(|| {
-                files
-                    .par_iter()
-                    .map(|file| analyze_one_source_file_cached(file, options, cache))
-                    .collect()
-            })
+        let pool = cache.thread_pool(threads)?;
+        pool.install(|| {
+            files
+                .par_iter()
+                .map(|file| analyze_one_source_file_cached(file, options, cache))
+                .collect()
+        })
     };
 
     Ok(outcomes
@@ -1821,16 +1817,20 @@ pub fn analyze_source_files_cached(
                 filename,
                 source,
                 analysis,
+                suppressions,
+                suppression_diagnostics,
                 fresh,
                 fingerprint,
             } => {
                 if fresh {
-                    cache.insert(
+                    cache.insert_with_suppressions(
                         path.clone(),
                         relative_origin_file(Path::new(root_dir), &path),
                         &analysis.messages,
                         &analysis.diagnostics,
                         &analysis.comments,
+                        &suppressions,
+                        &suppression_diagnostics,
                         fingerprint,
                     );
                 }
@@ -1844,6 +1844,147 @@ pub fn analyze_source_files_cached(
         .collect())
 }
 
+/// Lint source files while reusing the shared extraction/analysis cache.
+///
+/// Warm cache hits — including `ExtractionOnly` entries from `pmds extract`
+/// and `Complete` entries with cached suppression directives — validate with a
+/// single `stat` and avoid reading unchanged source files from disk.
+pub fn lint_source_files_cached(
+    files: &[SourceFileAnalysisRequest],
+    root_dir: &str,
+    options: &ExtractCatalogMessagesOptions,
+    max_threads: Option<usize>,
+    cache: &mut ExtractCache,
+) -> PalamedesResult<Vec<PalamedesResult<SourceLintFileResult>>> {
+    cache.reset_if_request_differs(root_dir, options);
+    let threads = resolve_extract_threads(max_threads, files.len());
+    let outcomes: Vec<SourceFileLintOutcome> = if threads <= 1 {
+        files
+            .iter()
+            .map(|file| lint_one_source_file_cached(file, options, cache))
+            .collect()
+    } else {
+        let pool = cache.thread_pool(threads)?;
+        pool.install(|| {
+            files
+                .par_iter()
+                .map(|file| lint_one_source_file_cached(file, options, cache))
+                .collect()
+        })
+    };
+
+    Ok(outcomes
+        .into_iter()
+        .map(|outcome| match outcome {
+            SourceFileLintOutcome::Hit(result) => Ok(result),
+            SourceFileLintOutcome::Fresh {
+                path,
+                filename,
+                analysis,
+                suppressions,
+                suppression_diagnostics,
+                fingerprint,
+            } => {
+                cache.insert_with_suppressions(
+                    path.clone(),
+                    relative_origin_file(Path::new(root_dir), &path),
+                    &analysis.messages,
+                    &analysis.diagnostics,
+                    &analysis.comments,
+                    &suppressions,
+                    &suppression_diagnostics,
+                    fingerprint,
+                );
+                Ok(apply_lint_suppressions(
+                    &filename,
+                    analysis.diagnostics,
+                    &suppressions,
+                    &suppression_diagnostics,
+                ))
+            }
+            SourceFileLintOutcome::Failed(error) => Err(error),
+        })
+        .collect())
+}
+
+enum SourceFileLintOutcome {
+    Hit(SourceLintFileResult),
+    Fresh {
+        path: String,
+        filename: String,
+        analysis: SourceAnalysisResult,
+        suppressions: Vec<LintSuppression>,
+        suppression_diagnostics: Vec<SourceDiagnostic>,
+        fingerprint: Option<ReadStartFingerprint>,
+    },
+    Failed(PalamedesError),
+}
+
+fn lint_one_source_file_cached(
+    file: &SourceFileAnalysisRequest,
+    options: &ExtractCatalogMessagesOptions,
+    cache: &ExtractCache,
+) -> SourceFileLintOutcome {
+    if let Some(hit) = cache.get_for_lint(&file.path) {
+        return match hit {
+            CachedLintEntry::Clean => SourceFileLintOutcome::Hit(SourceLintFileResult::default()),
+            CachedLintEntry::Complete {
+                diagnostics,
+                suppressions,
+                suppression_diagnostics,
+            } => SourceFileLintOutcome::Hit(apply_lint_suppressions(
+                &file.filename,
+                diagnostics,
+                &suppressions,
+                &suppression_diagnostics,
+            )),
+        };
+    }
+
+    let fingerprint = cache.fingerprint_before_read(&file.path);
+    let source = match std::fs::read_to_string(&file.path) {
+        Ok(source) => source,
+        Err(source) => {
+            return SourceFileLintOutcome::Failed(PalamedesError::ReadFile {
+                path: PathBuf::from(&file.path),
+                source,
+            });
+        }
+    };
+
+    let analysis = EXTRACT_ARENA.with(|arena| {
+        let mut arena = arena.borrow_mut();
+        let analysis = analyze_source_in(
+            &arena,
+            &source,
+            &file.path,
+            options.reference_scopes,
+            &options.mdx,
+            &options
+                .rules
+                .for_source_locale(options.source_locale.as_deref()),
+        );
+        arena.reset();
+        analysis
+    });
+
+    match analysis {
+        Ok(analysis) => {
+            let (suppressions, suppression_diagnostics) =
+                parse_lint_suppressions_from_comments(&source, &file.path, &analysis.comments);
+            SourceFileLintOutcome::Fresh {
+                path: file.path.clone(),
+                filename: file.filename.clone(),
+                analysis,
+                suppressions,
+                suppression_diagnostics,
+                fingerprint,
+            }
+        }
+        Err(error) => SourceFileLintOutcome::Failed(error),
+    }
+}
+
 /// Result of the parallel source-analysis phase before ordered cache insertion.
 enum SourceFileAnalysisOutcome {
     Analyzed {
@@ -1851,6 +1992,8 @@ enum SourceFileAnalysisOutcome {
         filename: String,
         source: String,
         analysis: SourceAnalysisResult,
+        suppressions: Vec<LintSuppression>,
+        suppression_diagnostics: Vec<SourceDiagnostic>,
         fresh: bool,
         fingerprint: Option<ReadStartFingerprint>,
     },
@@ -1884,6 +2027,8 @@ fn analyze_one_source_file_cached(
                 diagnostics,
                 comments,
             },
+            suppressions: Vec::new(),
+            suppression_diagnostics: Vec::new(),
             fresh: false,
             fingerprint: None,
         };
@@ -1906,14 +2051,20 @@ fn analyze_one_source_file_cached(
     });
 
     match analysis {
-        Ok(analysis) => SourceFileAnalysisOutcome::Analyzed {
-            path: file.path.clone(),
-            filename: file.filename.clone(),
-            source,
-            analysis,
-            fresh: true,
-            fingerprint,
-        },
+        Ok(analysis) => {
+            let (suppressions, suppression_diagnostics) =
+                parse_lint_suppressions_from_comments(&source, &file.path, &analysis.comments);
+            SourceFileAnalysisOutcome::Analyzed {
+                path: file.path.clone(),
+                filename: file.filename.clone(),
+                source,
+                analysis,
+                suppressions,
+                suppression_diagnostics,
+                fresh: true,
+                fingerprint,
+            }
+        }
         Err(error) => SourceFileAnalysisOutcome::Failed(error),
     }
 }
@@ -1995,7 +2146,7 @@ fn analyze_source_in(
     rules: &SourceRuleOptions,
 ) -> PalamedesResult<SourceAnalysisResult> {
     if is_mdx_filename(filename) {
-        let result = analyze_mdx(source, filename, mdx_options.clone());
+        let result = analyze_mdx_for_extraction(source, filename, mdx_options.clone());
         return Ok(SourceAnalysisResult {
             messages: result.messages,
             diagnostics: result
@@ -2276,28 +2427,23 @@ pub fn extract_catalog_messages_cached(
             })
             .collect()
     } else {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|source| PalamedesError::ExtractionPool {
-                message: source.to_string(),
-            })?
-            .install(|| {
-                request
-                    .files
-                    .par_iter()
-                    .map(|file| {
-                        extract_one_file(
-                            file,
-                            &root_dir,
-                            reference_scopes,
-                            &mdx_options,
-                            &rules,
-                            cache,
-                        )
-                    })
-                    .collect()
-            })
+        let pool = cache.thread_pool(threads)?;
+        pool.install(|| {
+            request
+                .files
+                .par_iter()
+                .map(|file| {
+                    extract_one_file(
+                        file,
+                        &root_dir,
+                        reference_scopes,
+                        &mdx_options,
+                        &rules,
+                        cache,
+                    )
+                })
+                .collect()
+        })
     };
 
     /*
@@ -2327,16 +2473,20 @@ pub fn extract_catalog_messages_cached(
                 messages,
                 diagnostics: file_diagnostics,
                 comments,
+                suppressions,
+                suppression_diagnostics,
                 cache_insert,
                 fingerprint,
             } => {
                 match cache_insert {
-                    Some(CacheInsertKind::Complete) => cache.insert(
+                    Some(CacheInsertKind::Complete) => cache.insert_with_suppressions(
                         path.clone(),
                         relative_file.clone(),
                         &messages,
                         &file_diagnostics,
                         &comments,
+                        &suppressions,
+                        &suppression_diagnostics,
                         fingerprint,
                     ),
                     Some(CacheInsertKind::ExtractionOnly) => cache.insert_extraction_only(
@@ -2401,6 +2551,8 @@ fn extract_one_file(
             messages,
             diagnostics,
             comments,
+            suppressions: Vec::new(),
+            suppression_diagnostics: Vec::new(),
             cache_insert: None,
             fingerprint: None,
         };
@@ -2452,8 +2604,11 @@ fn extract_one_file(
             messages: Vec::new(),
             diagnostics: Vec::new(),
             comments: Vec::new(),
-            // Extraction can cache the empty result; the entry remains marked
-            // incomplete so source lint still performs the full analysis.
+            suppressions: Vec::new(),
+            suppression_diagnostics: Vec::new(),
+            // Extraction and `pmds lint` both treat this sentinel as clean;
+            // `analyze_source_files_cached` still parses it when full comment
+            // lists are requested.
             cache_insert: Some(CacheInsertKind::ExtractionOnly),
             fingerprint,
         };
@@ -2472,15 +2627,21 @@ fn extract_one_file(
     });
 
     match analyzed {
-        Ok(analysis) => FileExtraction::Extracted {
-            path: file.clone(),
-            relative_file: relative_origin_file(root_dir, file),
-            messages: analysis.messages,
-            diagnostics: analysis.diagnostics,
-            comments: analysis.comments,
-            cache_insert: Some(CacheInsertKind::Complete),
-            fingerprint,
-        },
+        Ok(analysis) => {
+            let (suppressions, suppression_diagnostics) =
+                parse_lint_suppressions_from_comments(&source, file, &analysis.comments);
+            FileExtraction::Extracted {
+                path: file.clone(),
+                relative_file: relative_origin_file(root_dir, file),
+                messages: analysis.messages,
+                diagnostics: analysis.diagnostics,
+                comments: analysis.comments,
+                suppressions,
+                suppression_diagnostics,
+                cache_insert: Some(CacheInsertKind::Complete),
+                fingerprint,
+            }
+        }
         Err(
             error @ (PalamedesError::ExplicitMessageIdsUnsupported
             | PalamedesError::NestedMessageMacro { .. }
@@ -2533,6 +2694,8 @@ enum FileExtraction {
         messages: Vec<ExtractedMessageRecord>,
         diagnostics: Vec<SourceDiagnostic>,
         comments: Vec<SourceComment>,
+        suppressions: Vec<LintSuppression>,
+        suppression_diagnostics: Vec<SourceDiagnostic>,
         /// How this result should populate the cache, or `None` for a hit.
         cache_insert: Option<CacheInsertKind>,
         /// File identity observed before reading, used to reject mid-run edits.
@@ -2652,14 +2815,11 @@ fn add_extracted_message(
         }
     }
 
-    let origin = CatalogUpdateOrigin {
+    entry.origins.push(CatalogUpdateOrigin {
         file: relative_file.to_string(),
         line: u32::try_from(message.origin.1).unwrap_or(u32::MAX),
         scope: message.scope.clone(),
-    };
-    if !entry.origins.contains(&origin) {
-        entry.origins.push(origin);
-    }
+    });
 }
 
 fn catalog_key(message: &str, context: Option<&str>) -> String {
@@ -2681,6 +2841,7 @@ impl From<AggregatedCatalogEntry> for CatalogUpdateMessage {
                 .then(a.line.cmp(&b.line))
                 .then(a.scope.cmp(&b.scope))
         });
+        origins.dedup();
 
         Self {
             message,

@@ -13,9 +13,8 @@ use std::path::{Component, Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 use palamedes::{
-    CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSourceKey,
-    ContainedDir, FallbackLocales, compile_catalog_artifact,
-    compile_catalog_artifact_with_source_keys, is_valid_locale, render_catalog_module,
+    CatalogArtifactDiagnosticSeverity, CatalogArtifactSourceKey, ContainedDir, FallbackLocales,
+    SharedCatalogSet, is_valid_locale, render_catalog_module,
 };
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
@@ -441,15 +440,23 @@ fn compile_js(
         ));
     }
 
-    let mut update = CatalogUpdate {
-        catalogs: Vec::new(),
-        missing: Vec::new(),
-    };
-    let mut diagnostics = Vec::new();
-    let mut modules = Vec::new();
-    for locale in &locales {
+    let mut artifact_config = config.artifact_config();
+    if !fallback_locales.is_empty() {
+        artifact_config.fallback_locales = Some(FallbackLocales::Shared(fallback_locales.to_vec()));
+    }
+    let shared_catalogs = SharedCatalogSet::load(artifact_config, &locales);
+
+    struct LocaleCompileOutcome {
+        diagnostics: Vec<CompileDiagnostic>,
+        missing: Vec<MissingTranslation>,
+        module: (OsString, PathBuf, String),
+    }
+
+    let compile_one_locale = |locale: &String| -> Result<LocaleCompileOutcome, String> {
+        let mut locale_diagnostics = Vec::new();
+        let mut locale_missing = Vec::new();
         let mut messages = BTreeMap::<String, MergedMessage>::new();
-        for catalog in &config.catalogs {
+        for (catalog_index, catalog) in config.catalogs.iter().enumerate() {
             let resource = match config.resolve_contained_catalog_path(
                 &catalog.path,
                 locale,
@@ -461,7 +468,7 @@ fn compile_js(
                         .resolve_catalog_path(&catalog.path, locale, catalog.format)
                         .to_string_lossy()
                         .into_owned();
-                    diagnostics.push(CompileDiagnostic {
+                    locale_diagnostics.push(CompileDiagnostic {
                         severity: CatalogArtifactDiagnosticSeverity::Error,
                         code: INVALID_CATALOG.to_owned(),
                         message: error.to_string(),
@@ -475,33 +482,15 @@ fn compile_js(
                 }
             };
             let resource_path = resource.to_string_lossy().into_owned();
-            let mut artifact_config = config.artifact_config();
-            if !fallback_locales.is_empty() {
-                artifact_config.fallback_locales =
-                    Some(FallbackLocales::Shared(fallback_locales.to_vec()));
-            }
-            let request = CatalogArtifactRequest {
-                config: artifact_config,
-                resource_path: resource_path.clone(),
-            };
-            // Only collect per-message source keys when earlier catalogs have
-            // already populated `messages` so cross-catalog conflicts can
-            // report provenance; single-catalog builds and the first catalog
-            // skip the extra provenance pass.
-            let compiled = if messages.is_empty() {
-                compile_catalog_artifact(&request).map(|artifact| (artifact, BTreeMap::new()))
-            } else {
-                compile_catalog_artifact_with_source_keys(&request)
-            };
-            let (artifact, source_keys) = match compiled {
-                Ok(compiled) => compiled,
+            let artifact = match shared_catalogs.compile_catalog(catalog_index, locale, &resource) {
+                Ok(artifact) => artifact,
                 // A catalog that does not parse or normalize, such as one with
                 // a duplicate msgid, is a diagnostic so `--json` reports it.
-                Err(error) => {
-                    diagnostics.push(CompileDiagnostic {
+                Err(message) => {
+                    locale_diagnostics.push(CompileDiagnostic {
                         severity: CatalogArtifactDiagnosticSeverity::Error,
                         code: INVALID_CATALOG.to_owned(),
-                        message: error.to_string(),
+                        message,
                         catalog_path: Some(resource_path.clone()),
                         locale: Some(locale.clone()),
                         requested_locale: Some(locale.clone()),
@@ -512,7 +501,7 @@ fn compile_js(
                 }
             };
 
-            let errors_before = diagnostics.len();
+            let errors_before = locale_diagnostics.len();
             for diagnostic in &artifact.diagnostics {
                 if diagnostic.severity != CatalogArtifactDiagnosticSeverity::Error {
                     continue;
@@ -522,7 +511,7 @@ fn compile_js(
                     .resolve_catalog_path(&catalog.path, &diagnostic.locale, catalog.format)
                     .to_string_lossy()
                     .into_owned();
-                diagnostics.push(CompileDiagnostic {
+                locale_diagnostics.push(CompileDiagnostic {
                     severity: diagnostic.severity,
                     code: diagnostic.code.clone(),
                     message: diagnostic.message.clone(),
@@ -534,7 +523,7 @@ fn compile_js(
                 });
             }
 
-            if diagnostics.len() > errors_before {
+            if locale_diagnostics.len() > errors_before {
                 continue;
             }
             let mut fallbacks = BTreeMap::new();
@@ -553,6 +542,9 @@ fn compile_js(
                 }
             }
 
+            // Lazily resolve provenance keys from the already-parsed catalogs
+            // only if a cross-catalog conflict is actually detected.
+            let mut conflict_source_keys: Option<BTreeMap<String, CatalogArtifactSourceKey>> = None;
             for (id, code) in &artifact.messages {
                 let fallback = fallbacks.remove(id.as_str());
                 match messages.entry(id.clone()) {
@@ -587,7 +579,12 @@ fn compile_js(
                             });
                             continue;
                         }
-                        diagnostics.push(CompileDiagnostic {
+                        let source_keys = conflict_source_keys.get_or_insert_with(|| {
+                            shared_catalogs
+                                .source_keys_for_catalog(catalog_index, locale, &resource)
+                                .unwrap_or_default()
+                        });
+                        locale_diagnostics.push(CompileDiagnostic {
                             severity: CatalogArtifactDiagnosticSeverity::Error,
                             code: CONFLICTING_MESSAGE.to_owned(),
                             message: format!(
@@ -622,7 +619,7 @@ fn compile_js(
         for (fallback, catalog_path) in fallbacks {
             let resolved_locale = &fallback.resolved_locale;
             if fail_on_missing {
-                diagnostics.push(CompileDiagnostic {
+                locale_diagnostics.push(CompileDiagnostic {
                     severity: CatalogArtifactDiagnosticSeverity::Error,
                     code: MISSING_TRANSLATION.to_owned(),
                     message: format!(
@@ -635,7 +632,7 @@ fn compile_js(
                     conflicting_catalog_path: None,
                 });
             } else {
-                update.missing.push(MissingTranslation {
+                locale_missing.push(MissingTranslation {
                     locale: locale.clone(),
                     message: fallback.source_key.message.clone(),
                     context: fallback.source_key.context.clone(),
@@ -651,7 +648,63 @@ fn compile_js(
         let (file_name, module_path) = resolve_compiled_js_module_path(output, locale)?;
         let code = render_catalog_module(&messages, locale, &module_path.to_string_lossy())
             .map_err(|error| error.to_string())?;
-        modules.push((file_name, module_path, code));
+        Ok(LocaleCompileOutcome {
+            diagnostics: locale_diagnostics,
+            missing: locale_missing,
+            module: (file_name, module_path, code),
+        })
+    };
+
+    let worker_count = locales.len().min(
+        std::thread::available_parallelism()
+            .map(std::num::NonZeroUsize::get)
+            .unwrap_or(1),
+    );
+    let mut outcomes: Vec<Option<Result<LocaleCompileOutcome, String>>> = Vec::new();
+    outcomes.resize_with(locales.len(), || None);
+
+    if worker_count <= 1 {
+        for (slot, locale) in outcomes.iter_mut().zip(&locales) {
+            *slot = Some(compile_one_locale(locale));
+        }
+    } else {
+        let locales_slice = locales.as_slice();
+        let compile_one_locale_ref = &compile_one_locale;
+        let collected = std::thread::scope(|scope| {
+            let handles = (0..worker_count)
+                .map(|worker| {
+                    scope.spawn(move || {
+                        locales_slice
+                            .iter()
+                            .enumerate()
+                            .skip(worker)
+                            .step_by(worker_count)
+                            .map(|(index, locale)| (index, compile_one_locale_ref(locale)))
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .flat_map(|handle| handle.join().expect("catalog compile worker panicked"))
+                .collect::<Vec<_>>()
+        });
+        for (index, outcome) in collected {
+            outcomes[index] = Some(outcome);
+        }
+    }
+
+    let mut update = CatalogUpdate {
+        catalogs: Vec::new(),
+        missing: Vec::new(),
+    };
+    let mut diagnostics = Vec::new();
+    let mut modules = Vec::with_capacity(locales.len());
+    for outcome in outcomes {
+        let outcome = outcome.expect("every locale produces a compile outcome")?;
+        diagnostics.extend(outcome.diagnostics);
+        update.missing.extend(outcome.missing);
+        modules.push(outcome.module);
     }
 
     if diagnostics.is_empty() {

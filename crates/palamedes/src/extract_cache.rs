@@ -15,17 +15,20 @@
 //! a normal extraction, never to an error.
 
 use std::collections::HashMap;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::{PalamedesError, PalamedesResult};
 use crate::extract::{ExtractCatalogMessagesOptions, ExtractedMessageRecord};
-use crate::source::{SourceComment, SourceDiagnostic, SourceRuleOptions};
+use crate::source::{LintSuppression, SourceComment, SourceDiagnostic, SourceRuleOptions};
 
 /// Bumped whenever the cached payload shape or the extractor's output changes
 /// in a way that makes previously stored entries wrong.
-const CACHE_SCHEMA: u32 = 9;
+const CACHE_SCHEMA: u32 = 10;
 
 /// Maximum bytes read from the advisory extraction cache file (64 MiB).
 const MAX_CACHE_FILE_BYTES: u64 = 64 * 1024 * 1024;
@@ -90,13 +93,27 @@ struct CacheEntry {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum CachedEntryAnalysis {
-    /// The textual gate proved that extraction is empty, but no parser-owned
-    /// diagnostics or comments were collected for source lint.
+    /// The textual gate proved that extraction is empty and no Palamedes lint
+    /// markers or suppression directives exist, so both extraction and
+    /// `pmds lint` can treat the file as clean after one `stat`.
     ExtractionOnly,
     Complete {
         messages: Vec<ExtractedMessageRecord>,
         diagnostics: Vec<SourceDiagnostic>,
         comments: Vec<SourceComment>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        lint_suppressions: Vec<LintSuppression>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        lint_suppression_diagnostics: Vec<SourceDiagnostic>,
+    },
+}
+
+pub(crate) enum CachedLintEntry {
+    Clean,
+    Complete {
+        diagnostics: Vec<SourceDiagnostic>,
+        suppressions: Vec<LintSuppression>,
+        suppression_diagnostics: Vec<SourceDiagnostic>,
     },
 }
 
@@ -128,23 +145,31 @@ struct CacheStamp {
     source_locale: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 struct CachePayload {
     stamp: CacheStamp,
     entries: HashMap<String, CacheEntry>,
+}
+
+#[derive(Serialize)]
+struct CachePayloadRef<'a> {
+    stamp: &'a CacheStamp,
+    entries: &'a HashMap<String, CacheEntry>,
 }
 
 /// Extraction and source-analysis cache for one project root.
 ///
 /// Load once per process and keep it alive: a single `pmds extract` saves the
 /// read and parse of every unchanged file, `pmds lint` reuses its diagnostics
-/// and comment ranges, and watch mode reuses the same instance across rebuilds.
+/// and suppression directives without re-reading unchanged files, and watch
+/// mode reuses both the cache and its bounded Rayon worker pool across rebuilds.
 #[derive(Debug)]
 pub struct ExtractCache {
     stamp: CacheStamp,
     entries: HashMap<String, CacheEntry>,
     dirty: bool,
     enabled: bool,
+    pool: Option<(usize, Arc<rayon::ThreadPool>)>,
 }
 
 impl ExtractCache {
@@ -164,6 +189,7 @@ impl ExtractCache {
             entries: HashMap::new(),
             dirty: false,
             enabled: false,
+            pool: None,
         }
     }
 
@@ -215,7 +241,31 @@ impl ExtractCache {
             entries,
             dirty: false,
             enabled: true,
+            pool: None,
         }
+    }
+
+    /// Returns a reusable Rayon pool sized for `threads`, building it on first use
+    /// or when the requested thread count changes.
+    pub(crate) fn thread_pool(
+        &mut self,
+        threads: usize,
+    ) -> PalamedesResult<Arc<rayon::ThreadPool>> {
+        if let Some((cached_threads, pool)) = &self.pool
+            && *cached_threads == threads
+        {
+            return Ok(Arc::clone(pool));
+        }
+        let pool = Arc::new(
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .map_err(|source| PalamedesError::ExtractionPool {
+                    message: source.to_string(),
+                })?,
+        );
+        self.pool = Some((threads, Arc::clone(&pool)));
+        Ok(pool)
     }
 
     /// Cached result for `path`, if the file still looks exactly as it did.
@@ -242,12 +292,38 @@ impl ExtractCache {
                 messages,
                 diagnostics,
                 comments,
+                ..
             } => (
                 entry.relative_file.clone(),
                 messages.clone(),
                 diagnostics.clone(),
                 comments.clone(),
             ),
+        })
+    }
+
+    /// Cached lint result for `path`, validated with a single `stat` and zero disk reads.
+    pub(crate) fn get_for_lint(&self, path: &str) -> Option<CachedLintEntry> {
+        if !self.enabled {
+            return None;
+        }
+        let entry = self.entries.get(path)?;
+        let current = FileFingerprint::read(Path::new(path))?;
+        if current != entry.fingerprint {
+            return None;
+        }
+        Some(match &entry.analysis {
+            CachedEntryAnalysis::ExtractionOnly => CachedLintEntry::Clean,
+            CachedEntryAnalysis::Complete {
+                diagnostics,
+                lint_suppressions,
+                lint_suppression_diagnostics,
+                ..
+            } => CachedLintEntry::Complete {
+                diagnostics: diagnostics.clone(),
+                suppressions: lint_suppressions.clone(),
+                suppression_diagnostics: lint_suppression_diagnostics.clone(),
+            },
         })
     }
 
@@ -269,6 +345,7 @@ impl ExtractCache {
             messages,
             diagnostics,
             comments,
+            ..
         } = &entry.analysis
         else {
             return None;
@@ -340,6 +417,7 @@ impl ExtractCache {
     /// run would accept that as a hit and write stale messages. Re-reading the
     /// identity here and requiring both to agree means a file edited mid-run is
     /// simply not cached.
+    #[cfg(test)]
     pub(crate) fn insert(
         &mut self,
         path: String,
@@ -351,6 +429,32 @@ impl ExtractCache {
     ) where
         ExtractedMessageRecord: Clone,
     {
+        self.insert_with_suppressions(
+            path,
+            relative_file,
+            messages,
+            diagnostics,
+            comments,
+            &[],
+            &[],
+            before,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn insert_with_suppressions(
+        &mut self,
+        path: String,
+        relative_file: String,
+        messages: &[ExtractedMessageRecord],
+        diagnostics: &[SourceDiagnostic],
+        comments: &[SourceComment],
+        lint_suppressions: &[LintSuppression],
+        lint_suppression_diagnostics: &[SourceDiagnostic],
+        before: Option<ReadStartFingerprint>,
+    ) where
+        ExtractedMessageRecord: Clone,
+    {
         self.insert_entry(
             path,
             relative_file,
@@ -358,6 +462,8 @@ impl ExtractCache {
                 messages: messages.to_vec(),
                 diagnostics: diagnostics.to_vec(),
                 comments: comments.to_vec(),
+                lint_suppressions: lint_suppressions.to_vec(),
+                lint_suppression_diagnostics: lint_suppression_diagnostics.to_vec(),
             },
             before,
         );
@@ -462,12 +568,10 @@ impl ExtractCache {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let payload = CachePayload {
-            stamp: self.stamp.clone(),
-            entries: self.entries.clone(),
+        let payload = CachePayloadRef {
+            stamp: &self.stamp,
+            entries: &self.entries,
         };
-        let encoded = serde_json::to_vec(&payload)
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
 
         /*
          * Written through a temporary file so a crash or a concurrent reader
@@ -476,7 +580,12 @@ impl ExtractCache {
          */
         let directory = path.parent().unwrap_or_else(|| Path::new("."));
         let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
-        std::io::Write::write_all(&mut temporary, &encoded)?;
+        {
+            let mut writer = BufWriter::new(&mut temporary);
+            serde_json::to_writer(&mut writer, &payload)
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+            writer.flush()?;
+        }
         temporary.persist(path).map_err(|error| error.error)?;
         self.dirty = false;
         Ok(())
