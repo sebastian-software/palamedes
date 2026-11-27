@@ -4385,8 +4385,17 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       continue;
     }
 
-    if (!isPwsh && ch === "{" && tokens.length === 0 && !tokenStarted) {
-      if (pendingFunctionName !== null) {
+    if (
+      !isPwsh &&
+      !isCmd &&
+      ch === "{" &&
+      !tokenStarted &&
+      (index + 1 >= text.length || /[\s;]/u.test(text[index + 1])) &&
+      tokens.every(
+        (tok) => tok === "if" || tok === "then" || tok === "else" || tok === "elif" || tok === "do",
+      )
+    ) {
+      if (pendingFunctionName !== null && tokens.length === 0) {
         events.push({
           kind: "enter-function",
           name: pendingFunctionName,
@@ -4399,14 +4408,25 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         commandStartEventIndex = events.length;
         continue;
       }
-      if (functionBraceStack.length > 0) {
-        functionBraceStack.push("block");
-        continue;
+      const groupConditional = commandConditional || nextConditional;
+      if (tokens.length > 0) {
+        flushCommand();
       }
+      nextConditional = false;
+      commandConditional = false;
+      functionBraceStack.push("group");
+      events.push({
+        kind: "enter-group",
+        conditional: groupConditional,
+        redirectTarget: null,
+      });
+      commandStartEventIndex = events.length;
+      continue;
     }
 
     if (
       !isPwsh &&
+      !isCmd &&
       ch === "}" &&
       tokens.length === 0 &&
       !tokenStarted &&
@@ -4419,6 +4439,9 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       const kind = functionBraceStack.pop();
       if (kind === "fn") {
         events.push({ kind: "exit-function" });
+        commandStartEventIndex = events.length;
+      } else {
+        events.push({ kind: "exit-group" });
         commandStartEventIndex = events.length;
       }
       continue;
@@ -4504,9 +4527,14 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         wrapLastStageInSubshell();
         inPipeline = false;
       }
+      const subshellConditional = commandConditional || nextConditional;
       nextConditional = false;
       parenKindStack.push("subshell");
-      events.push({ kind: "enter-subshell" });
+      events.push({
+        kind: "enter-subshell",
+        conditional: subshellConditional,
+        redirectTarget: null,
+      });
       commandStartEventIndex = events.length;
       continue;
     }
@@ -4676,6 +4704,71 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   flushCommand();
   if (inPipeline) {
     wrapLastStageInSubshell();
+  }
+  // Attach trailing group/subshell stdout redirections (e.g. `{ echo ...; } >>
+  // "$GITHUB_ENV"` or `( printf ... ) >> "$GITHUB_OUTPUT"`) onto their opening
+  // `enter-group`/`enter-subshell` event so inner commands inherit them.
+  if (!isPwsh && !isCmd) {
+    const openGroups = [];
+    const consumedRedirIndices = new Set();
+    for (let evIdx = 0; evIdx < events.length; evIdx += 1) {
+      const ev = events[evIdx];
+      if (ev.kind === "enter-group" || ev.kind === "enter-subshell") {
+        openGroups.push(ev);
+        continue;
+      }
+      if (ev.kind === "exit-group" || ev.kind === "exit-subshell") {
+        const opener = openGroups.pop();
+        const nextEv = events[evIdx + 1];
+        if (opener && nextEv?.kind === "command" && nextEv.tokens.length > 0) {
+          let cursor = 0;
+          let stdoutTarget = null;
+          let onlyRedirections = true;
+          while (cursor < nextEv.tokens.length) {
+            const tok = nextEv.tokens[cursor];
+            const consumed = consumeShellRedirection(
+              nextEv.tokens,
+              cursor,
+              null,
+              nextEv.tokenQuoted,
+              nextEv.tokenOffsets,
+            );
+            if (consumed === 0) {
+              onlyRedirections = false;
+              break;
+            }
+            const op = consumed === 3 ? nextEv.tokens[cursor + 1] : tok;
+            const fd = consumed === 3 ? tok : null;
+            const target = nextEv.tokens[cursor + consumed - 1];
+            const affectsStdout =
+              (fd === null || fd === "1") &&
+              (op === ">" || op === ">>" || op === ">|" || op === ">&");
+            if (affectsStdout) {
+              if ((op === ">" || op === ">>" || op === ">|") && isGithubEnvTarget(target)) {
+                stdoutTarget = "github-env";
+              } else if (
+                (op === ">" || op === ">>" || op === ">|") &&
+                isGithubOutputTarget(target)
+              ) {
+                stdoutTarget = "github-output";
+              } else {
+                stdoutTarget = "other";
+              }
+            }
+            cursor += consumed;
+          }
+          if (onlyRedirections) {
+            if (stdoutTarget !== null) {
+              opener.redirectTarget = stdoutTarget;
+            }
+            consumedRedirIndices.add(evIdx + 1);
+          }
+        }
+      }
+    }
+    if (consumedRedirIndices.size > 0) {
+      return events.filter((_, idx) => !consumedRedirIndices.has(idx));
+    }
   }
   return events;
 }
@@ -5599,24 +5692,34 @@ function extractRedirectedWriteLines(
   targetPredicate = isGithubEnvTarget,
   tokenQuoted = null,
   tokenOffsets = null,
+  defaultTargetsFile = false,
 ) {
   const stripped = [];
   let targetsFile = false;
+  let hasStdoutRedirect = false;
   for (let index = startIndex; index < tokens.length; index += 1) {
     const token = tokens[index];
     if (!tokenQuoted?.[index] && isRedirectionOperator(token)) {
-      if (
-        (token === ">" || token === ">>" || token === ">|") &&
-        targetPredicate(tokens[index + 1])
-      ) {
-        targetsFile = true;
+      if (token === ">" || token === ">>" || token === ">|" || token === ">&") {
+        hasStdoutRedirect = true;
+        if (
+          (token === ">" || token === ">>" || token === ">|") &&
+          targetPredicate(tokens[index + 1])
+        ) {
+          targetsFile = true;
+        }
       }
       index += 1;
       continue;
     }
     if (isAdjacentFdPrefix(tokens, index, tokenQuoted, tokenOffsets)) {
+      const op = tokens[index + 1];
+      if (token === "1" && (op === ">" || op === ">>" || op === ">|" || op === ">&")) {
+        hasStdoutRedirect = true;
+      }
       if (
-        (tokens[index + 1] === ">" || tokens[index + 1] === ">>" || tokens[index + 1] === ">|") &&
+        (token === "1" || op === ">" || op === ">>" || op === ">|") &&
+        (op === ">" || op === ">>" || op === ">|") &&
         targetPredicate(tokens[index + 2])
       ) {
         targetsFile = true;
@@ -5627,7 +5730,7 @@ function extractRedirectedWriteLines(
     stripped.push(token);
   }
 
-  if (!targetsFile || stripped.length === 0) {
+  if ((!targetsFile && !(defaultTargetsFile && !hasStdoutRedirect)) || stripped.length === 0) {
     return null;
   }
 
@@ -6526,6 +6629,10 @@ function inspectBuildContextSpec(
   }
 }
 
+function isBuiltinBuildkitSyntax(value) {
+  return value.toLowerCase() === "builtin";
+}
+
 function checkBuildkitSyntaxOverride(entry, reportFile, reportLine, problems) {
   if (!entry) {
     return;
@@ -6540,7 +6647,7 @@ function checkBuildkitSyntaxOverride(entry, reportFile, reportLine, problems) {
   let reportedDynamic = false;
   for (const rawValue of values) {
     const value = stripQuotes(String(rawValue ?? ""));
-    if (!value) {
+    if (!value || isBuiltinBuildkitSyntax(value)) {
       continue;
     }
     if (isDynamicReference(value)) {
@@ -6837,6 +6944,16 @@ function inspectShellText(
   ];
   const isWindowsShell = shellMode === "pwsh" || shellMode === "cmd";
   const calledFnDefs = new Set();
+  const stdoutRedirectStack = [];
+  let groupConditionalDepth = 0;
+  const currentStdoutRedirectTarget = () => {
+    for (let idx = stdoutRedirectStack.length - 1; idx >= 0; idx -= 1) {
+      if (stdoutRedirectStack[idx].target !== null) {
+        return stdoutRedirectStack[idx].target;
+      }
+    }
+    return null;
+  };
   const clearArrayMirrorInVars = (varsMap, name) => {
     const prefix = `${ARRAY_ELEM_KEY_PREFIX}${name}\0`;
     for (const key of varsMap.keys()) {
@@ -6970,7 +7087,12 @@ function inspectShellText(
     }
     visited.add(targetFnDef);
     for (const ev of targetFnDef.bodyEvents) {
-      if (ev.kind === "stdin-containerfile-heredoc" || ev.kind === "nested-shell-heredoc") {
+      if (
+        ev.kind === "stdin-containerfile-heredoc" ||
+        ev.kind === "nested-shell-heredoc" ||
+        ev.redirectTarget === "github-env" ||
+        ev.redirectTarget === "github-output"
+      ) {
         return true;
       }
       if (ev.kind !== "command") {
@@ -7138,8 +7260,32 @@ function inspectShellText(
       if (event.kind === "exit-function") {
         continue;
       }
+      if (event.kind === "enter-group") {
+        stdoutRedirectStack.push({
+          target: event.redirectTarget ?? null,
+          conditional: Boolean(event.conditional),
+        });
+        if (event.conditional) {
+          groupConditionalDepth += 1;
+        }
+        continue;
+      }
+      if (event.kind === "exit-group") {
+        const popped = stdoutRedirectStack.pop();
+        if (popped?.conditional && groupConditionalDepth > 0) {
+          groupConditionalDepth -= 1;
+        }
+        continue;
+      }
       if (event.kind === "enter-subshell") {
         const parent = scopeStack.at(-1);
+        stdoutRedirectStack.push({
+          target: event.redirectTarget ?? null,
+          conditional: Boolean(event.conditional),
+        });
+        if (event.conditional) {
+          groupConditionalDepth += 1;
+        }
         scopeStack.push({
           vars: cloneVarMap(parent.vars),
           arrays: cloneArrayMap(parent.arrays),
@@ -7155,6 +7301,10 @@ function inspectShellText(
         continue;
       }
       if (event.kind === "exit-subshell") {
+        const popped = stdoutRedirectStack.pop();
+        if (popped?.conditional && groupConditionalDepth > 0) {
+          groupConditionalDepth -= 1;
+        }
         if (scopeStack.length > 1) {
           inspectUncalledFunctions(scopeStack.at(-1));
           scopeStack.pop();
@@ -8584,16 +8734,22 @@ function inspectShellText(
         }
       }
 
+      const activeStdoutTarget = currentStdoutRedirectTarget();
       const githubEnvLines = extractRedirectedWriteLines(
         tokens,
         cursor,
         isGithubEnvTarget,
         peeledQuoted,
         peeledTokenOffsets,
+        activeStdoutTarget === "github-env",
       );
       if (githubEnvLines) {
         if (!suppressSideEffects) {
-          const isConditional = fnCallConditional || frame.branches.length > 0 || conditional;
+          const isConditional =
+            fnCallConditional ||
+            frame.branches.length > 0 ||
+            conditional ||
+            groupConditionalDepth > 0;
           for (const assignment of parseGithubEnvPayload(githubEnvLines, lineNumber)) {
             const resolved = resolveImageTokenCandidates(
               assignment.value,
@@ -8619,10 +8775,15 @@ function inspectShellText(
         isGithubOutputTarget,
         peeledQuoted,
         peeledTokenOffsets,
+        activeStdoutTarget === "github-output",
       );
       if (githubOutputLines) {
         if (!suppressSideEffects) {
-          const isConditional = fnCallConditional || frame.branches.length > 0 || conditional;
+          const isConditional =
+            fnCallConditional ||
+            frame.branches.length > 0 ||
+            conditional ||
+            groupConditionalDepth > 0;
           for (const assignment of parseGithubOutputPayload(githubOutputLines, lineNumber)) {
             const resolved = resolveImageTokenCandidates(
               assignment.value,
@@ -9108,6 +9269,7 @@ function inspectShellText(
       if (buildCommand?.kind === "buildx-create") {
         let rawDriver = null;
         const rawDriverOpts = [];
+        let isHelpOnly = false;
         for (let index = buildCommand.argStart; index < tokens.length; index += 1) {
           const redirConsumed = consumeShellRedirection(tokens, index);
           if (redirConsumed > 0) {
@@ -9117,6 +9279,10 @@ function inspectShellText(
           const token = tokens[index];
           if (token === "--") {
             break;
+          }
+          if (token === "--help" || token === "-h") {
+            isHelpOnly = true;
+            continue;
           }
           if (token === "--driver") {
             if (tokens[index + 1] !== undefined) {
@@ -9146,6 +9312,9 @@ function inspectShellText(
           ) {
             index += 1;
           }
+        }
+        if (isHelpOnly) {
+          continue;
         }
 
         const createRows = matrixRows.length > 0 ? matrixRows : [null];
@@ -14816,6 +14985,7 @@ export function unpinnedContainerfileReferences(
         const syntaxLine = (syntaxLineIndex === -1 ? 1 : syntaxLineIndex + 1) + startLineOffset;
         if (
           frontend &&
+          !isBuiltinBuildkitSyntax(frontend) &&
           (!isDynamicReference(frontend) || hasProvablyUnpinnedLiteralSuffix(frontend)) &&
           !isPinnedDigest(frontend)
         ) {
@@ -14858,6 +15028,7 @@ export function unpinnedContainerfileReferences(
         const frontend = stripQuotes(slashSyntaxMatch.groups.value.trim().split(/\s+/u)[0] ?? "");
         if (
           frontend &&
+          !isBuiltinBuildkitSyntax(frontend) &&
           (!isDynamicReference(frontend) || hasProvablyUnpinnedLiteralSuffix(frontend)) &&
           !isPinnedDigest(frontend)
         ) {
@@ -14886,6 +15057,7 @@ export function unpinnedContainerfileReferences(
               const frontend = stripQuotes(directiveValue.split(/\s+/u)[0] ?? "");
               if (
                 frontend &&
+                !isBuiltinBuildkitSyntax(frontend) &&
                 (!isDynamicReference(frontend) || hasProvablyUnpinnedLiteralSuffix(frontend)) &&
                 !isPinnedDigest(frontend)
               ) {

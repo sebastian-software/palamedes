@@ -4697,6 +4697,43 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:13: alpine:3.20 is not pinned to a sha256 digest"]);
+    // Grouped redirections (`{ ...; } >> "$GITHUB_ENV"` and
+    // `( ... ) >> "$GITHUB_OUTPUT"`) propagate to inner echo/printf commands,
+    // `BUILDKIT_SYNTAX=builtin` / `# syntax=builtin` are accepted as built-in
+    // frontends, and `docker buildx create --help` skips builder image checks.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r64:",
+          "    runs-on: ubuntu-latest",
+          "    env:",
+          "      IMAGE: node:24",
+          "    steps:",
+          "      - id: set",
+          "        run: |",
+          "          {",
+          `            echo "IMAGE=node:24@${digest}"`,
+          '            echo "debug" >&2',
+          '          } >> "$GITHUB_ENV"',
+          "          (",
+          `            printf 'pinned=node:24@%s\\n' "${digest}"`,
+          '            echo "unpinned=alpine:3.20"',
+          '          ) >> "$GITHUB_OUTPUT"',
+          '      - run: docker pull "$IMAGE"',
+          '      - run: docker pull "${{ steps.set.outputs.pinned }}"',
+          '      - run: docker pull "${{ steps.set.outputs.unpinned }}"',
+          "      - run: |",
+          "          docker build --build-arg BUILDKIT_SYNTAX=builtin - <<'EOF'",
+          "          # syntax=builtin",
+          `          FROM node:24@${digest}`,
+          "          EOF",
+          "      - run: docker buildx create --help",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:20: alpine:3.20 is not pinned to a sha256 digest"]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
