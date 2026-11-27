@@ -840,7 +840,14 @@ describe("createRemixI18nServer", () => {
   });
 
   it("validates cookieName, cookieMaxAge, and serializeLocaleCookie inputs and supports Secure", () => {
-    for (const invalidName of ["", "bad; Path=/", "bad\r\nSet-Cookie: x=1", "has space", "a=b"]) {
+    for (const invalidName of [
+      "",
+      "bad; Path=/",
+      "bad\r\nSet-Cookie: x=1",
+      "has space",
+      "a=b",
+      null as never,
+    ]) {
       expect(() =>
         createRemixI18nServer({
           locales,
@@ -858,6 +865,7 @@ describe("createRemixI18nServer", () => {
       Number.POSITIVE_INFINITY,
       Number.MAX_SAFE_INTEGER + 1,
       "3600" as never,
+      null as never,
     ]) {
       expect(() =>
         createRemixI18nServer({

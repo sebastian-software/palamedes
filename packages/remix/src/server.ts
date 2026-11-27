@@ -269,11 +269,12 @@ export function createRemixI18nServer<TLocale extends string>(
     PalamedesI18n,
     RemixI18nContextValue<TLocale, PalamedesI18n>
   >();
-  const cookieName = options.cookieName ?? "locale";
+  const cookieName = options.cookieName === undefined ? "locale" : options.cookieName;
   if (typeof cookieName !== "string" || !COOKIE_NAME_PATTERN.test(cookieName)) {
     throw new TypeError("createRemixI18nServer: cookieName must be a valid cookie name.");
   }
-  const cookieMaxAge = options.cookieMaxAge ?? 60 * 60 * 24 * 365;
+  const cookieMaxAge =
+    options.cookieMaxAge === undefined ? 60 * 60 * 24 * 365 : options.cookieMaxAge;
   if (typeof cookieMaxAge !== "number" || !Number.isSafeInteger(cookieMaxAge) || cookieMaxAge < 0) {
     throw new RangeError(
       "createRemixI18nServer: cookieMaxAge must be a non-negative safe integer.",

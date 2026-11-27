@@ -108,9 +108,13 @@ const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const COOKIE_VALUE_PATTERN = /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/;
 const HTTP_PROTOCOL_PATTERN = /^https?:?$/i;
 const DNS_LABEL_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+const BCP47_STRUCTURE_PATTERN = /^[A-Za-z0-9]{1,8}(?:-[A-Za-z0-9]{1,8})*$/;
 const MAX_ACCEPT_LANGUAGE_LENGTH = 2048;
 const MAX_ACCEPT_LANGUAGE_ENTRIES = 32;
 const MAX_LANGUAGE_TAG_LENGTH = 64;
+const MAX_LANGUAGE_TAG_EXTENSION_ALLOWANCE = 64;
+const DEFAULT_MAX_REQUEST_LANGUAGE_TAG_LENGTH =
+  MAX_LANGUAGE_TAG_LENGTH + MAX_LANGUAGE_TAG_EXTENSION_ALLOWANCE;
 
 // ---------------------------------------------------------------------------
 // Config-free helpers
@@ -137,7 +141,7 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
 
 function languagePreferences(
   header: string | null | undefined,
-  maxTagLength = MAX_LANGUAGE_TAG_LENGTH,
+  maxTagLength = DEFAULT_MAX_REQUEST_LANGUAGE_TAG_LENGTH,
 ) {
   if (!header || header.length > MAX_ACCEPT_LANGUAGE_LENGTH) {
     return [];
@@ -183,7 +187,9 @@ function languagePreferences(
     }
 
     if (rawTag.length > maxTagLength) {
-      if (quality === 0) {
+      // Structurally invalid tags can never match a configured locale; only fail
+      // closed when an over-budget q=0 exclusion could plausibly be a valid tag.
+      if (quality === 0 && BCP47_STRUCTURE_PATTERN.test(rawTag)) {
         return [];
       }
       continue;
@@ -694,19 +700,14 @@ export function defineLocaleControls<TLocale extends string>(
       maximized: parsed?.maximize(),
     };
   });
-  const configuredLongMax = languageLocales.reduce(
-    (max, entry) =>
-      Math.max(
-        max,
-        entry.locale.length > MAX_LANGUAGE_TAG_LENGTH ? entry.locale.length : 0,
-        entry.lower.length > MAX_LANGUAGE_TAG_LENGTH ? entry.lower.length : 0,
-      ),
+  const configuredTagMax = languageLocales.reduce(
+    (max, entry) => Math.max(max, entry.locale.length, entry.lower.length),
     0,
   );
-  const maxRequestTagLength =
-    configuredLongMax > 0
-      ? Math.min(MAX_ACCEPT_LANGUAGE_LENGTH, configuredLongMax + MAX_LANGUAGE_TAG_LENGTH)
-      : MAX_LANGUAGE_TAG_LENGTH;
+  const maxRequestTagLength = Math.min(
+    MAX_ACCEPT_LANGUAGE_LENGTH,
+    Math.max(MAX_LANGUAGE_TAG_LENGTH, configuredTagMax) + MAX_LANGUAGE_TAG_EXTENSION_ALLOWANCE,
+  );
 
   const preferredLocale = (header: string | null | undefined): TLocale => {
     const preferences = languagePreferences(header, maxRequestTagLength);

@@ -982,7 +982,7 @@ describe("security hardening", () => {
       const withinCap = `${Array.from({ length: 31 }, () => "xx-YY;q=0.5").join(",")},de;q=0.9`;
       expect(controls.preferredLocale(withinCap)).toBe("de");
 
-      const longTag = `${"a".repeat(80)}-US`;
+      const longTag = `${"a".repeat(140)}-US`;
       expect(parseAcceptLanguage(`${longTag}, de;q=0.8`)).toStrictEqual(["de"]);
       expect(controls.preferredLocale(`${longTag}, de;q=0.8`)).toBe("de");
     });
@@ -998,12 +998,26 @@ describe("security hardening", () => {
       expect(controls.preferredLocale(overLengthCap)).toBe("en");
       expect(parseAcceptLanguage(overLengthCap)).toStrictEqual([]);
 
-      // Overlong exclusion tag (>64 chars) cannot be silently dropped either.
-      const overlongExclusion = `de-AT,de-u-ca-${"a".repeat(60)};q=0`;
-      expect(controls.preferredLocale(overlongExclusion)).toBe("en");
+      // Structurally valid over-budget exclusion tag (>128 chars) fails closed.
+      const validOverBudgetExclusion = `de-AT,de-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-deber-x-${Array.from({ length: 24 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(controls.preferredLocale(validOverBudgetExclusion)).toBe("en");
+
+      // Structurally malformed over-budget exclusion tag is ignored instead of dropping valid preferences.
+      const malformedOverBudgetExclusion = `de-AT,${"a".repeat(140)}-US;q=0`;
+      expect(controls.preferredLocale(malformedOverBudgetExclusion)).toBe("de");
+      expect(parseAcceptLanguage(malformedOverBudgetExclusion)).toStrictEqual(["de-at", "de"]);
     });
 
-    it("keeps exact, canonical, and extension-insensitive matching working for valid configured locales longer than 64 chars", () => {
+    it("keeps exact, canonical, and extension-insensitive matching working for short and long configured locales", () => {
+      const regional = defineLocaleControls({
+        locales: ["en", "de-DE"] as const,
+        defaultLocale: "en",
+      });
+      const extendedGerman =
+        "de-DE-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-deber";
+      expect(regional.preferredLocale(extendedGerman)).toBe("de-DE");
+      expect(parseAcceptLanguage(extendedGerman)).toContain("de");
+
       const longLocale = "de-DE-abcdefg-bcdefgh-cdefghi-defghij-efghijk-fghijkl-ghijklm-hijklmn";
       const reorderedLongLocale =
         "de-DE-hijklmn-abcdefg-bcdefgh-cdefghi-defghij-efghijk-fghijkl-ghijklm";
