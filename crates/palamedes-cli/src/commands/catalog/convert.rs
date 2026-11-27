@@ -4,7 +4,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
-use palamedes::{CatalogFileConvertRequest, PalamedesCatalogFormat, convert_catalog_file};
+use palamedes::{
+    CatalogFileConvertRequest, ContainedDir, ContainedNewFileMode, ContainedWriteDurability,
+    ContainedWriteOutcome, PalamedesCatalogFormat, convert_catalog_content, convert_catalog_file,
+    split_relative_catalog_path,
+};
 
 use crate::command::{Command, Context};
 use crate::error::CliError;
@@ -48,6 +52,7 @@ pub enum ConvertReport {
     Configured {
         converted: usize,
         skipped: usize,
+        durability_warnings: Vec<(PathBuf, String)>,
     },
 }
 
@@ -81,34 +86,203 @@ impl Command for ConvertOptions {
                 let config = context.load_config(Some(config_path))?;
                 let mut converted = 0usize;
                 let mut skipped = 0usize;
+                let mut durability_warnings = Vec::new();
+                let target_format = target_catalog_format(self.to);
+
+                struct PlannedConversion<'a> {
+                    scope: &'a str,
+                    locale: &'a str,
+                    input: PathBuf,
+                    input_parent: PathBuf,
+                    input_file: std::ffi::OsString,
+                    output: PathBuf,
+                    output_file: std::ffi::OsString,
+                }
+
+                let mut planned = Vec::new();
+                let mut skipped_fcl_catalogs = Vec::new();
                 for catalog in &config.catalogs {
                     if catalog.format != palamedes::PalamedesCatalogFormat::Po {
+                        skipped_fcl_catalogs.push(catalog);
                         skipped += config.locales.len();
                         continue;
                     }
                     for locale in &config.locales {
-                        let input =
-                            config.resolve_catalog_path(&catalog.path, locale, catalog.format);
-                        if !input.exists() {
+                        let input = config.resolve_contained_catalog_path(
+                            &catalog.path,
+                            locale,
+                            catalog.format,
+                        )?;
+                        let (input_parent, input_file) =
+                            split_relative_catalog_path(&config.root_dir, &input).map_err(
+                                |error| CliError::Io {
+                                    path: input.clone(),
+                                    source: error.into_io_error(),
+                                },
+                            )?;
+                        let Some(input_dir) =
+                            ContainedDir::open_subpath(&config.root_dir, &input_parent, false)
+                                .map_err(|error| CliError::Io {
+                                    path: input.clone(),
+                                    source: error.into_io_error(),
+                                })?
+                        else {
+                            skipped += 1;
+                            continue;
+                        };
+                        if !input_dir
+                            .entry_exists(&input_file)
+                            .map_err(|error| CliError::Io {
+                                path: input.clone(),
+                                source: error.into_io_error(),
+                            })?
+                        {
                             skipped += 1;
                             continue;
                         }
-                        let output = config.resolve_catalog_path(
+                        let output = config.resolve_contained_catalog_path(
                             &catalog.path,
                             locale,
-                            target_catalog_format(self.to),
-                        );
-                        convert_one_catalog(
-                            &input,
-                            &output,
-                            &config.source_locale,
-                            Some(locale),
-                            self.to,
+                            target_format,
                         )?;
-                        converted += 1;
+                        if input == output {
+                            return Err(CliError::ConvertOutputIsInput);
+                        }
+                        let (output_parent, output_file) =
+                            split_relative_catalog_path(&config.root_dir, &output).map_err(
+                                |error| CliError::Io {
+                                    path: output.clone(),
+                                    source: error.into_io_error(),
+                                },
+                            )?;
+                        debug_assert_eq!(
+                            output_parent, input_parent,
+                            "configured format conversion only changes the catalog filename extension"
+                        );
+                        planned.push(PlannedConversion {
+                            scope: catalog.path.as_str(),
+                            locale: locale.as_str(),
+                            input,
+                            input_parent,
+                            input_file,
+                            output,
+                            output_file,
+                        });
                     }
                 }
-                Ok(ConvertReport::Configured { converted, skipped })
+
+                if !planned.is_empty() {
+                    let mut protected_fcl_targets =
+                        Vec::with_capacity(skipped_fcl_catalogs.len() * config.locales.len());
+                    for catalog in skipped_fcl_catalogs {
+                        for locale in &config.locales {
+                            let protected = config.resolve_contained_catalog_path(
+                                &catalog.path,
+                                locale,
+                                catalog.format,
+                            )?;
+                            protected_fcl_targets.push((catalog.path.as_str(), protected));
+                        }
+                    }
+                    let planned_outputs: Vec<(&str, PathBuf)> = planned
+                        .iter()
+                        .map(|job| (job.scope, job.output.clone()))
+                        .collect();
+                    crate::commands::extract::reject_colliding_catalog_targets_with_protected(
+                        &config.root_dir,
+                        &planned_outputs,
+                        &protected_fcl_targets,
+                        true,
+                    )?;
+                }
+
+                for job in planned {
+                    let Some(input_dir) =
+                        ContainedDir::open_subpath(&config.root_dir, &job.input_parent, false)
+                            .map_err(|error| CliError::Io {
+                                path: job.input.clone(),
+                                source: error.into_io_error(),
+                            })?
+                    else {
+                        skipped += 1;
+                        continue;
+                    };
+                    if !input_dir
+                        .entry_exists(&job.input_file)
+                        .map_err(|error| CliError::Io {
+                            path: job.input.clone(),
+                            source: error.into_io_error(),
+                        })?
+                    {
+                        skipped += 1;
+                        continue;
+                    }
+                    // Configured conversion changes only the storage extension on
+                    // the final filename, so input and output share `input_dir`
+                    // and its single directory-wide target lock.
+                    let _lock =
+                        input_dir
+                            .lock_target(&job.output_file)
+                            .map_err(|error| CliError::Io {
+                                path: job.output.clone(),
+                                source: error.into_io_error(),
+                            })?;
+                    let Some(source) =
+                        input_dir
+                            .read_optional_file(&job.input_file)
+                            .map_err(|error| CliError::Io {
+                                path: job.input.clone(),
+                                source: error.into_io_error(),
+                            })?
+                    else {
+                        skipped += 1;
+                        continue;
+                    };
+                    let input_identity =
+                        input_dir
+                            .file_identity(&job.input_file)
+                            .map_err(|error| CliError::Io {
+                                path: job.input.clone(),
+                                source: error.into_io_error(),
+                            })?;
+                    let output_identity =
+                        input_dir.file_identity(&job.output_file).map_err(|error| {
+                            CliError::Io {
+                                path: job.output.clone(),
+                                source: error.into_io_error(),
+                            }
+                        })?;
+                    if input_identity.is_some() && input_identity == output_identity {
+                        return Err(CliError::ConvertOutputIsInput);
+                    }
+                    let converted_content = convert_catalog_content(
+                        &source,
+                        PalamedesCatalogFormat::Po,
+                        target_format,
+                        &config.source_locale,
+                        Some(job.locale),
+                    )?;
+                    if let ContainedWriteOutcome::CommittedWithoutDirSync(source) = input_dir
+                        .write_file_atomically(
+                            &job.output_file,
+                            converted_content.as_bytes(),
+                            ContainedNewFileMode::Private,
+                            ContainedWriteDurability::Full,
+                        )
+                        .map_err(|error| CliError::Io {
+                            path: job.output.clone(),
+                            source: error.into_io_error(),
+                        })?
+                    {
+                        durability_warnings.push((job.output.clone(), source.to_string()));
+                    }
+                    converted += 1;
+                }
+                Ok(ConvertReport::Configured {
+                    converted,
+                    skipped,
+                    durability_warnings,
+                })
             }
             (None, None) => Err(CliError::MissingConvertInput),
         }
@@ -138,7 +312,11 @@ impl Command for ConvertOptions {
                     );
                 }
             }
-            ConvertReport::Configured { converted, skipped } => {
+            ConvertReport::Configured {
+                converted,
+                skipped,
+                durability_warnings,
+            } => {
                 println!(
                     "{}",
                     tr!(
@@ -147,6 +325,16 @@ impl Command for ConvertOptions {
                         skipped = skipped
                     )
                 );
+                for (path, warning) in durability_warnings {
+                    eprintln!(
+                        "{}",
+                        tr!(
+                            "Warning: {path} was written, but syncing its containing directory failed: {error}",
+                            path = path.display(),
+                            error = warning
+                        )
+                    );
+                }
                 println!(
                     "{}",
                     tr!(
@@ -327,7 +515,8 @@ catalogs:
             report,
             ConvertReport::Configured {
                 converted: 1,
-                skipped: 0
+                skipped: 0,
+                ..
             }
         ));
         assert!(catalog_dir.join("messages.v2.fcl").exists());
@@ -372,7 +561,8 @@ catalogs:
             report,
             ConvertReport::Configured {
                 converted: 1,
-                skipped: 0
+                skipped: 0,
+                ..
             }
         ));
         assert!(catalog_dir.join("messages.po.fcl").exists());
@@ -425,5 +615,378 @@ catalogs:
         let converted = fs::read_to_string(output).expect("read output");
         assert!(converted.contains("tc=Translator note"));
         assert!(converted.contains("f=fuzzy"));
+    }
+
+    #[test]
+    fn configured_conversion_rejects_hard_linked_input_output_alias() {
+        let fixture = temp_dir("convert-hardlink-alias");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        let input = catalog_dir.join("messages.po");
+        let output = catalog_dir.join("messages.fcl");
+        let original =
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n";
+        fs::write(&input, original).expect("write input");
+        fs::hard_link(&input, &output).expect("hard link output to input");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+
+        let error = options
+            .run(&Context::with_cwd(&fixture))
+            .expect_err("hard-linked alias must be rejected");
+        assert!(matches!(
+            error,
+            crate::error::CliError::ConvertOutputIsInput
+        ));
+        assert_eq!(fs::read_to_string(&input).expect("read input"), original);
+        assert_eq!(fs::read_to_string(&output).expect("read output"), original);
+    }
+
+    #[test]
+    fn configured_conversion_rejects_duplicate_fcl_destinations_before_writing() {
+        let fixture = temp_dir("convert-duplicate-fcl-destination");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+  - path: 'locales\{locale}\messages.fcl'
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        fs::write(
+            catalog_dir.join("messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"First\"\nmsgstr \"First\"\n",
+        )
+        .expect("write first catalog");
+        fs::write(
+            catalog_dir.join("messages.fcl.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Second\"\nmsgstr \"Second\"\n",
+        )
+        .expect("write second catalog");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+
+        let error = options
+            .run(&Context::with_cwd(&fixture))
+            .expect_err("colliding FCL destinations must fail before writing any output");
+        assert!(
+            matches!(
+                error,
+                crate::error::CliError::Io { ref source, .. }
+                    if source.kind() == std::io::ErrorKind::AlreadyExists
+            ),
+            "expected AlreadyExists collision error, got {error:?}"
+        );
+        assert!(
+            !catalog_dir.join("messages.fcl").exists(),
+            "no FCL output should be written when configured destinations collide"
+        );
+    }
+
+    #[test]
+    fn configured_conversion_skips_missing_inputs_without_false_destination_collision() {
+        let fixture = temp_dir("convert-missing-input-no-collision");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+  - path: locales/{locale}/messages.fcl
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        fs::write(
+            catalog_dir.join("messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Only\"\nmsgstr \"Only\"\n",
+        )
+        .expect("write existing catalog");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+
+        let report = options
+            .run(&Context::with_cwd(&fixture))
+            .expect("missing second PO input should be skipped rather than flagged as a collision");
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 1,
+                skipped: 1,
+                ..
+            }
+        ));
+        let fcl = fs::read_to_string(catalog_dir.join("messages.fcl")).expect("read fcl");
+        assert!(fcl.contains("Only"));
+    }
+
+    #[test]
+    fn configured_conversion_reads_source_po_under_directory_lock() {
+        use std::ffi::OsStr;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let fixture = temp_dir("convert-reads-under-lock");
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            r#"locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        let po_path = catalog_dir.join("messages.po");
+        fs::write(
+            &po_path,
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Old\"\nmsgstr \"Old\"\n",
+        )
+        .expect("write initial po");
+
+        let dir = palamedes::ContainedDir::open_root(&catalog_dir).expect("open catalog dir");
+        let guard = dir
+            .lock_target(OsStr::new("messages.fcl"))
+            .expect("hold directory lock");
+
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker_fixture = fixture;
+        let worker_config = config_path;
+        let worker = std::thread::spawn(move || {
+            let options = ConvertOptions {
+                input: None,
+                config: Some(worker_config),
+                to: ConvertFormat::Fcl,
+                output: None,
+                source_locale: "en".to_owned(),
+                locale: None,
+            };
+            started_tx.send(()).expect("signal start");
+            let result = options.run(&Context::with_cwd(&worker_fixture));
+            done_tx.send(result).expect("send result");
+        });
+
+        started_rx.recv().expect("worker started");
+        assert!(
+            matches!(
+                done_rx.recv_timeout(Duration::from_millis(80)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ),
+            "converter must block on directory lock before reading and converting PO"
+        );
+        // Update the PO file while holding the lock, then release the lock.
+        fs::write(
+            &po_path,
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Fresh\"\nmsgstr \"Fresh\"\n",
+        )
+        .expect("update po while locked");
+        drop(guard);
+
+        let report = done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("converter completes after lock release")
+            .expect("conversion succeeds");
+        worker.join().expect("join worker");
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 1,
+                skipped: 0,
+                ..
+            }
+        ));
+        let fcl = fs::read_to_string(catalog_dir.join("messages.fcl")).expect("read fcl");
+        assert!(
+            fcl.contains("Fresh"),
+            "converted FCL must reflect PO content read under the lock, got:\n{fcl}"
+        );
+        assert!(
+            !fcl.contains("Old"),
+            "converted FCL must not contain stale pre-lock PO content, got:\n{fcl}"
+        );
+    }
+
+    #[test]
+    fn configured_convert_rejects_overwriting_existing_configured_fcl_catalog() {
+        let fixture = temp_dir("convert-protect-configured-fcl");
+        let catalog_dir = fixture.join("locales/en");
+        fs::create_dir_all(&catalog_dir).expect("create catalog dir");
+        fs::write(
+            catalog_dir.join("messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"FromPo\"\nmsgstr \"From PO\"\n",
+        )
+        .expect("write po");
+        let original_fcl =
+            "---\nformat: fcl/1\nlocale: en\n---\n\n# Existing FCL\n@FromFcl\n\"From FCL\"\n";
+        fs::write(catalog_dir.join("messages.fcl"), original_fcl).expect("write fcl");
+
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            "locales:\n  - en\nsource-locale: en\ncatalogs:\n  - path: locales\\{locale}\\messages\n    format: po\n    include:\n      - src/a\n  - path: locales/{locale}/messages\n    format: fcl\n    include:\n      - src/b\n",
+        )
+        .expect("write config");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+        let err = options
+            .run(&Context::with_cwd(&fixture))
+            .expect_err("converting PO into a configured FCL catalog path must fail");
+        assert!(
+            matches!(
+                err,
+                crate::error::CliError::Io { ref source, .. }
+                    if source.kind() == std::io::ErrorKind::AlreadyExists
+            ),
+            "expected AlreadyExists conflict error, got {err:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(catalog_dir.join("messages.fcl")).expect("read untouched fcl"),
+            original_fcl,
+            "existing configured FCL catalog must remain untouched"
+        );
+    }
+
+    #[test]
+    fn configured_convert_allows_overlapping_skipped_fcl_paths_when_po_output_is_distinct() {
+        let fixture = temp_dir("convert-overlapping-protected-fcl");
+        let po_dir = fixture.join("po");
+        let ref_dir = fixture.join("reference");
+        fs::create_dir_all(&po_dir).expect("create po dir");
+        fs::create_dir_all(&ref_dir).expect("create ref dir");
+        fs::write(
+            po_dir.join("en.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let shared_fcl = "---\nformat: fcl/1\nlocale: en\n---\n\n@Shared\n\"Shared\"\n";
+        fs::write(ref_dir.join("shared.fcl"), shared_fcl).expect("write shared fcl");
+
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            "locales:\n  - en\n  - de\nsource-locale: en\ncatalogs:\n  - path: reference/shared\n    format: fcl\n    include:\n      - src/shared\n  - path: po/{locale}\n    format: po\n    include:\n      - src/app\n",
+        )
+        .expect("write config");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+        let report = options
+            .run(&Context::with_cwd(&fixture))
+            .expect("overlapping skipped FCL paths must not block converting distinct PO catalog");
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 1,
+                skipped: 3,
+                ..
+            }
+        ));
+        assert!(po_dir.join("en.fcl").exists());
+        assert_eq!(
+            fs::read_to_string(ref_dir.join("shared.fcl")).expect("read shared fcl"),
+            shared_fcl
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn configured_convert_noop_skips_fcl_only_config_without_inspecting_skipped_paths() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = temp_dir("convert-noop-fcl-only-dangling");
+        let locales_dir = fixture.join("locales");
+        fs::create_dir_all(&locales_dir).expect("create locales dir");
+        symlink(
+            fixture.join("nonexistent-outside-target.fcl"),
+            locales_dir.join("en.fcl"),
+        )
+        .expect("create dangling symlink");
+
+        let config_path = fixture.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            "locales:\n  - en\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    format: fcl\n    include:\n      - src\n",
+        )
+        .expect("write config");
+
+        let options = ConvertOptions {
+            input: None,
+            config: Some(config_path),
+            to: ConvertFormat::Fcl,
+            output: None,
+            source_locale: "en".to_owned(),
+            locale: None,
+        };
+        let report = options
+            .run(&Context::with_cwd(&fixture))
+            .expect("FCL-only no-op convert must skip without failing on skipped paths");
+        assert!(matches!(
+            report,
+            ConvertReport::Configured {
+                converted: 0,
+                skipped: 1,
+                ..
+            }
+        ));
     }
 }

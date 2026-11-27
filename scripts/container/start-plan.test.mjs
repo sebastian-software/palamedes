@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -12,11 +12,13 @@ import {
 } from "./start-plan.mjs";
 
 describe("buildStartArgs", () => {
-  it("runs vite preview directly for tanstack with a single host/port", () => {
+  it("runs vite preview directly for tanstack with native config loading and a single host/port", () => {
     expect(buildStartArgs({ framework: "tanstack", start: ["preview"], port: 4020 })).toEqual([
       "exec",
       "vite",
       "preview",
+      "--configLoader",
+      "native",
       "--host",
       CONTAINER_HOST,
       "--port",
@@ -24,11 +26,13 @@ describe("buildStartArgs", () => {
     ]);
   });
 
-  it("runs Vite MDX directly with a container-reachable host and fixed port", () => {
+  it("runs Vite MDX directly with native config loading, a container-reachable host, and fixed port", () => {
     expect(buildStartArgs({ framework: "vite", start: ["preview"], port: 4070 })).toEqual([
       "exec",
       "vite",
       "preview",
+      "--configLoader",
+      "native",
       "--host",
       CONTAINER_HOST,
       "--port",
@@ -92,6 +96,8 @@ describe("container publish contract", () => {
       "exec",
       "vite",
       "preview",
+      "--configLoader",
+      "native",
       "--host",
       CONTAINER_HOST,
       "--port",
@@ -104,6 +110,85 @@ describe("container publish contract", () => {
       "utf8",
     );
     expect(containerfile).toMatch(/^EXPOSE .*\b4070\b/m);
+  });
+
+  it("hardens Containerfile base images, toolchain provisioning, runtime permissions, and health checks", async () => {
+    const [containerfile, cargoToml, publishContainer, runExamplesDoc] = await Promise.all([
+      readFile(resolve(import.meta.dirname, "../../Containerfile"), "utf8"),
+      readFile(resolve(import.meta.dirname, "../../Cargo.toml"), "utf8"),
+      readFile(
+        resolve(import.meta.dirname, "../../.github/workflows/publish-examples-container.yml"),
+        "utf8",
+      ),
+      readFile(
+        resolve(import.meta.dirname, "../../docs/operations/run-examples-container.md"),
+        "utf8",
+      ),
+    ]);
+
+    const rustVersion = cargoToml.match(/^rust-version\s*=\s*"([^"]+)"/mu)?.[1];
+    expect(rustVersion).toBeTruthy();
+
+    const nonCommentLines = containerfile
+      .split(/\r?\n/u)
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n");
+
+    expect(nonCommentLines).not.toContain("sh.rustup.rs");
+    expect(nonCommentLines).not.toContain("npm install -g");
+    expect(nonCommentLines).not.toContain("RUSTUP_HOME");
+    expect(nonCommentLines).not.toContain("/usr/local/cargo");
+    expect(containerfile).toMatch(
+      new RegExp(
+        `^FROM rust:${rustVersion.replaceAll(".", "\\.")}-bookworm@sha256:[0-9a-f]{64} AS rust-toolchain$`,
+        "mu",
+      ),
+    );
+    expect(nonCommentLines).toMatch(
+      new RegExp(
+        `^FROM rust:${rustVersion.replaceAll(".", "\\.")}-bookworm@sha256:[0-9a-f]{64} AS rust-toolchain\\n+FROM node:24-bookworm@sha256:[0-9a-f]{64} AS build$`,
+        "mu",
+      ),
+    );
+    expect(containerfile).toMatch(/^FROM node:24-bookworm@sha256:[0-9a-f]{64} AS build$/mu);
+    expect(containerfile).toMatch(/^FROM node:24-bookworm-slim@sha256:[0-9a-f]{64} AS runtime$/mu);
+    expect(containerfile).toContain(
+      "COPY --from=rust-toolchain /usr/local/rustup/toolchains /usr/local/rust-toolchains",
+    );
+    expect(containerfile).toContain("pnpm_config_verify_deps_before_run=false");
+    expect(containerfile).toContain("-exec chmod a+rX,go-w,ug-s");
+    expect(containerfile).toContain("-perm /6022");
+    expect(containerfile).toContain("COPY --from=build --chown=root:root /app /app");
+    expect(containerfile).not.toContain("--chown=node:node");
+    expect(containerfile).toContain("USER node");
+    expect(containerfile).toMatch(/^HEALTHCHECK\b.*127\.0\.0\.1:4080\/ready/msu);
+    expect(containerfile).toContain("podman build --format docker -f Containerfile");
+    expect(runExamplesDoc).toContain("podman build --format docker -f Containerfile");
+    expect(publishContainer).toContain('test "$(docker exec examples-smoke id -un)" = node');
+    expect(publishContainer).toContain("if docker exec examples-smoke sh -c 'touch /app/.ro-check");
+    expect(publishContainer).toContain("docker exec examples-smoke sh -eu -c '");
+    expect(publishContainer).toContain(
+      "unsafe=$(find /app /usr/local/share/corepack ! -type l \\( -perm /6022 -o -writable \\)",
+    );
+    expect(publishContainer).toContain(
+      "for pruned in crates docs adr tests benchmarks fuzz site video;",
+    );
+    expect(publishContainer).toContain('test ! -e "/app/$pruned"');
+
+    const logicalNonCommentLines = nonCommentLines.replace(/\\\r?\n\s*/gu, " ");
+    const pruneCommands = [...logicalNonCommentLines.matchAll(/^RUN\s+rm\s+-rf\b.*$/gmu)]
+      .map((match) => match[0])
+      .join("\n");
+    expect(pruneCommands.length).toBeGreaterThan(0);
+    for (const dir of ["crates", "docs", "adr", "tests", "benchmarks", "fuzz", "site", "video"]) {
+      expect(pruneCommands).toMatch(new RegExp(`\\b${dir}\\b`, "u"));
+    }
+
+    for (const strategy of ["cookie", "route", "subdomain", "tld"]) {
+      await expect(
+        access(resolve(import.meta.dirname, `../../examples/react-router-${strategy}/Dockerfile`)),
+      ).rejects.toThrow();
+    }
   });
 });
 

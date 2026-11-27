@@ -41,9 +41,9 @@ test("reports the baseline, headroom, and exact artifact on success", () => {
   const result = evaluateBinarySize(budget, budget.baseline.bytes + 100_000);
   const message = formatBinarySizeResult(result, "target/release/libpalamedes_node.so");
 
-  assert.equal(result.headroom, 642_824);
+  assert.equal(result.headroom, 1_642_824);
   assert.match(message, /0\.10 MB \(100,000 B\) above that baseline/u);
-  assert.match(message, /0\.64 MB \(642,824 B\) to spare/u);
+  assert.match(message, /1\.64 MB \(1,642,824 B\) to spare/u);
 });
 
 test("fails every over-budget artifact with actionable diagnostics", () => {

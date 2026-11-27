@@ -180,7 +180,7 @@ pub struct CatalogArtifactResult {
 }
 
 /// Source identity for a catalog message.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogArtifactSourceKey {
     /// Source message string.

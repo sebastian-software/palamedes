@@ -75,6 +75,22 @@ pub enum PalamedesError {
         /// Regex compilation error.
         source: regex::Error,
     },
+    /// A configured or requested locale identifier is unsafe or invalid.
+    #[error(
+        "Invalid locale \"{locale}\": locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+    )]
+    InvalidCatalogLocale {
+        /// Invalid locale identifier.
+        locale: String,
+    },
+    /// A configured catalog path is absolute or attempts to escape its root directory.
+    #[error("Unsafe catalog path \"{path}\": {reason}")]
+    UnsafeCatalogPath {
+        /// Original catalog path pattern from configuration.
+        path: String,
+        /// Explanation of why the catalog path was rejected.
+        reason: String,
+    },
     /// The requested resource path did not expose a locale placeholder value.
     #[error("Could not resolve locale from {resource_path}")]
     CouldNotResolveLocale {

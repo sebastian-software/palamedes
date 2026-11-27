@@ -182,6 +182,16 @@ executable. Trusted plugins may invoke documented built-in commands through
 that path. In JSON mode they should capture built-in output so it does not
 corrupt the plugin protocol on stdout.
 
+The host also sets `PALAMEDES_PLUGIN_PATH` to the declared plugin executable
+path and `PALAMEDES_PLUGIN_DIR` to a best-effort directory path resolved from
+the verified pinned executable at spawn time. Packaged script wrappers should
+locate sibling executables and assets from `PALAMEDES_PLUGIN_DIR` rather than
+`dirname "$0"`, because pinned Unix execution launches through kernel
+descriptor or volfs paths rather than the package directory pathname. Because
+`PALAMEDES_PLUGIN_DIR` is passed as a pathname rather than an open directory
+handle, sibling lookups through it still resolve against the live filesystem at
+the time the wrapper accesses them.
+
 Configured plugins are trusted local code with the same filesystem,
 environment, and network permissions as `pmds`. The protocol is a compatibility
 boundary, not a sandbox. Built-ins bypass config and plugin resolution, so a

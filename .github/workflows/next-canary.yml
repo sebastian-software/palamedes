@@ -15,9 +15,10 @@ on:
         default: canary
         type: string
 
+# The contract jobs install unvetted Next.js canary packages and run Playwright,
+# so they stay read-only; only the downstream reporting job opts into `issues: write`.
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: next-canary-${{ github.ref }}
@@ -27,19 +28,54 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  contract:
-    name: client catalog ${{ matrix.label }} contract
+  contract-assets:
+    name: client catalog asset contract
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - delivery: assets
-            label: asset
-          - delivery: permutations
-            label: permutation
+    outputs:
+      next_version: ${{ steps.next.outputs.version }}
+      contract_outcome: ${{ steps.contract.outcome }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Set up workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      # The plugin's own `next` dev dependency moves too, so the build resolves
+      # one Next copy. pnpm records the exact version as a release-age exclusion.
+      - name: Install Next.js ${{ inputs.next_version || 'canary' }}
+        id: next
+        env:
+          NEXT_TAG: ${{ inputs.next_version || 'canary' }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$NEXT_TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::next_version must be one version or dist-tag"
+            exit 1
+          fi
+          version="$(npm view "next@$NEXT_TAG" version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Verifying the client catalog asset contract against next@$version." >> "$GITHUB_STEP_SUMMARY"
+          pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"
+
+      - name: Verify Next client catalog asset contract
+        id: contract
+        run: pnpm --dir examples/nextjs-route build:catalog-assets
+
+  contract-permutations:
+    name: client catalog permutation contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      next_version: ${{ steps.next.outputs.version }}
+      contract_outcome: ${{ steps.contract.outcome }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -51,7 +87,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Chromium for the permutation browser contract
-        if: matrix.delivery == 'permutations'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Build workspace packages
@@ -71,46 +106,148 @@ jobs:
           fi
           version="$(npm view "next@$NEXT_TAG" version)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Verifying the client catalog ${{ matrix.label }} contract against next@$version." >> "$GITHUB_STEP_SUMMARY"
+          echo "Verifying the client catalog permutation contract against next@$version." >> "$GITHUB_STEP_SUMMARY"
           pnpm --filter @palamedes/example-nextjs-route --filter @palamedes/next-plugin add "next@$version"
 
-      - name: Verify Next client catalog ${{ matrix.label }} contract
+      - name: Verify Next client catalog permutation contract
         id: contract
-        run: pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}
+        run: pnpm --dir examples/nextjs-route build:catalog-permutations
 
-      # Separate long-lived issues let one delivery recover independently.
-      - name: Open or refresh the tracking issue
-        if: failure() && github.event_name == 'schedule' && steps.contract.outcome == 'failure'
+  # Separate long-lived issues let one delivery recover independently while
+  # keeping `issues: write` out of the jobs that install Next.js canary. Each
+  # delivery's update is authorized directly by its own upstream job result.
+  report-issues:
+    name: update canary tracking issues
+    needs:
+      - contract-assets
+      - contract-permutations
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Open, refresh, or close tracking issues
         env:
           GH_TOKEN: ${{ github.token }}
-          TITLE: "fix(next-plugin): Next.js canary breaks the client catalog ${{ matrix.label }} contract"
-          NEXT_VERSION: ${{ steps.next.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ASSETS_JOB_RESULT: ${{ needs.contract-assets.result }}
+          ASSETS_CONTRACT_OUTCOME: ${{ needs.contract-assets.outputs.contract_outcome }}
+          ASSETS_NEXT_VERSION: ${{ needs.contract-assets.outputs.next_version }}
+          PERMUTATIONS_JOB_RESULT: ${{ needs.contract-permutations.result }}
+          PERMUTATIONS_CONTRACT_OUTCOME: ${{ needs.contract-permutations.outputs.contract_outcome }}
+          PERMUTATIONS_NEXT_VERSION: ${{ needs.contract-permutations.outputs.next_version }}
         run: |
-          set -euo pipefail
-          {
-            echo "\`pnpm --dir examples/nextjs-route build:catalog-${{ matrix.delivery }}\` failed against \`next@$NEXT_VERSION\`."
-            echo
-            echo "Check emitted markers and, for permutations, manifest selection, request isolation"
-            echo "and lazy chunk URLs before this release reaches the \`next\` peer range. See"
-            echo "[ADR-030](https://github.com/${{ github.repository }}/blob/main/adr/030-next-client-catalogs-outside-the-bundler-graph.md) and"
-            echo "[ADR-031](https://github.com/${{ github.repository }}/blob/main/adr/031-next-server-selected-client-chunk-permutations.md)."
-            echo
-            echo "Run: $RUN_URL"
-          } > issue-body.md
+          node <<'NODE'
+          const { execFileSync } = require("node:child_process");
+          const fs = require("node:fs");
 
-          node ./scripts/open-or-refresh-issue.mjs \
-            --title "$TITLE" \
-            --body-file issue-body.md \
-            --label stability
+          const DELIVERIES = [
+            {
+              delivery: "assets",
+              label: "asset",
+              jobResult: process.env.ASSETS_JOB_RESULT || "",
+              contractOutcome: process.env.ASSETS_CONTRACT_OUTCOME || "",
+              nextVersion: process.env.ASSETS_NEXT_VERSION || "",
+            },
+            {
+              delivery: "permutations",
+              label: "permutation",
+              jobResult: process.env.PERMUTATIONS_JOB_RESULT || "",
+              contractOutcome: process.env.PERMUTATIONS_CONTRACT_OUTCOME || "",
+              nextVersion: process.env.PERMUTATIONS_NEXT_VERSION || "",
+            },
+          ];
+          const VERSION_PATTERN = /^[A-Za-z0-9._-]+$/u;
+          const failures = [];
 
-      - name: Close the tracking issue
-        if: success() && github.event_name == 'schedule'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TITLE: "fix(next-plugin): Next.js canary breaks the client catalog ${{ matrix.label }} contract"
-        run: >
-          node ./scripts/open-or-refresh-issue.mjs
-          --title "$TITLE"
-          --label stability
-          --close-comment "The scheduled Next.js canary run passes the client catalog ${{ matrix.label }} contract again."
+          for (const { delivery, label, jobResult, contractOutcome, nextVersion } of DELIVERIES) {
+            try {
+              const title = `fix(next-plugin): Next.js canary breaks the client catalog ${label} contract`;
+
+              if (jobResult === "success") {
+                execFileSync(
+                  process.execPath,
+                  [
+                    "./scripts/open-or-refresh-issue.mjs",
+                    "--title",
+                    title,
+                    "--label",
+                    "stability",
+                    "--close-comment",
+                    `The scheduled Next.js canary run passes the client catalog ${label} contract again.`,
+                  ],
+                  { stdio: "inherit" },
+                );
+                continue;
+              }
+
+              if (jobResult === "cancelled") {
+                continue;
+              }
+
+              if (
+                jobResult === "failure" &&
+                (contractOutcome === "" ||
+                  contractOutcome === "skipped" ||
+                  contractOutcome === "success")
+              ) {
+                // Setup or runner failed before the contract step published an
+                // outcome, or a post-job action failed after the contract step
+                // succeeded; leave tracking issues unchanged so the upstream
+                // job failure stands without falsely failing issue reporting.
+                continue;
+              }
+
+              if (jobResult === "failure" && contractOutcome === "failure") {
+                const safeVersion = VERSION_PATTERN.test(nextVersion) ? nextVersion : "unknown";
+                const bodyFile = `issue-body-${delivery}.md`;
+                const body = [
+                  `\`pnpm --dir examples/nextjs-route build:catalog-${delivery}\` failed against \`next@${safeVersion}\`.`,
+                  "",
+                  "Check emitted markers and, for permutations, manifest selection, request isolation",
+                  "and lazy chunk URLs before this release reaches the `next` peer range. See",
+                  `[ADR-030](https://github.com/${process.env.REPOSITORY}/blob/main/adr/030-next-client-catalogs-outside-the-bundler-graph.md) and`,
+                  `[ADR-031](https://github.com/${process.env.REPOSITORY}/blob/main/adr/031-next-server-selected-client-chunk-permutations.md).`,
+                  "",
+                  `Run: ${process.env.RUN_URL}`,
+                  "",
+                ].join("\n");
+                fs.writeFileSync(bodyFile, body);
+                execFileSync(
+                  process.execPath,
+                  [
+                    "./scripts/open-or-refresh-issue.mjs",
+                    "--title",
+                    title,
+                    "--body-file",
+                    bodyFile,
+                    "--label",
+                    "stability",
+                  ],
+                  { stdio: "inherit" },
+                );
+                continue;
+              }
+
+              throw new Error(
+                `Unexpected upstream state for ${delivery}: jobResult=${JSON.stringify(jobResult)}, contractOutcome=${JSON.stringify(contractOutcome)}`,
+              );
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              console.error(`Failed to update tracking issue for ${delivery}: ${message}`);
+              failures.push(`${delivery}: ${message}`);
+            }
+          }
+
+          if (failures.length > 0) {
+            process.exitCode = 1;
+          }
+          NODE

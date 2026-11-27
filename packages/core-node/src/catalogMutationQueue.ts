@@ -4,7 +4,130 @@ import path from "node:path";
 import type { TranslationPatchRequest } from "./generated/palamedes-node-types";
 import { getCoreNodeProcessState } from "./processGlobalState";
 
+function isValidLocaleForQueue(locale: string): boolean {
+  if (locale.length === 0 || locale.includes("..")) {
+    return false;
+  }
+  const first = locale.charCodeAt(0);
+  const last = locale.charCodeAt(locale.length - 1);
+  if (!isAsciiAlnum(first) || !isAsciiAlnum(last)) {
+    return false;
+  }
+  for (let i = 0; i < locale.length; i += 1) {
+    const code = locale.charCodeAt(i);
+    if (!isAsciiAlnum(code) && code !== 45 && code !== 95 && code !== 46) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isAsciiAlnum(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function isDefaultIgnorableCodePoint(codePoint: number): boolean {
+  return (
+    codePoint === 0x00_ad ||
+    codePoint === 0x03_4f ||
+    codePoint === 0x06_1c ||
+    (codePoint >= 0x11_5f && codePoint <= 0x11_60) ||
+    (codePoint >= 0x17_b4 && codePoint <= 0x17_b5) ||
+    (codePoint >= 0x18_0b && codePoint <= 0x18_0f) ||
+    (codePoint >= 0x20_0b && codePoint <= 0x20_0f) ||
+    (codePoint >= 0x20_2a && codePoint <= 0x20_2e) ||
+    (codePoint >= 0x20_60 && codePoint <= 0x20_6f) ||
+    codePoint === 0x31_64 ||
+    (codePoint >= 0xfe_00 && codePoint <= 0xfe_0f) ||
+    codePoint === 0xfe_ff ||
+    codePoint === 0xff_a0 ||
+    (codePoint >= 0xff_f0 && codePoint <= 0xff_f8) ||
+    (codePoint >= 0x1_bc_a0 && codePoint <= 0x1_bc_a3) ||
+    (codePoint >= 0x1_d1_73 && codePoint <= 0x1_d1_7a) ||
+    (codePoint >= 0xe_00_00 && codePoint <= 0xe_0f_ff)
+  );
+}
+
+function isReservedLockSegment(segment: string): boolean {
+  let normalized = "";
+  for (const ch of segment) {
+    const codePoint = ch.codePointAt(0);
+    if (codePoint === undefined || isDefaultIgnorableCodePoint(codePoint)) {
+      continue;
+    }
+    if (codePoint === 0x01_7f) {
+      normalized += "s";
+    } else if (codePoint === 0x21_2a) {
+      normalized += "k";
+    } else if (codePoint >= 0x41 && codePoint <= 0x5a) {
+      normalized += String.fromCharCode(codePoint + 32);
+    } else {
+      normalized += ch;
+    }
+  }
+  return normalized.replace(/[. ]+$/, "") === ".pmds-lock";
+}
+
+function isSafeRelativeCatalogPath(value: string): boolean {
+  if (value.trim().length === 0) {
+    return false;
+  }
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
+      return false;
+    }
+  }
+  if (
+    path.isAbsolute(value) ||
+    value.startsWith("/") ||
+    value.startsWith("\\") ||
+    /^[A-Za-z]:/.test(value) ||
+    /^[A-Za-z]:/.test(value.replaceAll("{locale}", "a")) ||
+    value.endsWith("/") ||
+    value.endsWith("\\")
+  ) {
+    return false;
+  }
+  const segments = value.split(/[\\/]/);
+  let firstNormal: string | undefined;
+  let lastNonEmpty = "";
+  let hasNormal = false;
+  for (const segment of segments) {
+    if (segment === "") {
+      continue;
+    }
+    lastNonEmpty = segment;
+    if (segment === ".") {
+      continue;
+    }
+    if (
+      segment === ".." ||
+      isReservedLockSegment(segment) ||
+      /^[A-Za-z]:/.test(segment) ||
+      /^[A-Za-z]:/.test(segment.replaceAll("{locale}", "a"))
+    ) {
+      return false;
+    }
+    if (firstNormal === undefined) {
+      firstNormal = segment;
+    }
+    hasNormal = true;
+  }
+  if (!hasNormal || lastNonEmpty === ".") {
+    return false;
+  }
+  if (
+    firstNormal !== undefined &&
+    (/^[A-Za-z]:/.test(firstNormal) || /^[A-Za-z]:/.test(firstNormal.replaceAll("{locale}", "a")))
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function translationPatchTargetPaths(request: TranslationPatchRequest): string[] {
+  const resolvedRoot = path.resolve(request.config.rootDir);
   return request.patches.flatMap((patch) => {
     const catalog = request.config.catalogs.find(
       (candidate) => candidate.path === patch.id.catalog,
@@ -12,13 +135,27 @@ export function translationPatchTargetPaths(request: TranslationPatchRequest): s
     if (!catalog) {
       return [];
     }
+    if (!isValidLocaleForQueue(patch.id.locale) || !isSafeRelativeCatalogPath(catalog.path)) {
+      return [];
+    }
 
     const extension = catalog.format === "Fcl" ? "fcl" : "po";
-    const configuredExtension = path.extname(catalog.path);
-    const configuredPath = path.resolve(
-      request.config.rootDir,
-      catalog.path.replaceAll("{locale}", patch.id.locale),
-    );
+    const portableCatalogPath = catalog.path.replaceAll("\\", "/");
+    const expanded = portableCatalogPath.replaceAll("{locale}", patch.id.locale);
+    if (!isSafeRelativeCatalogPath(expanded)) {
+      return [];
+    }
+    const configuredExtension = path.posix.extname(portableCatalogPath);
+    const configuredPath = path.resolve(resolvedRoot, expanded);
+    const relativeToRoot = path.relative(resolvedRoot, configuredPath);
+    if (
+      relativeToRoot === "" ||
+      relativeToRoot === ".." ||
+      relativeToRoot.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeToRoot)
+    ) {
+      return [];
+    }
     if (configuredExtension === `.${extension}`) {
       return [configuredPath];
     }

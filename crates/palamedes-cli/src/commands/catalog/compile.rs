@@ -7,20 +7,21 @@
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 use palamedes::{
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSourceKey,
-    CatalogParseRequest, FallbackLocales, compile_catalog_artifact, compiled_message_key,
-    parse_catalog, render_catalog_module,
+    ContainedDir, FallbackLocales, compile_catalog_artifact,
+    compile_catalog_artifact_with_source_keys, is_valid_locale, render_catalog_module,
 };
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
 
 use crate::command::{Command, Context, VersionedJson, render_json};
-use crate::config::{ConfigCatalog, LoadedConfig};
+use crate::config::LoadedConfig;
 use crate::error::CliError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -373,6 +374,31 @@ fn compile_js(
     } else {
         locales.to_vec()
     };
+    let invalid_locale_diagnostics: Vec<CompileDiagnostic> = locales
+        .iter()
+        .filter(|locale| !is_valid_locale(locale))
+        .map(|invalid| CompileDiagnostic {
+            severity: CatalogArtifactDiagnosticSeverity::Error,
+            code: INVALID_LOCALE.to_owned(),
+            message: format!(
+                "Invalid locale \"{invalid}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+            ),
+            catalog_path: None,
+            locale: Some(invalid.clone()),
+            requested_locale: Some(invalid.clone()),
+            source_key: None,
+            conflicting_catalog_path: None,
+        })
+        .collect();
+    if !invalid_locale_diagnostics.is_empty() {
+        return Ok(CompileReport {
+            update: CatalogUpdate {
+                catalogs: Vec::new(),
+                missing: Vec::new(),
+            },
+            diagnostics: invalid_locale_diagnostics,
+        });
+    }
     let mut requested = BTreeSet::new();
     if let Some(repeated) = locales
         .iter()
@@ -381,6 +407,29 @@ fn compile_js(
         return Err(format!(
             "--locale {repeated} is given more than once; each locale compiles to one module."
         ));
+    }
+    if let Some(invalid) = fallback_locales
+        .iter()
+        .find(|fallback| !is_valid_locale(fallback))
+    {
+        return Ok(CompileReport {
+            update: CatalogUpdate {
+                catalogs: Vec::new(),
+                missing: Vec::new(),
+            },
+            diagnostics: vec![CompileDiagnostic {
+                severity: CatalogArtifactDiagnosticSeverity::Error,
+                code: INVALID_LOCALE.to_owned(),
+                message: format!(
+                    "Invalid --fallback-locale \"{invalid}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+                ),
+                catalog_path: None,
+                locale: Some(invalid.clone()),
+                requested_locale: None,
+                source_key: None,
+                conflicting_catalog_path: None,
+            }],
+        });
     }
     if let Some(unknown) = fallback_locales
         .iter()
@@ -401,18 +450,51 @@ fn compile_js(
     for locale in &locales {
         let mut messages = BTreeMap::<String, MergedMessage>::new();
         for catalog in &config.catalogs {
-            let resource = config.resolve_catalog_path(&catalog.path, locale, catalog.format);
+            let resource = match config.resolve_contained_catalog_path(
+                &catalog.path,
+                locale,
+                catalog.format,
+            ) {
+                Ok(resource) => resource,
+                Err(error) => {
+                    let catalog_path = config
+                        .resolve_catalog_path(&catalog.path, locale, catalog.format)
+                        .to_string_lossy()
+                        .into_owned();
+                    diagnostics.push(CompileDiagnostic {
+                        severity: CatalogArtifactDiagnosticSeverity::Error,
+                        code: INVALID_CATALOG.to_owned(),
+                        message: error.to_string(),
+                        catalog_path: Some(catalog_path),
+                        locale: Some(locale.clone()),
+                        requested_locale: Some(locale.clone()),
+                        source_key: None,
+                        conflicting_catalog_path: None,
+                    });
+                    continue;
+                }
+            };
             let resource_path = resource.to_string_lossy().into_owned();
             let mut artifact_config = config.artifact_config();
             if !fallback_locales.is_empty() {
                 artifact_config.fallback_locales =
                     Some(FallbackLocales::Shared(fallback_locales.to_vec()));
             }
-            let artifact = match compile_catalog_artifact(&CatalogArtifactRequest {
+            let request = CatalogArtifactRequest {
                 config: artifact_config,
                 resource_path: resource_path.clone(),
-            }) {
-                Ok(artifact) => artifact,
+            };
+            // Only collect per-message source keys when earlier catalogs have
+            // already populated `messages` so cross-catalog conflicts can
+            // report provenance; single-catalog builds and the first catalog
+            // skip the extra provenance pass.
+            let compiled = if messages.is_empty() {
+                compile_catalog_artifact(&request).map(|artifact| (artifact, BTreeMap::new()))
+            } else {
+                compile_catalog_artifact_with_source_keys(&request)
+            };
+            let (artifact, source_keys) = match compiled {
+                Ok(compiled) => compiled,
                 // A catalog that does not parse or normalize, such as one with
                 // a duplicate msgid, is a diagnostic so `--json` reports it.
                 Err(error) => {
@@ -515,7 +597,7 @@ fn compile_js(
                             catalog_path: Some(resource_path.clone()),
                             locale: Some(locale.clone()),
                             requested_locale: Some(locale.clone()),
-                            source_key: find_source_key(config, catalog, &resource, locale, entry.key()),
+                            source_key: source_keys.get(entry.key()).cloned(),
                             conflicting_catalog_path: Some(existing.catalog_path.clone()),
                         });
                     }
@@ -566,16 +648,25 @@ fn compile_js(
             .into_iter()
             .map(|(id, message)| (id, message.code))
             .collect::<BTreeMap<_, _>>();
-        let module_path = output.join(format!("{locale}.mjs"));
+        let (file_name, module_path) = resolve_compiled_js_module_path(output, locale)?;
         let code = render_catalog_module(&messages, locale, &module_path.to_string_lossy())
             .map_err(|error| error.to_string())?;
-        modules.push((module_path, code));
+        modules.push((file_name, module_path, code));
     }
 
     if diagnostics.is_empty() {
-        fs::create_dir_all(output).map_err(|error| format!("{}: {error}", output.display()))?;
-        for (module_path, code) in modules {
-            fs::write(&module_path, format!("{code}\n"))
+        create_output_dir_all(output).map_err(|error| format!("{}: {error}", output.display()))?;
+        let output_dir = ContainedDir::open_root(output)
+            .map_err(|error| format!("{}: {error}", output.display()))?;
+        for (file_name, module_path, _) in &modules {
+            output_dir
+                .reject_symlink_or_hard_link(file_name)
+                .map_err(|error| format!("{}: {error}", module_path.display()))?;
+        }
+        for (file_name, module_path, code) in modules {
+            let contents = format!("{code}\n");
+            output_dir
+                .write_file_in_place(&file_name, contents.as_bytes())
                 .map_err(|error| format!("{}: {error}", module_path.display()))?;
             update.catalogs.push(module_path);
         }
@@ -586,6 +677,50 @@ fn compile_js(
     })
 }
 
+/// Creates missing output directories with mode `0o755` on Unix (matching
+/// `ContainedDir::open_subpath`) so a relaxed umask such as `0002` does not
+/// produce a group-writable `0o775` directory that safe lock/staging checks
+/// reject, while leaving any pre-existing directory's permissions untouched.
+fn create_output_dir_all(output: &Path) -> std::io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o755);
+    }
+    builder.create(output)
+}
+
+fn resolve_compiled_js_module_path(
+    output: &Path,
+    locale: &str,
+) -> Result<(OsString, PathBuf), String> {
+    if !is_valid_locale(locale) {
+        return Err(format!(
+            "Invalid locale \"{locale}\". Locales must use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+        ));
+    }
+    let file_name = format!("{locale}.mjs");
+    let mut components = Path::new(&file_name).components();
+    if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
+        return Err(format!(
+            "Compiled module filename \"{file_name}\" for locale \"{locale}\" must be a single path segment."
+        ));
+    }
+    let module_path = output.join(&file_name);
+    if module_path.parent() != Some(output)
+        || module_path.file_name() != Some(OsStr::new(&file_name))
+    {
+        return Err(format!(
+            "Compiled module path {} must be a direct child of {}.",
+            module_path.display(),
+            output.display()
+        ));
+    }
+    Ok((OsString::from(file_name), module_path))
+}
+
 fn clone_source_key(source_key: &CatalogArtifactSourceKey) -> CatalogArtifactSourceKey {
     CatalogArtifactSourceKey {
         message: source_key.message.clone(),
@@ -593,37 +728,369 @@ fn clone_source_key(source_key: &CatalogArtifactSourceKey) -> CatalogArtifactSou
     }
 }
 
-/// Recovers the source message behind a runtime ID from the catalog that
-/// compiled it. Only conflicts need this, so the extra parse stays off the
-/// successful path.
-fn find_source_key(
-    config: &LoadedConfig,
-    catalog: &ConfigCatalog,
-    resource: &Path,
-    locale: &str,
-    compiled_id: &str,
-) -> Option<CatalogArtifactSourceKey> {
-    let parsed = parse_catalog(&CatalogParseRequest {
-        target_path: resource.to_string_lossy().into_owned(),
-        locale: locale.to_owned(),
-        source_locale: config.source_locale.clone(),
-        format: catalog.format,
-    })
-    .ok()?;
-    parsed
-        .messages
-        .into_iter()
-        .find(|message| {
-            compiled_message_key(&message.message, message.context.as_deref()) == compiled_id
-        })
-        .map(|message| CatalogArtifactSourceKey {
-            message: message.message,
-            context: message.context,
-        })
-}
-
 impl CompileOptions {
     pub(crate) fn telemetry_config(&self) -> Option<&std::path::Path> {
         self.config.as_deref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use super::{compile_js, resolve_compiled_js_module_path};
+    use crate::commands::test_support::temp_dir;
+    use crate::config::load_config;
+
+    #[test]
+    fn compiled_js_module_paths_stay_direct_children_of_output() {
+        let output = Path::new("/tmp/out");
+        assert_eq!(
+            resolve_compiled_js_module_path(output, "de-AT")
+                .expect("valid locale")
+                .1,
+            output.join("de-AT.mjs")
+        );
+        for invalid in [
+            "",
+            ".",
+            "..",
+            "../outside",
+            "../../../tmp/pwned",
+            "nested/de",
+            r"nested\de",
+            ".hidden",
+            "de.",
+        ] {
+            assert!(
+                resolve_compiled_js_module_path(output, invalid).is_err(),
+                "expected invalid compiled locale to be rejected: {invalid:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn compile_js_rejects_traversal_locales_before_writing() {
+        let app = temp_dir("compile-js-traversal-locale");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+
+        let report = compile_js(&config, &["../escaped".to_owned()], &[], false, &output)
+            .expect("invalid locale should return a CompileReport diagnostic");
+        assert!(report.update.catalogs.is_empty());
+        assert_eq!(report.diagnostics.len(), 1);
+        assert_eq!(report.diagnostics[0].code, "compile.invalid_locale");
+        assert_eq!(report.diagnostics[0].locale.as_deref(), Some("../escaped"));
+        assert!(report.diagnostics[0].message.contains("Invalid locale"));
+        assert!(!app.join("escaped.mjs").exists());
+        assert!(!output.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_rejects_symlink_output_escaping_output_dir() {
+        use std::os::unix::fs::symlink;
+
+        let outside = temp_dir("compile-js-symlink-outside");
+        let app = temp_dir("compile-js-symlink-app");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+        fs::create_dir_all(&output).expect("create output dir");
+
+        let escaped_target = outside.join("pwned.mjs");
+        fs::write(&escaped_target, "original").expect("seed outside file");
+        symlink(&escaped_target, output.join("en.mjs")).expect("create escaping symlink");
+
+        let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect_err("escaping output symlink must be rejected");
+        assert!(
+            error.contains("refusing to write through symlink"),
+            "got: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&escaped_target).expect("read outside file"),
+            "original"
+        );
+
+        // Dangling symlink pointing outside must also be rejected.
+        fs::remove_file(output.join("en.mjs")).expect("remove symlink");
+        let dangling_target = outside.join("new.mjs");
+        symlink(&dangling_target, output.join("en.mjs")).expect("create dangling symlink");
+
+        let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect_err("dangling output symlink must be rejected");
+        assert!(
+            error.contains("refusing to write through symlink"),
+            "got: {error}"
+        );
+        assert!(!dangling_target.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_preserves_umask_and_existing_permissions_on_modules() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let app = temp_dir("compile-js-permissions");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+
+        // Compare newly created module permissions with a sibling file created via `fs::write`.
+        fs::create_dir_all(&output).expect("create output dir");
+        let baseline = output.join("baseline.txt");
+        fs::write(&baseline, "baseline").expect("write baseline");
+        let baseline_mode = fs::metadata(&baseline)
+            .expect("baseline metadata")
+            .permissions()
+            .mode()
+            & 0o7777;
+
+        compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect("initial compile succeeds");
+        let created_mode = fs::metadata(output.join("en.mjs"))
+            .expect("created metadata")
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(created_mode, baseline_mode);
+
+        // Existing custom permissions (including private 0600 files) must survive atomic replacement.
+        for mode in [0o640, 0o600] {
+            fs::set_permissions(output.join("en.mjs"), fs::Permissions::from_mode(mode))
+                .expect("chmod existing module");
+            compile_js(&config, &["en".to_owned()], &[], false, &output)
+                .expect("recompile succeeds");
+            let preserved_mode = fs::metadata(output.join("en.mjs"))
+                .expect("preserved metadata")
+                .permissions()
+                .mode()
+                & 0o7777;
+            assert_eq!(preserved_mode, mode);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_reports_primary_catalog_containment_failures_as_diagnostics() {
+        use std::os::unix::fs::symlink;
+
+        let outside = temp_dir("compile-js-primary-diag-outside");
+        let app = temp_dir("compile-js-primary-diag-app");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        symlink(
+            outside.join("dangling.po"),
+            app.join("locales/en/messages.po"),
+        )
+        .expect("create dangling primary catalog symlink");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+
+        let report = compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect("primary containment error must be reported in CompileReport");
+        assert!(report.update.catalogs.is_empty());
+        assert_eq!(report.diagnostics.len(), 1);
+        assert_eq!(report.diagnostics[0].code, "compile.invalid_catalog");
+        assert_eq!(report.diagnostics[0].locale.as_deref(), Some("en"));
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn compile_js_refuses_to_overwrite_hard_linked_output_target() {
+        let outside = temp_dir("compile-js-hardlink-outside");
+        let app = temp_dir("compile-js-hardlink-app");
+        fs::create_dir_all(app.join("locales/en")).expect("create en locale dir");
+        fs::create_dir_all(app.join("locales/de")).expect("create de locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en, de]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write en po");
+        fs::write(
+            app.join("locales/de/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hallo\"\n",
+        )
+        .expect("write de po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+        fs::create_dir_all(&output).expect("create output dir");
+
+        // Seed an earlier writable locale (`en.mjs`) and a later hard-linked
+        // locale (`de.mjs`); preflight must reject `de.mjs` before touching `en.mjs`.
+        let en_module = output.join("en.mjs");
+        fs::write(&en_module, "export const prior = true;\n").expect("seed en.mjs");
+        let outside_file = outside.join("victim.mjs");
+        fs::write(&outside_file, "do-not-overwrite").expect("seed outside file");
+        fs::hard_link(&outside_file, output.join("de.mjs")).expect("create hard link");
+
+        let error = compile_js(
+            &config,
+            &["en".to_owned(), "de".to_owned()],
+            &[],
+            false,
+            &output,
+        )
+        .expect_err("hard-linked output target must be rejected");
+        assert!(
+            error.contains("hard-linked"),
+            "expected hard-link containment error, got: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&en_module).expect("read prior en.mjs"),
+            "export const prior = true;\n",
+            "earlier locale must not be rewritten when a later locale fails preflight"
+        );
+        assert_eq!(
+            fs::read_to_string(&outside_file).expect("read outside file"),
+            "do-not-overwrite"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_refuses_to_overwrite_read_only_existing_module() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let app = temp_dir("compile-js-readonly-module");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let config = load_config(&app, None).expect("load config");
+        let output = app.join("out");
+        fs::create_dir_all(&output).expect("create output dir");
+        let module_path = output.join("en.mjs");
+        fs::write(&module_path, "export const original = true;\n").expect("seed module");
+        fs::set_permissions(&module_path, fs::Permissions::from_mode(0o444))
+            .expect("chmod 0444 module");
+
+        if fs::OpenOptions::new()
+            .write(true)
+            .open(&module_path)
+            .is_ok()
+        {
+            fs::set_permissions(&module_path, fs::Permissions::from_mode(0o644)).expect("restore");
+            return;
+        }
+
+        let error = compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect_err("read-only existing module must not be overwritten");
+        assert!(
+            error.contains("en.mjs"),
+            "expected module path in error, got: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&module_path).expect("read unchanged module"),
+            "export const original = true;\n"
+        );
+        fs::set_permissions(&module_path, fs::Permissions::from_mode(0o644)).expect("restore");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_js_creates_missing_output_dirs_without_group_or_world_write_bits() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let app = temp_dir("compile-js-output-dir-mode");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        fs::write(
+            app.join("locales/en/messages.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write po");
+        let existing_parent = app.join("existing-parent");
+        fs::create_dir(&existing_parent).expect("create existing parent");
+        fs::set_permissions(&existing_parent, fs::Permissions::from_mode(0o775))
+            .expect("chmod 0775 existing parent");
+
+        let config = load_config(&app, None).expect("load config");
+        let output = existing_parent.join("nested/js-out");
+        compile_js(&config, &["en".to_owned()], &[], false, &output)
+            .expect("compile_js must create stageable output directory");
+
+        assert!(output.join("en.mjs").is_file());
+        let nested_mode = fs::metadata(existing_parent.join("nested"))
+            .expect("stat nested")
+            .permissions()
+            .mode();
+        let output_mode = fs::metadata(&output)
+            .expect("stat output")
+            .permissions()
+            .mode();
+        assert_eq!(
+            nested_mode & 0o0022,
+            0,
+            "newly created ancestor must not be group/world-writable"
+        );
+        assert_eq!(
+            output_mode & 0o0022,
+            0,
+            "newly created output dir must not be group/world-writable"
+        );
+        let existing_mode = fs::metadata(&existing_parent)
+            .expect("stat existing parent")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(
+            existing_mode, 0o775,
+            "pre-existing ancestor directory permissions must not be modified"
+        );
+        fs::set_permissions(&existing_parent, fs::Permissions::from_mode(0o755)).expect("restore");
     }
 }

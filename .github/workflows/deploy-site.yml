@@ -52,10 +52,10 @@ on:
       - main
   workflow_dispatch:
 
+# Build installs dependencies and runs Playwright, so the workflow defaults to
+# read-only; only the deploy job opts into GitHub Pages write permissions.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: deploy-site
@@ -117,11 +117,6 @@ jobs:
         if: vars.PALAMEDES_RYBBIT_SCRIPT_URL != '' && vars.PALAMEDES_RYBBIT_SITE_ID != ''
         run: pnpm verify:site-analytics
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
-        with:
-          enablement: true
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
@@ -130,10 +125,18 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+        with:
+          enablement: true
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
@@ -141,6 +144,7 @@ jobs:
   verify:
     needs: deploy
     runs-on: ubuntu-24.04
+    permissions: {}
     steps:
       - name: Smoke-test the live site
         shell: bash

@@ -1340,6 +1340,7 @@ dependencies = [
  "ferrocat-po",
  "ferromark",
  "ignore",
+ "libc",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",
@@ -1356,6 +1357,7 @@ dependencies = [
  "string_wizard",
  "tempfile",
  "thiserror",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -1396,6 +1398,7 @@ dependencies = [
  "signal-hook",
  "tempfile",
  "thiserror",
+ "unicode-normalization",
 ]
 
 [[package]]
