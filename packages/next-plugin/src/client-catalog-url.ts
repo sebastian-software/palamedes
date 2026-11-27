@@ -12,9 +12,18 @@ export function clientCatalogPublicPrefix(
 ): string {
   const assetPrefix = config.assetPrefix ?? "";
   if (assetPrefix !== "") {
-    return assetPrefix.endsWith("/") ? assetPrefix.slice(0, -1) : assetPrefix;
+    const trimmed = assetPrefix.endsWith("/") ? assetPrefix.slice(0, -1) : assetPrefix;
+    if (trimmed === "" || trimmed.startsWith("/") || /^[a-z][\d+.a-z-]*:\/\//iu.test(trimmed)) {
+      return trimmed;
+    }
+    // Path-style relative prefixes such as `"cdn"` must be root-relative so
+    // `<link rel="modulepreload">` and `client-catalog.mjs` resolve the same
+    // URL on nested pages without relying on the document's `<base href>`.
+    return `/${trimmed}`;
   }
-  return config.basePath ?? "";
+  const basePath = config.basePath ?? "";
+  if (basePath === "" || basePath.startsWith("/")) return basePath;
+  return `/${basePath}`;
 }
 
 /*
