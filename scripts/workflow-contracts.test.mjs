@@ -5711,6 +5711,34 @@ describe("workflow contracts", () => {
       expect(checkWorkflowPins(r86Fixture).problems).toEqual([
         "ci/bad.recipe:1: alpine:3.20 is not pinned to a sha256 digest",
       ]);
+
+      // `--net-alias`, Buildx `--resource`/`--security-opt` separate-value flags,
+      // and Dockerfile heredocs with an explicit numeric file descriptor (`0<<'DOC'`).
+      await writeFile(
+        join(r86Fixture, "Dockerfile"),
+        [
+          `FROM alpine:3.20@${digest}`,
+          "RUN cat 0<<'DOC' > /tmp/example.Dockerfile",
+          "FROM alpine:3.20",
+          "DOC",
+          "",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(r86Fixture, ".github", "workflows", "build.yml"),
+        [
+          "on: push",
+          "jobs:",
+          "  build:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          `      - uses: actions/checkout@${"b".repeat(40)} # v4`,
+          `      - run: docker run --rm --net-alias api alpine:3.20@${digest} true`,
+          "      - run: docker buildx build --resource memory=512m --security-opt seccomp=unconfined .",
+          "",
+        ].join("\n"),
+      );
+      expect(checkWorkflowPins(r86Fixture).problems).toEqual([]);
     } finally {
       await rm(r86Fixture, { recursive: true, force: true });
     }

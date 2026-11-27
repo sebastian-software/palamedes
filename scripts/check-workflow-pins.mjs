@@ -262,6 +262,7 @@ const DOCKER_RUN_VALUE_FLAGS = new Set([
   "--mount",
   "--name",
   "--net",
+  "--net-alias",
   "--network",
   "--network-alias",
   "--oom-score-adj",
@@ -480,6 +481,7 @@ const PODMAN_POD_CREATE_VALUE_FLAGS = new Set([
   "--memory-swap",
   "--name",
   "--net",
+  "--net-alias",
   "--network",
   "--network-alias",
   "--pid",
@@ -8867,8 +8869,10 @@ const DOCKER_BUILD_VALUE_FLAGS = new Set([
   "--platform",
   "--progress",
   "--provenance",
+  "--resource",
   "--sbom",
   "--secret",
+  "--security-opt",
   "--shm-size",
   "--ssh",
   "-t",
@@ -18802,8 +18806,22 @@ function extractDockerfileHeredocDelimiters(instructionText) {
       atWordStart = false;
       continue;
     }
-    if (atWordStart && ch === "<" && rest[index + 1] === "<" && rest[index + 2] !== "<") {
-      let cursor = index + 2;
+    let heredocOpStart = -1;
+    if (atWordStart) {
+      if (ch === "<" && rest[index + 1] === "<" && rest[index + 2] !== "<") {
+        heredocOpStart = index;
+      } else if (ch >= "0" && ch <= "9") {
+        let fdEnd = index + 1;
+        while (fdEnd < rest.length && rest[fdEnd] >= "0" && rest[fdEnd] <= "9") {
+          fdEnd += 1;
+        }
+        if (rest[fdEnd] === "<" && rest[fdEnd + 1] === "<" && rest[fdEnd + 2] !== "<") {
+          heredocOpStart = fdEnd;
+        }
+      }
+    }
+    if (heredocOpStart >= 0) {
+      let cursor = heredocOpStart + 2;
       let stripTabs = false;
       if (rest[cursor] === "-") {
         stripTabs = true;
