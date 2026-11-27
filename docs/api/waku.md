@@ -91,6 +91,7 @@ import { fsRouter } from "waku";
 import adapter from "waku/adapters/default";
 import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
 import { getRequestNonce, runWithRequestNonce, wasRequestNonceApplied } from "./lib/csp.server";
+import { resolveApplicationLocale } from "./lib/i18n.server";
 
 const modules = Object.fromEntries(
   Object.entries(import.meta.glob("/src/pages/**/*.{tsx,ts}")).map(([key, value]) => [
@@ -119,7 +120,10 @@ export default adapter(fsRouter(modules), {
       runWithRequestNonce(async () => {
         await next();
         const nonce = getRequestNonce();
+        // Apply this strict policy in production builds; Vite dev injects HMR
+        // scripts and inline styles that require a separate development policy.
         if (
+          !import.meta.env.DEV &&
           nonce &&
           wasRequestNonceApplied() &&
           context.res.headers.get("content-type")?.startsWith("text/html")
@@ -132,7 +136,8 @@ export default adapter(fsRouter(modules), {
     () =>
       createWakuCatalogDeliveryMiddleware({
         resolveLocale: (request) => resolveApplicationLocale(request),
-        nonce: () => (wasRequestNonceApplied() ? getRequestNonce() : undefined),
+        nonce: () =>
+          !import.meta.env.DEV && wasRequestNonceApplied() ? getRequestNonce() : undefined,
       }),
   ],
 });
@@ -149,15 +154,14 @@ import { getRequestNonce, markRequestNonceApplied } from "../../lib/csp.server";
 
 const cspInterceptor: HandlerInterceptor = async (next) => {
   const nonce = getRequestNonce();
-  if (nonce) unstable_setNonce(nonce);
+  if (!import.meta.env.DEV && nonce) unstable_setNonce(nonce);
   const result = await next();
   // This recipe covers SSR-enabled dynamic pages: Waku sets an RSC path for SSR
   // pages, leaves it unset for `_api` handlers (so raw HTML handlers own their
   // own CSP), and returns null for unmatched `/` before its unnonced root
-  // fallback shell runs. `unstable_disableSSR: true` routes are outside this
-  // guard's scope and need a route-aware check that enables the nonce for both
-  // `createWakuCatalogDeliveryMiddleware` and the response CSP headers.
+  // fallback shell runs. `unstable_disableSSR: true` routes are outside scope.
   if (
+    !import.meta.env.DEV &&
     nonce &&
     unstable_getRscPath() !== undefined &&
     result instanceof Response &&
@@ -174,13 +178,9 @@ export default cspInterceptor;
 Because Waku's `fsRouter()` defaults pages to static rendering, opt SSR routes
 that rely on request-time catalog delivery and per-request CSP nonces into
 dynamic rendering (as in `examples/waku-cookie/src/pages/_root.tsx` and
-`index.tsx`). Dynamic routes with `unstable_disableSSR: true` are outside this
-`unstable_getRscPath()` guard's scope because Waku renders their nonced HTML
-shell without setting an RSC path—if your app uses `unstable_disableSSR: true`,
-replace that guard with a route-aware check so both
-`createWakuCatalogDeliveryMiddleware({ nonce })` and the response
-`Content-Security-Policy` and `Cache-Control: private, no-store` headers receive
-the same request nonce on those routes:
+`index.tsx`). This recipe is scoped to SSR-enabled dynamic routes; routes using
+`unstable_disableSSR: true` are outside its scope (Waku `1.0.0-rc.4`'s default
+non-SSR shell omits `</head>` and does not receive the split-catalog import map):
 
 ```ts
 export async function getConfig() {
