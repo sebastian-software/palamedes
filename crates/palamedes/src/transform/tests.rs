@@ -3270,6 +3270,66 @@ fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements()
         transformed.code
     );
 
+    // Valid: nested lowered Trans inside a parent Trans attribute with shadowed `Trans`
+    // followed by a descriptor with a discarded macro field must rebind cleanly without panicking.
+    let nested_lowered_trans = r#"import { Trans as MacroTrans } from "@palamedes/remix/macro";
+import { jsx as render } from "remix/component/jsx-runtime";
+import { t } from "@palamedes/core/macro";
+export function f() {
+  const Trans = () => null;
+  return [
+    <MacroTrans><Button title={t`Title`} label={t`Label`} badge={render(MacroTrans, { children: "Inner" })} /></MacroTrans>,
+    t({ message: "Notice", ignored: t`Unused` }),
+  ];
+}
+"#;
+    let transformed = transform_macros_raw(nested_lowered_trans, "nested-lowered-trans.tsx", None)
+        .expect("nested lowered Trans in attribute with later discarded macro must not panic");
+    assert!(transformed.code.contains("<__palamedesTrans id="));
+    assert!(transformed.code.contains("render(__palamedesTrans, { id:"));
+    assert!(!transformed.code.contains("@palamedes/remix/macro"));
+    assert!(!transformed.code.contains("@palamedes/core/macro"));
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &transformed.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "rebound nested Trans output must be valid TSX: {:?}\n{}",
+        parsed.diagnostics,
+        transformed.code
+    );
+
+    // Valid: distinct runtime modules (`react` and `remix`) must not emit duplicate `Trans` bindings.
+    let multi_runtime_trans = r#"import { Trans as ReactTrans } from "@palamedes/react/macro";
+import { Trans as RemixTrans } from "@palamedes/remix/macro";
+import { t } from "@palamedes/core/macro";
+export function f() {
+  return [
+    <ReactTrans>React</ReactTrans>,
+    <RemixTrans>Remix</RemixTrans>,
+    t({ message: "Notice", ignored: ReactTrans }),
+  ];
+}
+"#;
+    let transformed = transform_macros_raw(multi_runtime_trans, "multi-runtime-trans.tsx", None)
+        .expect("React and Remix Trans macros in one file should emit distinct compiled imports");
+    assert!(
+        transformed
+            .code
+            .contains("import { Trans } from \"@palamedes/react/compiled\";")
+    );
+    assert!(
+        transformed
+            .code
+            .contains("import { Trans as __palamedesTrans } from \"@palamedes/remix/compiled\";")
+    );
+    let parsed = Parser::new(&allocator, &transformed.code, SourceType::tsx()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "multi-runtime Trans output must be valid TSX: {:?}\n{}",
+        parsed.diagnostics,
+        transformed.code
+    );
+
     // Valid: direct runtime calls inside macro value expressions remain extractable and preserved.
     for (filename, source) in [
         (

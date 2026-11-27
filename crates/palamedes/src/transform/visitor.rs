@@ -33,6 +33,7 @@ pub(super) struct TransformVisitor<'a> {
     pub trans_imports: HashSet<(String, String)>,
     pub reused_trans_imports: HashSet<String>,
     trans_replacements: Vec<TransReplacement>,
+    next_trans_placeholder: usize,
     pub consumed_binding_ranges: Vec<(Option<SymbolId>, usize, usize)>,
     pub error: Option<PalamedesError>,
     jsx_child_element_spans: Vec<(usize, usize)>,
@@ -44,13 +45,7 @@ struct TransReplacement {
     macro_symbol_id: SymbolId,
     reference_span: (u32, u32),
     replacement_index: usize,
-    style: TransReplacementStyle,
-}
-
-#[derive(Clone, Copy)]
-enum TransReplacementStyle {
-    Identifier,
-    Jsx,
+    placeholder: String,
 }
 
 impl<'a> TransformVisitor<'a> {
@@ -72,9 +67,21 @@ impl<'a> TransformVisitor<'a> {
             trans_imports: HashSet::new(),
             reused_trans_imports: HashSet::new(),
             trans_replacements: Vec::new(),
+            next_trans_placeholder: 0,
             consumed_binding_ranges: Vec::new(),
             error: None,
             jsx_child_element_spans: Vec::new(),
+        }
+    }
+
+    fn next_trans_placeholder(&mut self) -> String {
+        loop {
+            let id = self.next_trans_placeholder;
+            self.next_trans_placeholder += 1;
+            let candidate = format!("__palamedesTransSlot{id}__");
+            if !self.source.contains(&candidate) {
+                return candidate;
+            }
         }
     }
 
@@ -148,8 +155,9 @@ impl<'a> TransformVisitor<'a> {
     }
 
     pub(super) fn rebind_surviving_trans(&mut self, semantic: &Semantic<'_>) {
-        let mut aliases = HashMap::<SymbolId, String>::new();
+        let mut aliases = HashMap::<(String, SymbolId), String>::new();
         let mut reserved = self.imports.used_identifier_names.clone();
+        let mut plain_trans_module: Option<String> = None;
         for replacement in self.trans_replacements.clone() {
             let symbol_id = replacement.macro_symbol_id;
             let module = replacement.import_module;
@@ -158,38 +166,35 @@ impl<'a> TransformVisitor<'a> {
             let reuses_trans_import =
                 self.imports
                     .can_reuse_trans_import_at(semantic, &module, reference_span);
-            let needs_alias = self.imports.has_surviving_reference(
-                semantic,
-                symbol_id,
-                &self.consumed_binding_ranges,
-            ) || (!reuses_trans_import
-                && !self.imports.can_use_generated_trans_import_at(
+            let can_use_plain_trans = plain_trans_module
+                .as_deref()
+                .is_none_or(|existing| existing == module);
+            let needs_alias = !can_use_plain_trans
+                || self.imports.has_surviving_reference(
                     semantic,
                     symbol_id,
-                    reference_span,
-                ));
+                    &self.consumed_binding_ranges,
+                )
+                || (!reuses_trans_import
+                    && !self.imports.can_use_generated_trans_import_at(
+                        semantic,
+                        symbol_id,
+                        reference_span,
+                    ));
             let local_name = if needs_alias {
                 aliases
-                    .entry(symbol_id)
+                    .entry((module.clone(), symbol_id))
                     .or_insert_with(|| unique_identifier("__palamedesTrans", &mut reserved))
                     .clone()
             } else {
+                plain_trans_module = Some(module.clone());
+                reserved.insert("Trans".to_string());
                 "Trans".to_string()
             };
-            match replacement.style {
-                TransReplacementStyle::Jsx if local_name != "Trans" => {
-                    self.replacements[replacement_index].text = self.replacements
-                        [replacement_index]
-                        .text
-                        .replacen("<Trans ", &format!("<{local_name} "), 1);
-                }
-                TransReplacementStyle::Identifier => {
-                    self.replacements[replacement_index].text = self.replacements
-                        [replacement_index]
-                        .text
-                        .replacen("__palamedesTrans", &local_name, 1);
-                }
-                TransReplacementStyle::Jsx => {}
+            if let Some(target) = self.replacements.get_mut(replacement_index) {
+                target.text = target
+                    .text
+                    .replacen(&replacement.placeholder, &local_name, 1);
             }
             if local_name == "Trans" && reuses_trans_import {
                 self.reused_trans_imports.insert(module.clone());
@@ -265,9 +270,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
         }
 
         let attribute_replacement_start = self.replacements.len();
+        let trans_replacement_start = self.trans_replacements.len();
         if macro_info.imported_name == "Trans" {
             self.visit_preserved_attribute_macros(&it.children);
             if self.error.is_some() {
+                self.trans_replacements.truncate(trans_replacement_start);
                 return;
             }
         }
@@ -320,6 +327,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     )
                 };
                 if let Some((nested_macro, nested_start)) = nested {
+                    self.trans_replacements.truncate(trans_replacement_start);
                     self.fail_nested_macro_in_value(
                         &macro_info.imported_name,
                         &nested_macro,
@@ -327,18 +335,31 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     );
                     return;
                 }
-                let text = if macro_info.imported_name != "Trans"
+                let mut text = if macro_info.imported_name != "Trans"
                     && self.is_current_jsx_child_element(it)
                 {
                     format!("{{{text}}}")
                 } else {
                     text
                 };
+                let trans_placeholder = if macro_info.imported_name == "Trans"
+                    && macro_info.source.strip_suffix("/macro").is_some()
+                {
+                    let placeholder = self.next_trans_placeholder();
+                    text = text.replacen("<Trans ", &format!("<{placeholder} "), 1);
+                    Some(placeholder)
+                } else {
+                    None
+                };
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,
                     end: it.span.end as usize,
                     text,
                 });
+                let parent_index = self.replacements.len() - 1;
+                for nested_trans in &mut self.trans_replacements[trans_replacement_start..] {
+                    nested_trans.replacement_index = parent_index;
+                }
                 self.push_compiled_id(&compiled_id);
                 if macro_info.imported_name == "Trans" {
                     self.record_consumed_binding(
@@ -359,16 +380,18 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 }
 
                 if macro_info.imported_name == "Trans" {
-                    if let Some(module) = macro_info.source.strip_suffix("/macro") {
+                    if let (Some(module), Some(placeholder)) =
+                        (macro_info.source.strip_suffix("/macro"), trans_placeholder)
+                    {
                         self.trans_replacements.push(TransReplacement {
                             macro_symbol_id,
                             import_module: format!("{module}/compiled"),
-                            replacement_index: self.replacements.len() - 1,
+                            replacement_index: parent_index,
                             reference_span: (
                                 it.opening_element.name.span().start,
                                 it.opening_element.name.span().end,
                             ),
-                            style: TransReplacementStyle::Jsx,
+                            placeholder,
                         });
                     }
                 } else {
@@ -376,9 +399,11 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 }
             }
             Ok(None) => {
+                self.trans_replacements.truncate(trans_replacement_start);
                 self.fail_unsupported_macro(&macro_info.imported_name, it.span.start as usize);
             }
             Err(error) => {
+                self.trans_replacements.truncate(trans_replacement_start);
                 self.fail(error);
             }
         }
@@ -679,6 +704,16 @@ impl TransformVisitor<'_> {
                     );
                     return true;
                 }
+                let mut text = text;
+                let trans_placeholder = if macro_info.imported_name == "Trans"
+                    && macro_info.source.strip_suffix("/macro").is_some()
+                {
+                    let placeholder = self.next_trans_placeholder();
+                    text = text.replacen("__palamedesTrans", &placeholder, 1);
+                    Some(placeholder)
+                } else {
+                    None
+                };
                 self.replacements.push(Replacement {
                     start: call.span.start as usize,
                     end: call.span.end as usize,
@@ -700,13 +735,15 @@ impl TransformVisitor<'_> {
                     );
                 }
                 if macro_info.imported_name == "Trans" {
-                    if let Some(module) = macro_info.source.strip_suffix("/macro") {
+                    if let (Some(module), Some(placeholder)) =
+                        (macro_info.source.strip_suffix("/macro"), trans_placeholder)
+                    {
                         self.trans_replacements.push(TransReplacement {
                             import_module: format!("{module}/compiled"),
                             macro_symbol_id,
                             reference_span,
                             replacement_index: self.replacements.len() - 1,
-                            style: TransReplacementStyle::Identifier,
+                            placeholder,
                         });
                     }
                 } else {
