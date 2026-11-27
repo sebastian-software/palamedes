@@ -62,24 +62,24 @@ export function createRequestI18n(request: Request) {
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
 
-type CspRequestState = { nonce: string; ssrHtml: boolean };
+type CspRequestState = { nonce: string; ssrBody?: NonNullable<Response["body"]> };
 const cspNonceStorage = new AsyncLocalStorage<CspRequestState>();
 
 export function runWithRequestNonce<T>(fn: () => T): T {
-  return cspNonceStorage.run({ nonce: randomBytes(16).toString("base64"), ssrHtml: false }, fn);
+  return cspNonceStorage.run({ nonce: randomBytes(16).toString("base64") }, fn);
 }
 
 export function getRequestNonce(): string | undefined {
   return cspNonceStorage.getStore()?.nonce;
 }
 
-export function markSsrHtmlResponse(): void {
+export function trackSsrHtmlBody(body: NonNullable<Response["body"]>): void {
   const state = cspNonceStorage.getStore();
-  if (state) state.ssrHtml = true;
+  if (state) state.ssrBody = body;
 }
 
-export function isSsrHtmlResponse(): boolean {
-  return cspNonceStorage.getStore()?.ssrHtml === true;
+export function isTrackedSsrHtmlBody(body: Response["body"]): boolean {
+  return body !== null && cspNonceStorage.getStore()?.ssrBody === body;
 }
 ```
 
@@ -88,7 +88,7 @@ export function isSsrHtmlResponse(): boolean {
 import { fsRouter } from "waku";
 import adapter from "waku/adapters/default";
 import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
-import { getRequestNonce, isSsrHtmlResponse, runWithRequestNonce } from "./lib/csp.server";
+import { getRequestNonce, isTrackedSsrHtmlBody, runWithRequestNonce } from "./lib/csp.server";
 import { resolveApplicationLocale } from "./lib/i18n.server";
 
 const modules = Object.fromEntries(
@@ -125,16 +125,26 @@ export default adapter(fsRouter(modules), {
     "!/src/middleware/*.{test,spec}.{js,ts,tsx,jsx,mjs,cjs}",
   ]),
   middlewareFns: [
+    // If your app compresses HTML in middleware (for example, Hono `compress()`),
+    // register it here before this middleware—not in `src/middleware/*`—or compress
+    // at the reverse proxy so HTML rewriting runs before compression.
     () => async (context, next) =>
       runWithRequestNonce(async () => {
         await next();
+        // Rewrite and apply the nonce CSP only to the exact SSR HTML stream rendered
+        // by Waku. If a `src/middleware/*` handler replaced `context.res` (for example,
+        // with an HTML error or maintenance page) or handled a raw HTML `_api` route,
+        // leave that response and its CSP untouched.
+        if (!isTrackedSsrHtmlBody(context.res.body)) {
+          return;
+        }
+        await catalogDelivery(context, async () => {});
         const nonce = getRequestNonce();
         // Apply this nonce-enabled same-origin policy in production builds;
         // Vite dev injects HMR scripts and inline styles that need a separate dev policy.
         if (
           !import.meta.env.DEV &&
           nonce &&
-          isSsrHtmlResponse() &&
           context.res.headers.get("content-type")?.startsWith("text/html")
         ) {
           // Omit this write if an existing `src/middleware/*` handler already sets
@@ -143,21 +153,10 @@ export default adapter(fsRouter(modules), {
           context.header("content-security-policy", buildAppCsp(nonce));
           // Nonce-bearing HTML must never be replayed across visitors by a shared or
           // in-app cache: exclude these SSR routes from any `src/middleware/*` cache
-          // (or keep cache middleware outside both CSP and catalog delivery so it honors no-store).
+          // (or keep cache middleware outside this middleware so it honors no-store).
           context.header("cache-control", "private, no-store");
         }
       }),
-    // If your app compresses HTML in middleware (for example, Hono `compress()`),
-    // register it here before `catalogDelivery`—not in `src/middleware/*`—or
-    // compress at the reverse proxy so HTML rewriting runs before compression.
-    () => async (context, next) => {
-      await next();
-      // Transform only Waku-rendered SSR HTML so raw HTML `_api` handlers keep
-      // their own response body and CSP without unnonced catalog tags injected.
-      if (isSsrHtmlResponse()) {
-        await catalogDelivery(context, async () => {});
-      }
-    },
   ],
 });
 ```
@@ -169,7 +168,7 @@ import {
   unstable_setNonce,
   type HandlerInterceptor,
 } from "waku/router/server";
-import { getRequestNonce, markSsrHtmlResponse } from "../../lib/csp.server";
+import { getRequestNonce, trackSsrHtmlBody } from "../../lib/csp.server";
 
 const cspInterceptor: HandlerInterceptor = async (next) => {
   const nonce = getRequestNonce();
@@ -183,9 +182,10 @@ const cspInterceptor: HandlerInterceptor = async (next) => {
   if (
     unstable_getRscPath() !== undefined &&
     result instanceof Response &&
+    result.body !== null &&
     result.headers.get("content-type")?.startsWith("text/html")
   ) {
-    markSsrHtmlResponse();
+    trackSsrHtmlBody(result.body);
   }
   return result;
 };
