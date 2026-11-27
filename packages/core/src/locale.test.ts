@@ -1014,6 +1014,9 @@ describe("security hardening", () => {
       expect(custom.preferredLocale("de-DE")).toBe(longLocale);
       expect(custom.preferredLocale(longLocale)).toBe(longLocale);
       expect(custom.preferredLocale(longLocale.toUpperCase())).toBe(longLocale);
+      expect(custom.preferredLocale(`${longLocale}-u-ca-gregory`)).toBe(longLocale);
+      expect(custom.preferredLocale(`${longLocale}-u-ca-gregory;q=0, de-DE`)).toBe("en");
+      expect(custom.preferredLocale(`${longLocale}-notanextension`)).toBe("en");
       expect(custom.preferredLocale(`${longLocale};q=0, de-DE`)).toBe("en");
     });
 

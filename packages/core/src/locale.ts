@@ -135,9 +135,69 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   return null;
 }
 
+function isValidBcp47ExtensionSuffix(suffix: string): boolean {
+  if (!suffix.startsWith("-")) {
+    return false;
+  }
+
+  const subtags = suffix.slice(1).split("-");
+  const seenSingletons = new Set<string>();
+  let index = 0;
+
+  while (index < subtags.length) {
+    const singleton = subtags[index];
+    if (!singleton || singleton.length !== 1 || !/^[0-9a-z]$/.test(singleton)) {
+      return false;
+    }
+
+    if (singleton === "x") {
+      index += 1;
+      if (index >= subtags.length) {
+        return false;
+      }
+      while (index < subtags.length) {
+        const part = subtags[index];
+        if (!part || part.length > 8 || !/^[0-9a-z]+$/.test(part)) {
+          return false;
+        }
+        index += 1;
+      }
+      return true;
+    }
+
+    if (seenSingletons.has(singleton)) {
+      return false;
+    }
+    seenSingletons.add(singleton);
+    index += 1;
+
+    let extCount = 0;
+    while (index < subtags.length) {
+      const part = subtags[index];
+      if (!part) {
+        return false;
+      }
+      if (part.length === 1) {
+        break;
+      }
+      if (part.length < 2 || part.length > 8 || !/^[0-9a-z]+$/.test(part)) {
+        return false;
+      }
+      extCount += 1;
+      index += 1;
+    }
+
+    if (extCount === 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function languagePreferences(
   header: string | null | undefined,
-  knownLongTags?: ReadonlySet<string>,
+  allowLongTag?: (lowerTag: string) => boolean,
 ) {
   if (!header || header.length > MAX_ACCEPT_LANGUAGE_LENGTH) {
     return [];
@@ -183,7 +243,7 @@ function languagePreferences(
     }
 
     const lowerTag = rawTag.toLowerCase();
-    if (rawTag.length > MAX_LANGUAGE_TAG_LENGTH && !knownLongTags?.has(lowerTag)) {
+    if (rawTag.length > MAX_LANGUAGE_TAG_LENGTH && !allowLongTag?.(lowerTag)) {
       if (quality === 0) {
         return [];
       }
@@ -698,13 +758,31 @@ export function defineLocaleControls<TLocale extends string>(
   const configuredLocalesByLower = new Map(
     languageLocales.map((entry) => [entry.locale.toLowerCase(), entry]),
   );
-  const configuredLongTags = new Set(
-    languageLocales
-      .map((entry) => entry.locale.toLowerCase())
-      .filter((tag) => tag.length > MAX_LANGUAGE_TAG_LENGTH),
-  );
+  const configuredParsedBaseEntries = languageLocales.filter((entry) => entry.parsed !== null);
+  const matchConfiguredLongLocale = (lowerTag: string) => {
+    const exact = configuredLocalesByLower.get(lowerTag);
+    if (exact) {
+      return exact;
+    }
+
+    for (const entry of configuredParsedBaseEntries) {
+      if (lowerTag === entry.lower) {
+        return entry;
+      }
+      if (
+        lowerTag.startsWith(`${entry.lower}-`) &&
+        isValidBcp47ExtensionSuffix(lowerTag.slice(entry.lower.length))
+      ) {
+        return entry;
+      }
+    }
+
+    return null;
+  };
+  const allowLongRequestTag = (lowerTag: string): boolean =>
+    matchConfiguredLongLocale(lowerTag) !== null;
   const parseRequestLanguageTag = (tag: string) => {
-    const configured = configuredLocalesByLower.get(tag);
+    const configured = matchConfiguredLongLocale(tag);
     if (configured) {
       return { parsed: configured.parsed, maximized: configured.maximized };
     }
@@ -713,10 +791,7 @@ export function defineLocaleControls<TLocale extends string>(
   };
 
   const preferredLocale = (header: string | null | undefined): TLocale => {
-    const preferences = languagePreferences(
-      header,
-      configuredLongTags.size > 0 ? configuredLongTags : undefined,
-    );
+    const preferences = languagePreferences(header, allowLongRequestTag);
     const exclusions = preferences
       .filter(({ quality }) => quality === 0)
       .map(({ tag }) => {
