@@ -419,3 +419,20 @@ fn translations_cannot_add_numeric_requirements_to_display_arguments() {
         "{error}"
     );
 }
+
+#[test]
+fn module_path_is_reconstructed_from_normalized_identifiers() {
+    let directory = catalogs("Es ist {name}");
+    let output = tempfile::tempdir().unwrap();
+    let compiled = CatalogBuilder::new(directory.path(), "en")
+        .locales(&["en", "de"])
+        .module_path("crate :: i18n :: r#mod")
+        .compile_to(output.path())
+        .unwrap();
+    let generated = fs::read_to_string(compiled.rust_module).unwrap();
+    assert!(
+        generated.contains("$crate::i18n::r#mod::__palamedes_translate_signature"),
+        "{generated}"
+    );
+    assert!(!generated.contains(" :: "), "{generated}");
+}

@@ -229,6 +229,16 @@ pub enum PalamedesError {
         /// Configured named export.
         initializer_export: String,
     },
+    /// Macro transform received an invalid runtime import configuration.
+    #[error(
+        "Invalid runtime import configuration: module `{runtime_module}` and import `{runtime_import_name}` must identify a non-empty module and a valid JavaScript identifier."
+    )]
+    InvalidRuntimeImport {
+        /// Configured runtime module specifier.
+        runtime_module: String,
+        /// Configured runtime import identifier.
+        runtime_import_name: String,
+    },
     /// A JSX message macro was nested inside another JSX message macro.
     #[error(
         "Nested i18n macro is not extractable as a single message at {location}{}. Move the full sentence into <Plural> branches or use plural() so translators receive the complete sentence.",

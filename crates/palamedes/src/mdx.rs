@@ -602,12 +602,18 @@ impl<'a> MdxCompiler<'a> {
         if self.front_matter.is_empty() {
             return;
         }
-        writer.append("\nexport const frontmatter = ");
-        writer.append(
-            &serde_json::to_string(&self.front_matter)
-                .expect("front matter scalar map must serialize"),
-        );
-        writer.append(";\n");
+        writer.append("\nexport const frontmatter = {");
+        for (index, (key, value)) in self.front_matter.iter().enumerate() {
+            if index > 0 {
+                writer.append(",");
+            }
+            writer.append(&format!(
+                "{}:{}",
+                js_object_string_key(key),
+                js_string(value)
+            ));
+        }
+        writer.append("};\n");
         if self.translated_front_matter.is_empty() {
             return;
         }
@@ -618,7 +624,7 @@ impl<'a> MdxCompiler<'a> {
         for (key, reference) in &self.translated_front_matter {
             writer.append(&format!(
                 ", {}: __i18n._({})",
-                js_string(key),
+                js_object_string_key(key),
                 runtime_lookup_arguments(reference, self.options.include_source_metadata)
             ));
         }
@@ -1110,7 +1116,13 @@ impl<'a> MdxCompiler<'a> {
             let values = unit
                 .values
                 .iter()
-                .map(|(name, expression)| format!("{name}: ({expression})"))
+                .map(|(name, expression)| {
+                    if name == "__proto__" {
+                        format!("[\"__proto__\"]: ({expression})")
+                    } else {
+                        format!("{name}: ({expression})")
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             props.push(format!("values={{{{ {values} }}}}"));
@@ -1580,7 +1592,16 @@ fn range_text(source: &str, range: Span) -> &str {
 }
 
 fn js_string(value: &str) -> String {
-    serde_json::to_string(value).expect("string must serialize")
+    crate::js_string::render_js_string_literal(value)
+}
+
+fn js_object_string_key(key: &str) -> String {
+    let literal = js_string(key);
+    if key == "__proto__" {
+        format!("[{literal}]")
+    } else {
+        literal
+    }
 }
 
 fn is_jsx_comment(value: &str) -> bool {
@@ -2918,5 +2939,57 @@ See ![Diagram label](./d.png) here.
             "source position resolution must scan each source byte at most once"
         );
         assert_eq!(work.anchor_steps, anchors.len() * 2);
+    }
+
+    #[test]
+    fn escapes_html_script_delimiters_and_line_separators_in_generated_strings() {
+        let source = "---\nraw: \"</script><!-- -->\u{2028}\u{2029}\"\ntitle: \"Hello <!-- --> a < b > c\u{2028}\u{2029}\"\n---\n\n```html\n</script><!-- -->\u{2028}\u{2029}\n```\n\nUse `</script>\u{2028}` in prose.\n";
+        let result = analyze_valid(
+            source,
+            MdxOptions {
+                front_matter_fields: vec!["title".to_owned()],
+                include_source_metadata: true,
+                runtime_module: Some("@acme/runtime</script>\u{2028}".to_owned()),
+                trans_module: Some("@acme/trans<!-- -->\u{2029}".to_owned()),
+                ..MdxOptions::default()
+            },
+        );
+        let code = result.code.expect("valid MDX should compile");
+
+        assert!(!code.contains("</script>"), "{code}");
+        assert!(!code.contains("<!--"), "{code}");
+        assert!(!code.contains("-->"), "{code}");
+        assert!(!code.contains('\u{2028}'), "{code}");
+        assert!(!code.contains('\u{2029}'), "{code}");
+        assert!(code.contains("\\u003c/script\\u003e"), "{code}");
+        assert!(code.contains("\\u003c!-- --\\u003e"), "{code}");
+        assert!(code.contains("\\u2028"), "{code}");
+        assert!(code.contains("\\u2029"), "{code}");
+    }
+
+    #[test]
+    fn emits_computed_proto_keys_in_frontmatter_and_unit_values() {
+        let source =
+            "---\n__proto__: Prototype value\ntitle: Welcome\n---\n\nHello {user.__proto__}.\n";
+        let result = analyze_valid(
+            source,
+            MdxOptions {
+                front_matter_fields: vec!["__proto__".to_owned(), "title".to_owned()],
+                ..MdxOptions::default()
+            },
+        );
+        let code = result.code.expect("valid MDX should compile");
+
+        assert!(
+            code.contains("export const frontmatter = {[\"__proto__\"]:\"Prototype value\",\"title\":\"Welcome\"};"),
+            "{code}"
+        );
+        assert!(code.contains(", [\"__proto__\"]: __i18n._("), "{code}");
+        assert!(
+            code.contains("values={{ [\"__proto__\"]: (user.__proto__) }}"),
+            "{code}"
+        );
+        assert!(!code.contains("\"__proto__\":"), "{code}");
+        assert!(!code.contains("{ __proto__:"), "{code}");
     }
 }

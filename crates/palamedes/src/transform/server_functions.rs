@@ -13,6 +13,7 @@ use oxc_syntax::reference::Reference;
 use oxc_syntax::symbol::SymbolId;
 
 use crate::error::PalamedesError;
+use crate::js_string::render_js_string_literal;
 use crate::translation_scope::source_location;
 
 use super::imports::ImportedMacro;
@@ -62,8 +63,7 @@ impl ServerFunctionTransform {
 }
 
 pub(super) fn initializer_import(options: &ServerFunctionTransformOptions, alias: &str) -> String {
-    let module = serde_json::to_string(&options.initializer_module)
-        .expect("serializing a Rust string as JSON cannot fail");
+    let module = render_js_string_literal(&options.initializer_module);
     format!(
         "import {{ {} as {alias} }} from {module};\n",
         options.initializer_export

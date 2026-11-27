@@ -2965,3 +2965,190 @@ fn names_repeated_expressions_per_occurrence() {
         assert!(result.code.contains(values), "{}", result.code);
     }
 }
+
+#[test]
+fn rejects_invalid_runtime_import_options() {
+    let source =
+        "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t`Hi`; }\n";
+
+    for runtime_module in ["", "   ", "./bad\nmodule", "./bad\rmodule", "./bad\0module"] {
+        let error = transform_macros_raw(
+            source,
+            "sample.ts",
+            Some(NativeTransformOptions {
+                runtime_module: Some(runtime_module.to_string()),
+                ..NativeTransformOptions::default()
+            }),
+        )
+        .expect_err("invalid runtimeModule must be rejected");
+        assert!(
+            matches!(error, PalamedesError::InvalidRuntimeImport { .. }),
+            "runtime_module={runtime_module:?}: {error:?}"
+        );
+    }
+
+    for runtime_import_name in [
+        "",
+        "123bad",
+        "getI18n(); evil()",
+        "getI18n } from \"evil\"; //",
+        "default",
+        "class",
+        "await",
+        "let",
+        "function",
+        "return",
+        "import",
+        "eval",
+        "arguments",
+    ] {
+        let error = transform_macros_raw(
+            source,
+            "sample.ts",
+            Some(NativeTransformOptions {
+                runtime_import_name: Some(runtime_import_name.to_string()),
+                ..NativeTransformOptions::default()
+            }),
+        )
+        .expect_err("invalid runtimeImportName must be rejected");
+        assert!(
+            matches!(error, PalamedesError::InvalidRuntimeImport { .. }),
+            "runtime_import_name={runtime_import_name:?}: {error:?}"
+        );
+    }
+
+    // Component files without script blocks must still validate options.
+    let error = transform_macros_raw(
+        "<p>Hello</p>",
+        "Component.svelte",
+        Some(NativeTransformOptions {
+            runtime_import_name: Some("class".to_string()),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect_err("component without scripts must still reject invalid runtimeImportName");
+    assert!(matches!(error, PalamedesError::InvalidRuntimeImport { .. }));
+}
+
+#[test]
+fn escapes_runtime_and_server_function_module_specifiers() {
+    let source =
+        "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t`Hi`; }\n";
+    let module = "./runtime\" ; evil() // </script>\u{2028}\u{2029}";
+    let result = transform_macros_raw(
+        source,
+        "sample.ts",
+        Some(NativeTransformOptions {
+            runtime_module: Some(module.to_string()),
+            runtime_import_name: Some("customGetI18n".to_string()),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("non-empty module specifier with quotes and tags should escape safely");
+
+    assert!(result.code.contains(
+        "import { customGetI18n } from \"./runtime\\\" ; evil() // \\u003c/script\\u003e\\u2028\\u2029\";"
+    ));
+    assert!(!result.code.contains("</script>"));
+    assert!(!result.code.contains('\u{2028}'));
+    assert!(!result.code.contains('\u{2029}'));
+
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &result.code, SourceType::ts()).parse();
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "escaped runtime import must remain valid TypeScript: {:?}\n{}",
+        parsed.diagnostics,
+        result.code
+    );
+
+    let sf_error = transform_macros_raw(
+        r#"export async function save() { "use server"; }"#,
+        "action.ts",
+        Some(NativeTransformOptions {
+            server_functions: Some(ServerFunctionTransformOptions {
+                initializer_module: "./i18n\n;evil()".to_string(),
+                initializer_export: "init".to_string(),
+            }),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect_err("control characters in initializer_module must be rejected");
+    assert!(matches!(
+        sf_error,
+        PalamedesError::InvalidServerFunctionInitializer { .. }
+    ));
+
+    let sf_result = transform_macros_raw(
+        r#"export async function save() { "use server"; }"#,
+        "action.ts",
+        Some(NativeTransformOptions {
+            server_functions: Some(ServerFunctionTransformOptions {
+                initializer_module: "./i18n</script>\u{2028}".to_string(),
+                initializer_export: "init".to_string(),
+            }),
+            ..NativeTransformOptions::default()
+        }),
+    )
+    .expect("escaped server function initializer module should succeed");
+    assert!(!sf_result.code.contains("</script>"));
+    assert!(
+        sf_result
+            .code
+            .contains("./i18n\\u003c/script\\u003e\\u2028")
+    );
+}
+
+#[test]
+fn emits_computed_proto_keys_in_macro_value_bindings() {
+    for (filename, source, expected_fragment) in [
+        (
+            "template-member.ts",
+            "import { t } from \"@palamedes/core/macro\";\nconst label = t`Hello ${obj.__proto__}`;\n",
+            "{ [\"__proto__\"]: obj.__proto__ }",
+        ),
+        (
+            "template-ident.ts",
+            "import { t } from \"@palamedes/core/macro\";\nconst label = t`Hello ${__proto__}`;\n",
+            "{ [\"__proto__\"]: __proto__ }",
+        ),
+        (
+            "descriptor.ts",
+            "import { t } from \"@palamedes/core/macro\";\nconst label = t({ message: \"Hello {__proto__}\" }, { [\"__proto__\"]: value });\n",
+            "{ [\"__proto__\"]: value }",
+        ),
+        (
+            "trans.tsx",
+            "import { Trans } from \"@palamedes/react/macro\";\nconst el = <Trans>Hello {obj.__proto__}</Trans>;\n",
+            "values={{ [\"__proto__\"]: obj.__proto__ }}",
+        ),
+        (
+            "select.ts",
+            "import { select } from \"@palamedes/core/macro\";\nconst label = select(obj.__proto__, { other: \"Fallback\" });\n",
+            "{ [\"__proto__\"]: obj.__proto__ }",
+        ),
+    ] {
+        let result = transform_macros(source, filename, None)
+            .unwrap_or_else(|error| panic!("{filename} should transform: {error}"));
+        assert!(
+            result.code.contains(expected_fragment),
+            "{filename}: expected {expected_fragment:?} in:\n{}",
+            result.code
+        );
+        assert!(
+            !result.code.contains("{ __proto__:"),
+            "{filename}: must not emit uncomputed __proto__ key:\n{}",
+            result.code
+        );
+
+        let allocator = Allocator::default();
+        let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::tsx());
+        let parsed = Parser::new(&allocator, &result.code, source_type).parse();
+        assert!(
+            parsed.diagnostics.is_empty(),
+            "{filename}: generated code must be valid JS/TSX: {:?}\n{}",
+            parsed.diagnostics,
+            result.code
+        );
+    }
+}

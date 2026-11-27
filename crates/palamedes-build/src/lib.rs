@@ -168,6 +168,7 @@ impl CatalogBuilder {
 
     /// Compile inside Cargo's `OUT_DIR`, tracking inputs and reporting fallback use.
     pub fn build(self) -> BuildResult<CompiledCatalogs> {
+        validate_directory(&self.directory)?;
         println!("cargo:rerun-if-changed={}", self.directory.display());
         let output = std::env::var("OUT_DIR").map_err(|source| Error::OutDir { source })?;
         let compiled = self.compile_to(Path::new(&output))?;
@@ -182,20 +183,11 @@ impl CatalogBuilder {
 
     /// Generate application definitions, an update contract, and language data.
     pub fn compile_to(self, output: &Path) -> BuildResult<CompiledCatalogs> {
-        if syn::parse_str::<syn::Ident>(&self.macro_name).is_err() {
-            return Err(Error::InvalidMacroName {
-                name: self.macro_name,
-            });
-        }
-        if syn::parse_str::<syn::Path>(&self.module_path).is_err()
-            || (self.module_path != "crate" && !self.module_path.starts_with("crate::"))
-        {
-            return Err(Error::InvalidModulePath {
-                path: self.module_path,
-            });
-        }
+        validate_directory(&self.directory)?;
+        let macro_name = validate_macro_name(&self.macro_name)?;
+        let module_path = normalize_module_path(&self.module_path)?;
         let prepared = catalogs::prepare(&self)?;
-        let generated = generate_module(&self.macro_name, &self.module_path, &prepared);
+        let generated = generate_module(&macro_name, &module_path, &prepared);
         fs::create_dir_all(output).map_err(Error::io(output))?;
         let catalog_directory = output.join("catalogs");
         prepared.write_catalogs(&catalog_directory)?;
@@ -222,6 +214,7 @@ impl CatalogBuilder {
         contract: &CatalogContract,
         output: &Path,
     ) -> BuildResult<CatalogUpdate> {
+        validate_directory(&self.directory)?;
         contract.validate()?;
         let prepared = catalogs::prepare(&self)?;
         if prepared.contract != *contract {
@@ -233,6 +226,77 @@ impl CatalogBuilder {
             missing: prepared.missing,
         })
     }
+}
+
+fn validate_directory(directory: &Path) -> BuildResult<()> {
+    if directory
+        .as_os_str()
+        .as_encoded_bytes()
+        .iter()
+        .any(|&byte| matches!(byte, b'\r' | b'\n'))
+    {
+        return Err(Error::InvalidDirectoryPath {
+            path: directory.to_path_buf(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_macro_name(name: &str) -> BuildResult<String> {
+    let ident = syn::parse_str::<syn::Ident>(name).map_err(|_| Error::InvalidMacroName {
+        name: name.to_owned(),
+    })?;
+    let normalized = ident.to_string();
+    if normalized.starts_with("r#") || normalized != name {
+        return Err(Error::InvalidMacroName {
+            name: name.to_owned(),
+        });
+    }
+    Ok(normalized)
+}
+
+fn normalize_module_path(path: &str) -> BuildResult<String> {
+    if path.contains("//") || path.contains("/*") || path.contains("*/") {
+        return Err(Error::InvalidModulePath {
+            path: path.to_owned(),
+        });
+    }
+    let parsed = syn::parse_str::<syn::Path>(path).map_err(|_| Error::InvalidModulePath {
+        path: path.to_owned(),
+    })?;
+    if parsed.leading_colon.is_some() {
+        return Err(Error::InvalidModulePath {
+            path: path.to_owned(),
+        });
+    }
+    let mut segments = parsed.segments.iter();
+    let Some(first) = segments.next() else {
+        return Err(Error::InvalidModulePath {
+            path: path.to_owned(),
+        });
+    };
+    if first.ident != "crate" || !first.arguments.is_empty() {
+        return Err(Error::InvalidModulePath {
+            path: path.to_owned(),
+        });
+    }
+    let mut normalized = String::from("crate");
+    for segment in segments {
+        if !segment.arguments.is_empty() {
+            return Err(Error::InvalidModulePath {
+                path: path.to_owned(),
+            });
+        }
+        let ident = segment.ident.to_string();
+        if matches!(ident.as_str(), "crate" | "self" | "super" | "Self") {
+            return Err(Error::InvalidModulePath {
+                path: path.to_owned(),
+            });
+        }
+        normalized.push_str("::");
+        normalized.push_str(&ident);
+    }
+    Ok(normalized)
 }
 
 fn generate_module(name: &str, module_path: &str, prepared: &PreparedCatalogs) -> String {
