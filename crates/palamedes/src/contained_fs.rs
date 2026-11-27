@@ -513,7 +513,7 @@ mod platform {
     struct ExistingAcl {
         posix_access: Option<Vec<u8>>,
         nfs4: Option<Vec<u8>>,
-        selinux_label: Option<Vec<u8>>,
+        security_xattrs: Vec<(CString, Vec<u8>)>,
     }
 
     #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -894,6 +894,11 @@ mod platform {
             if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
             {
                 return None;
+            }
+            match (self.file_identity(left), self.file_identity(right)) {
+                (Ok(Some(left_id)), Ok(Some(right_id))) => return Some(left_id == right_id),
+                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => return Some(false),
+                _ => {}
             }
             let c_left = CString::new(left.as_bytes()).ok()?;
             let c_right = CString::new(right.as_bytes()).ok()?;
@@ -3620,9 +3625,9 @@ mod platform {
         {
             let readable = open_readable_self(dir)?;
             let mut checked_casefold_flag = false;
-            const FS_CASEFOLD_FL: libc::c_long = 0x4000_0000;
-            let mut flags: libc::c_long = 0;
-            // SAFETY: `FS_IOC_GETFLAGS` writes a single `c_long` flag bitmask.
+            const FS_CASEFOLD_FL: libc::c_int = 0x4000_0000;
+            let mut flags: libc::c_int = 0;
+            // SAFETY: `FS_IOC_GETFLAGS` writes a 32-bit `int` flag bitmask.
             if unsafe { libc::ioctl(readable.as_raw_fd(), libc::FS_IOC_GETFLAGS, &mut flags) } == 0
             {
                 checked_casefold_flag = true;
@@ -3828,13 +3833,16 @@ mod platform {
             let size = unsafe { libc::fgetxattr(fd, name.as_ptr(), std::ptr::null_mut(), 0) };
             if size < 0 {
                 let error = io::Error::last_os_error();
-                if matches!(error.raw_os_error(), Some(libc::ENODATA | libc::EOPNOTSUPP)) {
+                if matches!(
+                    error.raw_os_error(),
+                    Some(libc::ENODATA | libc::EOPNOTSUPP | libc::ENOSYS)
+                ) {
                     return Ok(None);
                 }
                 return Err(error);
             }
             if size == 0 {
-                return Ok(None);
+                return Ok(Some(Vec::new()));
             }
             let mut buffer = vec![0u8; usize::try_from(size).unwrap_or(0)];
             // SAFETY: `buffer` has `buffer.len()` writable bytes.
@@ -3912,13 +3920,16 @@ mod platform {
                 unsafe { libc::getxattr(proc_fd.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
             if size < 0 {
                 let error = io::Error::last_os_error();
-                if matches!(error.raw_os_error(), Some(libc::ENODATA | libc::EOPNOTSUPP)) {
+                if matches!(
+                    error.raw_os_error(),
+                    Some(libc::ENODATA | libc::EOPNOTSUPP | libc::ENOSYS)
+                ) {
                     return Ok(None);
                 }
                 return Err(error);
             }
             if size == 0 {
-                return Ok(None);
+                return Ok(Some(Vec::new()));
             }
             let mut buffer = vec![0u8; usize::try_from(size).unwrap_or(0)];
             // SAFETY: `buffer` has `buffer.len()` writable bytes.
@@ -3978,17 +3989,98 @@ mod platform {
     }
 
     #[cfg(target_os = "linux")]
+    fn read_linux_security_xattrs(fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
+        let mut attrs = std::collections::BTreeMap::<CString, Vec<u8>>::new();
+        // Probe well-known LSM access-control labels explicitly so synthesized
+        // SELinux or Smack attributes are captured even if `flistxattr` omits them.
+        for known in [
+            c"security.selinux",
+            c"security.SMACK64",
+            c"security.SMACK64EXEC",
+            c"security.SMACK64MMAP",
+        ] {
+            if let Some(value) = read_linux_xattr(fd, known)? {
+                attrs.insert(known.to_owned(), value);
+            }
+        }
+        // Also enumerate any additional `security.*` extended attributes on the
+        // inode (such as Smack transmute/custom labels or capabilities).
+        let mut names_buf = Vec::new();
+        let mut listed = false;
+        for _ in 0..4 {
+            // SAFETY: querying list size with null buffer.
+            let size = unsafe { libc::flistxattr(fd, std::ptr::null_mut(), 0) };
+            if size < 0 {
+                let error = io::Error::last_os_error();
+                if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::ENOSYS)) {
+                    listed = true;
+                    break;
+                }
+                return Err(error);
+            }
+            if size == 0 {
+                listed = true;
+                break;
+            }
+            names_buf.resize(usize::try_from(size).unwrap_or(0), 0u8);
+            // SAFETY: `names_buf` has `names_buf.len()` writable bytes.
+            let read = unsafe {
+                libc::flistxattr(
+                    fd,
+                    names_buf.as_mut_ptr().cast::<libc::c_char>(),
+                    names_buf.len(),
+                )
+            };
+            if read >= 0 {
+                names_buf.truncate(usize::try_from(read).unwrap_or(0));
+                listed = true;
+                break;
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::ERANGE) {
+                continue;
+            }
+            if matches!(error.raw_os_error(), Some(libc::EOPNOTSUPP | libc::ENOSYS)) {
+                names_buf.clear();
+                listed = true;
+                break;
+            }
+            return Err(error);
+        }
+        if !listed {
+            return Err(io::Error::other(
+                "extended attribute list changed concurrently while reading Linux security labels",
+            ));
+        }
+        for raw_name in names_buf.split(|&byte| byte == 0) {
+            if !raw_name.starts_with(b"security.") {
+                continue;
+            }
+            let Ok(c_name) = CString::new(raw_name) else {
+                continue;
+            };
+            if attrs.contains_key(&c_name) {
+                continue;
+            }
+            if let Some(value) = read_linux_xattr(fd, &c_name)? {
+                attrs.insert(c_name, value);
+            }
+        }
+        Ok(attrs.into_iter().collect())
+    }
+
+    #[cfg(target_os = "linux")]
     fn read_existing_acl(fd: std::os::fd::RawFd) -> io::Result<Option<ExistingAcl>> {
         let posix_access = read_linux_xattr(fd, c"system.posix_acl_access")?;
         let nfs4 = read_linux_xattr(fd, c"system.nfs4_acl")?;
-        let selinux_label = read_linux_xattr(fd, c"security.selinux")?;
-        if posix_access.is_none() && nfs4.is_none() && selinux_label.is_none() {
+        let security_xattrs = read_linux_security_xattrs(fd)?;
+        if posix_access.is_none() && nfs4.is_none() && security_xattrs.is_empty() {
             Ok(None)
         } else {
             Ok(Some(ExistingAcl {
                 posix_access,
                 nfs4,
-                selinux_label,
+                security_xattrs,
             }))
         }
     }
@@ -4033,16 +4125,16 @@ mod platform {
                 ));
             }
         }
-        if let Some(expected_label) = &acl.selinux_label {
-            let current_label = read_linux_xattr(temp_fd, c"security.selinux")?;
-            if current_label.as_deref() != Some(expected_label.as_slice()) {
-                // SAFETY: `temp_fd` is open and `expected_label` is a valid buffer.
+        for (name, expected_value) in &acl.security_xattrs {
+            let current_value = read_linux_xattr(temp_fd, name)?;
+            if current_value.as_deref() != Some(expected_value.as_slice()) {
+                // SAFETY: `temp_fd` is open and `expected_value` is a valid buffer.
                 if unsafe {
                     libc::fsetxattr(
                         temp_fd,
-                        c"security.selinux".as_ptr(),
-                        expected_label.as_ptr().cast::<libc::c_void>(),
-                        expected_label.len(),
+                        name.as_ptr(),
+                        expected_value.as_ptr().cast::<libc::c_void>(),
+                        expected_value.len(),
                         0,
                     )
                 } != 0
@@ -4050,16 +4142,21 @@ mod platform {
                     let error = io::Error::last_os_error();
                     return Err(io::Error::new(
                         io::ErrorKind::PermissionDenied,
-                        format!("cannot preserve SELinux label on replacement: {error}"),
+                        format!(
+                            "cannot preserve Linux security label {} on replacement: {error}",
+                            name.to_string_lossy()
+                        ),
                     ));
                 }
-                let verified_label = read_linux_xattr(temp_fd, c"security.selinux")?;
-                if verified_label.as_deref() != Some(expected_label.as_slice()) {
-                    return Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "cannot verify SELinux label preservation on replacement",
-                    ));
-                }
+            }
+        }
+        if !acl.security_xattrs.is_empty() {
+            let verified = read_linux_security_xattrs(temp_fd)?;
+            if verified != acl.security_xattrs {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "cannot verify Linux security label preservation on replacement",
+                ));
             }
         }
         Ok(())
@@ -5530,6 +5627,48 @@ mod platform {
     }
 }
 
+#[cfg(any(windows, test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WindowsTxfOpenDisposition {
+    NotFound,
+    Retry,
+    Unsupported,
+    Error,
+}
+
+#[cfg(any(windows, test))]
+const fn classify_windows_txf_open_status(status: i32) -> WindowsTxfOpenDisposition {
+    // Verified Windows SDK `ntstatus.h` values (`FACILITY_TXFS = 0x19`).
+    const STATUS_NOT_IMPLEMENTED: i32 = 0xC000_0002_u32 as i32;
+    const STATUS_INVALID_DEVICE_REQUEST: i32 = 0xC000_0010_u32 as i32;
+    const STATUS_OBJECT_NAME_NOT_FOUND: i32 = 0xC000_0034_u32 as i32;
+    const STATUS_OBJECT_PATH_NOT_FOUND: i32 = 0xC000_003A_u32 as i32;
+    const STATUS_SHARING_VIOLATION: i32 = 0xC000_0043_u32 as i32;
+    const STATUS_NOT_SUPPORTED: i32 = 0xC000_00BB_u32 as i32;
+    const STATUS_TRANSACTIONAL_CONFLICT: i32 = 0xC019_0001_u32 as i32;
+    const STATUS_RM_NOT_ACTIVE: i32 = 0xC019_0005_u32 as i32;
+    const STATUS_TRANSACTIONS_UNSUPPORTED_REMOTE: i32 = 0xC019_000A_u32 as i32;
+    const STATUS_EFS_NOT_ALLOWED_IN_TRANSACTION: i32 = 0xC019_003E_u32 as i32;
+    const STATUS_TRANSACTIONAL_OPEN_NOT_ALLOWED: i32 = 0xC019_003F_u32 as i32;
+
+    match status {
+        STATUS_OBJECT_NAME_NOT_FOUND | STATUS_OBJECT_PATH_NOT_FOUND => {
+            WindowsTxfOpenDisposition::NotFound
+        }
+        STATUS_SHARING_VIOLATION | STATUS_TRANSACTIONAL_CONFLICT => {
+            WindowsTxfOpenDisposition::Retry
+        }
+        STATUS_NOT_IMPLEMENTED
+        | STATUS_INVALID_DEVICE_REQUEST
+        | STATUS_NOT_SUPPORTED
+        | STATUS_RM_NOT_ACTIVE
+        | STATUS_TRANSACTIONS_UNSUPPORTED_REMOTE
+        | STATUS_EFS_NOT_ALLOWED_IN_TRANSACTION
+        | STATUS_TRANSACTIONAL_OPEN_NOT_ALLOWED => WindowsTxfOpenDisposition::Unsupported,
+        _ => WindowsTxfOpenDisposition::Error,
+    }
+}
+
 #[cfg(windows)]
 mod platform {
     use std::ffi::{OsStr, OsString, c_void};
@@ -5630,12 +5769,6 @@ mod platform {
     const SE_SACL_PROTECTED: u16 = 0x2000;
     const STATUS_ACCESS_DENIED: NtStatus = 0xC000_0022_u32 as i32;
     const STATUS_PRIVILEGE_NOT_HELD: NtStatus = 0xC000_0061_u32 as i32;
-    const STATUS_TRANSACTIONAL_CONFLICT: NtStatus = 0xC019_0001_u32 as i32;
-    const STATUS_TRANSACTION_INVALID_STATE: NtStatus = 0xC019_0006_u32 as i32;
-    const STATUS_RM_NOT_ACTIVE: NtStatus = 0xC019_0008_u32 as i32;
-    const STATUS_TRANSACTIONS_UNSUPPORTED_REMOTE: NtStatus = 0xC019_001D_u32 as i32;
-    const STATUS_TRANSACTIONAL_OPEN_NOT_ALLOWED: NtStatus = 0xC019_0037_u32 as i32;
-    const STATUS_EFS_NOT_ALLOWED_IN_TRANSACTION: NtStatus = 0xC019_003E_u32 as i32;
     const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 0x0000_0800;
     const INVALID_HANDLE_VALUE: *mut c_void = -1_isize as *mut c_void;
 
@@ -6167,6 +6300,11 @@ mod platform {
 
         /// Detects the filename equivalence policy of this Windows directory,
         /// respecting NTFS per-directory case sensitivity.
+        ///
+        /// Returns `None` when the filesystem does not support
+        /// `FileCaseSensitiveInformation` (for example, case-sensitive SMB
+        /// shares) so callers can fall back to actual entry identities or
+        /// filesystem probing rather than assuming case-insensitivity.
         #[must_use]
         pub fn filename_equivalence(&self) -> Option<super::DirFilenameEquivalence> {
             let mut iosb = IoStatusBlock {
@@ -6184,21 +6322,125 @@ mod platform {
                     FILE_CASE_SENSITIVE_INFORMATION_CLASS,
                 )
             };
-            if status >= 0 && (info.flags & FILE_CS_FLAG_CASE_SENSITIVE_DIR) != 0 {
-                Some(super::DirFilenameEquivalence::Exact)
+            if status >= 0 {
+                if (info.flags & FILE_CS_FLAG_CASE_SENSITIVE_DIR) != 0 {
+                    Some(super::DirFilenameEquivalence::Exact)
+                } else {
+                    Some(super::DirFilenameEquivalence::CaseInsensitiveNtfs)
+                }
             } else {
-                Some(super::DirFilenameEquivalence::CaseInsensitiveNtfs)
+                None
             }
         }
 
-        /// Windows uses the OS's live `RtlUpcaseUnicodeChar` `$UpCase` table
-        /// directly, so no on-disk filename equivalence probe is needed.
+        /// Probes whether two single-segment filenames resolve to the same
+        /// entry on this Windows directory's mounted filesystem.
+        ///
+        /// First compares actual on-disk file identities when either entry
+        /// already exists (working even on read-only directories). Otherwise
+        /// creates a temporary delete-on-close subdirectory inside `self` and
+        /// checks whether creating `left` makes `right` resolve to the same
+        /// file identity.
         #[must_use]
         pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
             if left == right {
                 return Some(true);
             }
-            None
+            if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
+            {
+                return None;
+            }
+            match (self.file_identity(left), self.file_identity(right)) {
+                (Ok(Some(left_id)), Ok(Some(right_id))) => return Some(left_id == right_id),
+                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => return Some(false),
+                _ => {}
+            }
+            let pid = std::process::id();
+            let probe_dir_handle = {
+                let mut created = None;
+                for _ in 0..32 {
+                    let nonce = TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
+                    let probe_name = OsString::from(format!(".pmds-probe-{pid}-{nonce}"));
+                    match nt_create_relative(
+                        self.handle.as_raw_handle(),
+                        &probe_name,
+                        FILE_READ_ATTRIBUTES | FILE_TRAVERSE | DELETE | SYNCHRONIZE,
+                        FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_HIDDEN,
+                        0,
+                        FILE_CREATE,
+                        FILE_DIRECTORY_FILE
+                            | FILE_OPEN_REPARSE_POINT
+                            | FILE_SYNCHRONOUS_IO_NONALERT,
+                        std::ptr::null_mut(),
+                    ) {
+                        Ok(handle) => {
+                            created = Some(handle);
+                            break;
+                        }
+                        Err(STATUS_OBJECT_NAME_COLLISION) => continue,
+                        Err(_) => return None,
+                    }
+                }
+                created?
+            };
+            struct WindowsProbeDirCleanup {
+                handle: OwnedHandle,
+            }
+            impl Drop for WindowsProbeDirCleanup {
+                fn drop(&mut self) {
+                    let _ = nt_mark_delete_on_close(self.handle.as_raw_handle());
+                }
+            }
+            let probe_dir = WindowsProbeDirCleanup {
+                handle: probe_dir_handle,
+            };
+            let left_handle = nt_create_relative(
+                probe_dir.handle.as_raw_handle(),
+                left,
+                FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
+                FILE_ATTRIBUTE_TEMPORARY,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_CREATE,
+                FILE_NON_DIRECTORY_FILE
+                    | FILE_OPEN_REPARSE_POINT
+                    | FILE_DELETE_ON_CLOSE
+                    | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            )
+            .ok()?;
+            let left_info = file_information(left_handle.as_raw_handle()).ok()?;
+            let left_id = FileIdentity {
+                volume_serial: left_info.volume_serial_number,
+                file_index_high: left_info.file_index_high,
+                file_index_low: left_info.file_index_low,
+            };
+            let result = match nt_create_relative(
+                probe_dir.handle.as_raw_handle(),
+                right,
+                FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                FILE_ATTRIBUTE_NORMAL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_OPEN,
+                FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            ) {
+                Ok(right_handle) => {
+                    let right_info = file_information(right_handle.as_raw_handle()).ok()?;
+                    let right_id = FileIdentity {
+                        volume_serial: right_info.volume_serial_number,
+                        file_index_high: right_info.file_index_high,
+                        file_index_low: right_info.file_index_low,
+                    };
+                    Some(left_id == right_id)
+                }
+                Err(status) if is_not_found_status(status) => Some(false),
+                Err(_) => None,
+            };
+            // Drop `left_handle` first so `FILE_DELETE_ON_CLOSE` empties
+            // `probe_dir` before `probe_dir`'s drop marks it delete-on-close.
+            drop(left_handle);
+            drop(probe_dir);
+            result
         }
 
         /// Detects whether filenames in this directory are compared
@@ -6974,37 +7216,30 @@ mod platform {
                 drop(_thread_tx);
                 match open_result {
                     Ok(handle) => break handle,
-                    Err(status) if is_not_found_status(status) => {
-                        return Err(ContainedFsError::Io(io::Error::new(
-                            io::ErrorKind::AlreadyExists,
-                            format!(
-                                "destination \"{}\" was removed concurrently before update",
-                                file_name.to_string_lossy()
-                            ),
-                        )));
-                    }
-                    Err(status @ (STATUS_SHARING_VIOLATION | STATUS_TRANSACTIONAL_CONFLICT)) => {
-                        if std::time::Instant::now() >= deadline {
+                    Err(status) => match super::classify_windows_txf_open_status(status) {
+                        super::WindowsTxfOpenDisposition::NotFound => {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "destination \"{}\" was removed concurrently before update",
+                                    file_name.to_string_lossy()
+                                ),
+                            )));
+                        }
+                        super::WindowsTxfOpenDisposition::Retry => {
+                            if std::time::Instant::now() >= deadline {
+                                return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                            backoff_ms = (backoff_ms * 2).min(50);
+                        }
+                        super::WindowsTxfOpenDisposition::Unsupported => {
+                            return Ok(TransactedOverwriteOutcome::Unsupported);
+                        }
+                        super::WindowsTxfOpenDisposition::Error => {
                             return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
                         }
-                        std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
-                        backoff_ms = (backoff_ms * 2).min(50);
-                    }
-                    Err(
-                        STATUS_TRANSACTIONAL_OPEN_NOT_ALLOWED
-                        | STATUS_NOT_SUPPORTED
-                        | STATUS_INVALID_DEVICE_REQUEST
-                        | STATUS_NOT_IMPLEMENTED
-                        | STATUS_RM_NOT_ACTIVE
-                        | STATUS_TRANSACTION_INVALID_STATE
-                        | STATUS_TRANSACTIONS_UNSUPPORTED_REMOTE
-                        | STATUS_EFS_NOT_ALLOWED_IN_TRANSACTION,
-                    ) => {
-                        return Ok(TransactedOverwriteOutcome::Unsupported);
-                    }
-                    Err(status) => {
-                        return Err(ContainedFsError::Io(nt_status_to_io_error(status)));
-                    }
+                    },
                 }
             };
 
@@ -9612,5 +9847,63 @@ mod tests {
             format!(".pmds-claim-{}-1", lock_id.ino),
             "writer E must serialize at generation 1 instead of sneaking into generation 0"
         );
+    }
+
+    #[test]
+    fn windows_txf_open_status_classification_matches_sdk_codes() {
+        use super::{WindowsTxfOpenDisposition, classify_windows_txf_open_status};
+
+        // Verified Windows SDK `ntstatus.h` values for unsupported TxF mounts/files.
+        for unsupported in [
+            0xC000_0002_u32 as i32, // STATUS_NOT_IMPLEMENTED
+            0xC000_0010_u32 as i32, // STATUS_INVALID_DEVICE_REQUEST
+            0xC000_00BB_u32 as i32, // STATUS_NOT_SUPPORTED
+            0xC019_0005_u32 as i32, // STATUS_RM_NOT_ACTIVE
+            0xC019_000A_u32 as i32, // STATUS_TRANSACTIONS_UNSUPPORTED_REMOTE
+            0xC019_003E_u32 as i32, // STATUS_EFS_NOT_ALLOWED_IN_TRANSACTION
+            0xC019_003F_u32 as i32, // STATUS_TRANSACTIONAL_OPEN_NOT_ALLOWED
+        ] {
+            assert_eq!(
+                classify_windows_txf_open_status(unsupported),
+                WindowsTxfOpenDisposition::Unsupported,
+                "expected Unsupported for NTSTATUS 0x{:08X}",
+                u32::from_ne_bytes(unsupported.to_ne_bytes())
+            );
+        }
+        // Transient conflicts retry.
+        for retry in [
+            0xC000_0043_u32 as i32, // STATUS_SHARING_VIOLATION
+            0xC019_0001_u32 as i32, // STATUS_TRANSACTIONAL_CONFLICT
+        ] {
+            assert_eq!(
+                classify_windows_txf_open_status(retry),
+                WindowsTxfOpenDisposition::Retry,
+                "expected Retry for NTSTATUS 0x{:08X}",
+                u32::from_ne_bytes(retry.to_ne_bytes())
+            );
+        }
+        // Concurrent deletion maps to NotFound.
+        for not_found in [
+            0xC000_0034_u32 as i32, // STATUS_OBJECT_NAME_NOT_FOUND
+            0xC000_003A_u32 as i32, // STATUS_OBJECT_PATH_NOT_FOUND
+        ] {
+            assert_eq!(
+                classify_windows_txf_open_status(not_found),
+                WindowsTxfOpenDisposition::NotFound
+            );
+        }
+        // Corruption and permission errors must propagate as hard errors, never fallback.
+        for hard_error in [
+            0xC019_0006_u32 as i32, // STATUS_RM_METADATA_CORRUPT
+            0xC000_0022_u32 as i32, // STATUS_ACCESS_DENIED
+            0xC019_0002_u32 as i32, // STATUS_INVALID_TRANSACTION
+        ] {
+            assert_eq!(
+                classify_windows_txf_open_status(hard_error),
+                WindowsTxfOpenDisposition::Error,
+                "expected Error for NTSTATUS 0x{:08X}",
+                u32::from_ne_bytes(hard_error.to_ne_bytes())
+            );
+        }
     }
 }

@@ -1330,34 +1330,38 @@ fn probe_unknown_dir_equivalence(dir: &ContainedDir) -> Option<DirFilenameEquiva
 fn resolve_directory_equivalence(
     dir: &ContainedDir,
     identity: Option<FileIdentity>,
-    parent: Option<(Option<FileIdentity>, DirFilenameEquivalence)>,
-    cache: &mut HashMap<FileIdentity, DirFilenameEquivalence>,
-) -> DirFilenameEquivalence {
+    parent: Option<(Option<FileIdentity>, DirFilenameEquivalence, bool)>,
+    cache: &mut HashMap<FileIdentity, (DirFilenameEquivalence, bool)>,
+) -> (DirFilenameEquivalence, bool) {
     if let Some(id) = identity
         && let Some(&cached) = cache.get(&id)
     {
         return cached;
     }
     let same_vol_parent = match (identity, parent) {
-        (Some(id), Some((Some(parent_id), parent_eq))) if id.same_volume(parent_id) => {
-            Some(parent_eq)
+        (Some(id), Some((Some(parent_id), parent_eq, parent_confirmed)))
+            if id.same_volume(parent_id) =>
+        {
+            Some((parent_eq, parent_confirmed))
         }
         _ => None,
     };
-    let equivalence = dir
+    let resolved = dir
         .filename_equivalence()
         .or_else(|| probe_unknown_dir_equivalence(dir))
+        .map(|eq| (eq, true))
         .or(same_vol_parent)
-        .unwrap_or_else(default_platform_equivalence);
+        .unwrap_or_else(|| (default_platform_equivalence(), false));
     if let Some(id) = identity {
-        cache.insert(id, equivalence);
+        cache.insert(id, resolved);
     }
-    equivalence
+    resolved
 }
 
 fn segments_collide_on_dir(
     anchor_dir: &ContainedDir,
     equivalence: DirFilenameEquivalence,
+    equivalence_confirmed: bool,
     left_remaining: &[OsString],
     left_file: &OsStr,
     right_remaining: &[OsString],
@@ -1387,7 +1391,8 @@ fn segments_collide_on_dir(
         if left == right {
             continue;
         }
-        if is_ascii_ci
+        if equivalence_confirmed
+            && is_ascii_ci
             && let (Some(l_str), Some(r_str)) = (left.to_str(), right.to_str())
             && l_str.is_ascii()
             && r_str.is_ascii()
@@ -1395,11 +1400,10 @@ fn segments_collide_on_dir(
         {
             continue;
         }
-        // Non-ASCII equivalence depends on the mounted volume's Unicode
-        // version (for example Linux ext4 `utf8-12.1` vs Unicode 16 in Rust).
-        // Ask the mounted filesystem before rejecting as a collision; fall back
-        // to the folded decision when the directory cannot be probed (e.g.
-        // read-only directory or Windows where `RtlUpcaseUnicodeChar` is exact).
+        // When equivalence is unconfirmed (for example, a read-only share where
+        // filesystem metadata queries are unsupported) or names are non-ASCII,
+        // consult actual entry identities / the mounted filesystem before
+        // reporting a collision.
         if anchor_dir.probe_names_equivalent(left, right) == Some(false) {
             return false;
         }
@@ -1413,7 +1417,7 @@ fn reject_colliding_extract_targets(
 ) -> Result<(), CliError> {
     type SeenBucket<'a> = Vec<(&'a str, Vec<OsString>, OsString)>;
 
-    let mut dir_eq_cache: HashMap<FileIdentity, DirFilenameEquivalence> = HashMap::new();
+    let mut dir_eq_cache: HashMap<FileIdentity, (DirFilenameEquivalence, bool)> = HashMap::new();
     let mut seen_paths: HashMap<(ExtractTargetAnchor, Vec<OsString>, OsString), SeenBucket<'_>> =
         HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
@@ -1438,7 +1442,7 @@ fn reject_colliding_extract_targets(
             path: config.root_dir.clone(),
             source: error.into_io_error(),
         })?;
-        let mut current_eq =
+        let (mut current_eq, mut current_eq_confirmed) =
             resolve_directory_equivalence(&current, current_id, None, &mut dir_eq_cache);
         let mut existing_prefix = PathBuf::new();
         let mut remaining_segments: Vec<OsString> = Vec::new();
@@ -1465,15 +1469,16 @@ fn reject_colliding_extract_targets(
                         path: catalog_path.clone(),
                         source: error.into_io_error(),
                     })?;
-                    let child_eq = resolve_directory_equivalence(
+                    let (child_eq, child_eq_confirmed) = resolve_directory_equivalence(
                         &child,
                         child_id,
-                        Some((current_id, current_eq)),
+                        Some((current_id, current_eq, current_eq_confirmed)),
                         &mut dir_eq_cache,
                     );
                     current = child;
                     current_id = child_id;
                     current_eq = child_eq;
+                    current_eq_confirmed = child_eq_confirmed;
                     existing_prefix.push(segment);
                 }
                 None => {
@@ -1498,6 +1503,7 @@ fn reject_colliding_extract_targets(
                     segments_collide_on_dir(
                         &current,
                         current_eq,
+                        current_eq_confirmed,
                         prev_raw_remaining,
                         prev_raw_file,
                         &raw_remaining_segments,
@@ -2605,6 +2611,34 @@ catalogs:
 
         fs::set_permissions(&locales_dir, fs::Permissions::from_mode(0o755))
             .expect("restore locales permissions");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn unconfirmed_case_insensitive_fallback_checks_live_directory_equivalence() {
+        use super::{ContainedDir, DirFilenameEquivalence};
+        use std::ffi::OsStr;
+
+        let root = temp_dir("extract-unconfirmed-eq");
+        let dir = ContainedDir::open_root(&root).expect("open temp dir");
+        let actually_ci = dir
+            .probe_names_equivalent(OsStr::new("Messages.po"), OsStr::new("messages.po"))
+            .expect("probe live filesystem case equivalence");
+        // Even if the guessed fallback says CaseInsensitiveNtfs (confirmed=false),
+        // `segments_collide_on_dir` consults the actual directory/entry identities
+        // instead of blindly rejecting ASCII case variants.
+        assert_eq!(
+            super::segments_collide_on_dir(
+                &dir,
+                DirFilenameEquivalence::CaseInsensitiveNtfs,
+                false,
+                &[],
+                OsStr::new("Messages.po"),
+                &[],
+                OsStr::new("messages.po"),
+            ),
+            actually_ci
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }

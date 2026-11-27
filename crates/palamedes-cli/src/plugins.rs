@@ -267,7 +267,7 @@ fn load_registry(
         cwd,
         native_executable,
         reuse_cached_manifests,
-        &hash_plugin_binary,
+        &hash_plugin_source,
     )
 }
 
@@ -276,7 +276,7 @@ fn load_registry_with_binary_hasher(
     cwd: &Path,
     native_executable: &Path,
     reuse_cached_manifests: bool,
-    hash_binary: &dyn Fn(&Path) -> Option<[u8; 32]>,
+    hash_binary: &dyn Fn(PluginHashSource<'_>) -> Option<[u8; 32]>,
 ) -> Result<PluginRegistry, PluginFailure> {
     let mut registry = PluginRegistry::default();
     let mut cache = load_plugin_manifest_cache(config);
@@ -517,21 +517,90 @@ fn cache_key_matches_binary(entry_key: &str, canonical_binary: &str) -> bool {
             .is_ok_and(|(binary, _)| binary == canonical_binary)
 }
 
+enum PluginHashSource<'a> {
+    #[cfg(any(unix, windows))]
+    PinnedFile(&'a fs::File),
+    Path(&'a Path),
+}
+
+fn hash_plugin_source(source: PluginHashSource<'_>) -> Option<[u8; 32]> {
+    match source {
+        #[cfg(any(unix, windows))]
+        PluginHashSource::PinnedFile(file) => hash_plugin_file(file),
+        PluginHashSource::Path(path) => hash_plugin_binary(path),
+    }
+}
+
 fn plugin_cache_identity_for_resolved(
     resolved: &ResolvedPlugin,
     binary_path: &Path,
     cached: Option<&PluginBinaryStamp>,
-    hash_binary: &dyn Fn(&Path) -> Option<[u8; 32]>,
+    hash_binary: &dyn Fn(PluginHashSource<'_>) -> Option<[u8; 32]>,
 ) -> Option<(String, PluginBinaryStamp)> {
-    let metadata = fs::metadata(binary_path).ok()?;
-    let binary_metadata = plugin_binary_metadata(&metadata);
-    if !resolved.pinned_matches_path(binary_path, &binary_metadata) {
-        return None;
+    #[cfg(any(unix, windows))]
+    if let Some(ref pinned) = resolved.pinned_binary {
+        use std::mem::ManuallyDrop;
+
+        #[cfg(unix)]
+        let pinned_file = {
+            use std::os::fd::{AsRawFd, FromRawFd};
+            // SAFETY: `pinned.file_fd` is open and owned by `pinned`;
+            // `ManuallyDrop` borrows it without closing on drop.
+            ManuallyDrop::new(unsafe { fs::File::from_raw_fd(pinned.file_fd.as_raw_fd()) })
+        };
+        #[cfg(windows)]
+        let pinned_file = {
+            use std::os::windows::io::{AsRawHandle, FromRawHandle};
+            // SAFETY: `pinned.pinned_handle` is open and owned by `pinned`;
+            // `ManuallyDrop` borrows it without closing on drop.
+            ManuallyDrop::new(unsafe {
+                fs::File::from_raw_handle(pinned.pinned_handle.as_raw_handle())
+            })
+        };
+
+        let fd_meta = pinned_file.metadata().ok()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if fd_meta.dev() != pinned.dev || fd_meta.ino() != pinned.ino {
+                return None;
+            }
+        }
+        let binary_metadata = plugin_binary_metadata(&fd_meta);
+        if !resolved.pinned_matches_path(binary_path, &binary_metadata) {
+            return None;
+        }
+        let stamp = if let Some(cached) = cached
+            && cached.metadata.permits_digest_reuse(&binary_metadata)
+        {
+            cached.clone()
+        } else {
+            if !pinned.readable {
+                return None;
+            }
+            let sha256 = hash_binary(PluginHashSource::PinnedFile(&pinned_file))?;
+            let after_meta = pinned_file.metadata().ok()?;
+            let after_binary_metadata = plugin_binary_metadata(&after_meta);
+            if after_binary_metadata != binary_metadata {
+                return None;
+            }
+            PluginBinaryStamp {
+                metadata: binary_metadata,
+                sha256,
+            }
+        };
+        if !resolved.pinned_matches_path(binary_path, &stamp.metadata) {
+            return None;
+        }
+        return Some((
+            plugin_cache_key(binary_path, &resolved.invocation_path),
+            stamp,
+        ));
     }
-    let (_, stamp) = plugin_cache_identity(binary_path, cached, hash_binary)?;
-    if !resolved.pinned_matches_path(binary_path, &stamp.metadata) {
-        return None;
-    }
+
+    let (_, stamp) = plugin_cache_identity(binary_path, cached, &|path| {
+        hash_binary(PluginHashSource::Path(path))
+    })?;
     Some((
         plugin_cache_key(binary_path, &resolved.invocation_path),
         stamp,
@@ -558,6 +627,30 @@ fn plugin_cache_identity(
             sha256,
         },
     ))
+}
+
+#[cfg(any(unix, windows))]
+fn hash_plugin_file(file: &fs::File) -> Option<[u8; 32]> {
+    #[cfg(unix)]
+    use std::os::unix::fs::FileExt;
+    #[cfg(windows)]
+    use std::os::windows::fs::FileExt;
+
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut offset: u64 = 0;
+    loop {
+        #[cfg(unix)]
+        let bytes_read = file.read_at(&mut buffer, offset).ok()?;
+        #[cfg(windows)]
+        let bytes_read = file.seek_read(&mut buffer, offset).ok()?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+        offset = offset.checked_add(u64::try_from(bytes_read).ok()?)?;
+    }
+    Some(hasher.finalize().into())
 }
 
 fn hash_plugin_binary(binary_path: &Path) -> Option<[u8; 32]> {
@@ -1646,10 +1739,12 @@ struct PinnedPluginBinary {
     dev: u64,
     #[cfg(unix)]
     ino: u64,
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(unix)]
     readable: bool,
     #[cfg(windows)]
-    _pinned_handle: std::os::windows::io::OwnedHandle,
+    pinned_handle: std::os::windows::io::OwnedHandle,
+    #[cfg(windows)]
+    readable: bool,
 }
 
 impl ResolvedPlugin {
@@ -2048,11 +2143,8 @@ mod unix_pinned_plugin {
                 file_fd: walked.file_fd,
                 dev: walked.dev,
                 ino: walked.ino,
-                #[cfg(any(target_os = "linux", target_os = "freebsd"))]
                 readable: walked.readable,
             });
-            #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
-            let _ = walked.readable;
             Ok((walked.canonical_path, invocation_path, pinned))
         }
 
@@ -2633,7 +2725,7 @@ mod windows_pinned_plugin {
     }
 
     pub(super) fn live_pinned_binary_path(pinned: &PinnedPluginBinary) -> Option<PathBuf> {
-        let units = final_path_units(pinned._pinned_handle.as_raw_handle()).ok()?;
+        let units = final_path_units(pinned.pinned_handle.as_raw_handle()).ok()?;
         Some(PathBuf::from(OsString::from_wide(&units)))
     }
 
@@ -2750,16 +2842,36 @@ mod windows_pinned_plugin {
                 )
             })?;
             let candidate = PathBuf::from(OsString::from_wide(&dir_final)).join(&relative);
-            // Hold the verified executable open with `FILE_EXECUTE | FILE_READ_ATTRIBUTES`
-            // (supporting execute-only ACLs) and `FILE_SHARE_READ` only (no write or
-            // delete sharing) so Windows prevents overwriting, renaming, or deleting
-            // the binary or any ancestor directory before launch.
-            let bin_file = match OpenOptions::new()
-                .access_mode(FILE_EXECUTE | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+            // Hold the verified executable open with `FILE_EXECUTE | FILE_READ_DATA |
+            // FILE_READ_ATTRIBUTES` (falling back to execute-only ACLs without
+            // `FILE_READ_DATA` on `PermissionDenied`) and `FILE_SHARE_READ` only
+            // (no write or delete sharing) so Windows prevents overwriting,
+            // renaming, or deleting the binary or any ancestor directory before
+            // launch and allows hashing directly from the pinned handle.
+            let (bin_file, readable) = match OpenOptions::new()
+                .access_mode(FILE_EXECUTE | FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
                 .share_mode(FILE_SHARE_READ)
                 .open(&candidate)
             {
-                Ok(file) => file,
+                Ok(file) => (file, true),
+                Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                    match OpenOptions::new()
+                        .access_mode(FILE_EXECUTE | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                        .share_mode(FILE_SHARE_READ)
+                        .open(&candidate)
+                    {
+                        Ok(file) => (file, false),
+                        Err(exec_error) => {
+                            return Err(PluginFailure::new(
+                                "PLUGIN_INVALID",
+                                format!(
+                                    "Could not pin binary plugin \"{specifier}\" executable at {}: {exec_error}",
+                                    invocation_path.display()
+                                ),
+                            ));
+                        }
+                    }
+                }
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
                     if fs::symlink_metadata(&candidate)
                         .ok()
@@ -2842,7 +2954,8 @@ mod windows_pinned_plugin {
                 canonical_binary,
                 invocation_path,
                 Arc::new(PinnedPluginBinary {
-                    _pinned_handle: OwnedHandle::from(bin_file),
+                    pinned_handle: OwnedHandle::from(bin_file),
+                    readable,
                 }),
             ))
         }
@@ -5038,7 +5151,8 @@ plugins:
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         use super::{
-            hash_plugin_binary, load_registry_with_binary_hasher, plugin_manifest_cache_path,
+            PluginHashSource, hash_plugin_source, load_registry_with_binary_hasher,
+            plugin_manifest_cache_path,
         };
 
         let root = temp_dir("manifest-cache");
@@ -5077,9 +5191,9 @@ plugins:
         .expect("config");
         let config = load_config(&root, None).expect("config with plugin");
         let hash_count = AtomicUsize::new(0);
-        let counting_hasher = |path: &Path| {
+        let counting_hasher = |source: PluginHashSource<'_>| {
             hash_count.fetch_add(1, Ordering::SeqCst);
-            hash_plugin_binary(path)
+            hash_plugin_source(source)
         };
         let load = |reuse_cached_manifests| {
             load_registry_with_binary_hasher(
@@ -5652,25 +5766,55 @@ catalogs:
 
         let resolved = super::resolve_binary_plugin("acme-execonly", &config_path)
             .expect("execute-only 0111 native plugin must resolve and pin without read permission");
+        // Execute-only pinned plugins without a reusable cached digest must skip
+        // caching without attempting to reopen or hash the pathname.
+        let exec_only_hashed = std::sync::atomic::AtomicBool::new(false);
+        assert!(
+            super::plugin_cache_identity_for_resolved(
+                &resolved,
+                &resolved.binary_path,
+                None,
+                &|source| {
+                    exec_only_hashed.store(true, std::sync::atomic::Ordering::SeqCst);
+                    super::hash_plugin_source(source)
+                },
+            )
+            .is_none(),
+            "execute-only pinned plugin without reusable digest must skip caching"
+        );
+        assert!(
+            !exec_only_hashed.load(std::sync::atomic::Ordering::SeqCst),
+            "execute-only pinned plugin must not invoke binary hasher"
+        );
         let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
             .expect("execute-only 0111 native plugin must run");
         assert_eq!(manifest.name, "execonly");
 
-        // Restore read permissions so we can verify replacement-after-pinning
-        // skips manifest caching rather than attributing the old manifest to a new binary.
+        // Restore read permissions so we can verify pinned descriptor hashing
+        // (never reopening the pathname) and replacement-after-pinning cache skip.
         fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755))
             .expect("restore permissions");
         let resolved_readable = super::resolve_binary_plugin("acme-execonly", &config_path)
             .expect("resolve readable plugin");
+        let used_pinned_fd = std::sync::atomic::AtomicBool::new(false);
         assert!(
             super::plugin_cache_identity_for_resolved(
                 &resolved_readable,
                 &resolved_readable.binary_path,
                 None,
-                &super::hash_plugin_binary,
+                &|source| {
+                    if matches!(source, super::PluginHashSource::PinnedFile(_)) {
+                        used_pinned_fd.store(true, std::sync::atomic::Ordering::SeqCst);
+                    }
+                    super::hash_plugin_source(source)
+                },
             )
             .is_some(),
             "cache identity succeeds while pathname matches pinned inode"
+        );
+        assert!(
+            used_pinned_fd.load(std::sync::atomic::Ordering::SeqCst),
+            "pinned plugin must hash the already-verified descriptor instead of reopening the path"
         );
         let replacement = bin_dir.join("acme-exec.new");
         fs::write(&replacement, b"replacement-bytes").expect("write replacement");
@@ -5680,7 +5824,7 @@ catalogs:
                 &resolved_readable,
                 &resolved_readable.binary_path,
                 None,
-                &super::hash_plugin_binary,
+                &super::hash_plugin_source,
             )
             .is_none(),
             "cache identity must skip caching once pathname no longer names pinned inode"
@@ -5950,7 +6094,7 @@ catalogs:
         let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        use super::{hash_plugin_binary, load_registry_with_binary_hasher};
+        use super::{PluginHashSource, hash_plugin_source, load_registry_with_binary_hasher};
 
         let root = temp_dir("plugin-alias-cache");
         let pkg = root.join("node_modules/acme-multicall");
@@ -5978,9 +6122,9 @@ catalogs:
         .expect("write config");
         let config = load_config(&root, None).expect("load config");
         let hash_count = AtomicUsize::new(0);
-        let counting_hasher = |path: &Path| {
+        let counting_hasher = |source: PluginHashSource<'_>| {
             hash_count.fetch_add(1, Ordering::SeqCst);
-            hash_plugin_binary(path)
+            hash_plugin_source(source)
         };
 
         let first = load_registry_with_binary_hasher(
