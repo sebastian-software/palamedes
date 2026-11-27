@@ -106,8 +106,8 @@ jobs:
             exit 1
           fi
           docker exec examples-smoke sh -eu -c '
-            writable=$(find /app /usr/local/share/corepack ! -type l \( -perm /022 -o -writable \) -print -quit)
-            test -z "$writable"
+            unsafe=$(find /app /usr/local/share/corepack ! -type l \( -perm /6022 -o -writable \) -print -quit)
+            test -z "$unsafe"
           '
           docker exec examples-smoke node scripts/container/verify-all.mjs
           docker exec examples-smoke node -e 'fetch("http://127.0.0.1:4080/ready").then(r => { if (!r.ok) process.exit(1); })'

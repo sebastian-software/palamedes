@@ -46,7 +46,7 @@ const EVENT_INPUTS_EXPRESSION_PATTERN =
   /\$\{\{\s*github\.event\.inputs(?:\.(?<dot>[A-Za-z0-9_-]+)|\[(?:'(?<sq>[^']+)'|"(?<dq>[^"]+)")\])\s*\}\}/giu;
 const UNKNOWN_WORKING_DIR = "\0unknown-working-dir";
 const MATRIX_EXPRESSION_PATTERN =
-  /\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}/giu;
+  /\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)\s*\}\}/giu;
 const BUILDKIT_TARGET_PLATFORM_ARGS = new Set([
   "TARGETPLATFORM",
   "TARGETOS",
@@ -61,8 +61,8 @@ const BUILDKIT_AUTOMATIC_PLATFORM_ARGS = new Set([
   "BUILDVARIANT",
 ]);
 const SINGLE_MATRIX_EXPRESSION_PATTERN =
-  /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*\}\}$/iu;
-const MATRIX_SEGMENT_PATTERN = /\.([A-Za-z0-9_-]+)|\[(?:'([^']+)'|"([^"]+)")\]/gu;
+  /^\$\{\{\s*matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)\s*\}\}$/iu;
+const MATRIX_SEGMENT_PATTERN = /\.([A-Za-z0-9_-]+)|\[(?:'([^']+)'|"([^"]+)"|\s*(\d+)\s*)\]/gu;
 const ENV_PREFIX_ASSIGNMENT_PATTERN = /^(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$/u;
 const SHELL_INTERPRETERS = new Set(["sh", "bash", "ash", "dash", "zsh", "ksh"]);
 const SHELL_COMMAND_PREFIXES = new Set([
@@ -823,7 +823,7 @@ function evaluateStepIfClause(clause, context) {
     .trim();
 
   const eqMatch =
-    /^(?<lhs>runner\.os|matrix(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*(?<op>==|!=)\s*(?<rhs>'(?:[^']|'')*'|"(?:[^"]|"")*"|true|false|null|-?(?:\d+(?:\.\d+)?|\.\d+))$/iu.exec(
+    /^(?<lhs>runner\.os|matrix(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)\s*(?<op>==|!=)\s*(?<rhs>'(?:[^']|'')*'|"(?:[^"]|"")*"|true|false|null|-?(?:\d+(?:\.\d+)?|\.\d+))$/iu.exec(
       trimmed,
     );
   if (eqMatch) {
@@ -862,7 +862,7 @@ function evaluateStepIfClause(clause, context) {
   }
 
   const fnMatch =
-    /^(?<neg>!)?\s*(?<fn>startsWith|contains)\(\s*(?<lhs>runner\.os|matrix(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)\s*,\s*(?:'(?<sq>[^']*)'|"(?<dq>[^"]*)")\s*\)$/iu.exec(
+    /^(?<neg>!)?\s*(?<fn>startsWith|contains)\(\s*(?<lhs>runner\.os|matrix(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)\s*,\s*(?:'(?<sq>[^']*)'|"(?<dq>[^"]*)")\s*\)$/iu.exec(
       trimmed,
     );
   if (fnMatch) {
@@ -1109,9 +1109,8 @@ function resolveGuardOperand(rawOperand, eventName, runnerContext) {
       ? { kind: "scalar", value: runnerContext.runnerOs, scalarType: "string" }
       : null;
   }
-  const matrixMatch = /^matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)$/iu.exec(
-    operand,
-  );
+  const matrixMatch =
+    /^matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)$/iu.exec(operand);
   if (matrixMatch && runnerContext?.row) {
     const resolvedNode = resolveMatrixNode(
       runnerContext.row,
@@ -1312,9 +1311,8 @@ function evaluateGuardForEventAndContext(rawExpr, eventName, runnerContext) {
   if (/^runner\.os$/iu.test(expr) && runnerContext?.runnerOs) {
     return runnerContext.runnerOs.length > 0;
   }
-  const matrixOnlyMatch = /^matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)$/iu.exec(
-    expr,
-  );
+  const matrixOnlyMatch =
+    /^matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)$/iu.exec(expr);
   if (matrixOnlyMatch && runnerContext?.row) {
     const resolvedNode = resolveMatrixNode(
       runnerContext.row,
@@ -2030,7 +2028,7 @@ function exprReferencesMatrixOutsideQuotes(expr) {
       continue;
     }
     if (
-      /^matrix(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])/iu.test(expr.slice(i)) &&
+      /^matrix(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])/iu.test(expr.slice(i)) &&
       (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))
     ) {
       return true;
@@ -4488,7 +4486,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
 function parseMatrixPathSegments(pathSuffix) {
   const segments = [];
   for (const match of pathSuffix.matchAll(MATRIX_SEGMENT_PATTERN)) {
-    segments.push(match[1] ?? match[2] ?? match[3]);
+    segments.push(match[1] ?? match[2] ?? match[3] ?? match[4]);
   }
   return segments;
 }
@@ -4509,14 +4507,27 @@ function lookupCaseInsensitiveMapEntry(map, key) {
 function resolveMatrixNode(rowMap, segments) {
   let current = { kind: "map", value: rowMap };
   for (const segment of segments) {
-    if (current?.kind !== "map") {
-      return null;
+    if (current?.kind === "map") {
+      const found = lookupCaseInsensitiveMapEntry(current.value, String(segment));
+      if (!found) {
+        return null;
+      }
+      current = found.value;
+      continue;
     }
-    const found = lookupCaseInsensitiveMapEntry(current.value, segment);
-    if (!found) {
-      return null;
+    if (current?.kind === "seq") {
+      const idxText = String(segment).trim();
+      if (!/^\d+$/u.test(idxText)) {
+        return null;
+      }
+      const idx = Number(idxText);
+      if (!Number.isSafeInteger(idx) || idx < 0 || idx >= current.value.length) {
+        return null;
+      }
+      current = current.value[idx];
+      continue;
     }
-    current = found.value;
+    return null;
   }
   return current ?? null;
 }
@@ -5058,7 +5069,7 @@ function substituteMatrixInsideExpression(expr, row) {
       i = end;
       continue;
     }
-    const mMatch = /^matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)/iu.exec(
+    const mMatch = /^matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+"|\s*\d+\s*)\])+)/iu.exec(
       expr.slice(i),
     );
     if (mMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
@@ -5559,6 +5570,7 @@ const DOCKER_BUILD_VALUE_FLAGS = new Set([
   "-c",
   "--cache-from",
   "--cache-to",
+  "--call",
   "--cgroup-parent",
   "--cpu-period",
   "--cpu-quota",
@@ -5575,6 +5587,7 @@ const DOCKER_BUILD_VALUE_FLAGS = new Set([
   "--memory-swap",
   "--metadata-file",
   "--network",
+  "--no-cache-filter",
   "-o",
   "--output",
   "--platform",
@@ -9585,6 +9598,7 @@ function checkStepsList(
   const effectiveEventNames = eventNames ?? buildFileContext?.eventNames ?? null;
   const allRows = matrixRows.length > 0 ? matrixRows : [null];
   const rowRunningEnvs = new Map();
+  const rowFailurePossibleEnvs = new Map();
   const rowCheckoutPaths = new Map();
   const rowForeignCheckoutPaths = new Map();
   const rowHasExplicitCheckout = new Set();
@@ -9598,21 +9612,29 @@ function checkStepsList(
     : [];
   for (const row of allRows) {
     rowRunningEnvs.set(row, cloneVarMap(baseEnv));
+    rowFailurePossibleEnvs.set(row, cloneVarMap(baseEnv));
     rowCheckoutPaths.set(row, [...initialCheckoutPrefixes]);
     rowForeignCheckoutPaths.set(row, [...initialForeignPrefixes]);
     rowWrittenEnvKeys.set(row, new Map());
   }
+  const stepCanRunAfterFailure = (ifNode) =>
+    ifNode?.kind === "scalar" && /\b(?:always|failure|cancelled)\s*\(/iu.test(String(ifNode.value));
   for (const stepNode of stepsNode.value) {
     if (stepNode?.kind !== "map") {
       continue;
     }
     const stepEnvNode = getMapField(stepNode, "env");
-    const getRowStepEnv = (row) => extractEnvMap(stepEnvNode, rowRunningEnvs.get(row) ?? baseEnv);
+    const stepIfNode = getMapField(stepNode, "if");
+    const runsAfterFailure = stepCanRunAfterFailure(stepIfNode);
+    const getRowStepEnv = (row) =>
+      extractEnvMap(
+        stepEnvNode,
+        (runsAfterFailure ? rowFailurePossibleEnvs.get(row) : rowRunningEnvs.get(row)) ?? baseEnv,
+      );
     const getRowCheckoutPrefixes = (row) =>
       rowCheckoutPaths.get(row) ?? [...initialCheckoutPrefixes];
     const getRowForeignPrefixes = (row) =>
       rowForeignCheckoutPaths.get(row) ?? [...initialForeignPrefixes];
-    const stepIfNode = getMapField(stepNode, "if");
     if (!isEventGuardSatisfiable(stepIfNode, effectiveEventNames)) {
       continue;
     }
@@ -9626,7 +9648,14 @@ function checkStepsList(
     if (runnerContexts.length > 0 && applicableContexts.length === 0) {
       continue;
     }
+    const continueOnErrorNode = getMapField(stepNode, "continue-on-error");
+    const mayContinueOnError =
+      continueOnErrorNode?.kind === "scalar" &&
+      String(continueOnErrorNode.value).trim().toLowerCase() !== "false";
     const isRowStepConditional = (row) => {
+      if (mayContinueOnError) {
+        return true;
+      }
       const rowContexts = row
         ? applicableContexts.filter((ctx) => ctx.row === row)
         : applicableContexts;
@@ -10815,18 +10844,25 @@ function checkStepsList(
           if (mergedEntries.length === 0) {
             continue;
           }
+          const failureTargetEnv = rowFailurePossibleEnvs.get(row);
+          const outputKey = `${STEP_OUTPUT_KEY_PREFIX}${stepIdLower}\0${name.toLowerCase()}`;
+          if (failureTargetEnv) {
+            const failMerged = mergeVarEntries(
+              [{ value: "", line: stepIdNode.line }],
+              mergedEntries,
+            );
+            failureTargetEnv.set(outputKey, failMerged);
+          }
           if (conditionalAcrossGroups) {
             mergedEntries = mergeVarEntries([{ value: "", line: stepIdNode.line }], mergedEntries);
           }
-          targetEnv.set(
-            `${STEP_OUTPUT_KEY_PREFIX}${stepIdLower}\0${name.toLowerCase()}`,
-            mergedEntries,
-          );
+          targetEnv.set(outputKey, mergedEntries);
         }
       }
     }
     for (const [row, writeMaps] of perRowEmittedEnv) {
       const targetEnv = rowRunningEnvs.get(row);
+      const failureTargetEnv = rowFailurePossibleEnvs.get(row);
       const writtenKeys = rowWrittenEnvKeys.get(row);
       if (!targetEnv) {
         continue;
@@ -10853,6 +10889,12 @@ function checkStepsList(
         }
         if (mergedEntries.length === 0) {
           continue;
+        }
+        if (failureTargetEnv) {
+          const existingFail = failureTargetEnv.has(name)
+            ? failureTargetEnv.get(name)
+            : [{ value: "", line: 0, unset: true }];
+          failureTargetEnv.set(name, mergeVarEntries(existingFail, mergedEntries));
         }
         if (conditionalAcrossGroups) {
           const existing = targetEnv.has(name)

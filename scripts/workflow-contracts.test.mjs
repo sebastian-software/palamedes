@@ -4397,6 +4397,60 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r56Fixture, { recursive: true, force: true });
     }
+    // Cleanup steps (`always()` / `failure()`) preserve pre-write env/output
+    // state from earlier steps that could be skipped on failure, static matrix
+    // array indexing (`matrix.images[0]`) is resolved, and Buildx
+    // `--no-cache-filter <stage>` consumes its stage argument before the build
+    // context path.
+    const r57Fixture = await mkdtemp(join(tmpdir(), "palamedes-pins-r57-"));
+    try {
+      await mkdir(join(r57Fixture, ".github", "workflows"), { recursive: true });
+      await writeFile(join(r57Fixture, "Dockerfile"), "FROM scratch AS build\n");
+      const r57Workflow = [
+        "on: push",
+        "env:",
+        "  IMG: alpine:3.20",
+        "jobs:",
+        "  failure-handler-state:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - run: ./may-fail.sh",
+        "      - id: pick",
+        "        run: |",
+        `          echo "IMG=node:24@${digest}" >> "$GITHUB_ENV"`,
+        `          echo "ref=node:24@${digest}" >> "$GITHUB_OUTPUT"`,
+        "      - run: |",
+        '          docker pull "$IMG"',
+        "          docker pull \"${{ steps.pick.outputs.ref || 'ignored-on-success:1' }}\"",
+        "      - if: always()",
+        "        run: |",
+        '          docker pull "$IMG"',
+        "          docker pull \"${{ steps.pick.outputs.ref || 'busybox:1.36' }}\"",
+        "  matrix-index-and-buildx:",
+        "    runs-on: ubuntu-latest",
+        "    strategy:",
+        "      matrix:",
+        "        include:",
+        "          - images:",
+        "              - nginx:1.27",
+        `              - node:24@${digest}`,
+        "    container: ${{ matrix.images[0] }}",
+        "    steps:",
+        "      - run: docker buildx build --no-cache-filter build .",
+        "",
+      ].join("\n");
+      expect(
+        unpinnedWorkflowContainerReferences(r57Workflow, ".github/workflows/r57.yml", {
+          root: r57Fixture,
+        }),
+      ).toEqual([
+        ".github/workflows/r57.yml:3: alpine:3.20 is not pinned to a sha256 digest",
+        ".github/workflows/r57.yml:19: busybox:1.36 is not pinned to a sha256 digest",
+        ".github/workflows/r57.yml:26: nginx:1.27 is not pinned to a sha256 digest",
+      ]);
+    } finally {
+      await rm(r57Fixture, { recursive: true, force: true });
+    }
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

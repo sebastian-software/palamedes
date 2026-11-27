@@ -78,8 +78,9 @@ RUN node scripts/build-component-demos.mjs
 # runtime image: the compiled .node was already copied into the platform
 # package (target/ is dead weight), Next.js build caches are not needed by
 # `next start`, and source/docs/test trees are unused at runtime. Normalize
-# permissions (`a+rX,go-w`) so root-owned files copied into the runtime stage
-# stay readable/traversable yet read-only for `node` regardless of host umask.
+# permissions (`a+rX,go-w,ug-s`) so root-owned files copied into the runtime
+# stage stay readable/traversable, non-writable for `node`, and free of
+# setuid/setgid bits regardless of host umask or dependency artifacts.
 RUN rm -rf target \
   examples/*/.next/cache \
   crates \
@@ -92,10 +93,10 @@ RUN rm -rf target \
   site \
   video \
   && find /app /usr/local/share/corepack ! -type l \( \
-    -perm /022 \
+    -perm /6022 \
     -o \( -type d ! -perm -0555 \) \
     -o \( ! -type d \( ! -perm -0444 -o \( -perm /0111 ! -perm -0111 \) \) \) \
-  \) -exec chmod a+rX,go-w {} +
+  \) -exec chmod a+rX,go-w,ug-s {} +
 
 # --- Runtime stage -----------------------------------------------------------
 # Dev dependencies stay installed on purpose: TanStack's `vite preview` needs
