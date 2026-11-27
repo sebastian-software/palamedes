@@ -167,7 +167,7 @@ export type RemixI18nServer<TLocale extends string> = {
   renderClientEntry(entryPath: string, options: RemixClientEntryOptions): Promise<string>;
   serveClientCatalogAsset(request: Request): Response | undefined;
   /** Asynchronous non-blocking variant of `serveClientCatalogAsset()` with in-flight deduplication. */
-  serveClientCatalogAssetAsync(request: Request): Promise<Response | undefined>;
+  serveClientCatalogAssetAsync?(request: Request): Promise<Response | undefined>;
   serializeLocaleCookie(locale: TLocale, options?: { secure?: boolean }): string;
 };
 
@@ -273,7 +273,9 @@ export function createRemixI18nRequestScope<T extends I18nInstance = I18nInstanc
 
 export function createRemixI18nServer<TLocale extends string>(
   options: RemixI18nServerOptions<TLocale>,
-): RemixI18nServer<TLocale> {
+): RemixI18nServer<TLocale> & {
+  serveClientCatalogAssetAsync(request: Request): Promise<Response | undefined>;
+} {
   if (options.catalogAssets && Object.hasOwn(options.catalogAssets, "clientModuleUrl")) {
     throw new TypeError(
       "Remove catalogAssets.clientModuleUrl. Pass the actual assetServer to renderClientEntry(); stable Remix resolves bootstrap URLs and import-map scopes through that server's mounts.",
