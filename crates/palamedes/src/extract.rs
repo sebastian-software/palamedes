@@ -1849,6 +1849,11 @@ pub fn analyze_source_files_cached(
 /// Warm cache hits — including `ExtractionOnly` entries from `pmds extract`
 /// and `Complete` entries with cached suppression directives — validate with a
 /// single `stat` and avoid reading unchanged source files from disk.
+///
+/// Just like batch extraction, non-MDX files containing none of the textual
+/// markers (`@palamedes`, `i18n`, or `palamedes-lint-`) skip parsing on a cold
+/// miss and record an `ExtractionOnly` entry so cached and `--no-cache` lint
+/// runs agree on every file.
 pub fn lint_source_files_cached(
     files: &[SourceFileAnalysisRequest],
     root_dir: &str,
@@ -1877,6 +1882,14 @@ pub fn lint_source_files_cached(
         .into_iter()
         .map(|outcome| match outcome {
             SourceFileLintOutcome::Hit(result) => Ok(result),
+            SourceFileLintOutcome::ExtractionOnly { path, fingerprint } => {
+                cache.insert_extraction_only(
+                    path.clone(),
+                    relative_origin_file(Path::new(root_dir), &path),
+                    fingerprint,
+                );
+                Ok(SourceLintFileResult::default())
+            }
             SourceFileLintOutcome::Fresh {
                 path,
                 filename,
@@ -1909,6 +1922,10 @@ pub fn lint_source_files_cached(
 
 enum SourceFileLintOutcome {
     Hit(SourceLintFileResult),
+    ExtractionOnly {
+        path: String,
+        fingerprint: Option<ReadStartFingerprint>,
+    },
     Fresh {
         path: String,
         filename: String,
@@ -1951,6 +1968,17 @@ fn lint_one_source_file_cached(
             });
         }
     };
+
+    if !is_mdx_filename(&file.path)
+        && !source.contains("@palamedes")
+        && !source.contains("i18n")
+        && !source.contains("palamedes-lint-")
+    {
+        return SourceFileLintOutcome::ExtractionOnly {
+            path: file.path.clone(),
+            fingerprint,
+        };
+    }
 
     let analysis = EXTRACT_ARENA.with(|arena| {
         let mut arena = arena.borrow_mut();

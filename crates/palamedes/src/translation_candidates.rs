@@ -2922,6 +2922,45 @@ fn parse_plural_branch(
     Ok(option.value.clone())
 }
 
+fn validate_po_target_locale(
+    po: &PoFile,
+    source_locale: &str,
+    locale: &str,
+) -> PalamedesResult<()> {
+    if source_locale.trim().is_empty() {
+        return Err(ferrocat::ApiError::InvalidArguments(
+            "source_locale must not be empty".to_owned(),
+        )
+        .into());
+    }
+    if locale.trim().is_empty() {
+        return Err(
+            ferrocat::ApiError::InvalidArguments("locale must not be empty".to_owned()).into(),
+        );
+    }
+    if let Some(declared) = po
+        .headers
+        .iter()
+        .rev()
+        .find(|header| header.key == "Language")
+        .map(|header| header.value.as_str())
+    {
+        if declared.trim().is_empty() {
+            return Err(ferrocat::ApiError::InvalidArguments(
+                "locale must not be empty".to_owned(),
+            )
+            .into());
+        }
+        if declared != locale {
+            return Err(ferrocat::ApiError::InvalidArguments(format!(
+                "catalog locale {declared:?} did not match expected locale {locale:?}"
+            ))
+            .into());
+        }
+    }
+    Ok(())
+}
+
 fn render_target_catalog_from_po(
     po: &PoFile,
     source_locale: &str,
@@ -2930,6 +2969,7 @@ fn render_target_catalog_from_po(
     po_options: Option<&PoOutputOptions>,
 ) -> PalamedesResult<String> {
     if format == PalamedesCatalogFormat::Po {
+        validate_po_target_locale(po, source_locale, locale)?;
         return Ok(ferrocat::stringify_po(
             po,
             &po_serialize_options(po_options),
@@ -6503,11 +6543,13 @@ mod tests {
         let app_de = fixture.path().join("app/de.po");
         let app_fr = fixture.path().join("app/fr.po");
         let admin_de = fixture.path().join("admin/de.po");
-        for path in [&app_de, &app_fr, &admin_de] {
+        for (path, locale) in [(&app_de, "de"), (&app_fr, "fr"), (&admin_de, "de")] {
             fs::create_dir_all(path.parent().expect("parent")).expect("dir");
             fs::write(
                 path,
-                "msgid \"\"\nmsgstr \"\"\n\"Language: de\\n\"\n\nmsgid \"Save\"\nmsgstr \"\"\n\nmsgid \"Cancel\"\nmsgstr \"\"\n",
+                format!(
+                    "msgid \"\"\nmsgstr \"\"\n\"Language: {locale}\\n\"\n\nmsgid \"Save\"\nmsgstr \"\"\n\nmsgid \"Cancel\"\nmsgstr \"\"\n"
+                ),
             )
             .expect("write po");
         }
@@ -6574,6 +6616,61 @@ mod tests {
         assert!(
             written.contains(&format!("msgstr \"{long_translation}\"\n")),
             "direct PO stringify must honor PoOutputOptions::line_breaks: {written:?}"
+        );
+    }
+
+    #[test]
+    fn apply_translation_patches_rejects_mismatched_po_language_header_before_writing() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let de_po = fixture.path().join("locales/de/messages.po");
+        fs::create_dir_all(de_po.parent().expect("parent")).expect("dir");
+        let original =
+            "msgid \"\"\nmsgstr \"\"\n\"Language: fr\\n\"\n\nmsgid \"Save\"\nmsgstr \"\"\n";
+        fs::write(&de_po, original).expect("write mismatched po");
+
+        let make_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}/messages".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        };
+
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_config(),
+            locales: vec!["de".to_owned()],
+            targets: Vec::new(),
+            max_origins: crate::DEFAULT_TRANSLATION_CANDIDATE_MAX_ORIGINS,
+        })
+        .expect("list candidate");
+        assert_eq!(listed.candidates.len(), 1);
+
+        let error = apply_translation_patches(TranslationPatchRequest {
+            config: make_config(),
+            po: None,
+            patches: vec![TranslationPatch {
+                id: listed.candidates[0].id.clone(),
+                fingerprint: listed.candidates[0].fingerprint.clone(),
+                translation: TranslationValue::Singular {
+                    value: "Speichern".to_owned(),
+                },
+                machine: None,
+            }],
+        })
+        .expect_err("mismatched Language header must fail before writing");
+        assert!(
+            error
+                .to_string()
+                .contains("catalog locale \"fr\" did not match expected locale \"de\""),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&de_po).expect("read po after rejection"),
+            original
         );
     }
 }

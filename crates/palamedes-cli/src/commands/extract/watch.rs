@@ -141,6 +141,22 @@ impl WatchMatchers {
                 .is_some_and(|suffix| known_files.contains(&configured.join(suffix)))
         })
     }
+
+    /// Returns whether `event` may have changed the set of discoverable source
+    /// files (for example a rescan request, or any non-content-edit event such
+    /// as creating, deleting, or renaming a file or directory).
+    fn event_invalidates_discovery(&self, event: &Event) -> bool {
+        if event.need_rescan() {
+            return true;
+        }
+        if is_pure_content_modify(event) || matches!(event.kind, EventKind::Access(_)) {
+            return false;
+        }
+        event.paths.is_empty()
+            || event.paths.iter().any(|path| {
+                !is_catalog_storage_path(path) && !self.is_internal_palamedes_path(path)
+            })
+    }
 }
 
 fn is_pure_content_modify(event: &Event) -> bool {
@@ -279,6 +295,10 @@ fn run_watch_mode_impl(
                 Ok(Err(error)) => return Err(CliError::Watch(error)),
                 Err(_) => return Ok(()),
             };
+            if matchers.event_invalidates_discovery(&event) {
+                cached_catalog_files = None;
+                known_files.clear();
+            }
             let changed = touches_config(&event.paths, &config.config_path, &watched_config_path);
             let mut reuse = !changed && cached_catalog_files.is_some() && !event.need_rescan();
             let mut matched = changed;
@@ -311,6 +331,11 @@ fn run_watch_mode_impl(
 
                 match rx.recv_timeout(WATCH_DEBOUNCE.min(remaining)) {
                     Ok(Ok(event)) => {
+                        if matchers.event_invalidates_discovery(&event) {
+                            cached_catalog_files = None;
+                            known_files.clear();
+                            can_reuse_discovery = false;
+                        }
                         let event_touches_config =
                             touches_config(&event.paths, &config.config_path, &watched_config_path);
                         config_changed = config_changed || event_touches_config;
@@ -1141,5 +1166,52 @@ catalogs:
             .expect("extraction without cache");
         assert!(cache.is_empty(), "a disabled cache must not store entries");
         assert!(!cache.is_dirty());
+    }
+
+    #[test]
+    fn event_invalidates_discovery_handles_structural_rescan_and_content_events() {
+        use notify::event::{AccessKind, CreateKind, DataChange, Flag, ModifyKind, RenameMode};
+        use notify::{Event, EventKind};
+
+        let dir = temp_dir("watch-discovery-invalidation");
+        fs::create_dir_all(dir.join("src")).expect("create src");
+        let config_path = dir.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        let config = load_config(&dir, Some(&config_path)).expect("load config");
+        let matchers = WatchMatchers::build(&config);
+
+        let content_modify = Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Content)))
+            .add_path(dir.join("src/app.tsx"));
+        assert!(!matchers.event_invalidates_discovery(&content_modify));
+
+        let access_event =
+            Event::new(EventKind::Access(AccessKind::Any)).add_path(dir.join("src/app.tsx"));
+        assert!(!matchers.event_invalidates_discovery(&access_event));
+
+        let catalog_create = Event::new(EventKind::Create(CreateKind::File))
+            .add_path(dir.join("locales/en/messages.po"));
+        assert!(!matchers.event_invalidates_discovery(&catalog_create));
+
+        let internal_create =
+            Event::new(EventKind::Create(CreateKind::File)).add_path(dir.join(".pmds-lock"));
+        assert!(!matchers.event_invalidates_discovery(&internal_create));
+
+        let dir_rename = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Any)))
+            .add_path(dir.join("src/new-subdir"));
+        assert!(matchers.event_invalidates_discovery(&dir_rename));
+
+        let dir_create =
+            Event::new(EventKind::Create(CreateKind::Folder)).add_path(dir.join("src/pages"));
+        assert!(matchers.event_invalidates_discovery(&dir_create));
+
+        let rescan_even_on_catalog =
+            Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Content)))
+                .add_path(dir.join("locales/en/messages.po"))
+                .set_flag(Flag::Rescan);
+        assert!(matchers.event_invalidates_discovery(&rescan_even_on_catalog));
     }
 }

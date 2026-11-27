@@ -873,6 +873,85 @@ export function View({ status }: { status: string }) {
     }
 
     #[test]
+    fn cached_and_uncached_lint_agree_on_syntax_broken_marker_free_and_marked_files() {
+        let app = std::env::temp_dir().join(format!(
+            "palamedes-lint-marker-parity-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        fs::create_dir_all(app.join("src")).expect("create src");
+        fs::write(
+            app.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\nextract-cache: true\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        let broken_plain = app.join("src/broken-plain.ts");
+        let broken_marked = app.join("src/broken-marked.ts");
+        fs::write(&broken_plain, "export const x = {{{;\n").expect("write broken plain");
+        fs::write(
+            &broken_marked,
+            "import { t } from \"@palamedes/core/macro\";\nexport const y = {{{;\n",
+        )
+        .expect("write broken marked");
+        let aged = std::time::SystemTime::now() - std::time::Duration::from_secs(10);
+        for path in [&broken_plain, &broken_marked] {
+            fs::File::options()
+                .write(true)
+                .open(path)
+                .expect("open")
+                .set_modified(aged)
+                .expect("age");
+        }
+
+        let context = Context::with_cwd(&app);
+        let config = context.load_config(None).expect("load config");
+        let mut cache = crate::commands::extract::cache::load_extract_cache(&config, false);
+        let _ = palamedes::extract_catalog_messages_cached(
+            palamedes::ExtractCatalogMessagesRequest {
+                root_dir: config.source_reference_root.to_string_lossy().into_owned(),
+                files: vec![broken_plain.to_string_lossy().into_owned()],
+                max_threads: Some(1),
+            },
+            config.analysis_options(),
+            &mut cache,
+        )
+        .expect("seed extract cache for plain file");
+        crate::commands::extract::cache::persist_extract_cache(&config, &mut cache);
+
+        let cached = LintOptions {
+            files: Vec::new(),
+            config: None,
+            json: true,
+            fail_on: LintFailOn::Error,
+            threads: Some(1),
+            no_cache: false,
+        }
+        .run(&context)
+        .expect("cached lint");
+        let uncached = LintOptions {
+            files: Vec::new(),
+            config: None,
+            json: true,
+            fail_on: LintFailOn::Error,
+            threads: Some(1),
+            no_cache: true,
+        }
+        .run(&context)
+        .expect("uncached lint");
+
+        assert_eq!(cached.failed_files.len(), 1);
+        assert!(cached.failed_files[0].file.ends_with("broken-marked.ts"));
+        assert_eq!(
+            serde_json::to_vec(&cached).expect("cached json"),
+            serde_json::to_vec(&uncached).expect("uncached json")
+        );
+        fs::remove_dir_all(app).expect("cleanup");
+    }
+
+    #[test]
     fn warning_threshold_fails_after_building_the_result() {
         let mut result = super::LintResult {
             diagnostics: Vec::new(),
