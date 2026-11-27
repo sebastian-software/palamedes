@@ -1,8 +1,8 @@
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fs;
-use std::io::Write;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use ferrocat::{
     CatalogMessageKey, CatalogMode, ConvertCatalogOptions, EffectiveTranslationRef, Header, MsgStr,
@@ -13,6 +13,7 @@ use ferrocat::{
 use ferrocat_icu::{IcuMessage, IcuNode, IcuOption, IcuPluralKind, stringify_icu};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use unicode_normalization::UnicodeNormalization;
 
 mod references;
 
@@ -30,6 +31,10 @@ thread_local! {
 
 use crate::catalog_artifact::resolve_catalog_path;
 use crate::catalog_update::{AiProvenance, MachineMetadata, po_serialize_options};
+use crate::contained_fs::{
+    ContainedDir, ContainedFsError, ContainedNewFileMode, ContainedWriteDurability,
+    DirFilenameEquivalence, FileIdentity, split_relative_catalog_path,
+};
 use crate::icu_compatibility::compare_runtime_icu;
 use crate::icu_text::parse_runtime_icu;
 use crate::{
@@ -281,6 +286,8 @@ struct LoadedCatalog {
     scope: String,
     locale: String,
     path: PathBuf,
+    parent_dir: Arc<ContainedDir>,
+    file_name: OsString,
     format: PalamedesCatalogFormat,
     original: String,
     po: PoFile,
@@ -303,8 +310,21 @@ struct PoItemIndexes {
 #[derive(Debug)]
 struct PreparedCatalog {
     path: PathBuf,
+    parent_dir: Arc<ContainedDir>,
+    file_name: OsString,
+    expected_original: Option<String>,
+    content: String,
+}
+
+#[derive(Debug)]
+struct PreparedCatalogPlan {
+    catalog_index: usize,
+    path: PathBuf,
+    relative_parent: PathBuf,
+    file_name: OsString,
     locale: String,
     patch_indexes: Vec<usize>,
+    original: String,
     content: String,
     changed: bool,
 }
@@ -434,7 +454,25 @@ pub fn apply_translation_patches(
 
 fn apply_translation_patches_with_replacement<F>(
     request: TranslationPatchRequest,
+    replace_catalog: F,
+) -> PalamedesResult<TranslationPatchResult>
+where
+    F: FnMut(
+        &PreparedCatalog,
+        &str,
+        Option<&PoOutputOptions>,
+    ) -> PalamedesResult<CatalogReplacement>,
+{
+    apply_translation_patches_with_options(request, replace_catalog, false, None, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_translation_patches_with_options<F>(
+    request: TranslationPatchRequest,
     mut replace_catalog: F,
+    simulate_missing_file_identity: bool,
+    simulated_dir_equivalence: Option<Option<DirFilenameEquivalence>>,
+    simulated_8dot3_alias_probe: Option<Option<bool>>,
 ) -> PalamedesResult<TranslationPatchResult>
 where
     F: FnMut(
@@ -545,10 +583,199 @@ where
         ));
     }
 
-    let mut prepared = Vec::new();
+    let mut target_batches: BTreeMap<(PathBuf, OsString), Vec<CatalogBatchKey>> = BTreeMap::new();
+    for batch in groups.keys() {
+        let catalog = &request.config.catalogs[batch.catalog_index];
+        let path = resolve_catalog_path(&request.config, catalog, &batch.locale)?;
+        let (relative_parent, file_name) =
+            split_relative_catalog_path(Path::new(&request.config.root_dir), &path).map_err(
+                |error| PalamedesError::UnsafeCatalogPath {
+                    path: path.to_string_lossy().into_owned(),
+                    reason: error.to_string(),
+                },
+            )?;
+        target_batches
+            .entry((relative_parent, file_name))
+            .or_default()
+            .push(batch.clone());
+    }
+
+    // Collect every configured (catalog, locale) target not already in `groups`
+    // — including source-locale catalogs — so a requested write can never
+    // silently modify an unpatched source catalog or another configured scope
+    // that resolves to the same file. Check source-locale targets first so
+    // collisions against a source catalog always report `source_locale_read_only`.
+    let mut configured_locales = Vec::with_capacity(request.config.locales.len() + 1);
+    configured_locales.push(request.config.source_locale.as_str());
+    for locale in &request.config.locales {
+        if !configured_locales.contains(&locale.as_str()) {
+            configured_locales.push(locale.as_str());
+        }
+    }
+    let mut unpatched_targets_by_parent: BTreeMap<PathBuf, Vec<(OsString, bool)>> = BTreeMap::new();
+    for (catalog_index, catalog) in request.config.catalogs.iter().enumerate() {
+        for &locale in &configured_locales {
+            let key = CatalogBatchKey {
+                catalog_index,
+                locale: locale.to_owned(),
+            };
+            if groups.contains_key(&key) {
+                continue;
+            }
+            let path = resolve_catalog_path(&request.config, catalog, locale)?;
+            let (relative_parent, file_name) =
+                split_relative_catalog_path(Path::new(&request.config.root_dir), &path).map_err(
+                    |error| PalamedesError::UnsafeCatalogPath {
+                        path: path.to_string_lossy().into_owned(),
+                        reason: error.to_string(),
+                    },
+                )?;
+            let is_source = is_source_locale(&request.config, locale);
+            if let Some(colliding) =
+                target_batches.get(&(relative_parent.clone(), file_name.clone()))
+            {
+                for batch in colliding {
+                    if let Some(patch_indexes) = groups.get(batch) {
+                        for &patch_index in patch_indexes {
+                            if rejected.insert(patch_index) {
+                                if is_source {
+                                    diagnostics.push(workflow_diagnostic(
+                                        "translation.source_locale",
+                                        "Patch target resolves to the same file as a configured source-locale catalog and cannot be modified.",
+                                        Some(request.patches[patch_index].id.clone()),
+                                    ));
+                                } else {
+                                    diagnostics.push(workflow_diagnostic(
+                                        "translation.ambiguous_catalog",
+                                        "Multiple configured catalog scopes resolve to the same target file.",
+                                        Some(request.patches[patch_index].id.clone()),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            unpatched_targets_by_parent
+                .entry(relative_parent)
+                .or_default()
+                .push((file_name, is_source));
+        }
+    }
+
+    for colliding in target_batches.values().filter(|batches| batches.len() > 1) {
+        for batch in colliding {
+            if let Some(patch_indexes) = groups.get(batch) {
+                for &patch_index in patch_indexes {
+                    if rejected.insert(patch_index) {
+                        diagnostics.push(workflow_diagnostic(
+                            "translation.ambiguous_catalog",
+                            "Multiple configured catalog scopes resolve to the same target file.",
+                            Some(request.patches[patch_index].id.clone()),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    if !rejected.is_empty() {
+        return Ok(rejected_translation_patch_result(
+            request.patches,
+            requested_count,
+            &rejected,
+            diagnostics,
+        ));
+    }
+
+    let root_dir = Path::new(&request.config.root_dir);
+    // Phase 1: validate the entire batch opening at most one catalog directory
+    // descriptor at a time so large multi-locale batches stay within low
+    // `RLIMIT_NOFILE` budgets while still rejecting invalid patches before any
+    // write occurs.
+    let mut seen_identities: HashMap<FileIdentity, Vec<usize>> = HashMap::new();
+    let mut dir_eq_cache: HashMap<PathBuf, Option<DirFilenameEquivalence>> = HashMap::new();
+    let mut alias_probe_cache: HashMap<(PathBuf, OsString, OsString), bool> = HashMap::new();
+    let mut unidentified_trie = UnidentifiedPatchNode::default();
+    let mut prepared_plans = Vec::new();
     for (batch, patch_indexes) in groups {
         let catalog = &request.config.catalogs[batch.catalog_index];
         let mut loaded = load_catalog(&request.config, catalog, &batch.locale)?;
+        let (relative_parent, _) =
+            split_relative_catalog_path(root_dir, &loaded.path).map_err(|error| {
+                PalamedesError::UnsafeCatalogPath {
+                    path: loaded.path.to_string_lossy().into_owned(),
+                    reason: error.to_string(),
+                }
+            })?;
+        let identity = if simulate_missing_file_identity {
+            None
+        } else {
+            loaded
+                .parent_dir
+                .file_identity(&loaded.file_name)
+                .map_err(|error| match error {
+                    ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
+                        path: loaded.path.to_string_lossy().into_owned(),
+                        reason,
+                    },
+                    ContainedFsError::Io(source) => PalamedesError::ReadFile {
+                        path: loaded.path.clone(),
+                        source,
+                    },
+                })?
+        };
+        if let Some(identity) = identity {
+            let entry = seen_identities.entry(identity).or_default();
+            if !entry.is_empty() {
+                reject_ambiguous_catalog_patches(
+                    entry,
+                    &patch_indexes,
+                    &request.patches,
+                    &mut rejected,
+                    &mut diagnostics,
+                );
+            }
+            entry.extend(patch_indexes.iter().copied());
+        } else {
+            // When `file_identity` is unavailable (for example, on a Windows
+            // volume that does not expose `FileIdInfo`), fall back to each
+            // containing directory's filename-equivalence rules and indexed
+            // 8.3 short-name matching so aliased scopes such as
+            // `Locales/{locale}` and `locales/{locale}` or `σ/{locale}` and
+            // `ς/{locale}` are rejected before Phase 2 commits any write.
+            let segments = resolve_unidentified_patch_segments(
+                root_dir,
+                &relative_parent,
+                Some(&loaded.parent_dir),
+                &loaded.file_name,
+                &mut dir_eq_cache,
+                simulated_dir_equivalence,
+            )?;
+            let mut colliding_priors = Vec::new();
+            let mut probe_ctx = UnidentifiedAliasProbeContext {
+                root_dir,
+                leaf_parent_rel: &relative_parent,
+                leaf_parent_dir: Some(&loaded.parent_dir),
+                cache: &mut alias_probe_cache,
+                simulated_8dot3_alias_probe,
+            };
+            unidentified_trie.collect_colliding_leaf_patches(
+                &segments,
+                Path::new(""),
+                &mut probe_ctx,
+                &mut colliding_priors,
+            );
+            if !colliding_priors.is_empty() {
+                reject_ambiguous_catalog_patches(
+                    &colliding_priors,
+                    &patch_indexes,
+                    &request.patches,
+                    &mut rejected,
+                    &mut diagnostics,
+                );
+            }
+            unidentified_trie.insert(&segments, &patch_indexes);
+        }
         for &patch_index in &patch_indexes {
             if rejected.contains(&patch_index) {
                 continue;
@@ -654,13 +881,124 @@ where
                 loaded.format,
                 request.po.as_ref(),
             )?;
-            prepared.push(PreparedCatalog {
+            let changed = content != loaded.original;
+            prepared_plans.push(PreparedCatalogPlan {
+                catalog_index: batch.catalog_index,
                 path: loaded.path,
+                relative_parent,
+                file_name: loaded.file_name,
                 locale: batch.locale,
                 patch_indexes,
-                changed: content != loaded.original,
+                original: loaded.original,
                 content,
+                changed,
             });
+        }
+        // `loaded` (and its `ContainedDir` descriptor) drops at the end of each
+        // iteration, keeping open descriptors bounded to O(1).
+    }
+
+    // Check every unpatched configured (catalog, locale) target — including
+    // source-locale catalogs — against the live file identities and
+    // filesystem-equivalence trie of the patched targets so a single patch can
+    // never mutate an unpatched source catalog or another scope that aliases
+    // the same file on disk (e.g., via case-folding, NFD, or 8.3 short names).
+    if !seen_identities.is_empty() || !unidentified_trie.is_empty() {
+        for (unpatched_rel_parent, entries) in &unpatched_targets_by_parent {
+            let parent_dir = match ContainedDir::open_subpath(root_dir, unpatched_rel_parent, false)
+            {
+                Ok(Some(dir)) => Some(dir),
+                Ok(None) => None,
+                Err(ContainedFsError::Containment(reason)) => {
+                    return Err(PalamedesError::UnsafeCatalogPath {
+                        path: root_dir
+                            .join(unpatched_rel_parent)
+                            .to_string_lossy()
+                            .into_owned(),
+                        reason,
+                    });
+                }
+                Err(ContainedFsError::Io(source)) => {
+                    return Err(PalamedesError::ReadFile {
+                        path: root_dir.join(unpatched_rel_parent),
+                        source,
+                    });
+                }
+            };
+            // Check source-locale entries before non-source entries so a target
+            // aliasing a source catalog always reports `translation.source_locale`.
+            let ordered_entries = entries
+                .iter()
+                .filter(|(_, is_source)| *is_source)
+                .chain(entries.iter().filter(|(_, is_source)| !*is_source));
+            for (file_name, is_source) in ordered_entries {
+                let mut colliding_patch_indexes: Vec<usize> = Vec::new();
+                if !seen_identities.is_empty()
+                    && !simulate_missing_file_identity
+                    && let Some(ref dir) = parent_dir
+                {
+                    let identity = dir.file_identity(file_name).map_err(|error| {
+                        let target_path = root_dir.join(unpatched_rel_parent).join(file_name);
+                        match error {
+                            ContainedFsError::Containment(reason) => {
+                                PalamedesError::UnsafeCatalogPath {
+                                    path: target_path.to_string_lossy().into_owned(),
+                                    reason,
+                                }
+                            }
+                            ContainedFsError::Io(source) => PalamedesError::ReadFile {
+                                path: target_path,
+                                source,
+                            },
+                        }
+                    })?;
+                    if let Some(identity) = identity
+                        && let Some(indexes) = seen_identities.get(&identity)
+                    {
+                        colliding_patch_indexes.extend_from_slice(indexes);
+                    }
+                }
+                if !unidentified_trie.is_empty() {
+                    let segments = resolve_unidentified_patch_segments(
+                        root_dir,
+                        unpatched_rel_parent,
+                        parent_dir.as_ref(),
+                        file_name,
+                        &mut dir_eq_cache,
+                        simulated_dir_equivalence,
+                    )?;
+                    let mut probe_ctx = UnidentifiedAliasProbeContext {
+                        root_dir,
+                        leaf_parent_rel: unpatched_rel_parent,
+                        leaf_parent_dir: parent_dir.as_ref(),
+                        cache: &mut alias_probe_cache,
+                        simulated_8dot3_alias_probe,
+                    };
+                    unidentified_trie.collect_colliding_leaf_patches(
+                        &segments,
+                        Path::new(""),
+                        &mut probe_ctx,
+                        &mut colliding_patch_indexes,
+                    );
+                }
+                for patch_index in colliding_patch_indexes {
+                    if rejected.insert(patch_index) {
+                        if *is_source {
+                            diagnostics.push(workflow_diagnostic(
+                                "translation.source_locale",
+                                "Patch target resolves to the same file as a configured source-locale catalog and cannot be modified.",
+                                Some(request.patches[patch_index].id.clone()),
+                            ));
+                        } else {
+                            diagnostics.push(workflow_diagnostic(
+                                "translation.ambiguous_catalog",
+                                "Multiple configured catalog scopes resolve to the same target file.",
+                                Some(request.patches[patch_index].id.clone()),
+                            ));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -673,40 +1011,204 @@ where
         ));
     }
 
+    // Phase 2: commit each changed catalog one at a time under its pinned
+    // directory handle and exclusive cross-process target lock (at most 3 open
+    // descriptors at any point, regardless of how many locales are patched).
     let mut completed_patches = BTreeSet::new();
     let mut catalogs_updated = 0;
     let mut replacement_diagnostics = Vec::new();
-    for catalog in &prepared {
-        if catalog.changed {
-            match replace_catalog(catalog, &request.config.source_locale, request.po.as_ref()) {
-                Ok(CatalogReplacement::Durable) => {}
-                Ok(CatalogReplacement::CommittedWithDurabilityWarning(source)) => {
-                    replacement_diagnostics.push(TranslationWorkflowDiagnostic {
-                        code: "translation.catalog_durability".to_owned(),
-                        message: format!(
-                            "Catalog replacement committed, but synchronizing its directory failed: {source}"
-                        ),
-                        id: None,
-                        catalog_path: Some(catalog.path.to_string_lossy().into_owned()),
-                        locale: Some(catalog.locale.clone()),
-                    });
-                }
-                Err(source) => {
-                    return Err(PalamedesError::TranslationPatchWrite {
-                        result: completed_translation_patch_result(
-                            &request.patches,
-                            &changed_patches,
-                            &completed_patches,
-                            catalogs_updated,
-                            replacement_diagnostics,
-                        ),
-                        source: Box::new(source),
-                    });
-                }
-            }
-            catalogs_updated += 1;
+    for plan in prepared_plans {
+        if !plan.changed {
+            completed_patches.extend(&plan.patch_indexes);
+            continue;
         }
-        completed_patches.extend(&catalog.patch_indexes);
+        let commit_result: PalamedesResult<Option<CatalogReplacement>> = (|| {
+            let parent_dir =
+                match ContainedDir::open_subpath(root_dir, &plan.relative_parent, false) {
+                    Ok(Some(dir)) => Arc::new(dir),
+                    Ok(None) => {
+                        return Err(PalamedesError::ReadFile {
+                            path: plan.path.clone(),
+                            source: std::io::Error::new(
+                                std::io::ErrorKind::NotFound,
+                                "catalog file does not exist",
+                            ),
+                        });
+                    }
+                    Err(ContainedFsError::Containment(reason)) => {
+                        return Err(PalamedesError::UnsafeCatalogPath {
+                            path: plan.path.to_string_lossy().into_owned(),
+                            reason,
+                        });
+                    }
+                    Err(ContainedFsError::Io(source)) => {
+                        return Err(PalamedesError::ReadFile {
+                            path: plan.path.clone(),
+                            source,
+                        });
+                    }
+                };
+            let _target_lock =
+                parent_dir
+                    .lock_target(&plan.file_name)
+                    .map_err(|error| match error {
+                        ContainedFsError::Containment(reason) => {
+                            PalamedesError::UnsafeCatalogPath {
+                                path: plan.path.to_string_lossy().into_owned(),
+                                reason,
+                            }
+                        }
+                        ContainedFsError::Io(source) => PalamedesError::WriteFile {
+                            path: plan.path.clone(),
+                            source,
+                        },
+                    })?;
+            let current_original = match parent_dir.read_optional_file(&plan.file_name) {
+                Ok(Some(content)) => content,
+                Ok(None) => {
+                    return Err(PalamedesError::ReadFile {
+                        path: plan.path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            "catalog file does not exist",
+                        ),
+                    });
+                }
+                Err(ContainedFsError::Containment(reason)) => {
+                    return Err(PalamedesError::UnsafeCatalogPath {
+                        path: plan.path.to_string_lossy().into_owned(),
+                        reason,
+                    });
+                }
+                Err(ContainedFsError::Io(source)) => {
+                    return Err(PalamedesError::ReadFile {
+                        path: plan.path.clone(),
+                        source,
+                    });
+                }
+            };
+            let (changed, content, expected_original) = if current_original == plan.original {
+                (true, plan.content, current_original)
+            } else {
+                // Another writer modified this catalog after Phase 1 validation.
+                // Re-parse under the exclusive lock, re-verify every patch
+                // fingerprint against the live file, and re-render so unrelated
+                // concurrent edits are preserved and conflicting edits fail
+                // cleanly instead of being overwritten.
+                let catalog_cfg = &request.config.catalogs[plan.catalog_index];
+                let mut reloaded = build_loaded_catalog_from_content(
+                    &request.config,
+                    catalog_cfg,
+                    &plan.locale,
+                    plan.path.clone(),
+                    Arc::clone(&parent_dir),
+                    plan.file_name.clone(),
+                    current_original,
+                )?;
+                for &patch_index in &plan.patch_indexes {
+                    let patch = &request.patches[patch_index];
+                    let key =
+                        CatalogMessageKey::new(patch.id.message.clone(), patch.id.context.clone());
+                    let item_index = reloaded.messages.get(&key).copied().ok_or_else(|| {
+                        PalamedesError::WriteFile {
+                            path: plan.path.clone(),
+                            source: std::io::Error::new(
+                                std::io::ErrorKind::AlreadyExists,
+                                "catalog changed concurrently and patch target no longer exists",
+                            ),
+                        }
+                    })?;
+                    if reloaded.ambiguous_messages.contains(&key) {
+                        return Err(PalamedesError::WriteFile {
+                            path: plan.path.clone(),
+                            source: std::io::Error::new(
+                                std::io::ErrorKind::AlreadyExists,
+                                "catalog changed concurrently and patch target became ambiguous",
+                            ),
+                        });
+                    }
+                    let current = build_candidate(
+                        &reloaded,
+                        &key,
+                        &reloaded.po.items[item_index],
+                        usize::MAX,
+                    )?;
+                    if current.fingerprint != patch.fingerprint {
+                        return Err(PalamedesError::WriteFile {
+                            path: plan.path.clone(),
+                            source: std::io::Error::new(
+                                std::io::ErrorKind::AlreadyExists,
+                                "catalog changed concurrently and patch fingerprint is now stale",
+                            ),
+                        });
+                    }
+                }
+                for &patch_index in &plan.patch_indexes {
+                    apply_patch_to_po(
+                        &mut reloaded.po,
+                        &reloaded.po_item_indexes,
+                        &request.patches[patch_index],
+                    )?;
+                }
+                let po = ferrocat::stringify_po(&reloaded.po, &SerializeOptions::default());
+                let rendered = render_target_catalog(
+                    &po,
+                    &request.config.source_locale,
+                    &plan.locale,
+                    reloaded.format,
+                    request.po.as_ref(),
+                )?;
+                (rendered != reloaded.original, rendered, reloaded.original)
+            };
+            if !changed {
+                return Ok(None);
+            }
+            let prepared_catalog = PreparedCatalog {
+                path: plan.path.clone(),
+                parent_dir: Arc::clone(&parent_dir),
+                file_name: plan.file_name.clone(),
+                expected_original: Some(expected_original),
+                content,
+            };
+            replace_catalog(
+                &prepared_catalog,
+                &request.config.source_locale,
+                request.po.as_ref(),
+            )
+            .map(Some)
+        })();
+
+        match commit_result {
+            Ok(Some(CatalogReplacement::Durable)) => {
+                catalogs_updated += 1;
+            }
+            Ok(Some(CatalogReplacement::CommittedWithDurabilityWarning(source))) => {
+                catalogs_updated += 1;
+                replacement_diagnostics.push(TranslationWorkflowDiagnostic {
+                    code: "translation.catalog_durability".to_owned(),
+                    message: format!(
+                        "Catalog replacement committed, but synchronizing its directory failed: {source}"
+                    ),
+                    id: None,
+                    catalog_path: Some(plan.path.to_string_lossy().into_owned()),
+                    locale: Some(plan.locale),
+                });
+            }
+            Ok(None) => {}
+            Err(source) => {
+                return Err(PalamedesError::TranslationPatchWrite {
+                    result: completed_translation_patch_result(
+                        &request.patches,
+                        &changed_patches,
+                        &completed_patches,
+                        catalogs_updated,
+                        replacement_diagnostics,
+                    ),
+                    source: Box::new(source),
+                });
+            }
+        }
+        completed_patches.extend(&plan.patch_indexes);
     }
 
     Ok(completed_translation_patch_result(
@@ -716,6 +1218,699 @@ where
         catalogs_updated,
         replacement_diagnostics,
     ))
+}
+
+fn reject_ambiguous_catalog_patches(
+    prior_indexes: &[usize],
+    current_indexes: &[usize],
+    patches: &[TranslationPatch],
+    rejected: &mut BTreeSet<usize>,
+    diagnostics: &mut Vec<TranslationWorkflowDiagnostic>,
+) {
+    for &prior_index in prior_indexes {
+        if rejected.insert(prior_index) {
+            diagnostics.push(workflow_diagnostic(
+                "translation.ambiguous_catalog",
+                "Multiple configured catalog scopes resolve to the same target file.",
+                Some(patches[prior_index].id.clone()),
+            ));
+        }
+    }
+    for &patch_index in current_indexes {
+        if rejected.insert(patch_index) {
+            diagnostics.push(workflow_diagnostic(
+                "translation.ambiguous_catalog",
+                "Multiple configured catalog scopes resolve to the same target file.",
+                Some(patches[patch_index].id.clone()),
+            ));
+        }
+    }
+}
+
+struct UnidentifiedPatchSegment {
+    raw: OsString,
+    folded: OsString,
+    equivalence: Option<DirFilenameEquivalence>,
+}
+
+#[cfg(windows)]
+fn ntfs_casefold(text: &str) -> String {
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn RtlUpcaseUnicodeChar(source_character: u16) -> u16;
+    }
+
+    let upcased: Vec<u16> = text
+        .encode_utf16()
+        .map(|unit| {
+            // SAFETY: `RtlUpcaseUnicodeChar` is a pure code-unit table lookup.
+            unsafe { RtlUpcaseUnicodeChar(unit) }
+        })
+        .collect();
+    String::from_utf16_lossy(&upcased)
+}
+
+#[cfg(not(windows))]
+fn ntfs_casefold(text: &str) -> String {
+    // NTFS `$UpCase` is a 65,536-entry UTF-16 code-unit table: supplementary
+    // plane characters (> U+FFFF, encoded as surrogate pairs) are untouched,
+    // multi-character expansions such as `ß` -> `SS` stay distinct, `σ` and `ς`
+    // both map to `Σ`, and dotless `ı` (U+0131) does not fold to `I`.
+    let mut folded = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if (ch as u32) > 0xFFFF || ch == '\u{0131}' {
+            folded.push(ch);
+            continue;
+        }
+        let mut upper = ch.to_uppercase();
+        if let Some(first) = upper.next()
+            && upper.next().is_none()
+            && (first as u32) <= 0xFFFF
+        {
+            folded.push(first);
+        } else {
+            folded.push(ch);
+        }
+    }
+    folded
+}
+
+const fn is_default_ignorable_code_point(ch: char) -> bool {
+    let cp = ch as u32;
+    matches!(
+        cp,
+        0x00ad
+            | 0x034f
+            | 0x061c
+            | 0x115f..=0x1160
+            | 0x17b4..=0x17b5
+            | 0x180b..=0x180f
+            | 0x200b..=0x200f
+            | 0x202a..=0x202e
+            | 0x2060..=0x206f
+            | 0x3164
+            | 0xfe00..=0xfe0f
+            | 0xfeff
+            | 0xffa0
+            | 0xfff0..=0xfff8
+            | 0x1bca0..=0x1bca3
+            | 0x1d173..=0x1d17a
+            | 0xe0000..=0xe0fff
+    )
+}
+
+fn unicode_full_casefold_nfd(text: &str, strip_default_ignorables: bool) -> String {
+    // Unicode CaseFolding (C + F) over NFD, matching extract's conservative
+    // normalization/casefolding rules (so `café` and `cafe\u{0301}` match,
+    // `σ`/`ς`/`Σ` all fold to `σ`, `ß`/`ẞ` fold to `ss`, `µ` folds to `μ`,
+    // and `ﬁ` folds to `fi`).
+    let mut folded = String::with_capacity(text.len());
+    for ch in text.nfd() {
+        if strip_default_ignorables && is_default_ignorable_code_point(ch) {
+            continue;
+        }
+        match ch {
+            '\u{13a0}'..='\u{13f5}' => folded.push(ch),
+            '\u{13f8}'..='\u{13fd}' => {
+                folded.push(char::from_u32((ch as u32) - 8).unwrap_or(ch));
+            }
+            '\u{ab70}'..='\u{abbf}' => {
+                folded.push(char::from_u32(0x13a0 + ((ch as u32) - 0xab70)).unwrap_or(ch));
+            }
+            '\u{00b5}' => folded.push('\u{03bc}'),
+            '\u{00df}' | '\u{1e9e}' => folded.push_str("ss"),
+            '\u{0149}' => folded.push_str("\u{02bc}n"),
+            '\u{017f}' => folded.push('s'),
+            '\u{0345}' => folded.push('\u{03b9}'),
+            '\u{03c2}' => folded.push('\u{03c3}'),
+            '\u{03d0}' => folded.push('\u{03b2}'),
+            '\u{03d1}' => folded.push('\u{03b8}'),
+            '\u{03d5}' => folded.push('\u{03c6}'),
+            '\u{03d6}' => folded.push('\u{03c0}'),
+            '\u{03f0}' => folded.push('\u{03ba}'),
+            '\u{03f1}' => folded.push('\u{03c1}'),
+            '\u{03f5}' => folded.push('\u{03b5}'),
+            '\u{0587}' => folded.push_str("\u{0565}\u{0582}"),
+            '\u{1c80}' => folded.push('\u{0432}'),
+            '\u{1c81}' => folded.push('\u{0434}'),
+            '\u{1c82}' => folded.push('\u{043e}'),
+            '\u{1c83}' => folded.push('\u{0441}'),
+            '\u{1c84}' | '\u{1c85}' => folded.push('\u{0442}'),
+            '\u{1c86}' => folded.push('\u{044a}'),
+            '\u{1c87}' => folded.push('\u{0463}'),
+            '\u{1c88}' => folded.push('\u{a64b}'),
+            '\u{1e9a}' => folded.push_str("a\u{02be}"),
+            '\u{fb00}' => folded.push_str("ff"),
+            '\u{fb01}' => folded.push_str("fi"),
+            '\u{fb02}' => folded.push_str("fl"),
+            '\u{fb03}' => folded.push_str("ffi"),
+            '\u{fb04}' => folded.push_str("ffl"),
+            '\u{fb05}' | '\u{fb06}' => folded.push_str("st"),
+            '\u{fb13}' => folded.push_str("\u{0574}\u{0576}"),
+            '\u{fb14}' => folded.push_str("\u{0574}\u{0565}"),
+            '\u{fb15}' => folded.push_str("\u{0574}\u{056b}"),
+            '\u{fb16}' => folded.push_str("\u{057e}\u{0576}"),
+            '\u{fb17}' => folded.push_str("\u{0574}\u{056d}"),
+            other => {
+                for lower in other.to_lowercase() {
+                    folded.push(lower);
+                }
+            }
+        }
+    }
+    folded.nfd().collect()
+}
+
+fn fold_patch_segment(segment: &OsStr, equivalence: Option<DirFilenameEquivalence>) -> OsString {
+    match equivalence {
+        Some(DirFilenameEquivalence::Exact) => segment.to_os_string(),
+        Some(DirFilenameEquivalence::UnicodeNfd | DirFilenameEquivalence::UnicodeHfsPlus) => {
+            segment.to_str().map_or_else(
+                || segment.to_os_string(),
+                |text| OsString::from(text.nfd().collect::<String>()),
+            )
+        }
+        Some(DirFilenameEquivalence::CaseInsensitiveNtfs) => segment.to_str().map_or_else(
+            || segment.to_os_string(),
+            |text| OsString::from(ntfs_casefold(text.trim_end_matches(['.', ' ']))),
+        ),
+        Some(
+            DirFilenameEquivalence::CaseInsensitiveVfat
+            | DirFilenameEquivalence::CaseInsensitiveExfat,
+        ) => segment.to_str().map_or_else(
+            || segment.to_os_string(),
+            |text| OsString::from(ntfs_casefold(text.trim_end_matches('.'))),
+        ),
+        Some(
+            DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
+            | DirFilenameEquivalence::CaseInsensitiveHfsPlus,
+        ) => segment.to_str().map_or_else(
+            || segment.to_os_string(),
+            |text| OsString::from(unicode_full_casefold_nfd(text, false)),
+        ),
+        Some(DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf) => segment.to_str().map_or_else(
+            || segment.to_os_string(),
+            |text| OsString::from(unicode_full_casefold_nfd(text, true)),
+        ),
+        None => segment.to_str().map_or_else(
+            || segment.to_os_string(),
+            |text| {
+                OsString::from(unicode_full_casefold_nfd(
+                    text.trim_end_matches(['.', ' ']),
+                    true,
+                ))
+            },
+        ),
+    }
+}
+
+fn query_cached_dir_equivalence(
+    root_dir: &Path,
+    relative_dir: &Path,
+    open_dir: Option<&ContainedDir>,
+    cache: &mut HashMap<PathBuf, Option<DirFilenameEquivalence>>,
+    simulated_dir_equivalence: Option<Option<DirFilenameEquivalence>>,
+) -> PalamedesResult<Option<DirFilenameEquivalence>> {
+    if let Some(simulated) = simulated_dir_equivalence {
+        return Ok(simulated);
+    }
+    if let Some(&cached) = cache.get(relative_dir) {
+        return Ok(cached);
+    }
+    let eq = if let Some(dir) = open_dir {
+        dir.filename_equivalence()
+    } else {
+        match ContainedDir::open_subpath(root_dir, relative_dir, false) {
+            Ok(Some(dir)) => dir.filename_equivalence(),
+            Ok(None) => None,
+            Err(ContainedFsError::Containment(reason)) => {
+                return Err(PalamedesError::UnsafeCatalogPath {
+                    path: root_dir.join(relative_dir).to_string_lossy().into_owned(),
+                    reason,
+                });
+            }
+            Err(ContainedFsError::Io(_)) => None,
+        }
+    };
+    cache.insert(relative_dir.to_path_buf(), eq);
+    Ok(eq)
+}
+
+fn resolve_unidentified_patch_segments(
+    root_dir: &Path,
+    relative_parent: &Path,
+    parent_dir: Option<&ContainedDir>,
+    file_name: &OsStr,
+    dir_eq_cache: &mut HashMap<PathBuf, Option<DirFilenameEquivalence>>,
+    simulated_dir_equivalence: Option<Option<DirFilenameEquivalence>>,
+) -> PalamedesResult<Vec<UnidentifiedPatchSegment>> {
+    let mut segments = Vec::new();
+    let mut current_rel = PathBuf::new();
+
+    for component in relative_parent.components() {
+        let raw = component.as_os_str().to_os_string();
+        let eq = query_cached_dir_equivalence(
+            root_dir,
+            &current_rel,
+            None,
+            dir_eq_cache,
+            simulated_dir_equivalence,
+        )?;
+        let folded = fold_patch_segment(&raw, eq);
+        segments.push(UnidentifiedPatchSegment {
+            raw,
+            folded,
+            equivalence: eq,
+        });
+        current_rel.push(component.as_os_str());
+    }
+
+    let file_eq = query_cached_dir_equivalence(
+        root_dir,
+        relative_parent,
+        parent_dir,
+        dir_eq_cache,
+        simulated_dir_equivalence,
+    )?;
+    let file_raw = file_name.to_os_string();
+    let file_folded = fold_patch_segment(&file_raw, file_eq);
+    segments.push(UnidentifiedPatchSegment {
+        raw: file_raw,
+        folded: file_folded,
+        equivalence: file_eq,
+    });
+
+    Ok(segments)
+}
+
+const fn equivalence_allows_8dot3(equivalence: Option<DirFilenameEquivalence>) -> bool {
+    matches!(
+        equivalence,
+        None | Some(
+            DirFilenameEquivalence::CaseInsensitiveNtfs
+                | DirFilenameEquivalence::CaseInsensitiveVfat
+        )
+    )
+}
+
+const fn is_valid_8dot3_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric()
+        || matches!(
+            ch,
+            '!' | '#'
+                | '$'
+                | '%'
+                | '&'
+                | '\''
+                | '('
+                | ')'
+                | '-'
+                | '@'
+                | '^'
+                | '_'
+                | '`'
+                | '{'
+                | '}'
+                | '~'
+        )
+}
+
+fn is_valid_8dot3_name(name: &str) -> bool {
+    if name.is_empty() || name.starts_with(['.', ' ']) || name.ends_with(['.', ' ']) {
+        return false;
+    }
+    let mut parts = name.split('.');
+    let Some(stem) = parts.next() else {
+        return false;
+    };
+    let ext = parts.next().unwrap_or("");
+    if parts.next().is_some() || stem.is_empty() || stem.len() > 8 || ext.len() > 3 {
+        return false;
+    }
+    stem.chars().all(is_valid_8dot3_char) && ext.chars().all(is_valid_8dot3_char)
+}
+
+struct Short83Candidate {
+    prefix: String,
+    hash_prefix: Option<String>,
+    digits_len: usize,
+    ext: String,
+}
+
+struct Long83Derived {
+    base: String,
+    ext: String,
+    has_non_ascii: bool,
+}
+
+fn parse_8dot3_short_name(segment: &OsStr) -> Option<Short83Candidate> {
+    let text = segment.to_str()?;
+    if !is_valid_8dot3_name(text) {
+        return None;
+    }
+    let (stem_raw, ext_raw) = text.split_once('.').unwrap_or((text, ""));
+    let (prefix_raw, digits) = stem_raw.rsplit_once('~')?;
+    if prefix_raw.is_empty()
+        || digits.is_empty()
+        || digits.len() > 6
+        || !digits.bytes().all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let prefix = prefix_raw.to_ascii_uppercase();
+    let hash_prefix = if prefix.len() >= 5
+        && prefix.len() <= 6
+        && prefix[prefix.len() - 4..]
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit())
+    {
+        Some(prefix[..prefix.len() - 4].to_owned())
+    } else {
+        None
+    };
+    Some(Short83Candidate {
+        prefix,
+        hash_prefix,
+        digits_len: digits.len(),
+        ext: ext_raw.to_ascii_uppercase(),
+    })
+}
+
+fn parse_8dot3_long_name(segment: &OsStr) -> Option<Long83Derived> {
+    let Some(text) = segment.to_str() else {
+        return Some(Long83Derived {
+            base: String::new(),
+            ext: "_".to_owned(),
+            has_non_ascii: true,
+        });
+    };
+    if is_valid_8dot3_name(text) {
+        return None;
+    }
+    let trimmed = text.trim_end_matches(['.', ' ']);
+    let (raw_stem, raw_ext) = match trimmed.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => (stem, ext),
+        _ => (trimmed, ""),
+    };
+    let has_non_ascii = !trimmed.is_ascii();
+    let mut base = String::new();
+    for ch in raw_stem.chars() {
+        if ch == ' ' || ch == '.' {
+            continue;
+        }
+        if !ch.is_ascii() {
+            base.push('_');
+        } else if is_valid_8dot3_char(ch) {
+            base.push(ch.to_ascii_uppercase());
+        } else {
+            base.push('_');
+        }
+    }
+    let mut ext = String::new();
+    for ch in raw_ext.chars() {
+        if ch == ' ' || ch == '.' {
+            continue;
+        }
+        if ext.len() == 3 {
+            break;
+        }
+        if !ch.is_ascii() {
+            ext.push('_');
+        } else if is_valid_8dot3_char(ch) {
+            ext.push(ch.to_ascii_uppercase());
+        } else {
+            ext.push('_');
+        }
+    }
+    Some(Long83Derived {
+        base,
+        ext,
+        has_non_ascii,
+    })
+}
+
+struct UnidentifiedAliasProbeContext<'a> {
+    root_dir: &'a Path,
+    leaf_parent_rel: &'a Path,
+    leaf_parent_dir: Option<&'a ContainedDir>,
+    cache: &'a mut HashMap<(PathBuf, OsString, OsString), bool>,
+    simulated_8dot3_alias_probe: Option<Option<bool>>,
+}
+
+impl UnidentifiedAliasProbeContext<'_> {
+    fn verify_8dot3_pair(&mut self, dir_rel: &Path, left: &OsStr, right: &OsStr) -> bool {
+        if left == right {
+            return true;
+        }
+        let (first, second) = if left <= right {
+            (left.to_os_string(), right.to_os_string())
+        } else {
+            (right.to_os_string(), left.to_os_string())
+        };
+        let key = (dir_rel.to_path_buf(), first, second);
+        if let Some(&cached) = self.cache.get(&key) {
+            return cached;
+        }
+        let probed = if let Some(simulated) = self.simulated_8dot3_alias_probe {
+            simulated
+        } else if dir_rel == self.leaf_parent_rel {
+            // Both catalog paths already exist in their containing directory,
+            // so inspect the live entries directly (file IDs or Windows
+            // `FileAlternateNameInformation`) without probing an empty
+            // directory where populated-directory numeric tails (`~2`, etc.)
+            // would differ.
+            self.leaf_parent_dir
+                .and_then(|dir| dir.probe_existing_names_equivalent(left, right))
+        } else {
+            ContainedDir::open_subpath(self.root_dir, dir_rel, false)
+                .ok()
+                .flatten()
+                .and_then(|dir| dir.probe_existing_names_equivalent(left, right))
+        };
+        // Only treat the pair as distinct when the filesystem explicitly
+        // disproves aliasing (`Some(false)`); fail closed on `Some(true)` or
+        // unprobeable (`None`).
+        let collides = probed != Some(false);
+        self.cache.insert(key, collides);
+        collides
+    }
+}
+
+#[derive(Default)]
+struct UnidentifiedPatchNode {
+    leaf_patch_indexes: Vec<usize>,
+    child_nodes: Vec<(OsString, Self)>,
+    by_folded: HashMap<OsString, usize>,
+    // Bidirectional O(1) indexes for NTFS/FAT 8.3 short/long aliases.
+    long_by_prefix: HashMap<(String, String, usize), Vec<usize>>,
+    long_by_hash_prefix: HashMap<(String, String), Vec<usize>>,
+    non_ascii_long_by_ext: HashMap<String, Vec<usize>>,
+    any_non_ascii_ext_long: Vec<usize>,
+    short_by_prefix: HashMap<(String, String, usize), Vec<usize>>,
+    short_by_hash_prefix: HashMap<(String, String), Vec<usize>>,
+    short_by_ext: HashMap<String, Vec<usize>>,
+    all_shorts: Vec<usize>,
+}
+
+impl UnidentifiedPatchNode {
+    fn is_empty(&self) -> bool {
+        self.leaf_patch_indexes.is_empty() && self.child_nodes.is_empty()
+    }
+
+    fn matching_8dot3_children(&self, raw: &OsStr) -> Vec<usize> {
+        let mut matches = Vec::new();
+        let mut seen = HashSet::new();
+        let mut push_unique = |idx: usize| {
+            if seen.insert(idx) {
+                matches.push(idx);
+            }
+        };
+
+        if let Some(short) = parse_8dot3_short_name(raw) {
+            if let Some(indices) = self.long_by_prefix.get(&(
+                short.ext.clone(),
+                short.prefix.clone(),
+                short.digits_len,
+            )) {
+                for &idx in indices {
+                    push_unique(idx);
+                }
+            }
+            if let Some(ref hash_prefix) = short.hash_prefix
+                && let Some(indices) = self
+                    .long_by_hash_prefix
+                    .get(&(short.ext.clone(), hash_prefix.clone()))
+            {
+                for &idx in indices {
+                    push_unique(idx);
+                }
+            }
+            if let Some(indices) = self.non_ascii_long_by_ext.get(&short.ext) {
+                for &idx in indices {
+                    push_unique(idx);
+                }
+            }
+            for &idx in &self.any_non_ascii_ext_long {
+                push_unique(idx);
+            }
+            return matches;
+        }
+
+        if self.all_shorts.is_empty() {
+            return matches;
+        }
+
+        if let Some(long) = parse_8dot3_long_name(raw) {
+            if long.has_non_ascii {
+                if long.ext.contains('_') {
+                    for &idx in &self.all_shorts {
+                        push_unique(idx);
+                    }
+                } else if let Some(indices) = self.short_by_ext.get(&long.ext) {
+                    for &idx in indices {
+                        push_unique(idx);
+                    }
+                }
+            } else {
+                for digits_len in 1..=6 {
+                    let prefix_len = long.base.len().min(7 - digits_len);
+                    if prefix_len > 0
+                        && let Some(indices) = self.short_by_prefix.get(&(
+                            long.ext.clone(),
+                            long.base[..prefix_len].to_owned(),
+                            digits_len,
+                        ))
+                    {
+                        for &idx in indices {
+                            push_unique(idx);
+                        }
+                    }
+                }
+                let max_hash = long.base.len().min(2);
+                for len in 1..=max_hash {
+                    if let Some(indices) = self
+                        .short_by_hash_prefix
+                        .get(&(long.ext.clone(), long.base[..len].to_owned()))
+                    {
+                        for &idx in indices {
+                            push_unique(idx);
+                        }
+                    }
+                }
+            }
+        }
+        matches
+    }
+
+    fn record_8dot3_child(&mut self, raw: &OsStr, child_idx: usize) {
+        if let Some(short) = parse_8dot3_short_name(raw) {
+            self.all_shorts.push(child_idx);
+            self.short_by_ext
+                .entry(short.ext.clone())
+                .or_default()
+                .push(child_idx);
+            self.short_by_prefix
+                .entry((short.ext.clone(), short.prefix, short.digits_len))
+                .or_default()
+                .push(child_idx);
+            if let Some(hash_prefix) = short.hash_prefix {
+                self.short_by_hash_prefix
+                    .entry((short.ext, hash_prefix))
+                    .or_default()
+                    .push(child_idx);
+            }
+            return;
+        }
+        if let Some(long) = parse_8dot3_long_name(raw) {
+            if long.has_non_ascii && long.ext.contains('_') {
+                self.any_non_ascii_ext_long.push(child_idx);
+            }
+            if long.has_non_ascii {
+                self.non_ascii_long_by_ext
+                    .entry(long.ext)
+                    .or_default()
+                    .push(child_idx);
+            } else {
+                for digits_len in 1..=6 {
+                    let prefix_len = long.base.len().min(7 - digits_len);
+                    if prefix_len > 0 {
+                        self.long_by_prefix
+                            .entry((
+                                long.ext.clone(),
+                                long.base[..prefix_len].to_owned(),
+                                digits_len,
+                            ))
+                            .or_default()
+                            .push(child_idx);
+                    }
+                }
+                let max_hash = long.base.len().min(2);
+                for len in 1..=max_hash {
+                    self.long_by_hash_prefix
+                        .entry((long.ext.clone(), long.base[..len].to_owned()))
+                        .or_default()
+                        .push(child_idx);
+                }
+            }
+        }
+    }
+
+    fn collect_colliding_leaf_patches(
+        &self,
+        segments: &[UnidentifiedPatchSegment],
+        current_rel: &Path,
+        probe_ctx: &mut UnidentifiedAliasProbeContext<'_>,
+        out: &mut Vec<usize>,
+    ) {
+        let Some((seg, rest)) = segments.split_first() else {
+            out.extend_from_slice(&self.leaf_patch_indexes);
+            return;
+        };
+
+        let mut matched_children = Vec::new();
+        if let Some(&child_idx) = self.by_folded.get(&seg.folded) {
+            matched_children.push(child_idx);
+        }
+        if equivalence_allows_8dot3(seg.equivalence) {
+            for child_idx in self.matching_8dot3_children(&seg.raw) {
+                if !matched_children.contains(&child_idx)
+                    && probe_ctx.verify_8dot3_pair(
+                        current_rel,
+                        &self.child_nodes[child_idx].0,
+                        &seg.raw,
+                    )
+                {
+                    matched_children.push(child_idx);
+                }
+            }
+        }
+
+        for child_idx in matched_children {
+            let next_rel = current_rel.join(&seg.raw);
+            self.child_nodes[child_idx]
+                .1
+                .collect_colliding_leaf_patches(rest, &next_rel, probe_ctx, out);
+        }
+    }
+
+    fn insert(&mut self, segments: &[UnidentifiedPatchSegment], patch_indexes: &[usize]) {
+        let mut node = self;
+        for seg in segments {
+            let child_idx = if let Some(&existing_idx) = node.by_folded.get(&seg.folded) {
+                existing_idx
+            } else {
+                let new_idx = node.child_nodes.len();
+                node.child_nodes.push((seg.raw.clone(), Self::default()));
+                node.by_folded.insert(seg.folded.clone(), new_idx);
+                if equivalence_allows_8dot3(seg.equivalence) {
+                    node.record_8dot3_child(&seg.raw, new_idx);
+                }
+                new_idx
+            };
+            node = &mut node.child_nodes[child_idx].1;
+        }
+        node.leaf_patch_indexes.extend_from_slice(patch_indexes);
+    }
 }
 
 #[cfg(feature = "test-support")]
@@ -786,11 +1981,84 @@ fn load_catalog(
     catalog: &CatalogConfig,
     locale: &str,
 ) -> PalamedesResult<LoadedCatalog> {
-    let path = resolve_catalog_path(config, catalog, locale);
-    let original = fs::read_to_string(&path).map_err(|source| PalamedesError::ReadFile {
-        path: path.clone(),
-        source,
-    })?;
+    load_catalog_with_dir_cache(config, catalog, locale, &mut HashMap::new())
+}
+
+fn load_catalog_with_dir_cache(
+    config: &CatalogArtifactConfig,
+    catalog: &CatalogConfig,
+    locale: &str,
+    pinned_dirs: &mut HashMap<PathBuf, Arc<ContainedDir>>,
+) -> PalamedesResult<LoadedCatalog> {
+    let root_dir = Path::new(&config.root_dir);
+    let path = resolve_catalog_path(config, catalog, locale)?;
+    let (relative_parent, file_name) =
+        split_relative_catalog_path(root_dir, &path).map_err(|error| {
+            PalamedesError::UnsafeCatalogPath {
+                path: path.to_string_lossy().into_owned(),
+                reason: error.to_string(),
+            }
+        })?;
+    let parent_dir = if let Some(cached) = pinned_dirs.get(&relative_parent) {
+        Arc::clone(cached)
+    } else {
+        let opened = match ContainedDir::open_subpath(root_dir, &relative_parent, false) {
+            Ok(Some(dir)) => Arc::new(dir),
+            Ok(None) => {
+                return Err(PalamedesError::ReadFile {
+                    path,
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "catalog file does not exist",
+                    ),
+                });
+            }
+            Err(ContainedFsError::Containment(reason)) => {
+                return Err(PalamedesError::UnsafeCatalogPath {
+                    path: path.to_string_lossy().into_owned(),
+                    reason,
+                });
+            }
+            Err(ContainedFsError::Io(source)) => {
+                return Err(PalamedesError::ReadFile { path, source });
+            }
+        };
+        pinned_dirs.insert(relative_parent, Arc::clone(&opened));
+        opened
+    };
+    let original = match parent_dir.read_optional_file(&file_name) {
+        Ok(Some(content)) => content,
+        Ok(None) => {
+            return Err(PalamedesError::ReadFile {
+                path,
+                source: std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "catalog file does not exist",
+                ),
+            });
+        }
+        Err(ContainedFsError::Containment(reason)) => {
+            return Err(PalamedesError::UnsafeCatalogPath {
+                path: path.to_string_lossy().into_owned(),
+                reason,
+            });
+        }
+        Err(ContainedFsError::Io(source)) => return Err(PalamedesError::ReadFile { path, source }),
+    };
+    build_loaded_catalog_from_content(
+        config, catalog, locale, path, parent_dir, file_name, original,
+    )
+}
+
+fn build_loaded_catalog_from_content(
+    config: &CatalogArtifactConfig,
+    catalog: &CatalogConfig,
+    locale: &str,
+    path: PathBuf,
+    parent_dir: Arc<ContainedDir>,
+    file_name: OsString,
+    original: String,
+) -> PalamedesResult<LoadedCatalog> {
     let po = parse_catalog_as_po(&original, &config.source_locale, locale, catalog.format)?;
     let mut messages = BTreeMap::new();
     let mut ambiguous_messages = BTreeSet::new();
@@ -812,6 +2080,8 @@ fn load_catalog(
         scope: catalog.path.clone(),
         locale: locale.to_owned(),
         path,
+        parent_dir,
+        file_name,
         format: catalog.format,
         original,
         po,
@@ -1603,7 +2873,7 @@ fn atomic_replace_catalog(
     _source_locale: &str,
     _po: Option<&PoOutputOptions>,
 ) -> PalamedesResult<CatalogReplacement> {
-    atomic_replace_catalog_with_directory_sync(catalog, sync_catalog_directory)
+    atomic_replace_catalog_with_directory_sync(catalog, ContainedDir::sync_directory)
 }
 
 fn atomic_replace_catalog_with_directory_sync<F>(
@@ -1611,81 +2881,44 @@ fn atomic_replace_catalog_with_directory_sync<F>(
     sync_directory: F,
 ) -> PalamedesResult<CatalogReplacement>
 where
-    F: FnOnce(&std::path::Path) -> std::io::Result<()>,
+    F: FnOnce(&ContainedDir) -> std::io::Result<()>,
 {
-    // `PreparedCatalog::content` has already been rendered into its target format. Writing it
-    // directly avoids asking `convert_catalog_file` to parse and render the same catalog again.
-    // Keep the replacement atomic and fully durable when the filesystem permits it: sync the
-    // temporary content and inherited target permissions, rename beside the target, then sync the
-    // containing directory. `persist` is the visible commit point, so a later directory-sync
-    // failure is a successful replacement with an explicit durability warning rather than a false
-    // "not applied" error. A new target keeps `NamedTempFile`'s secure platform default instead of
-    // inventing permissions that may conflict with the caller's policy.
-    let directory = catalog
-        .path
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."));
-    let target_permissions = match fs::metadata(&catalog.path) {
-        Ok(metadata) => Some(metadata.permissions()),
-        Err(source) if source.kind() == std::io::ErrorKind::NotFound => None,
-        Err(source) => {
-            return Err(PalamedesError::WriteFile {
-                path: catalog.path.clone(),
-                source,
-            });
-        }
+    // `PreparedCatalog::content` has already been rendered into its target format. Commit the
+    // replacement directly through the verified `ContainedDir` handle captured during load so
+    // ancestor path swaps between preparation and commit cannot redirect the write outside the
+    // configured root. Metadata and ACLs are restored before the temporary file is synced and
+    // renamed; a later directory-sync failure returns an explicit durability warning because the
+    // rename is already visibly committed.
+    let write_result = if let Some(expected_original) = catalog.expected_original.as_deref() {
+        catalog.parent_dir.write_file_atomically_if_unchanged(
+            &catalog.file_name,
+            catalog.content.as_bytes(),
+            Some(expected_original.as_bytes()),
+            ContainedNewFileMode::Private,
+            ContainedWriteDurability::FileOnly,
+        )
+    } else {
+        catalog.parent_dir.write_file_atomically(
+            &catalog.file_name,
+            catalog.content.as_bytes(),
+            ContainedNewFileMode::Private,
+            ContainedWriteDurability::FileOnly,
+        )
     };
-    fs::create_dir_all(directory).map_err(|source| PalamedesError::WriteFile {
-        path: catalog.path.clone(),
-        source,
+    write_result.map_err(|error| match error {
+        ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
+            path: catalog.path.to_string_lossy().into_owned(),
+            reason,
+        },
+        ContainedFsError::Io(source) => PalamedesError::WriteFile {
+            path: catalog.path.clone(),
+            source,
+        },
     })?;
-    let mut temporary =
-        tempfile::NamedTempFile::new_in(directory).map_err(|source| PalamedesError::WriteFile {
-            path: catalog.path.clone(),
-            source,
-        })?;
-    temporary
-        .write_all(catalog.content.as_bytes())
-        .map_err(|source| PalamedesError::WriteFile {
-            path: catalog.path.clone(),
-            source,
-        })?;
-    if let Some(permissions) = target_permissions {
-        temporary
-            .as_file()
-            .set_permissions(permissions)
-            .map_err(|source| PalamedesError::WriteFile {
-                path: catalog.path.clone(),
-                source,
-            })?;
-    }
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|source| PalamedesError::WriteFile {
-            path: catalog.path.clone(),
-            source,
-        })?;
-    temporary
-        .persist(&catalog.path)
-        .map_err(|source| PalamedesError::WriteFile {
-            path: catalog.path.clone(),
-            source: source.error,
-        })?;
-    Ok(match sync_directory(directory) {
+    Ok(match sync_directory(&catalog.parent_dir) {
         Ok(()) => CatalogReplacement::Durable,
         Err(source) => CatalogReplacement::CommittedWithDurabilityWarning(source),
     })
-}
-
-#[cfg(unix)]
-fn sync_catalog_directory(directory: &std::path::Path) -> std::io::Result<()> {
-    fs::File::open(directory).and_then(|file| file.sync_all())
-}
-
-#[cfg(not(unix))]
-fn sync_catalog_directory(_directory: &std::path::Path) -> std::io::Result<()> {
-    Ok(())
 }
 
 fn po_item_indexes(po: &PoFile) -> HashMap<CatalogMessageKey, PoItemIndexes> {
@@ -3607,16 +4840,25 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn new_direct_replacement_keeps_secure_tempfile_permissions() {
+        use std::ffi::OsString;
         use std::os::unix::fs::PermissionsExt;
+        use std::sync::Arc;
+
+        use crate::contained_fs::ContainedDir;
 
         let fixture = tempfile::tempdir().expect("fixture directory");
         let path = fixture.path().join("new/messages.po");
+        let parent_dir = Arc::new(
+            ContainedDir::open_subpath(fixture.path(), Path::new("new"), true)
+                .expect("open contained parent")
+                .expect("created parent"),
+        );
         let prepared = PreparedCatalog {
             path: path.clone(),
-            locale: "de".to_owned(),
-            patch_indexes: Vec::new(),
+            parent_dir,
+            file_name: OsString::from("messages.po"),
+            expected_original: None,
             content: "msgid \"Hello\"\nmsgstr \"Hallo\"\n".to_owned(),
-            changed: true,
         };
 
         atomic_replace_catalog(&prepared, "en", None).expect("create new catalog atomically");
@@ -3628,6 +4870,204 @@ mod tests {
                 .mode()
                 & 0o7777,
             0o600
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn translation_writeback_stays_pinned_to_original_directory_handle_after_parent_swap() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let outside = tempfile::tempdir().expect("outside directory");
+        let outside_catalog = outside.path().join("de.po");
+        fs::write(&outside_catalog, "outside-untouched").expect("seed outside target");
+
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list candidate");
+        let hello = candidate(&listed.candidates, "Hello");
+
+        let moved_dir = fixture.path().join("messages-moved");
+        let result = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config: po_config(fixture.path()),
+                po: None,
+                patches: vec![singular_patch(hello, "Hallo")],
+            },
+            |catalog, source_locale, po| {
+                // Swap `messages` to a symlink pointing outside after preparation, right before commit.
+                fs::rename(fixture.path().join("messages"), &moved_dir).expect("move real dir");
+                symlink(outside.path(), fixture.path().join("messages")).expect("swap symlink");
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+        )
+        .expect("pinned replacement stays inside original directory handle");
+
+        assert!(result.updated);
+        assert_eq!(
+            fs::read_to_string(&outside_catalog).expect("read outside file"),
+            "outside-untouched"
+        );
+        assert!(
+            fs::read_to_string(moved_dir.join("de.po"))
+                .expect("read moved original dir")
+                .contains("msgstr \"Hallo\"")
+        );
+    }
+
+    #[test]
+    fn rejects_batches_whose_catalog_scopes_normalize_to_the_same_target_file() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let before = fs::read_to_string(&path).expect("read original catalog");
+
+        let config = CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "messages/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: r"messages\{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: CatalogArtifactConfig {
+                root_dir: config.root_dir.clone(),
+                locales: config.locales.clone(),
+                source_locale: config.source_locale.clone(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![CatalogConfig {
+                    path: "messages/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                }],
+            },
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list candidate");
+        let hello = candidate(&listed.candidates, "Hello");
+        let mut alias_patch = singular_patch(hello, "Servus");
+        alias_patch.id.catalog = r"messages\{locale}".to_owned();
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config,
+            po: None,
+            patches: vec![singular_patch(hello, "Hallo"), alias_patch],
+        })
+        .expect("conflicting normalized catalog scopes must be rejected cleanly");
+
+        assert!(!result.updated);
+        assert_eq!(result.stats.requested, 2);
+        assert_eq!(result.stats.applied, 0);
+        assert_eq!(result.outcomes.len(), 2);
+        assert!(
+            result
+                .outcomes
+                .iter()
+                .all(|outcome| outcome.status == TranslationPatchOutcomeStatus::Rejected)
+        );
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diag| diag.code == "translation.ambiguous_catalog")
+        );
+        assert_eq!(
+            fs::read_to_string(&path).expect("read unchanged catalog"),
+            before
+        );
+    }
+
+    #[test]
+    fn rejects_batches_whose_catalog_scopes_alias_the_same_on_disk_file() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let primary = fixture.path().join("messages/de.po");
+        write_po_fixture(&primary, "de");
+        let alias_dir = fixture.path().join("alias");
+        fs::create_dir_all(&alias_dir).expect("alias dir");
+        fs::hard_link(&primary, alias_dir.join("de.po")).expect("hard link alias");
+        let before = fs::read_to_string(&primary).expect("read original catalog");
+
+        let config = CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "messages/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: "alias/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: CatalogArtifactConfig {
+                root_dir: config.root_dir.clone(),
+                locales: config.locales.clone(),
+                source_locale: config.source_locale.clone(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![CatalogConfig {
+                    path: "messages/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                }],
+            },
+            locales: vec!["de".to_owned()],
+            targets: vec![id("messages/{locale}", "de", "Hello", None)],
+            max_origins: 8,
+        })
+        .expect("list candidate");
+        let hello = candidate(&listed.candidates, "Hello");
+        let mut alias_patch = singular_patch(hello, "Servus");
+        alias_patch.id.catalog = "alias/{locale}".to_owned();
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config,
+            po: None,
+            patches: vec![singular_patch(hello, "Hallo"), alias_patch],
+        })
+        .expect("aliased on-disk targets must be rejected cleanly");
+
+        assert!(!result.updated);
+        assert_eq!(result.stats.applied, 0);
+        assert!(
+            result
+                .outcomes
+                .iter()
+                .all(|outcome| outcome.status == TranslationPatchOutcomeStatus::Rejected)
+        );
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diag| diag.code == "translation.ambiguous_catalog")
+        );
+        assert_eq!(
+            fs::read_to_string(&primary).expect("read unchanged catalog"),
+            before
         );
     }
 
@@ -3879,5 +5319,926 @@ mod tests {
             },
             machine: None,
         }
+    }
+
+    #[cfg(unix)]
+    fn count_open_fds() -> Option<usize> {
+        for dir in ["/dev/fd", "/proc/self/fd"] {
+            if let Ok(entries) = fs::read_dir(dir) {
+                return Some(entries.count());
+            }
+        }
+        None
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn multi_locale_patch_batch_bounds_open_file_descriptors() {
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let locale_count = 100usize;
+        let mut locales = Vec::with_capacity(locale_count + 1);
+        locales.push("en".to_owned());
+        write_po_fixture(&fixture.path().join("locales/en/messages.po"), "en");
+        for idx in 0..locale_count {
+            let locale = format!("loc-{idx:03}");
+            write_po_fixture(
+                &fixture.path().join(format!("locales/{locale}/messages.po")),
+                &locale,
+            );
+            locales.push(locale);
+        }
+
+        let make_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: locales.clone(),
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}/messages".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        };
+
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_config(),
+            locales: locales[1..].to_vec(),
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list candidates across 100 locale directories");
+
+        let mut patches = Vec::with_capacity(locale_count);
+        for locale in &locales[1..] {
+            let entry = listed
+                .candidates
+                .iter()
+                .find(|c| c.id.locale == *locale && c.id.message == "Hello")
+                .expect("Hello candidate");
+            patches.push(singular_patch(entry, &format!("Hello-{locale}")));
+        }
+
+        let baseline_fds = count_open_fds();
+        let mut peak_fd_delta = 0usize;
+        let result = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config: make_config(),
+                po: None,
+                patches,
+            },
+            |catalog, source_locale, po| {
+                if let (Some(base), Some(current)) = (baseline_fds, count_open_fds()) {
+                    peak_fd_delta = peak_fd_delta.max(current.saturating_sub(base));
+                }
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+        )
+        .expect("100-locale batch must succeed with bounded open descriptors");
+
+        assert!(result.updated);
+        assert_eq!(result.stats.catalogs_updated, locale_count);
+        assert_eq!(result.stats.applied, locale_count);
+        if baseline_fds.is_some() {
+            assert!(
+                peak_fd_delta <= 32,
+                "expected O(1) open descriptors across {locale_count} locale directories, observed peak delta {peak_fd_delta}"
+            );
+        }
+    }
+
+    #[test]
+    fn patch_batch_rejects_aliased_catalogs_when_file_identity_is_unavailable() {
+        use super::{DirFilenameEquivalence, apply_translation_patches_with_options};
+
+        for simulated_eq in [
+            Some(DirFilenameEquivalence::CaseInsensitiveNtfs),
+            None, // FAT32 / exFAT / SMB where FileCaseSensitiveInformation is also unavailable
+        ] {
+            let fixture = tempfile::tempdir().expect("fixture directory");
+            let upper_path = fixture.path().join("Locales/de.po");
+            let lower_path = fixture.path().join("locales/de.po");
+            write_po_fixture(&fixture.path().join("Locales/en.po"), "en");
+            write_po_fixture(&fixture.path().join("locales/en.po"), "en");
+            write_po_fixture(&upper_path, "de");
+            if !lower_path.exists() {
+                write_po_fixture(&lower_path, "de");
+            }
+            let before_upper = fs::read_to_string(&upper_path).expect("read upper before");
+            let before_lower = fs::read_to_string(&lower_path).expect("read lower before");
+
+            let make_config = || CatalogArtifactConfig {
+                root_dir: fixture.path().to_string_lossy().into_owned(),
+                locales: vec!["en".to_owned(), "de".to_owned()],
+                source_locale: "en".to_owned(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![
+                    CatalogConfig {
+                        path: "Locales/{locale}".to_owned(),
+                        format: PalamedesCatalogFormat::Po,
+                    },
+                    CatalogConfig {
+                        path: "locales/{locale}".to_owned(),
+                        format: PalamedesCatalogFormat::Po,
+                    },
+                ],
+            };
+
+            let listed = list_translation_candidates(&TranslationCandidateRequest {
+                config: make_config(),
+                locales: vec!["de".to_owned()],
+                targets: Vec::new(),
+                max_origins: 8,
+            })
+            .expect("list candidates");
+            let upper_candidate = listed
+                .candidates
+                .iter()
+                .find(|c| c.id.catalog == "Locales/{locale}" && c.id.message == "Hello")
+                .expect("upper Hello candidate");
+            let lower_candidate = listed
+                .candidates
+                .iter()
+                .find(|c| c.id.catalog == "locales/{locale}" && c.id.message == "Hello")
+                .expect("lower Hello candidate");
+
+            let mut writes = 0usize;
+            let result = apply_translation_patches_with_options(
+                TranslationPatchRequest {
+                    config: make_config(),
+                    po: None,
+                    patches: vec![
+                        singular_patch(upper_candidate, "Hallo Upper"),
+                        singular_patch(lower_candidate, "Hallo Lower"),
+                    ],
+                },
+                |catalog, source_locale, po| {
+                    writes += 1;
+                    atomic_replace_catalog(catalog, source_locale, po)
+                },
+                true,
+                Some(simulated_eq),
+                None,
+            )
+            .expect("ambiguous batch returns structured rejection");
+
+            assert!(!result.updated, "ambiguous batch must not update files");
+            assert_eq!(writes, 0, "Phase 2 must not commit any write");
+            assert_eq!(result.stats.applied, 0);
+            assert_eq!(result.diagnostics.len(), 2);
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .all(|diag| diag.code == "translation.ambiguous_catalog"),
+                "expected translation.ambiguous_catalog diagnostics, got {:?}",
+                result.diagnostics
+            );
+            assert_eq!(
+                fs::read_to_string(&upper_path).expect("read upper after"),
+                before_upper
+            );
+            assert_eq!(
+                fs::read_to_string(&lower_path).expect("read lower after"),
+                before_lower
+            );
+        }
+
+        // Distinct files (different locales) still succeed when file_identity is unavailable.
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        write_po_fixture(&fixture.path().join("locales/en.po"), "en");
+        write_po_fixture(&fixture.path().join("locales/de.po"), "de");
+        write_po_fixture(&fixture.path().join("locales/fr.po"), "fr");
+        let make_distinct_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned(), "fr".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_distinct_config(),
+            locales: vec!["de".to_owned(), "fr".to_owned()],
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list distinct candidates");
+        let de_candidate = listed
+            .candidates
+            .iter()
+            .find(|c| c.id.locale == "de" && c.id.message == "Hello")
+            .expect("de Hello");
+        let fr_candidate = listed
+            .candidates
+            .iter()
+            .find(|c| c.id.locale == "fr" && c.id.message == "Hello")
+            .expect("fr Hello");
+        let result = apply_translation_patches_with_options(
+            TranslationPatchRequest {
+                config: make_distinct_config(),
+                po: None,
+                patches: vec![
+                    singular_patch(de_candidate, "Hallo"),
+                    singular_patch(fr_candidate, "Bonjour"),
+                ],
+            },
+            atomic_replace_catalog,
+            true,
+            Some(Some(DirFilenameEquivalence::CaseInsensitiveNtfs)),
+            None,
+        )
+        .expect("distinct locales must succeed when file_identity is unavailable");
+        assert!(result.updated);
+        assert_eq!(result.stats.applied, 2);
+        assert_eq!(result.stats.catalogs_updated, 2);
+    }
+
+    #[test]
+    fn patch_batch_rejects_8dot3_aliased_catalogs_when_file_identity_is_unavailable() {
+        use super::{DirFilenameEquivalence, apply_translation_patches_with_options};
+
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        write_po_fixture(&fixture.path().join("LongDirectory/en.po"), "en");
+        write_po_fixture(&fixture.path().join("LongDirectory/de.po"), "de");
+        write_po_fixture(&fixture.path().join("LONGDI~1/en.po"), "en");
+        write_po_fixture(&fixture.path().join("LONGDI~1/de.po"), "de");
+
+        let make_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "LongDirectory/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: "LONGDI~1/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_config(),
+            locales: vec!["de".to_owned()],
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list 8.3 candidates");
+        let long_candidate = listed
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == "LongDirectory/{locale}" && c.id.message == "Hello")
+            .expect("long Hello");
+        let short_candidate = listed
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == "LONGDI~1/{locale}" && c.id.message == "Hello")
+            .expect("short Hello");
+
+        // 1. When the filesystem confirms or cannot disprove that `LONGDI~1` aliases
+        // `LongDirectory`, reject the ambiguous batch before any write occurs.
+        for probe_outcome in [Some(true), None] {
+            let mut writes = 0usize;
+            let result = apply_translation_patches_with_options(
+                TranslationPatchRequest {
+                    config: make_config(),
+                    po: None,
+                    patches: vec![
+                        singular_patch(long_candidate, "Hallo Long"),
+                        singular_patch(short_candidate, "Hallo Short"),
+                    ],
+                },
+                |catalog, source_locale, po| {
+                    writes += 1;
+                    atomic_replace_catalog(catalog, source_locale, po)
+                },
+                true,
+                Some(Some(DirFilenameEquivalence::CaseInsensitiveNtfs)),
+                Some(probe_outcome),
+            )
+            .expect("8.3 aliased batch returns structured rejection");
+
+            assert!(!result.updated);
+            assert_eq!(writes, 0);
+            assert_eq!(result.stats.applied, 0);
+            assert_eq!(result.diagnostics.len(), 2);
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .all(|diag| diag.code == "translation.ambiguous_catalog")
+            );
+        }
+
+        // 2. When the live filesystem disproves aliasing (two separately created
+        // directories whose names match the 8.3 heuristic, using `LONGDI~2` so
+        // `LongDirectory` and `LONGDI~2` remain genuinely distinct even on
+        // Windows volumes with 8.3 short names enabled where `LongDirectory`
+        // gets `LONGDI~1`), the batch succeeds!
+        let distinct_fixture = tempfile::tempdir().expect("distinct 8.3 fixture directory");
+        write_po_fixture(&distinct_fixture.path().join("LongDirectory/en.po"), "en");
+        write_po_fixture(&distinct_fixture.path().join("LongDirectory/de.po"), "de");
+        write_po_fixture(&distinct_fixture.path().join("LONGDI~2/en.po"), "en");
+        write_po_fixture(&distinct_fixture.path().join("LONGDI~2/de.po"), "de");
+        let make_distinct_config = || CatalogArtifactConfig {
+            root_dir: distinct_fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "LongDirectory/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: "LONGDI~2/{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let distinct_listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_distinct_config(),
+            locales: vec!["de".to_owned()],
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list distinct 8.3 candidates");
+        let distinct_long = distinct_listed
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == "LongDirectory/{locale}" && c.id.message == "Hello")
+            .expect("distinct long Hello");
+        let distinct_short = distinct_listed
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == "LONGDI~2/{locale}" && c.id.message == "Hello")
+            .expect("distinct short Hello");
+        let result = apply_translation_patches_with_options(
+            TranslationPatchRequest {
+                config: make_distinct_config(),
+                po: None,
+                patches: vec![
+                    singular_patch(distinct_long, "Hallo Long"),
+                    singular_patch(distinct_short, "Hallo Short"),
+                ],
+            },
+            atomic_replace_catalog,
+            true,
+            Some(Some(DirFilenameEquivalence::CaseInsensitiveNtfs)),
+            None,
+        )
+        .expect("separately created LongDirectory and LONGDI~2 must succeed when distinct on disk");
+        assert!(result.updated);
+        assert_eq!(result.stats.applied, 2);
+        assert_eq!(result.stats.catalogs_updated, 2);
+    }
+
+    #[test]
+    fn patch_batch_rejects_ntfs_sigma_alias_when_file_identity_is_unavailable() {
+        use super::{DirFilenameEquivalence, apply_translation_patches_with_options};
+
+        // Always test Greek sigma vs capital sigma (`σ`/`Σ`) under both
+        // confirmed NTFS and unknown equivalence on all platforms (matching
+        // Windows `RtlUpcaseUnicodeChar` as well as non-Windows `$UpCase`),
+        // and test sigma vs final sigma (`σ`/`ς`) under unknown equivalence on
+        // all platforms plus confirmed NTFS on non-Windows hosts (real Windows
+        // `RtlUpcaseUnicodeChar` keeps U+03C2 distinct from U+03A3).
+        let mut cases = vec![
+            (
+                "\u{03c3}",
+                "\u{03a3}",
+                Some(DirFilenameEquivalence::CaseInsensitiveNtfs),
+            ),
+            ("\u{03c3}", "\u{03a3}", None),
+            ("\u{03c3}", "\u{03c2}", None),
+        ];
+        #[cfg(not(windows))]
+        cases.push((
+            "\u{03c3}",
+            "\u{03c2}",
+            Some(DirFilenameEquivalence::CaseInsensitiveNtfs),
+        ));
+
+        for (first_dir, second_dir, simulated_eq) in cases {
+            let fixture = tempfile::tempdir().expect("fixture directory");
+            let sigma_path = fixture.path().join(format!("{first_dir}/de.po"));
+            let second_path = fixture.path().join(format!("{second_dir}/de.po"));
+            write_po_fixture(&fixture.path().join(format!("{first_dir}/en.po")), "en");
+            write_po_fixture(&fixture.path().join(format!("{second_dir}/en.po")), "en");
+            write_po_fixture(&sigma_path, "de");
+            if !second_path.exists() {
+                write_po_fixture(&second_path, "de");
+            }
+            let before_sigma = fs::read_to_string(&sigma_path).expect("read sigma before");
+            let before_second = fs::read_to_string(&second_path).expect("read second before");
+
+            let first_pattern = format!("{first_dir}/{{locale}}");
+            let second_pattern = format!("{second_dir}/{{locale}}");
+            let make_config = || CatalogArtifactConfig {
+                root_dir: fixture.path().to_string_lossy().into_owned(),
+                locales: vec!["en".to_owned(), "de".to_owned()],
+                source_locale: "en".to_owned(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![
+                    CatalogConfig {
+                        path: first_pattern.clone(),
+                        format: PalamedesCatalogFormat::Po,
+                    },
+                    CatalogConfig {
+                        path: second_pattern.clone(),
+                        format: PalamedesCatalogFormat::Po,
+                    },
+                ],
+            };
+            let listed = list_translation_candidates(&TranslationCandidateRequest {
+                config: make_config(),
+                locales: vec!["de".to_owned()],
+                targets: Vec::new(),
+                max_origins: 8,
+            })
+            .expect("list Greek sigma candidates");
+            let sigma_candidate = listed
+                .candidates
+                .iter()
+                .find(|c| c.id.catalog == first_pattern && c.id.message == "Hello")
+                .expect("sigma Hello");
+            let second_candidate = listed
+                .candidates
+                .iter()
+                .find(|c| c.id.catalog == second_pattern && c.id.message == "Hello")
+                .expect("second sigma Hello");
+
+            let mut writes = 0usize;
+            let result = apply_translation_patches_with_options(
+                TranslationPatchRequest {
+                    config: make_config(),
+                    po: None,
+                    patches: vec![
+                        singular_patch(sigma_candidate, "Hallo Sigma"),
+                        singular_patch(second_candidate, "Hallo Second Sigma"),
+                    ],
+                },
+                |catalog, source_locale, po| {
+                    writes += 1;
+                    atomic_replace_catalog(catalog, source_locale, po)
+                },
+                true,
+                Some(simulated_eq),
+                None,
+            )
+            .expect("sigma alias returns structured rejection");
+
+            assert!(!result.updated);
+            assert_eq!(writes, 0, "Phase 2 must not commit any write");
+            assert_eq!(result.stats.applied, 0);
+            assert_eq!(result.diagnostics.len(), 2);
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .all(|diag| diag.code == "translation.ambiguous_catalog"),
+                "expected translation.ambiguous_catalog for {first_dir}/{second_dir} pair ({simulated_eq:?}), got {:?}",
+                result.diagnostics
+            );
+            assert_eq!(
+                fs::read_to_string(&sigma_path).expect("read sigma after"),
+                before_sigma
+            );
+            assert_eq!(
+                fs::read_to_string(&second_path).expect("read second after"),
+                before_second
+            );
+        }
+    }
+
+    #[test]
+    fn patch_batch_rejects_nfc_nfd_aliased_catalogs_when_file_identity_is_unavailable() {
+        use super::apply_translation_patches_with_options;
+
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let nfc_scope = "caf\u{00e9}/{locale}";
+        let nfd_scope = "cafe\u{0301}/{locale}";
+        let nfc_path = fixture.path().join("caf\u{00e9}/de.po");
+        let nfd_path = fixture.path().join("cafe\u{0301}/de.po");
+        write_po_fixture(&fixture.path().join("caf\u{00e9}/en.po"), "en");
+        write_po_fixture(&fixture.path().join("cafe\u{0301}/en.po"), "en");
+        write_po_fixture(&nfc_path, "de");
+        if !nfd_path.exists() {
+            write_po_fixture(&nfd_path, "de");
+        }
+        let before_nfc = fs::read_to_string(&nfc_path).expect("read nfc before");
+        let before_nfd = fs::read_to_string(&nfd_path).expect("read nfd before");
+
+        let make_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: nfc_scope.to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: nfd_scope.to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_config(),
+            locales: vec!["de".to_owned()],
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list NFC/NFD candidates");
+        let nfc_candidate = listed
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == nfc_scope && c.id.message == "Hello")
+            .expect("nfc Hello");
+        let nfd_candidate = listed
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == nfd_scope && c.id.message == "Hello")
+            .expect("nfd Hello");
+
+        let mut writes = 0usize;
+        let result = apply_translation_patches_with_options(
+            TranslationPatchRequest {
+                config: make_config(),
+                po: None,
+                patches: vec![
+                    singular_patch(nfc_candidate, "Hallo NFC"),
+                    singular_patch(nfd_candidate, "Hallo NFD"),
+                ],
+            },
+            |catalog, source_locale, po| {
+                writes += 1;
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+            true,
+            Some(None),
+            None,
+        )
+        .expect("NFC/NFD alias returns structured rejection");
+
+        assert!(!result.updated);
+        assert_eq!(writes, 0, "Phase 2 must not commit any write");
+        assert_eq!(result.stats.applied, 0);
+        assert_eq!(result.diagnostics.len(), 2);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diag| diag.code == "translation.ambiguous_catalog"),
+            "expected translation.ambiguous_catalog for NFC/NFD pair, got {:?}",
+            result.diagnostics
+        );
+        assert_eq!(
+            fs::read_to_string(&nfc_path).expect("read nfc after"),
+            before_nfc
+        );
+        assert_eq!(
+            fs::read_to_string(&nfd_path).expect("read nfd after"),
+            before_nfd
+        );
+    }
+
+    #[test]
+    fn patch_rejects_write_that_collides_with_unpatched_source_or_other_configured_catalog() {
+        use super::{DirFilenameEquivalence, apply_translation_patches_with_options};
+
+        // 1. Single patch to `{locale}/en/messages` (`de`) must be rejected as
+        // `translation.source_locale_read_only` when unpatched `de\{locale}\messages`
+        // (`en`, source locale) resolves to the same `de/en/messages.po` file.
+        let fixture = tempfile::tempdir().expect("source collision fixture");
+        let shared_path = fixture.path().join("de/en/messages.po");
+        write_po_fixture(&fixture.path().join("en/en/messages.po"), "en");
+        write_po_fixture(&shared_path, "de");
+        write_po_fixture(&fixture.path().join("de/de/messages.po"), "de");
+        let before = fs::read_to_string(&shared_path).expect("read shared before");
+
+        let make_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "{locale}/en/messages".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: r"de\{locale}\messages".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_config(),
+            locales: vec!["de".to_owned()],
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list candidates");
+        let candidate = listed
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == "{locale}/en/messages" && c.id.message == "Hello")
+            .expect("target Hello");
+
+        let mut writes = 0usize;
+        let result = apply_translation_patches_with_options(
+            TranslationPatchRequest {
+                config: make_config(),
+                po: None,
+                patches: vec![singular_patch(candidate, "Hallo")],
+            },
+            |catalog, source_locale, po| {
+                writes += 1;
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+            false,
+            None,
+            None,
+        )
+        .expect("collision with unpatched source catalog returns structured rejection");
+
+        assert!(!result.updated);
+        assert_eq!(writes, 0);
+        assert_eq!(result.stats.applied, 0);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diag| diag.code == "translation.source_locale"),
+            "expected translation.source_locale, got {:?}",
+            result.diagnostics
+        );
+        assert_eq!(
+            fs::read_to_string(&shared_path).expect("read shared after"),
+            before
+        );
+
+        // 2. Single patch to `{locale}/fr/messages` (`de`) must be rejected as
+        // `translation.ambiguous_catalog` when unpatched `de/{locale}/messages`
+        // (`fr`) resolves to the same `de/fr/messages.po` file.
+        let non_source_fixture = tempfile::tempdir().expect("non-source collision fixture");
+        let fr_shared = non_source_fixture.path().join("de/fr/messages.po");
+        write_po_fixture(&non_source_fixture.path().join("en/fr/messages.po"), "en");
+        write_po_fixture(&non_source_fixture.path().join("de/en/messages.po"), "en");
+        write_po_fixture(&non_source_fixture.path().join("de/de/messages.po"), "de");
+        write_po_fixture(&fr_shared, "de");
+        let before_fr = fs::read_to_string(&fr_shared).expect("read fr shared before");
+        let make_non_source_config = || CatalogArtifactConfig {
+            root_dir: non_source_fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned(), "fr".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "{locale}/fr/messages".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: "de/{locale}/messages".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed_fr = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_non_source_config(),
+            locales: vec!["de".to_owned()],
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list fr collision candidates");
+        let fr_candidate = listed_fr
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == "{locale}/fr/messages" && c.id.message == "Hello")
+            .expect("fr target Hello");
+        let mut fr_writes = 0usize;
+        let fr_result = apply_translation_patches_with_options(
+            TranslationPatchRequest {
+                config: make_non_source_config(),
+                po: None,
+                patches: vec![singular_patch(fr_candidate, "Hallo")],
+            },
+            |catalog, source_locale, po| {
+                fr_writes += 1;
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+            false,
+            None,
+            None,
+        )
+        .expect("collision with unpatched non-source catalog returns structured rejection");
+        assert!(!fr_result.updated);
+        assert_eq!(fr_writes, 0);
+        assert!(
+            fr_result
+                .diagnostics
+                .iter()
+                .any(|diag| diag.code == "translation.ambiguous_catalog"),
+            "expected translation.ambiguous_catalog, got {:?}",
+            fr_result.diagnostics
+        );
+        assert_eq!(
+            fs::read_to_string(&fr_shared).expect("read fr shared after"),
+            before_fr
+        );
+
+        // 3. Single patch must also be rejected when an unpatched source-locale
+        // catalog aliases it via case-folding when file_identity is unavailable.
+        let ci_fixture = tempfile::tempdir().expect("ci source collision fixture");
+        let ci_target = ci_fixture.path().join("de/en/messages.po");
+        write_po_fixture(&ci_fixture.path().join("en/en/messages.po"), "en");
+        write_po_fixture(&ci_fixture.path().join("DE/en/messages.po"), "en");
+        write_po_fixture(&ci_fixture.path().join("DE/de/messages.po"), "de");
+        write_po_fixture(&ci_target, "de");
+        let make_ci_config = || CatalogArtifactConfig {
+            root_dir: ci_fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: "{locale}/en/messages".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: "DE/{locale}/messages".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed_ci = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_ci_config(),
+            locales: vec!["de".to_owned()],
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list ci candidates");
+        let ci_candidate = listed_ci
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == "{locale}/en/messages" && c.id.message == "Hello")
+            .expect("ci target Hello");
+        let mut ci_writes = 0usize;
+        let ci_result = apply_translation_patches_with_options(
+            TranslationPatchRequest {
+                config: make_ci_config(),
+                po: None,
+                patches: vec![singular_patch(ci_candidate, "Hallo")],
+            },
+            |catalog, source_locale, po| {
+                ci_writes += 1;
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+            true,
+            Some(Some(DirFilenameEquivalence::CaseInsensitiveNtfs)),
+            None,
+        )
+        .expect("ci source alias returns structured rejection");
+        assert!(!ci_result.updated);
+        assert_eq!(ci_writes, 0);
+        assert!(
+            ci_result
+                .diagnostics
+                .iter()
+                .any(|diag| diag.code == "translation.source_locale"),
+            "expected translation.source_locale on case-folded unpatched source catalog, got {:?}",
+            ci_result.diagnostics
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn patch_rejects_when_unpatched_source_catalog_is_symlink_to_target() {
+        use std::os::unix::fs::symlink;
+
+        // 1. Unpatched source catalog file symlinked to the patched target catalog.
+        let file_fixture = tempfile::tempdir().expect("symlinked source file fixture");
+        let de_path = file_fixture.path().join("locales/de/messages.po");
+        let en_dir = file_fixture.path().join("locales/en");
+        fs::create_dir_all(&en_dir).expect("create en dir");
+        write_po_fixture(&de_path, "de");
+        let before = fs::read_to_string(&de_path).expect("read de before");
+        symlink(&de_path, en_dir.join("messages.po")).expect("symlink en -> de");
+
+        let config = CatalogArtifactConfig {
+            root_dir: file_fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}/messages".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        };
+        let mut writes = 0usize;
+        let err = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config,
+                po: None,
+                patches: vec![TranslationPatch {
+                    id: TranslationCandidateId {
+                        catalog: "locales/{locale}/messages".to_owned(),
+                        locale: "de".to_owned(),
+                        message: "Hello".to_owned(),
+                        context: None,
+                    },
+                    fingerprint: "placeholder".to_owned(),
+                    translation: TranslationValue::Singular {
+                        value: "Hallo".to_owned(),
+                    },
+                    machine: None,
+                }],
+            },
+            |catalog, source_locale, po| {
+                writes += 1;
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+        )
+        .expect_err("symlinked unpatched source catalog file must abort before writing");
+        assert!(
+            matches!(err, PalamedesError::UnsafeCatalogPath { .. }),
+            "expected UnsafeCatalogPath for symlinked source file, got {err:?}"
+        );
+        assert_eq!(writes, 0);
+        assert_eq!(fs::read_to_string(&de_path).expect("read de after"), before);
+
+        // 2. Unpatched source catalog directory symlinked to the patched target directory.
+        let dir_fixture = tempfile::tempdir().expect("symlinked source dir fixture");
+        let de_dir_path = dir_fixture.path().join("locales/de/messages.po");
+        write_po_fixture(&de_dir_path, "de");
+        let before_dir = fs::read_to_string(&de_dir_path).expect("read de dir before");
+        symlink(
+            dir_fixture.path().join("locales/de"),
+            dir_fixture.path().join("locales/en"),
+        )
+        .expect("symlink en dir -> de dir");
+
+        let dir_config = CatalogArtifactConfig {
+            root_dir: dir_fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![CatalogConfig {
+                path: "locales/{locale}/messages".to_owned(),
+                format: PalamedesCatalogFormat::Po,
+            }],
+        };
+        let mut dir_writes = 0usize;
+        let dir_err = apply_translation_patches_with_replacement(
+            TranslationPatchRequest {
+                config: dir_config,
+                po: None,
+                patches: vec![TranslationPatch {
+                    id: TranslationCandidateId {
+                        catalog: "locales/{locale}/messages".to_owned(),
+                        locale: "de".to_owned(),
+                        message: "Hello".to_owned(),
+                        context: None,
+                    },
+                    fingerprint: "placeholder".to_owned(),
+                    translation: TranslationValue::Singular {
+                        value: "Hallo".to_owned(),
+                    },
+                    machine: None,
+                }],
+            },
+            |catalog, source_locale, po| {
+                dir_writes += 1;
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+        )
+        .expect_err("symlinked unpatched source catalog directory must abort before writing");
+        assert!(
+            matches!(dir_err, PalamedesError::UnsafeCatalogPath { .. }),
+            "expected UnsafeCatalogPath for symlinked source dir, got {dir_err:?}"
+        );
+        assert_eq!(dir_writes, 0);
+        assert_eq!(
+            fs::read_to_string(&de_dir_path).expect("read de dir after"),
+            before_dir
+        );
     }
 }

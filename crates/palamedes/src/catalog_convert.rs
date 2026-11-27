@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use ferrocat::{ConvertCatalogFileOptions, OrderBy};
+use ferrocat::{ConvertCatalogFileOptions, ConvertCatalogOptions, OrderBy};
 
 use crate::PalamedesCatalogFormat;
 use crate::error::{PalamedesError, PalamedesResult};
@@ -64,6 +64,36 @@ pub fn convert_catalog_file(
         message_count: result.message_count,
         diagnostics: result.diagnostics,
     })
+}
+
+/// Converts catalog content in memory using the same Ferrocat format and
+/// ordering options as [`convert_catalog_file`].
+///
+/// Callers that hold verified directory handles can read input and atomically
+/// write output relative to those handles without reopening raw pathnames.
+///
+/// # Errors
+///
+/// Returns an error when `source` cannot be parsed or the requested formats
+/// are incompatible.
+pub fn convert_catalog_content(
+    source: &str,
+    source_format: PalamedesCatalogFormat,
+    target_format: PalamedesCatalogFormat,
+    source_locale: &str,
+    locale: Option<&str>,
+) -> PalamedesResult<String> {
+    let mut options = ConvertCatalogOptions::new(
+        source,
+        source_locale,
+        source_format.ferrocat_mode(),
+        target_format.ferrocat_mode(),
+    )
+    .with_order_by(OrderBy::Msgid);
+    if let Some(locale) = locale {
+        options = options.with_locale(locale);
+    }
+    Ok(ferrocat::convert_catalog(options)?.content)
 }
 
 #[cfg(test)]

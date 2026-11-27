@@ -272,10 +272,25 @@ pub fn preview_catalog_file_update(
 ) -> PalamedesResult<CatalogUpdatePreview> {
     let target_path = validated_target_path(&request.target_path)?;
     let existing = read_optional_catalog(&target_path)?;
-    let result = update_catalog_source_first(
-        request,
-        CatalogUpdateDestination::Preview(existing.as_deref()),
-    )?;
+    preview_catalog_update_from_content(request, existing.as_deref())
+}
+
+/// Renders the update for a catalog from caller-supplied existing content
+/// without opening `request.target_path` on disk.
+///
+/// Callers that hold a verified directory handle can read and atomically
+/// replace the target file through that handle while reusing the exact same
+/// source-first projection and Ferrocat rendering options.
+///
+/// # Errors
+///
+/// Returns an error when Ferrocat rejects the projected messages or when any
+/// extracted message is empty.
+pub fn preview_catalog_update_from_content(
+    request: CatalogUpdateRequest,
+    existing: Option<&str>,
+) -> PalamedesResult<CatalogUpdatePreview> {
+    let result = update_catalog_source_first(request, CatalogUpdateDestination::Preview(existing))?;
     Ok(public_preview_result(result))
 }
 

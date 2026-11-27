@@ -7,16 +7,17 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, BufReader, IsTerminal, Read, Write};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::Once;
+use std::path::{Component, Path, PathBuf};
+use std::process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
 #[cfg(unix)]
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Once};
 use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
@@ -34,7 +35,9 @@ use crate::plugin_protocol::{parse_event, read_protocol_line};
 
 const PROTOCOL_VERSION: u64 = palamedes_plugin::PROTOCOL_VERSION;
 const NATIVE_EXECUTABLE_ENV: &str = palamedes_plugin::NATIVE_EXECUTABLE_ENV;
-const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 3;
+const PLUGIN_PATH_ENV: &str = palamedes_plugin::PLUGIN_PATH_ENV;
+const PLUGIN_DIR_ENV: &str = palamedes_plugin::PLUGIN_DIR_ENV;
+const PLUGIN_MANIFEST_CACHE_SCHEMA: u64 = 4;
 const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(5);
 const PROTOCOL_MAX_LINE_BYTES: usize = 1024 * 1024;
 const PROTOCOL_MAX_TOTAL_BYTES: usize = 16 * 1024 * 1024;
@@ -213,8 +216,9 @@ fn run_invocation(
                 format!("Could not serialize the resolved Palamedes config: {error}"),
             )
         })?,
-        "catalogs": plugin_catalogs(&config),
+        "catalogs": plugin_catalogs(&config)?,
     });
+    let run_resolved = prepare_selected_plugin_for_run(plugin, &config.config_path)?;
     let mut print_output = |text: &str| println!("{text}");
     let stream: Option<&mut dyn FnMut(&str)> = if invocation.json {
         None
@@ -222,14 +226,14 @@ fn run_invocation(
         Some(&mut print_output)
     };
     let result = invoke_binary(
-        &plugin.resolved,
+        &run_resolved,
         &request,
         &cwd,
         &native_executable,
         stream,
         InvocationPolicy::run(invocation.plugin_timeout),
     )?;
-    let mut output = finish_run(&plugin.resolved, result, !invocation.json)?;
+    let mut output = finish_run(&run_resolved, result, !invocation.json)?;
     if !registry.skipped.is_empty() {
         let mut diagnostics = skipped_diagnostics(&registry.skipped);
         diagnostics.append(&mut output.diagnostics);
@@ -264,7 +268,7 @@ fn load_registry(
         cwd,
         native_executable,
         reuse_cached_manifests,
-        &hash_plugin_binary,
+        &hash_plugin_source,
     )
 }
 
@@ -273,7 +277,7 @@ fn load_registry_with_binary_hasher(
     cwd: &Path,
     native_executable: &Path,
     reuse_cached_manifests: bool,
-    hash_binary: &dyn Fn(&Path) -> Option<[u8; 32]>,
+    hash_binary: &dyn Fn(PluginHashSource<'_>) -> Option<[u8; 32]>,
 ) -> Result<PluginRegistry, PluginFailure> {
     let mut registry = PluginRegistry::default();
     let mut cache = load_plugin_manifest_cache(config);
@@ -284,7 +288,8 @@ fn load_registry_with_binary_hasher(
         // A plugin that cannot resolve or describe blocks only its own
         // namespace; other configured commands keep working and surface the
         // skipped plugin as a warning diagnostic.
-        let resolved = match resolve_binary_plugin(declaration.specifier(), &config.config_path) {
+        let mut resolved = match resolve_binary_plugin(declaration.specifier(), &config.config_path)
+        {
             Ok(resolved) => resolved,
             Err(failure) => {
                 registry.skipped.push(SkippedPlugin {
@@ -295,18 +300,51 @@ fn load_registry_with_binary_hasher(
             }
         };
         let binary_path = fs::canonicalize(&resolved.binary_path).ok();
+        let cache_key = binary_path
+            .as_deref()
+            .map(|path| plugin_cache_key(path, &resolved.invocation_path));
         let cached_stamp = if reuse_cached_manifests {
-            binary_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().into_owned())
-                .and_then(|key| cache.entries.get(&key))
+            cache_key
+                .as_deref()
+                .and_then(|key| cache.entries.get(key))
                 .map(|entry| &entry.stamp)
+                .or_else(|| {
+                    // Reuse an already-verified binary digest from another alias
+                    // of the same canonical executable when available.
+                    let canonical_key = binary_path
+                        .as_deref()
+                        .map(|path| path.to_string_lossy().into_owned())?;
+                    cache
+                        .entries
+                        .get(&canonical_key)
+                        .map(|entry| &entry.stamp)
+                        .or_else(|| {
+                            cache
+                                .entries
+                                .iter()
+                                .find(|(entry_key, _)| {
+                                    cache_key_matches_binary(entry_key, &canonical_key)
+                                })
+                                .map(|(_, entry)| &entry.stamp)
+                        })
+                })
         } else {
             None
         };
-        let cache_identity = binary_path
-            .as_deref()
-            .and_then(|binary_path| plugin_cache_identity(binary_path, cached_stamp, hash_binary));
+        let cache_identity = binary_path.as_deref().and_then(|binary_path| {
+            plugin_cache_identity_for_resolved(&resolved, binary_path, cached_stamp, hash_binary)
+        });
+        let verified_stamp = cache_identity.as_ref().map(|(_, stamp)| stamp.clone());
+        let expected_metadata = verified_stamp
+            .as_ref()
+            .map(|stamp| stamp.metadata.clone())
+            .or_else(|| resolved.pinned_binary_metadata())
+            .or_else(|| {
+                binary_path
+                    .as_deref()
+                    .and_then(|path| fs::metadata(path).ok())
+                    .map(|meta| plugin_binary_metadata(&meta))
+            });
         let manifest = match cache_identity.as_ref().and_then(|(key, stamp)| {
             active_cache_keys.insert(key.clone());
             if !reuse_cached_manifests {
@@ -322,7 +360,11 @@ fn load_registry_with_binary_hasher(
             Some(manifest) => manifest,
             None => match describe_resolved_plugin(&resolved, cwd, native_executable) {
                 Ok(manifest) => {
-                    if let Some((key, stamp)) = cache_identity {
+                    if let Some((key, stamp)) = cache_identity
+                        && binary_path
+                            .as_deref()
+                            .is_some_and(|path| resolved.pinned_matches_path(path, &stamp.metadata))
+                    {
                         cache.entries.insert(
                             key,
                             CachedPluginManifest {
@@ -348,12 +390,29 @@ fn load_registry_with_binary_hasher(
             collision.get_or_insert(namespace);
             continue;
         }
+        // Release the pinned executable descriptor once discovery/describe
+        // finishes so loading many configured plugins keeps open descriptors
+        // O(1) — provided dispatch can re-verify the binary by content digest
+        // (`verified_stamp`) or kernel file identity (`unix_identity` on Unix,
+        // 128-bit `FileIdInfo` on Windows). When neither is available (for
+        // example, an execute-only binary on a volume without file IDs),
+        // retain the discovery handle so dispatch cannot run a replacement.
+        let can_reverify_without_handle = verified_stamp.is_some()
+            || expected_metadata
+                .as_ref()
+                .is_some_and(PluginBinaryMetadata::has_kernel_identity);
+        if can_reverify_without_handle {
+            resolved.pinned_binary = None;
+        }
         registry.plugins.insert(
             namespace,
             LoadedPlugin {
                 resolved,
                 manifest,
                 options: declaration.options(),
+                canonical_binary_path: binary_path,
+                verified_stamp,
+                expected_metadata,
             },
         );
     }
@@ -471,6 +530,113 @@ fn persist_plugin_manifest_cache(path: &Path, raw: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
+fn plugin_cache_key(binary_path: &Path, invocation_path: &Path) -> String {
+    let canonical = binary_path.to_string_lossy();
+    let declared = invocation_path.to_string_lossy();
+    if declared == canonical {
+        canonical.into_owned()
+    } else {
+        serde_json::to_string(&(canonical.as_ref(), declared.as_ref()))
+            .expect("plugin cache key JSON serialization")
+    }
+}
+
+fn cache_key_matches_binary(entry_key: &str, canonical_binary: &str) -> bool {
+    entry_key == canonical_binary
+        || serde_json::from_str::<(String, String)>(entry_key)
+            .is_ok_and(|(binary, _)| binary == canonical_binary)
+}
+
+enum PluginHashSource<'a> {
+    #[cfg(any(unix, windows))]
+    PinnedFile(&'a fs::File),
+    Path(&'a Path),
+}
+
+fn hash_plugin_source(source: PluginHashSource<'_>) -> Option<[u8; 32]> {
+    match source {
+        #[cfg(any(unix, windows))]
+        PluginHashSource::PinnedFile(file) => hash_plugin_file(file),
+        PluginHashSource::Path(path) => hash_plugin_binary(path),
+    }
+}
+
+fn plugin_cache_identity_for_resolved(
+    resolved: &ResolvedPlugin,
+    binary_path: &Path,
+    cached: Option<&PluginBinaryStamp>,
+    hash_binary: &dyn Fn(PluginHashSource<'_>) -> Option<[u8; 32]>,
+) -> Option<(String, PluginBinaryStamp)> {
+    #[cfg(any(unix, windows))]
+    if let Some(ref pinned) = resolved.pinned_binary {
+        use std::mem::ManuallyDrop;
+
+        #[cfg(unix)]
+        let pinned_file = {
+            use std::os::fd::{AsRawFd, FromRawFd};
+            // SAFETY: `pinned.file_fd` is open and owned by `pinned`;
+            // `ManuallyDrop` borrows it without closing on drop.
+            ManuallyDrop::new(unsafe { fs::File::from_raw_fd(pinned.file_fd.as_raw_fd()) })
+        };
+        #[cfg(windows)]
+        let pinned_file = {
+            use std::os::windows::io::{AsRawHandle, FromRawHandle};
+            // SAFETY: `pinned.pinned_handle` is open and owned by `pinned`;
+            // `ManuallyDrop` borrows it without closing on drop.
+            ManuallyDrop::new(unsafe {
+                fs::File::from_raw_handle(pinned.pinned_handle.as_raw_handle())
+            })
+        };
+
+        let fd_meta = pinned_file.metadata().ok()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if fd_meta.dev() != pinned.dev || fd_meta.ino() != pinned.ino {
+                return None;
+            }
+        }
+        let binary_metadata = plugin_binary_metadata(&fd_meta);
+        if !resolved.pinned_matches_path(binary_path, &binary_metadata) {
+            return None;
+        }
+        let stamp = if let Some(cached) = cached
+            && cached.metadata.permits_digest_reuse(&binary_metadata)
+        {
+            cached.clone()
+        } else {
+            if !pinned.readable {
+                return None;
+            }
+            let sha256 = hash_binary(PluginHashSource::PinnedFile(&pinned_file))?;
+            let after_meta = pinned_file.metadata().ok()?;
+            let after_binary_metadata = plugin_binary_metadata(&after_meta);
+            if after_binary_metadata != binary_metadata {
+                return None;
+            }
+            PluginBinaryStamp {
+                metadata: binary_metadata,
+                sha256,
+            }
+        };
+        if !resolved.pinned_matches_path(binary_path, &stamp.metadata) {
+            return None;
+        }
+        return Some((
+            plugin_cache_key(binary_path, &resolved.invocation_path),
+            stamp,
+        ));
+    }
+
+    let (_, stamp) = plugin_cache_identity(binary_path, cached, &|path| {
+        hash_binary(PluginHashSource::Path(path))
+    })?;
+    Some((
+        plugin_cache_key(binary_path, &resolved.invocation_path),
+        stamp,
+    ))
+}
+
 fn plugin_cache_identity(
     binary_path: &Path,
     cached: Option<&PluginBinaryStamp>,
@@ -491,6 +657,30 @@ fn plugin_cache_identity(
             sha256,
         },
     ))
+}
+
+#[cfg(any(unix, windows))]
+fn hash_plugin_file(file: &fs::File) -> Option<[u8; 32]> {
+    #[cfg(unix)]
+    use std::os::unix::fs::FileExt;
+    #[cfg(windows)]
+    use std::os::windows::fs::FileExt;
+
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut offset: u64 = 0;
+    loop {
+        #[cfg(unix)]
+        let bytes_read = file.read_at(&mut buffer, offset).ok()?;
+        #[cfg(windows)]
+        let bytes_read = file.seek_read(&mut buffer, offset).ok()?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+        offset = offset.checked_add(u64::try_from(bytes_read).ok()?)?;
+    }
+    Some(hasher.finalize().into())
 }
 
 fn hash_plugin_binary(binary_path: &Path) -> Option<[u8; 32]> {
@@ -515,6 +705,7 @@ fn plugin_binary_metadata(metadata: &fs::Metadata) -> PluginBinaryMetadata {
         length: metadata.len(),
         modified_ns,
         unix_identity: unix_plugin_binary_identity(metadata),
+        windows_identity: None,
     }
 }
 
@@ -742,15 +933,7 @@ fn invoke_binary(
         )
     })?;
     request_bytes.push(b'\n');
-    let mut command = Command::new(&resolved.binary_path);
-    command
-        .current_dir(cwd)
-        .env(NATIVE_EXECUTABLE_ENV, native_executable)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
-    isolate_process_group(&mut command);
-    let mut child = spawn_binary(&mut command).map_err(|error| {
+    let mut child = spawn_resolved_binary(resolved, cwd, native_executable).map_err(|error| {
         PluginFailure::new(
             "PLUGIN_BINARY_SPAWN_FAILED",
             format!(
@@ -766,7 +949,7 @@ fn invoke_binary(
     // The request is written from a helper thread while this thread consumes
     // stdout, so a plugin that emits events before draining its stdin cannot
     // deadlock against a request larger than the pipe buffers.
-    let stdin = child.stdin.take();
+    let stdin = child.take_stdin();
     let writer = thread::spawn(move || -> io::Result<()> {
         let Some(mut stdin) = stdin else {
             return Ok(());
@@ -780,7 +963,7 @@ fn invoke_binary(
         }
     });
 
-    let mut stdout = BufReader::new(child.stdout.take().expect("piped plugin stdout"));
+    let mut stdout = BufReader::new(child.take_stdout().expect("piped plugin stdout"));
     let (stdout_tx, stdout_rx) = mpsc::sync_channel(1);
     let reader = thread::spawn(move || {
         loop {
@@ -941,6 +1124,2749 @@ fn invoke_binary(
     })
 }
 
+#[cfg(not(windows))]
+type PluginStdin = ChildStdin;
+
+#[cfg(not(windows))]
+type PluginStdout = ChildStdout;
+
+#[cfg(not(windows))]
+struct PluginChild(Child);
+
+#[cfg(not(windows))]
+impl PluginChild {
+    fn take_stdin(&mut self) -> Option<PluginStdin> {
+        self.0.stdin.take()
+    }
+
+    fn take_stdout(&mut self) -> Option<PluginStdout> {
+        self.0.stdout.take()
+    }
+
+    #[cfg(unix)]
+    fn id(&self) -> u32 {
+        self.0.id()
+    }
+
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        self.0.try_wait()
+    }
+
+    fn wait(&mut self) -> io::Result<ExitStatus> {
+        self.0.wait()
+    }
+
+    fn kill(&mut self) -> io::Result<()> {
+        self.0.kill()
+    }
+}
+
+#[cfg(windows)]
+enum PluginStdin {
+    Std(ChildStdin),
+    Pipe(fs::File),
+}
+
+#[cfg(windows)]
+impl Write for PluginStdin {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Std(stdin) => stdin.write(buf),
+            Self::Pipe(file) => file.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Std(stdin) => stdin.flush(),
+            Self::Pipe(file) => file.flush(),
+        }
+    }
+}
+
+#[cfg(windows)]
+enum PluginStdout {
+    Std(ChildStdout),
+    Pipe(fs::File),
+}
+
+#[cfg(windows)]
+impl Read for PluginStdout {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Std(stdout) => stdout.read(buf),
+            Self::Pipe(file) => file.read(buf),
+        }
+    }
+}
+
+#[cfg(windows)]
+struct WindowsAliasChild {
+    process: std::os::windows::io::OwnedHandle,
+    pid: u32,
+    stdin: Option<fs::File>,
+    stdout: Option<fs::File>,
+    exit_status: Option<ExitStatus>,
+}
+
+#[cfg(windows)]
+enum PluginChild {
+    Std(Child),
+    WinAlias(WindowsAliasChild),
+}
+
+#[cfg(windows)]
+impl PluginChild {
+    fn take_stdin(&mut self) -> Option<PluginStdin> {
+        match self {
+            Self::Std(child) => child.stdin.take().map(PluginStdin::Std),
+            Self::WinAlias(child) => child.stdin.take().map(PluginStdin::Pipe),
+        }
+    }
+
+    fn take_stdout(&mut self) -> Option<PluginStdout> {
+        match self {
+            Self::Std(child) => child.stdout.take().map(PluginStdout::Std),
+            Self::WinAlias(child) => child.stdout.take().map(PluginStdout::Pipe),
+        }
+    }
+
+    fn id(&self) -> u32 {
+        match self {
+            Self::Std(child) => child.id(),
+            Self::WinAlias(child) => child.pid,
+        }
+    }
+
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        match self {
+            Self::Std(child) => child.try_wait(),
+            Self::WinAlias(child) => child.wait_with_timeout(0),
+        }
+    }
+
+    fn wait(&mut self) -> io::Result<ExitStatus> {
+        match self {
+            Self::Std(child) => child.wait(),
+            Self::WinAlias(child) => child
+                .wait_with_timeout(windows_alias_spawn::INFINITE)?
+                .ok_or_else(|| io::Error::other("Windows plugin wait returned without status")),
+        }
+    }
+
+    fn kill(&mut self) -> io::Result<()> {
+        match self {
+            Self::Std(child) => child.kill(),
+            Self::WinAlias(child) => child.kill(),
+        }
+    }
+}
+
+#[cfg(any(windows, test))]
+fn encode_windows_argv0_command_line(invocation_units: &[u16]) -> io::Result<Vec<u16>> {
+    if invocation_units.is_empty()
+        || invocation_units
+            .iter()
+            .any(|&unit| unit == 0 || unit == u16::from(b'"'))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid Windows plugin invocation path",
+        ));
+    }
+    let mut command_line = Vec::with_capacity(invocation_units.len() + 3);
+    command_line.push(u16::from(b'"'));
+    command_line.extend_from_slice(invocation_units);
+    command_line.push(u16::from(b'"'));
+    command_line.push(0);
+    Ok(command_line)
+}
+
+#[cfg(any(windows, test))]
+fn build_windows_environment_block_units(
+    entries: Vec<(Vec<u16>, Vec<u16>)>,
+    overrides: &[(&str, &[u16])],
+) -> io::Result<Vec<u16>> {
+    let mut override_entries = Vec::with_capacity(overrides.len());
+    for &(key, value) in overrides {
+        if value.contains(&0) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Windows environment override contains interior NUL",
+            ));
+        }
+        let key_units: Vec<u16> = key.encode_utf16().collect();
+        let key_upper: Vec<u16> = key.to_ascii_uppercase().encode_utf16().collect();
+        override_entries.push((key_upper, key_units, value.to_vec()));
+    }
+    let mut filtered = Vec::with_capacity(entries.len() + override_entries.len());
+    for (key, value) in entries {
+        if key.is_empty()
+            || key.contains(&0)
+            || key[1..].contains(&u16::from(b'='))
+            || value.contains(&0)
+        {
+            continue;
+        }
+        let key_upper: Vec<u16> = key
+            .iter()
+            .map(|&unit| {
+                u8::try_from(unit).map_or(unit, |byte| u16::from(byte.to_ascii_uppercase()))
+            })
+            .collect();
+        if override_entries
+            .iter()
+            .any(|(override_upper, _, _)| *override_upper == key_upper)
+        {
+            continue;
+        }
+        filtered.push((key_upper, key, value));
+    }
+    filtered.extend(override_entries);
+    filtered.sort_by(|left, right| left.0.cmp(&right.0));
+
+    let mut block = Vec::new();
+    for (_, key, value) in filtered {
+        block.extend_from_slice(&key);
+        block.push(u16::from(b'='));
+        block.extend_from_slice(&value);
+        block.push(0);
+    }
+    if block.is_empty() {
+        block.push(0);
+    }
+    block.push(0);
+    Ok(block)
+}
+
+#[cfg(windows)]
+mod windows_alias_spawn {
+    use std::env;
+    use std::ffi::{OsStr, c_void};
+    use std::fs::File;
+    use std::io;
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use std::os::windows::process::ExitStatusExt;
+    use std::path::Path;
+    use std::process::ExitStatus;
+
+    use super::{
+        WindowsAliasChild, build_windows_environment_block_units, encode_windows_argv0_command_line,
+    };
+
+    pub(super) const INFINITE: u32 = 0xFFFF_FFFF;
+    const WAIT_OBJECT_0: u32 = 0x0000_0000;
+    const WAIT_TIMEOUT: u32 = 0x0000_0102;
+    const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
+    const STARTF_USESTDHANDLES: u32 = 0x0000_0100;
+    const CREATE_UNICODE_ENVIRONMENT: u32 = 0x0000_0400;
+    const EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
+    const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x0002_0002;
+    const STD_ERROR_HANDLE: u32 = 0xFFFF_FFF4;
+    const DUPLICATE_SAME_ACCESS: u32 = 0x0000_0002;
+    const INVALID_HANDLE_VALUE: *mut c_void = (-1_isize) as *mut c_void;
+
+    #[repr(C)]
+    struct SecurityAttributes {
+        n_length: u32,
+        lp_security_descriptor: *mut c_void,
+        b_inherit_handle: i32,
+    }
+
+    #[repr(C)]
+    struct StartupInfoW {
+        cb: u32,
+        lp_reserved: *mut u16,
+        lp_desktop: *mut u16,
+        lp_title: *mut u16,
+        dw_x: u32,
+        dw_y: u32,
+        dw_x_size: u32,
+        dw_y_size: u32,
+        dw_x_count_chars: u32,
+        dw_y_count_chars: u32,
+        dw_fill_attribute: u32,
+        dw_flags: u32,
+        w_show_window: u16,
+        cb_reserved2: u16,
+        lp_reserved2: *mut u8,
+        h_std_input: *mut c_void,
+        h_std_output: *mut c_void,
+        h_std_error: *mut c_void,
+    }
+
+    #[repr(C)]
+    struct StartupInfoExW {
+        startup_info: StartupInfoW,
+        lp_attribute_list: *mut c_void,
+    }
+
+    #[repr(C)]
+    struct ProcessInformation {
+        h_process: *mut c_void,
+        h_thread: *mut c_void,
+        dw_process_id: u32,
+        dw_thread_id: u32,
+    }
+
+    struct ProcThreadAttributeList {
+        buffer: Vec<usize>,
+        _handles: Vec<*mut c_void>,
+    }
+
+    impl ProcThreadAttributeList {
+        fn new_handle_list(mut handles: Vec<*mut c_void>) -> io::Result<Self> {
+            let mut required_bytes: usize = 0;
+            // SAFETY: querying the required attribute list size with a null pointer.
+            unsafe {
+                let _ = InitializeProcThreadAttributeList(
+                    std::ptr::null_mut(),
+                    1,
+                    0,
+                    &mut required_bytes,
+                );
+            }
+            if required_bytes == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let word_len = required_bytes.div_ceil(std::mem::size_of::<usize>());
+            let mut buffer = vec![0_usize; word_len];
+            // SAFETY: `buffer` is aligned to `usize` and has at least `required_bytes` bytes.
+            if unsafe {
+                InitializeProcThreadAttributeList(
+                    buffer.as_mut_ptr().cast::<c_void>(),
+                    1,
+                    0,
+                    &mut required_bytes,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            let mut list = Self {
+                buffer,
+                _handles: Vec::new(),
+            };
+            let byte_len = handles.len() * std::mem::size_of::<*mut c_void>();
+            // SAFETY: `list.buffer` is initialized and `handles` stays owned by
+            // `list` until after `DeleteProcThreadAttributeList` runs in `Drop`.
+            if unsafe {
+                UpdateProcThreadAttribute(
+                    list.as_mut_ptr(),
+                    0,
+                    PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                    handles.as_mut_ptr().cast::<c_void>(),
+                    byte_len,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            list._handles = handles;
+            Ok(list)
+        }
+
+        fn as_mut_ptr(&mut self) -> *mut c_void {
+            self.buffer.as_mut_ptr().cast::<c_void>()
+        }
+    }
+
+    impl Drop for ProcThreadAttributeList {
+        fn drop(&mut self) {
+            // SAFETY: `self.buffer` was successfully initialized by
+            // `InitializeProcThreadAttributeList`.
+            unsafe {
+                DeleteProcThreadAttributeList(self.as_mut_ptr());
+            }
+        }
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn InitializeProcThreadAttributeList(
+            lp_attribute_list: *mut c_void,
+            dw_attribute_count: u32,
+            dw_flags: u32,
+            lp_size: *mut usize,
+        ) -> i32;
+        fn UpdateProcThreadAttribute(
+            lp_attribute_list: *mut c_void,
+            dw_flags: u32,
+            attribute: usize,
+            lp_value: *mut c_void,
+            cb_size: usize,
+            lp_previous_value: *mut c_void,
+            lp_return_size: *mut usize,
+        ) -> i32;
+        fn DeleteProcThreadAttributeList(lp_attribute_list: *mut c_void);
+        fn CreatePipe(
+            h_read_pipe: *mut *mut c_void,
+            h_write_pipe: *mut *mut c_void,
+            lp_pipe_attributes: *mut SecurityAttributes,
+            n_size: u32,
+        ) -> i32;
+        fn SetHandleInformation(h_object: *mut c_void, dw_mask: u32, dw_flags: u32) -> i32;
+        fn GetStdHandle(n_std_handle: u32) -> *mut c_void;
+        fn GetCurrentProcess() -> *mut c_void;
+        fn DuplicateHandle(
+            h_source_process_handle: *mut c_void,
+            h_source_handle: *mut c_void,
+            h_target_process_handle: *mut c_void,
+            lp_target_handle: *mut *mut c_void,
+            dw_desired_access: u32,
+            b_inherit_handle: i32,
+            dw_options: u32,
+        ) -> i32;
+        fn CreateProcessW(
+            lp_application_name: *const u16,
+            lp_command_line: *mut u16,
+            lp_process_attributes: *mut SecurityAttributes,
+            lp_thread_attributes: *mut SecurityAttributes,
+            b_inherit_handles: i32,
+            dw_creation_flags: u32,
+            lp_environment: *const c_void,
+            lp_current_directory: *const u16,
+            lp_startup_info: *const StartupInfoW,
+            lp_process_information: *mut ProcessInformation,
+        ) -> i32;
+        fn WaitForSingleObject(h_handle: *mut c_void, dw_milliseconds: u32) -> u32;
+        fn GetExitCodeProcess(h_process: *mut c_void, lp_exit_code: *mut u32) -> i32;
+        fn TerminateProcess(h_process: *mut c_void, u_exit_code: u32) -> i32;
+    }
+
+    fn to_wide_nul(value: &OsStr) -> io::Result<Vec<u16>> {
+        let mut units: Vec<u16> = value.encode_wide().collect();
+        if units.contains(&0) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Windows path contains interior NUL",
+            ));
+        }
+        units.push(0);
+        Ok(units)
+    }
+
+    fn create_inheritable_pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
+        let mut attrs = SecurityAttributes {
+            n_length: u32::try_from(std::mem::size_of::<SecurityAttributes>())
+                .expect("SecurityAttributes fits in u32"),
+            lp_security_descriptor: std::ptr::null_mut(),
+            b_inherit_handle: 1,
+        };
+        let mut read_raw = std::ptr::null_mut();
+        let mut write_raw = std::ptr::null_mut();
+        // SAFETY: output pointers and `attrs` are valid for `CreatePipe`.
+        if unsafe { CreatePipe(&mut read_raw, &mut write_raw, &mut attrs, 0) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `CreatePipe` succeeded and returned two newly owned handles.
+        let read_handle = unsafe { OwnedHandle::from_raw_handle(read_raw) };
+        // SAFETY: `CreatePipe` succeeded and returned two newly owned handles.
+        let write_handle = unsafe { OwnedHandle::from_raw_handle(write_raw) };
+        Ok((read_handle, write_handle))
+    }
+
+    fn mark_not_inheritable(handle: &OwnedHandle) -> io::Result<()> {
+        // SAFETY: `handle` is an open Windows kernel handle.
+        if unsafe { SetHandleInformation(handle.as_raw_handle(), HANDLE_FLAG_INHERIT, 0) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    fn duplicate_inheritable_stderr() -> io::Result<Option<OwnedHandle>> {
+        // SAFETY: `GetStdHandle` has no preconditions.
+        let raw = unsafe { GetStdHandle(STD_ERROR_HANDLE) };
+        if raw.is_null() || raw == INVALID_HANDLE_VALUE {
+            return Ok(None);
+        }
+        let mut dup = std::ptr::null_mut();
+        // SAFETY: `GetCurrentProcess` returns the pseudo-handle for this process.
+        let proc_handle = unsafe { GetCurrentProcess() };
+        // SAFETY: `raw` is the current standard error handle and `dup` is writable.
+        if unsafe {
+            DuplicateHandle(
+                proc_handle,
+                raw,
+                proc_handle,
+                &mut dup,
+                0,
+                1,
+                DUPLICATE_SAME_ACCESS,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `DuplicateHandle` succeeded and returned a newly owned handle.
+        Ok(Some(unsafe { OwnedHandle::from_raw_handle(dup) }))
+    }
+
+    pub(super) fn spawn_alias_binary(
+        binary_path: &Path,
+        invocation_path: &Path,
+        cwd: &Path,
+        env_overrides: &[(&str, &OsStr)],
+    ) -> io::Result<WindowsAliasChild> {
+        let app_name = to_wide_nul(binary_path.as_os_str())?;
+        let invocation_units: Vec<u16> = invocation_path.as_os_str().encode_wide().collect();
+        let mut cmd_line = encode_windows_argv0_command_line(&invocation_units)?;
+        let cwd_wide = to_wide_nul(cwd.as_os_str())?;
+        let override_values: Vec<(&str, Vec<u16>)> = env_overrides
+            .iter()
+            .map(|&(key, value)| (key, value.encode_wide().collect()))
+            .collect();
+        let override_refs: Vec<(&str, &[u16])> = override_values
+            .iter()
+            .map(|(key, value)| (*key, value.as_slice()))
+            .collect();
+        let env_entries: Vec<(Vec<u16>, Vec<u16>)> = env::vars_os()
+            .map(|(k, v)| (k.encode_wide().collect(), v.encode_wide().collect()))
+            .collect();
+        let env_block = build_windows_environment_block_units(env_entries, &override_refs)?;
+
+        let (stdin_read, stdin_write) = create_inheritable_pipe()?;
+        mark_not_inheritable(&stdin_write)?;
+        let (stdout_read, stdout_write) = create_inheritable_pipe()?;
+        mark_not_inheritable(&stdout_read)?;
+        let stderr_dup = duplicate_inheritable_stderr()?;
+
+        let mut inherited_handles = vec![stdin_read.as_raw_handle(), stdout_write.as_raw_handle()];
+        if let Some(ref stderr) = stderr_dup {
+            inherited_handles.push(stderr.as_raw_handle());
+        }
+        let mut attr_list = ProcThreadAttributeList::new_handle_list(inherited_handles)?;
+
+        let startup_info = StartupInfoExW {
+            startup_info: StartupInfoW {
+                cb: u32::try_from(std::mem::size_of::<StartupInfoExW>())
+                    .expect("StartupInfoExW fits in u32"),
+                lp_reserved: std::ptr::null_mut(),
+                lp_desktop: std::ptr::null_mut(),
+                lp_title: std::ptr::null_mut(),
+                dw_x: 0,
+                dw_y: 0,
+                dw_x_size: 0,
+                dw_y_size: 0,
+                dw_x_count_chars: 0,
+                dw_y_count_chars: 0,
+                dw_fill_attribute: 0,
+                dw_flags: STARTF_USESTDHANDLES,
+                w_show_window: 0,
+                cb_reserved2: 0,
+                lp_reserved2: std::ptr::null_mut(),
+                h_std_input: stdin_read.as_raw_handle(),
+                h_std_output: stdout_write.as_raw_handle(),
+                h_std_error: stderr_dup
+                    .as_ref()
+                    .map_or(std::ptr::null_mut(), AsRawHandle::as_raw_handle),
+            },
+            lp_attribute_list: attr_list.as_mut_ptr(),
+        };
+        let mut proc_info = ProcessInformation {
+            h_process: std::ptr::null_mut(),
+            h_thread: std::ptr::null_mut(),
+            dw_process_id: 0,
+            dw_thread_id: 0,
+        };
+
+        // SAFETY: `app_name`, `cmd_line`, `env_block`, `cwd_wide`,
+        // `startup_info` (with its `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` restricting
+        // inheritance strictly to stdio), and `proc_info` remain valid for the
+        // duration of `CreateProcessW`.
+        let created = unsafe {
+            CreateProcessW(
+                app_name.as_ptr(),
+                cmd_line.as_mut_ptr(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                1,
+                CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+                env_block.as_ptr().cast::<c_void>(),
+                cwd_wide.as_ptr(),
+                &startup_info.startup_info,
+                &mut proc_info,
+            )
+        };
+        // Capture the Win32 error immediately before handle/attribute-list
+        // cleanup can overwrite the thread's last-error value.
+        let spawn_error = if created == 0 {
+            Some(io::Error::last_os_error())
+        } else {
+            None
+        };
+        drop(attr_list);
+        drop(stdin_read);
+        drop(stdout_write);
+        drop(stderr_dup);
+        if let Some(error) = spawn_error {
+            return Err(error);
+        }
+        // SAFETY: `CreateProcessW` succeeded and returned owned process and thread handles.
+        let process = unsafe { OwnedHandle::from_raw_handle(proc_info.h_process) };
+        // SAFETY: `CreateProcessW` succeeded and returned an owned thread handle.
+        let _thread = unsafe { OwnedHandle::from_raw_handle(proc_info.h_thread) };
+
+        Ok(WindowsAliasChild {
+            process,
+            pid: proc_info.dw_process_id,
+            stdin: Some(File::from(stdin_write)),
+            stdout: Some(File::from(stdout_read)),
+            exit_status: None,
+        })
+    }
+
+    impl WindowsAliasChild {
+        pub(super) fn wait_with_timeout(
+            &mut self,
+            timeout_ms: u32,
+        ) -> io::Result<Option<ExitStatus>> {
+            if let Some(status) = self.exit_status {
+                return Ok(Some(status));
+            }
+            // SAFETY: `self.process` is an open Windows process handle.
+            let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle(), timeout_ms) };
+            match wait {
+                WAIT_OBJECT_0 => {
+                    let mut code: u32 = 0;
+                    // SAFETY: `self.process` is open and `code` is writable.
+                    if unsafe { GetExitCodeProcess(self.process.as_raw_handle(), &mut code) } == 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    let status = ExitStatus::from_raw(code);
+                    self.exit_status = Some(status);
+                    Ok(Some(status))
+                }
+                WAIT_TIMEOUT => Ok(None),
+                _ => Err(io::Error::last_os_error()),
+            }
+        }
+
+        pub(super) fn kill(&mut self) -> io::Result<()> {
+            if self.exit_status.is_some() {
+                return Ok(());
+            }
+            // SAFETY: `self.process` is an open Windows process handle.
+            if unsafe { TerminateProcess(self.process.as_raw_handle(), 1) } == 0 {
+                let error = io::Error::last_os_error();
+                if self.wait_with_timeout(0)?.is_some() {
+                    return Ok(());
+                }
+                return Err(error);
+            }
+            Ok(())
+        }
+    }
+}
+
+#[derive(Debug)]
+struct PinnedPluginBinary {
+    #[cfg(unix)]
+    file_fd: std::os::fd::OwnedFd,
+    #[cfg(unix)]
+    dev: u64,
+    #[cfg(unix)]
+    ino: u64,
+    #[cfg(unix)]
+    readable: bool,
+    #[cfg(windows)]
+    pinned_handle: std::os::windows::io::OwnedHandle,
+    #[cfg(windows)]
+    windows_identity: Option<WindowsPluginBinaryIdentity>,
+    #[cfg(windows)]
+    readable: bool,
+}
+
+impl ResolvedPlugin {
+    fn pinned_binary_metadata(&self) -> Option<PluginBinaryMetadata> {
+        #[cfg(unix)]
+        if let Some(ref pinned) = self.pinned_binary {
+            use std::mem::ManuallyDrop;
+            use std::os::fd::{AsRawFd, FromRawFd};
+            use std::os::unix::fs::MetadataExt;
+
+            // SAFETY: `pinned.file_fd` is open and owned by `pinned`;
+            // `ManuallyDrop` keeps ownership on `pinned` without closing it.
+            let pinned_file =
+                ManuallyDrop::new(unsafe { fs::File::from_raw_fd(pinned.file_fd.as_raw_fd()) });
+            let fd_meta = pinned_file.metadata().ok()?;
+            if fd_meta.dev() != pinned.dev || fd_meta.ino() != pinned.ino {
+                return None;
+            }
+            return Some(plugin_binary_metadata(&fd_meta));
+        }
+        #[cfg(windows)]
+        if let Some(ref pinned) = self.pinned_binary {
+            use std::mem::ManuallyDrop;
+            use std::os::windows::io::{AsRawHandle, FromRawHandle};
+
+            // SAFETY: `pinned.pinned_handle` is open and owned by `pinned`;
+            // `ManuallyDrop` keeps ownership on `pinned` without closing it.
+            let pinned_file = ManuallyDrop::new(unsafe {
+                fs::File::from_raw_handle(pinned.pinned_handle.as_raw_handle())
+            });
+            let fd_meta = pinned_file.metadata().ok()?;
+            let mut metadata = plugin_binary_metadata(&fd_meta);
+            if let Some(expected_id) = pinned.windows_identity {
+                let current_id = windows_pinned_plugin::pinned_handle_identity(
+                    pinned.pinned_handle.as_raw_handle(),
+                )
+                .ok()?;
+                if current_id != expected_id {
+                    return None;
+                }
+                metadata.windows_identity = Some(current_id);
+            }
+            return Some(metadata);
+        }
+        None
+    }
+
+    fn pinned_matches_path(&self, binary_path: &Path, metadata: &PluginBinaryMetadata) -> bool {
+        #[cfg(unix)]
+        if let Some(ref pinned) = self.pinned_binary {
+            use std::mem::ManuallyDrop;
+            use std::os::fd::{AsRawFd, FromRawFd};
+            use std::os::unix::fs::MetadataExt;
+
+            let Ok(path_meta) = fs::metadata(binary_path) else {
+                return false;
+            };
+            if path_meta.dev() != pinned.dev || path_meta.ino() != pinned.ino {
+                return false;
+            }
+            // SAFETY: `pinned.file_fd` is open and owned by `pinned`;
+            // `ManuallyDrop` keeps ownership on `pinned` without closing it.
+            let pinned_file =
+                ManuallyDrop::new(unsafe { fs::File::from_raw_fd(pinned.file_fd.as_raw_fd()) });
+            let Ok(fd_meta) = pinned_file.metadata() else {
+                return false;
+            };
+            return fd_meta.dev() == pinned.dev
+                && fd_meta.ino() == pinned.ino
+                && fd_meta.len() == metadata.length
+                && path_meta.len() == metadata.length
+                && fd_meta.mtime() == path_meta.mtime()
+                && fd_meta.mtime_nsec() == path_meta.mtime_nsec()
+                && fd_meta.ctime() == path_meta.ctime()
+                && fd_meta.ctime_nsec() == path_meta.ctime_nsec();
+        }
+        #[cfg(windows)]
+        if let Some(ref pinned) = self.pinned_binary {
+            return windows_pinned_plugin::pinned_matches_path(pinned, binary_path, metadata);
+        }
+        #[cfg(not(any(unix, windows)))]
+        let _ = (binary_path, metadata);
+        true
+    }
+}
+
+#[cfg(unix)]
+mod unix_pinned_plugin {
+    use std::collections::VecDeque;
+    use std::ffi::{CString, OsStr, OsString};
+    use std::fs;
+    use std::io::{self, Read};
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    use std::path::{Component, Path, PathBuf};
+    use std::sync::Arc;
+
+    use super::{
+        PackageManifest, PinnedPluginBinary, PluginFailure, is_blocked_script_extension,
+        script_plugin_failure, validate_plugin_binary_relative_path,
+    };
+
+    const MAX_SYMLINK_DEPTH: usize = 40;
+
+    #[cfg(target_os = "linux")]
+    const DIR_OPEN_FLAGS: libc::c_int = libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC;
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    ))]
+    const DIR_OPEN_FLAGS: libc::c_int = libc::O_SEARCH | libc::O_DIRECTORY | libc::O_CLOEXEC;
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    )))]
+    const DIR_OPEN_FLAGS: libc::c_int = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC;
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    const DARWIN_O_EXEC: libc::c_int = 0x4000_0000;
+
+    enum WalkStep {
+        Normal(OsString),
+        ParentDir,
+    }
+
+    enum WalkError {
+        Missing { dangling_symlink: bool },
+        Escapes,
+        SymlinkLoop,
+        NotRegularFile,
+        InvalidPath,
+        Io(io::Error),
+    }
+
+    struct WalkedFile {
+        file_fd: OwnedFd,
+        dev: u64,
+        ino: u64,
+        readable: bool,
+        canonical_path: PathBuf,
+    }
+
+    fn cstr_path(path: &OsStr, specifier: &str) -> Result<CString, PluginFailure> {
+        CString::new(path.as_bytes()).map_err(|_| {
+            PluginFailure::new(
+                "PLUGIN_INVALID",
+                format!("Binary plugin \"{specifier}\" path contains an interior NUL byte."),
+            )
+        })
+    }
+
+    fn fstat_fd(fd: RawFd) -> io::Result<libc::stat> {
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: `fd` is open and `stat` is writable.
+        if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `fstat` succeeded and initialized `stat`.
+        Ok(unsafe { stat.assume_init() })
+    }
+
+    fn fstatat_nofollow(dir_fd: RawFd, name: &CString) -> io::Result<libc::stat> {
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: `dir_fd` is open, `name` is NUL-terminated, and `stat` is writable.
+        if unsafe {
+            libc::fstatat(
+                dir_fd,
+                name.as_ptr(),
+                stat.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } != 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `fstatat` succeeded and initialized `stat`.
+        Ok(unsafe { stat.assume_init() })
+    }
+
+    fn readlinkat_os(dir_fd: RawFd, name: &CString) -> io::Result<OsString> {
+        let mut buf = vec![0_u8; 256];
+        loop {
+            // SAFETY: `dir_fd` is open, `name` is NUL-terminated, and `buf` is writable.
+            let written = unsafe {
+                libc::readlinkat(dir_fd, name.as_ptr(), buf.as_mut_ptr().cast(), buf.len())
+            };
+            if written < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            #[allow(clippy::cast_sign_loss)]
+            let len = written as usize;
+            if len < buf.len() {
+                buf.truncate(len);
+                return Ok(OsString::from_vec(buf));
+            }
+            if buf.len() >= 64 * 1024 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "symlink target exceeds maximum path length",
+                ));
+            }
+            buf.resize(buf.len() * 2, 0);
+        }
+    }
+
+    fn is_symlink_open_error(raw: Option<i32>) -> bool {
+        #[cfg(target_os = "freebsd")]
+        if raw == Some(libc::EMLINK) {
+            return true;
+        }
+        #[cfg(target_os = "netbsd")]
+        if raw == Some(libc::EFTYPE) {
+            return true;
+        }
+        matches!(raw, Some(libc::ELOOP | libc::ENOTDIR))
+    }
+
+    fn canonical_dir_from_fd(fd: RawFd, fallback_path: &Path) -> io::Result<PathBuf> {
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            let mut buf = vec![0_u8; libc::PATH_MAX as usize];
+            // SAFETY: `fd` is open and `buf` has at least `PATH_MAX` writable bytes.
+            if unsafe { libc::fcntl(fd, libc::F_GETPATH, buf.as_mut_ptr()) } == 0 {
+                let len = buf.iter().position(|&byte| byte == 0).unwrap_or(buf.len());
+                buf.truncate(len);
+                if !buf.is_empty() {
+                    return Ok(PathBuf::from(OsString::from_vec(buf)));
+                }
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(path) = fs::read_link(format!("/proc/self/fd/{fd}"))
+                && path.is_absolute()
+                && !path.as_os_str().as_bytes().ends_with(b" (deleted)")
+            {
+                return Ok(path);
+            }
+        }
+        let canonical = fs::canonicalize(fallback_path)?;
+        let pinned_stat = fstat_fd(fd)?;
+        let path_meta = fs::metadata(&canonical)?;
+        use std::os::unix::fs::MetadataExt;
+        #[allow(clippy::unnecessary_cast)]
+        if path_meta.dev() != pinned_stat.st_dev as u64
+            || path_meta.ino() != pinned_stat.st_ino as u64
+        {
+            return Err(io::Error::other(
+                "package directory changed concurrently during pinning",
+            ));
+        }
+        Ok(canonical)
+    }
+
+    fn normalize_logical_abs_dir(package_dir: &Path) -> Option<PathBuf> {
+        let abs = if package_dir.is_absolute() {
+            package_dir.to_path_buf()
+        } else {
+            std::env::current_dir().ok()?.join(package_dir)
+        };
+        let mut normalized = PathBuf::new();
+        for component in abs.components() {
+            match component {
+                Component::RootDir => normalized.push(component.as_os_str()),
+                Component::Normal(part) => normalized.push(part),
+                Component::CurDir => {}
+                Component::ParentDir => {
+                    normalized.pop();
+                }
+                Component::Prefix(_) => return None,
+            }
+        }
+        Some(normalized)
+    }
+
+    pub(super) struct PinnedPackageDir {
+        root_fd: OwnedFd,
+        package_dir: PathBuf,
+        canonical_dir: PathBuf,
+        logical_abs_dir: Option<PathBuf>,
+    }
+
+    impl PinnedPackageDir {
+        pub(super) fn open(specifier: &str, package_dir: &Path) -> Result<Self, PluginFailure> {
+            let c_dir = cstr_path(package_dir.as_os_str(), specifier)?;
+            // SAFETY: `c_dir` is a valid C string.
+            let root_raw = unsafe { libc::open(c_dir.as_ptr(), DIR_OPEN_FLAGS) };
+            if root_raw < 0 {
+                return Err(PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not pin binary plugin package directory \"{specifier}\" at {}: {}",
+                        package_dir.display(),
+                        io::Error::last_os_error()
+                    ),
+                ));
+            }
+            // SAFETY: `root_raw` is a newly opened valid directory descriptor.
+            let root_fd = unsafe { OwnedFd::from_raw_fd(root_raw) };
+            let root_stat = fstat_fd(root_fd.as_raw_fd()).map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not inspect binary plugin package directory \"{specifier}\" at {}: {error}",
+                        package_dir.display()
+                    ),
+                )
+            })?;
+            #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+            if ((root_stat.st_mode as libc::mode_t) & libc::S_IFMT) != libc::S_IFDIR {
+                return Err(PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Binary plugin package \"{specifier}\" at {} is not a directory.",
+                        package_dir.display()
+                    ),
+                ));
+            }
+            let canonical_dir = canonical_dir_from_fd(root_fd.as_raw_fd(), package_dir).map_err(
+                |error| {
+                    PluginFailure::new(
+                        "PLUGIN_INVALID",
+                        format!(
+                            "Could not resolve binary plugin package directory \"{specifier}\" at {}: {error}",
+                            package_dir.display()
+                        ),
+                    )
+                },
+            )?;
+            let logical_abs_dir = normalize_logical_abs_dir(package_dir);
+            Ok(Self {
+                root_fd,
+                package_dir: package_dir.to_path_buf(),
+                canonical_dir,
+                logical_abs_dir,
+            })
+        }
+
+        pub(super) fn canonical_dir(&self) -> &Path {
+            &self.canonical_dir
+        }
+
+        pub(super) fn read_manifest(&self) -> io::Result<PackageManifest> {
+            let walked = self
+                .walk_contained_file(Path::new("package.json"), false)
+                .map_err(|error| match error {
+                    WalkError::Missing { .. } => {
+                        io::Error::new(io::ErrorKind::NotFound, "package.json not found")
+                    }
+                    WalkError::Escapes => io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "package.json escapes package directory",
+                    ),
+                    WalkError::SymlinkLoop => {
+                        io::Error::new(io::ErrorKind::InvalidData, "package.json symlink loop")
+                    }
+                    WalkError::NotRegularFile => io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "package.json is not a regular file",
+                    ),
+                    WalkError::InvalidPath => {
+                        io::Error::new(io::ErrorKind::InvalidInput, "invalid package.json path")
+                    }
+                    WalkError::Io(err) => err,
+                })?;
+            let mut file = fs::File::from(walked.file_fd);
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            serde_json::from_str(&contents).map_err(io::Error::other)
+        }
+
+        pub(super) fn resolve_and_pin_binary(
+            &self,
+            specifier: &str,
+            binary: &str,
+        ) -> Result<(PathBuf, PathBuf, Arc<PinnedPluginBinary>), PluginFailure> {
+            let relative = validate_plugin_binary_relative_path(specifier, binary)?;
+            let invocation_path = self.package_dir.join(&relative);
+            if is_blocked_script_extension(&invocation_path) {
+                return Err(script_plugin_failure(specifier, &invocation_path));
+            }
+            let walked = self
+                .walk_contained_file(&relative, true)
+                .map_err(|error| match error {
+                    WalkError::Missing {
+                        dangling_symlink: true,
+                    } => PluginFailure::new(
+                        "PLUGIN_INVALID",
+                        format!(
+                            "Binary plugin package \"{specifier}\" declares palamedes.pluginBinary \"{binary}\" which resolves to an invalid or dangling symlink."
+                        ),
+                    ),
+                    WalkError::Missing {
+                        dangling_symlink: false,
+                    } => PluginFailure::new(
+                        "PLUGIN_BINARY_MISSING",
+                        format!(
+                            "Configured plugin \"{specifier}\" has no executable at {}.",
+                            invocation_path.display()
+                        ),
+                    ),
+                    WalkError::Escapes => PluginFailure::new(
+                        "PLUGIN_INVALID",
+                        format!(
+                            "Binary plugin package \"{specifier}\" declares palamedes.pluginBinary \"{binary}\" which escapes package directory {}.",
+                            self.canonical_dir.display()
+                        ),
+                    ),
+                    WalkError::SymlinkLoop => PluginFailure::new(
+                        "PLUGIN_INVALID",
+                        format!(
+                            "Binary plugin package \"{specifier}\" declares palamedes.pluginBinary \"{binary}\" which contains a symlink loop."
+                        ),
+                    ),
+                    WalkError::NotRegularFile => PluginFailure::new(
+                        "PLUGIN_INVALID",
+                        format!(
+                            "Binary plugin \"{specifier}\" executable at {} is not a regular file.",
+                            invocation_path.display()
+                        ),
+                    ),
+                    WalkError::InvalidPath => PluginFailure::new(
+                        "PLUGIN_INVALID",
+                        format!(
+                            "Binary plugin package \"{specifier}\" declares invalid palamedes.pluginBinary \"{binary}\"."
+                        ),
+                    ),
+                    WalkError::Io(err) => PluginFailure::new(
+                        "PLUGIN_INVALID",
+                        format!(
+                            "Could not pin binary plugin \"{specifier}\" executable at {}: {err}",
+                            invocation_path.display()
+                        ),
+                    ),
+                })?;
+            if is_blocked_script_extension(&walked.canonical_path) {
+                return Err(script_plugin_failure(specifier, &walked.canonical_path));
+            }
+            let pinned = Arc::new(PinnedPluginBinary {
+                file_fd: walked.file_fd,
+                dev: walked.dev,
+                ino: walked.ino,
+                readable: walked.readable,
+            });
+            Ok((walked.canonical_path, invocation_path, pinned))
+        }
+
+        fn expand_symlink_target(
+            &self,
+            target_os: OsString,
+            dir_stack: &mut Vec<(OsString, OwnedFd)>,
+            queue: &mut VecDeque<WalkStep>,
+        ) -> Result<(), WalkError> {
+            let target_bytes = target_os.as_bytes();
+            let requires_directory = target_bytes == b"."
+                || target_bytes == b".."
+                || target_bytes.ends_with(b"/")
+                || target_bytes.ends_with(b"/.")
+                || target_bytes.ends_with(b"/..");
+            let target_path = PathBuf::from(target_os);
+            let stripped: PathBuf = if target_path.is_absolute() {
+                let inside = target_path
+                    .strip_prefix(&self.canonical_dir)
+                    .or_else(|_| {
+                        self.logical_abs_dir
+                            .as_deref()
+                            .ok_or(())
+                            .and_then(|logical| target_path.strip_prefix(logical).map_err(|_| ()))
+                    })
+                    .map_err(|()| WalkError::Escapes)?;
+                dir_stack.clear();
+                inside.to_path_buf()
+            } else {
+                target_path
+            };
+            let mut steps = Vec::new();
+            for component in stripped.components() {
+                match component {
+                    Component::Normal(part) => steps.push(WalkStep::Normal(part.to_os_string())),
+                    Component::ParentDir => steps.push(WalkStep::ParentDir),
+                    Component::CurDir => {}
+                    Component::RootDir | Component::Prefix(_) => return Err(WalkError::Escapes),
+                }
+            }
+            if requires_directory && queue.is_empty() {
+                return Err(WalkError::NotRegularFile);
+            }
+            for step in steps.into_iter().rev() {
+                queue.push_front(step);
+            }
+            Ok(())
+        }
+
+        fn open_leaf_fd(
+            leaf_dir_raw: RawFd,
+            c_file: &CString,
+            allow_execute_only: bool,
+        ) -> Result<(OwnedFd, bool), io::Error> {
+            let mut readable = true;
+            // SAFETY: `leaf_dir_raw` is open and `c_file` is NUL-terminated.
+            let mut file_raw = unsafe {
+                libc::openat(
+                    leaf_dir_raw,
+                    c_file.as_ptr(),
+                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                )
+            };
+            if allow_execute_only
+                && file_raw < 0
+                && io::Error::last_os_error().raw_os_error() == Some(libc::EACCES)
+            {
+                readable = false;
+                #[cfg(target_os = "linux")]
+                {
+                    // SAFETY: `leaf_dir_raw` is open and `c_file` is NUL-terminated.
+                    file_raw = unsafe {
+                        libc::openat(
+                            leaf_dir_raw,
+                            c_file.as_ptr(),
+                            libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                        )
+                    };
+                }
+                #[cfg(any(target_os = "macos", target_os = "ios"))]
+                {
+                    // SAFETY: `leaf_dir_raw` is open and `c_file` is NUL-terminated.
+                    file_raw = unsafe {
+                        libc::openat(
+                            leaf_dir_raw,
+                            c_file.as_ptr(),
+                            DARWIN_O_EXEC | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                        )
+                    };
+                }
+                #[cfg(target_os = "freebsd")]
+                {
+                    // SAFETY: `leaf_dir_raw` is open and `c_file` is NUL-terminated.
+                    file_raw = unsafe {
+                        libc::openat(
+                            leaf_dir_raw,
+                            c_file.as_ptr(),
+                            libc::O_EXEC | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                        )
+                    };
+                }
+            }
+            if file_raw < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: `file_raw` is a newly opened valid file descriptor.
+            Ok((unsafe { OwnedFd::from_raw_fd(file_raw) }, readable))
+        }
+
+        fn walk_contained_file(
+            &self,
+            relative: &Path,
+            allow_execute_only: bool,
+        ) -> Result<WalkedFile, WalkError> {
+            let mut queue = VecDeque::new();
+            for component in relative.components() {
+                match component {
+                    Component::Normal(part) => {
+                        queue.push_back(WalkStep::Normal(part.to_os_string()));
+                    }
+                    _ => return Err(WalkError::InvalidPath),
+                }
+            }
+            if queue.is_empty() {
+                return Err(WalkError::NotRegularFile);
+            }
+
+            let mut dir_stack: Vec<(OsString, OwnedFd)> = Vec::new();
+            let mut symlinks_followed = 0usize;
+
+            while let Some(step) = queue.pop_front() {
+                match step {
+                    WalkStep::ParentDir => {
+                        if dir_stack.pop().is_none() {
+                            return Err(WalkError::Escapes);
+                        }
+                    }
+                    WalkStep::Normal(seg) => {
+                        let c_seg =
+                            CString::new(seg.as_bytes()).map_err(|_| WalkError::InvalidPath)?;
+                        let cur_dir_raw = dir_stack
+                            .last()
+                            .map_or_else(|| self.root_fd.as_raw_fd(), |(_, fd)| fd.as_raw_fd());
+
+                        if !queue.is_empty() {
+                            // SAFETY: `cur_dir_raw` is open and `c_seg` is NUL-terminated.
+                            let next_raw = unsafe {
+                                libc::openat(
+                                    cur_dir_raw,
+                                    c_seg.as_ptr(),
+                                    DIR_OPEN_FLAGS | libc::O_NOFOLLOW,
+                                )
+                            };
+                            if next_raw >= 0 {
+                                // SAFETY: `next_raw` is a newly opened valid directory descriptor.
+                                dir_stack.push((seg, unsafe { OwnedFd::from_raw_fd(next_raw) }));
+                                continue;
+                            }
+                            let error = io::Error::last_os_error();
+                            if error.raw_os_error() == Some(libc::ENOENT) {
+                                return Err(WalkError::Missing {
+                                    dangling_symlink: symlinks_followed > 0,
+                                });
+                            }
+                            #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+                            if is_symlink_open_error(error.raw_os_error())
+                                && let Ok(st) = fstatat_nofollow(cur_dir_raw, &c_seg)
+                                && ((st.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFLNK
+                            {
+                                symlinks_followed += 1;
+                                if symlinks_followed > MAX_SYMLINK_DEPTH {
+                                    return Err(WalkError::SymlinkLoop);
+                                }
+                                let target =
+                                    readlinkat_os(cur_dir_raw, &c_seg).map_err(WalkError::Io)?;
+                                self.expand_symlink_target(target, &mut dir_stack, &mut queue)?;
+                                continue;
+                            }
+                            return Err(WalkError::Io(error));
+                        }
+
+                        // Final leaf component.
+                        match Self::open_leaf_fd(cur_dir_raw, &c_seg, allow_execute_only) {
+                            Ok((file_fd, readable)) => {
+                                let stat = fstat_fd(file_fd.as_raw_fd()).map_err(WalkError::Io)?;
+                                #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+                                let kind = (stat.st_mode as libc::mode_t) & libc::S_IFMT;
+                                if kind == libc::S_IFLNK {
+                                    drop(file_fd);
+                                    symlinks_followed += 1;
+                                    if symlinks_followed > MAX_SYMLINK_DEPTH {
+                                        return Err(WalkError::SymlinkLoop);
+                                    }
+                                    let target = readlinkat_os(cur_dir_raw, &c_seg)
+                                        .map_err(WalkError::Io)?;
+                                    self.expand_symlink_target(target, &mut dir_stack, &mut queue)?;
+                                    continue;
+                                }
+                                if kind != libc::S_IFREG {
+                                    return Err(WalkError::NotRegularFile);
+                                }
+                                let mut canonical_path = self.canonical_dir.clone();
+                                for (name, _) in &dir_stack {
+                                    canonical_path.push(name);
+                                }
+                                canonical_path.push(&seg);
+                                #[allow(clippy::unnecessary_cast)]
+                                let (dev, ino) = (stat.st_dev as u64, stat.st_ino as u64);
+                                return Ok(WalkedFile {
+                                    file_fd,
+                                    dev,
+                                    ino,
+                                    readable,
+                                    canonical_path,
+                                });
+                            }
+                            Err(error) => {
+                                if error.raw_os_error() == Some(libc::ENOENT) {
+                                    return Err(WalkError::Missing {
+                                        dangling_symlink: symlinks_followed > 0,
+                                    });
+                                }
+                                #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+                                if is_symlink_open_error(error.raw_os_error())
+                                    && let Ok(st) = fstatat_nofollow(cur_dir_raw, &c_seg)
+                                    && ((st.st_mode as libc::mode_t) & libc::S_IFMT)
+                                        == libc::S_IFLNK
+                                {
+                                    symlinks_followed += 1;
+                                    if symlinks_followed > MAX_SYMLINK_DEPTH {
+                                        return Err(WalkError::SymlinkLoop);
+                                    }
+                                    let target = readlinkat_os(cur_dir_raw, &c_seg)
+                                        .map_err(WalkError::Io)?;
+                                    self.expand_symlink_target(target, &mut dir_stack, &mut queue)?;
+                                    continue;
+                                }
+                                return Err(WalkError::Io(error));
+                            }
+                        }
+                    }
+                }
+            }
+
+            Err(WalkError::NotRegularFile)
+        }
+    }
+
+    pub(super) fn pin_direct_executable(
+        specifier: &str,
+        candidate: &Path,
+    ) -> Result<(PathBuf, PathBuf, Arc<PinnedPluginBinary>), PluginFailure> {
+        let invocation_path = candidate.to_path_buf();
+        if is_blocked_script_extension(&invocation_path) {
+            return Err(script_plugin_failure(specifier, &invocation_path));
+        }
+        let c_path = cstr_path(candidate.as_os_str(), specifier)?;
+        // Follow symlinks for direct executable path specifiers (matching
+        // `candidate.is_file()`), opening non-blocking read-only first so a
+        // FIFO swapped in after `is_file()` cannot block registry discovery,
+        // and falling back to execute-only / path descriptors when read
+        // permission is absent (mode `0111`).
+        let mut readable = true;
+        // SAFETY: `c_path` is NUL-terminated.
+        let mut raw = unsafe {
+            libc::open(
+                c_path.as_ptr(),
+                libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC,
+            )
+        };
+        if raw < 0 && io::Error::last_os_error().kind() == io::ErrorKind::PermissionDenied {
+            readable = false;
+            #[cfg(target_os = "linux")]
+            {
+                // SAFETY: `c_path` is NUL-terminated.
+                raw = unsafe { libc::open(c_path.as_ptr(), libc::O_PATH | libc::O_CLOEXEC) };
+            }
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            {
+                // SAFETY: `c_path` is NUL-terminated.
+                raw = unsafe {
+                    libc::open(
+                        c_path.as_ptr(),
+                        DARWIN_O_EXEC | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                    )
+                };
+            }
+            #[cfg(target_os = "freebsd")]
+            {
+                // SAFETY: `c_path` is NUL-terminated.
+                raw = unsafe {
+                    libc::open(
+                        c_path.as_ptr(),
+                        libc::O_EXEC | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                    )
+                };
+            }
+        }
+        if raw < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::NotFound {
+                return Err(PluginFailure::new(
+                    "PLUGIN_BINARY_MISSING",
+                    format!(
+                        "Configured plugin \"{specifier}\" has no executable at {}.",
+                        invocation_path.display()
+                    ),
+                ));
+            }
+            return Err(PluginFailure::new(
+                "PLUGIN_INVALID",
+                format!(
+                    "Could not pin binary plugin \"{specifier}\" executable at {}: {error}",
+                    invocation_path.display()
+                ),
+            ));
+        }
+        // SAFETY: `raw` is a newly opened valid file descriptor.
+        let file_fd = unsafe { OwnedFd::from_raw_fd(raw) };
+        let stat = fstat_fd(file_fd.as_raw_fd()).map_err(|error| {
+            PluginFailure::new(
+                "PLUGIN_INVALID",
+                format!(
+                    "Could not inspect pinned binary plugin \"{specifier}\" at {}: {error}",
+                    invocation_path.display()
+                ),
+            )
+        })?;
+        #[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+        if ((stat.st_mode as libc::mode_t) & libc::S_IFMT) != libc::S_IFREG {
+            return Err(PluginFailure::new(
+                "PLUGIN_BINARY_MISSING",
+                format!(
+                    "Configured plugin \"{specifier}\" has no executable at {}.",
+                    invocation_path.display()
+                ),
+            ));
+        }
+        // Clear `O_NONBLOCK` now that `S_ISREG` is verified.
+        // SAFETY: `file_fd` is an open regular file descriptor.
+        let fl = unsafe { libc::fcntl(file_fd.as_raw_fd(), libc::F_GETFL) };
+        if fl >= 0 && (fl & libc::O_NONBLOCK) != 0 {
+            // SAFETY: `file_fd` is an open regular file descriptor.
+            let _ =
+                unsafe { libc::fcntl(file_fd.as_raw_fd(), libc::F_SETFL, fl & !libc::O_NONBLOCK) };
+        }
+        #[allow(clippy::unnecessary_cast)]
+        let pinned = Arc::new(PinnedPluginBinary {
+            file_fd,
+            dev: stat.st_dev as u64,
+            ino: stat.st_ino as u64,
+            readable,
+        });
+        let canonical_binary = live_pinned_binary_path(&pinned)
+            .or_else(|| fs::canonicalize(candidate).ok())
+            .unwrap_or_else(|| invocation_path.clone());
+        if is_blocked_script_extension(&canonical_binary) {
+            return Err(script_plugin_failure(specifier, &canonical_binary));
+        }
+        Ok((canonical_binary, invocation_path, pinned))
+    }
+
+    pub(super) fn live_pinned_binary_path(pinned: &PinnedPluginBinary) -> Option<PathBuf> {
+        let fd = pinned.file_fd.as_raw_fd();
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            let mut buf = vec![0_u8; libc::PATH_MAX as usize];
+            // SAFETY: `fd` is open and `buf` has at least `PATH_MAX` writable bytes.
+            if unsafe { libc::fcntl(fd, libc::F_GETPATH, buf.as_mut_ptr()) } == 0 {
+                let len = buf.iter().position(|&byte| byte == 0).unwrap_or(buf.len());
+                buf.truncate(len);
+                if !buf.is_empty() {
+                    return Some(PathBuf::from(OsString::from_vec(buf)));
+                }
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(path) = fs::read_link(format!("/proc/self/fd/{fd}"))
+                && path.is_absolute()
+                && !path.as_os_str().as_bytes().ends_with(b" (deleted)")
+            {
+                return Some(path);
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
+        let _ = fd;
+        None
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    pub(super) fn fd_starts_with_shebang(fd: RawFd) -> io::Result<bool> {
+        let mut magic = [0_u8; 2];
+        // SAFETY: `fd` is open and `magic` is 2 writable bytes.
+        let read = unsafe { libc::pread(fd, magic.as_mut_ptr().cast(), magic.len(), 0) };
+        if read < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(read == 2 && magic == *b"#!")
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    pub(super) struct PrebuiltExecArrays {
+        _argv_storage: Vec<CString>,
+        argv_ptrs: Vec<*const libc::c_char>,
+        _envp_storage: Vec<CString>,
+        envp_ptrs: Vec<*const libc::c_char>,
+    }
+
+    // SAFETY: `argv_ptrs` and `envp_ptrs` point exclusively into the owned
+    // heap buffers of `_argv_storage` and `_envp_storage`, which stay pinned at
+    // stable addresses for the lifetime of `PrebuiltExecArrays`.
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    unsafe impl Send for PrebuiltExecArrays {}
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    unsafe impl Sync for PrebuiltExecArrays {}
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    impl PrebuiltExecArrays {
+        pub(super) fn build(
+            invocation_path: &Path,
+            env_overrides: &[(&str, &OsStr)],
+        ) -> io::Result<Self> {
+            let arg0 = CString::new(invocation_path.as_os_str().as_bytes()).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "plugin invocation path contains interior NUL",
+                )
+            })?;
+            let argv_storage = vec![arg0];
+            let argv_ptrs = vec![argv_storage[0].as_ptr(), std::ptr::null()];
+
+            let mut envp_storage = Vec::new();
+            for (key, value) in std::env::vars_os() {
+                if env_overrides
+                    .iter()
+                    .any(|&(override_key, _)| key.as_bytes() == override_key.as_bytes())
+                {
+                    continue;
+                }
+                let mut entry = Vec::with_capacity(key.len() + 1 + value.len());
+                entry.extend_from_slice(key.as_bytes());
+                entry.push(b'=');
+                entry.extend_from_slice(value.as_bytes());
+                if let Ok(cstr) = CString::new(entry) {
+                    envp_storage.push(cstr);
+                }
+            }
+            for &(override_key, override_value) in env_overrides {
+                let mut entry = Vec::with_capacity(override_key.len() + 1 + override_value.len());
+                entry.extend_from_slice(override_key.as_bytes());
+                entry.push(b'=');
+                entry.extend_from_slice(override_value.as_bytes());
+                let entry_cstr = CString::new(entry).map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("environment override {override_key} contains interior NUL"),
+                    )
+                })?;
+                envp_storage.push(entry_cstr);
+            }
+
+            let mut envp_ptrs = Vec::with_capacity(envp_storage.len() + 1);
+            for item in &envp_storage {
+                envp_ptrs.push(item.as_ptr());
+            }
+            envp_ptrs.push(std::ptr::null());
+
+            Ok(Self {
+                _argv_storage: argv_storage,
+                argv_ptrs,
+                _envp_storage: envp_storage,
+                envp_ptrs,
+            })
+        }
+
+        pub(super) fn argv_ptr(&self) -> *const *const libc::c_char {
+            self.argv_ptrs.as_ptr()
+        }
+
+        pub(super) fn envp_ptr(&self) -> *const *const libc::c_char {
+            self.envp_ptrs.as_ptr()
+        }
+    }
+}
+
+#[cfg(any(windows, test))]
+fn windows_wide_root_len(units: &[u16]) -> Option<usize> {
+    const BS: u16 = b'\\' as u16;
+    const Q: u16 = b'?' as u16;
+    const COLON: u16 = b':' as u16;
+
+    if units.len() >= 8
+        && units[0] == BS
+        && units[1] == BS
+        && units[2] == Q
+        && units[3] == BS
+        && (units[4] == u16::from(b'U') || units[4] == u16::from(b'u'))
+        && (units[5] == u16::from(b'N') || units[5] == u16::from(b'n'))
+        && (units[6] == u16::from(b'C') || units[6] == u16::from(b'c'))
+        && units[7] == BS
+    {
+        let server_rel = units[8..].iter().position(|&unit| unit == BS)?;
+        if server_rel == 0 {
+            return None;
+        }
+        let share_start = 8 + server_rel + 1;
+        if share_start >= units.len() {
+            return None;
+        }
+        return match units[share_start..].iter().position(|&unit| unit == BS) {
+            Some(0) => None,
+            Some(share_rel) => Some(share_start + share_rel + 1),
+            None => Some(units.len()),
+        };
+    }
+    if units.len() >= 4 && units[0] == BS && units[1] == BS && units[2] == Q && units[3] == BS {
+        return match units[4..].iter().position(|&unit| unit == BS) {
+            Some(0) => None,
+            Some(vol_rel) => Some(4 + vol_rel + 1),
+            None => Some(units.len()),
+        };
+    }
+    if units.len() >= 3
+        && u8::try_from(units[0]).is_ok_and(|byte| byte.is_ascii_alphabetic())
+        && units[1] == COLON
+        && units[2] == BS
+    {
+        return Some(3);
+    }
+    None
+}
+
+#[cfg(any(windows, test))]
+fn windows_parent_wide_path(units: &[u16]) -> Option<&[u16]> {
+    const BS: u16 = b'\\' as u16;
+
+    let root_len = windows_wide_root_len(units)?;
+    let mut end = units.len();
+    while end > root_len && units[end - 1] == BS {
+        end -= 1;
+    }
+    if end <= root_len {
+        return None;
+    }
+    let slash = units[..end].iter().rposition(|&unit| unit == BS)?;
+    if slash < root_len {
+        Some(&units[..root_len])
+    } else {
+        Some(&units[..slash])
+    }
+}
+
+#[cfg(windows)]
+mod windows_pinned_plugin {
+    use std::ffi::{OsStr, OsString, c_void};
+    use std::fs::{self, File, OpenOptions};
+    use std::io::{self, Read};
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use std::path::{Component, Path, PathBuf};
+    use std::sync::Arc;
+
+    use super::{
+        PackageManifest, PinnedPluginBinary, PluginBinaryMetadata, PluginFailure,
+        WindowsPluginBinaryIdentity, is_blocked_script_extension, script_plugin_failure,
+        validate_plugin_binary_relative_path, windows_parent_wide_path,
+    };
+
+    const FILE_READ_DATA: u32 = 0x0000_0001;
+    const FILE_EXECUTE: u32 = 0x0000_0020;
+    const FILE_TRAVERSE: u32 = 0x0000_0020;
+    const FILE_READ_ATTRIBUTES: u32 = 0x0000_0080;
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+    const FILE_SHARE_DELETE: u32 = 0x0000_0004;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0000_0010;
+    const FILE_ATTRIBUTE_NORMAL: u32 = 0x0000_0080;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+    const FILE_NAME_NORMALIZED: u32 = 0x0;
+    const FILE_ID_INFO_CLASS: i32 = 18;
+    const OBJ_CASE_INSENSITIVE: u32 = 0x0000_0040;
+    const FILE_OPEN: u32 = 1;
+    const FILE_DIRECTORY_FILE: u32 = 0x0000_0001;
+    const FILE_NON_DIRECTORY_FILE: u32 = 0x0000_0040;
+    const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x0000_0020;
+    const FILE_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    #[allow(clippy::cast_possible_wrap)]
+    const STATUS_OBJECT_NAME_NOT_FOUND: i32 = 0xC000_0034_u32 as i32;
+    #[allow(clippy::cast_possible_wrap)]
+    const STATUS_OBJECT_PATH_NOT_FOUND: i32 = 0xC000_003A_u32 as i32;
+
+    #[repr(C)]
+    struct UnicodeString {
+        length: u16,
+        maximum_length: u16,
+        buffer: *mut u16,
+    }
+
+    #[repr(C)]
+    struct ObjectAttributes {
+        length: u32,
+        root_directory: *mut c_void,
+        object_name: *mut UnicodeString,
+        attributes: u32,
+        security_descriptor: *mut c_void,
+        security_quality_of_service: *mut c_void,
+    }
+
+    #[repr(C)]
+    struct IoStatusBlock {
+        status_or_pointer: usize,
+        information: usize,
+    }
+
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtCreateFile(
+            file_handle: *mut *mut c_void,
+            desired_access: u32,
+            object_attributes: *mut ObjectAttributes,
+            io_status_block: *mut IoStatusBlock,
+            allocation_size: *mut i64,
+            file_attributes: u32,
+            share_access: u32,
+            create_disposition: u32,
+            create_options: u32,
+            ea_buffer: *mut c_void,
+            ea_length: u32,
+        ) -> i32;
+        fn RtlNtStatusToDosError(status: i32) -> u32;
+    }
+
+    fn nt_status_to_io_error(status: i32) -> io::Error {
+        // SAFETY: `RtlNtStatusToDosError` is a pure status-code conversion.
+        let dos = unsafe { RtlNtStatusToDosError(status) };
+        #[allow(clippy::cast_possible_wrap)]
+        io::Error::from_raw_os_error(dos as i32)
+    }
+
+    fn nt_open_relative(
+        root_handle: *mut c_void,
+        segment: &OsStr,
+        desired_access: u32,
+        file_attributes: u32,
+        share_access: u32,
+        create_options: u32,
+    ) -> Result<OwnedHandle, i32> {
+        let mut wide: Vec<u16> = segment.encode_wide().collect();
+        if wide.is_empty() || wide.contains(&0) {
+            return Err(STATUS_OBJECT_PATH_NOT_FOUND);
+        }
+        let byte_len = u16::try_from(wide.len().saturating_mul(2))
+            .map_err(|_| STATUS_OBJECT_PATH_NOT_FOUND)?;
+        let mut unicode = UnicodeString {
+            length: byte_len,
+            maximum_length: byte_len,
+            buffer: wide.as_mut_ptr(),
+        };
+        let mut attributes = ObjectAttributes {
+            length: u32::try_from(std::mem::size_of::<ObjectAttributes>()).unwrap_or(0),
+            root_directory: root_handle,
+            object_name: &mut unicode,
+            attributes: OBJ_CASE_INSENSITIVE,
+            security_descriptor: std::ptr::null_mut(),
+            security_quality_of_service: std::ptr::null_mut(),
+        };
+        let mut iosb = IoStatusBlock {
+            status_or_pointer: 0,
+            information: 0,
+        };
+        let mut handle: *mut c_void = std::ptr::null_mut();
+        // SAFETY: all pointers remain valid for the duration of `NtCreateFile`.
+        let status = unsafe {
+            NtCreateFile(
+                &mut handle,
+                desired_access,
+                &mut attributes,
+                &mut iosb,
+                std::ptr::null_mut(),
+                file_attributes,
+                share_access,
+                FILE_OPEN,
+                create_options,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if status < 0 {
+            return Err(status);
+        }
+        // SAFETY: `NtCreateFile` succeeded and returned a newly opened handle.
+        Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
+    }
+
+    /// Walks `relative` strictly handle-relative to `root_dir` via
+    /// `NtCreateFile(..., FILE_OPEN_REPARSE_POINT)` and rejects any reparse
+    /// point along the way, guaranteeing containment even on volumes/shares
+    /// that do not implement 128-bit `FileIdInfo`.
+    fn open_relative_file_no_reparse(
+        root_dir: *mut c_void,
+        relative: &Path,
+        desired_access: u32,
+        share_access: u32,
+    ) -> io::Result<File> {
+        let mut segments = Vec::new();
+        for component in relative.components() {
+            match component {
+                Component::Normal(part) => segments.push(part),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "relative path contains non-normal component",
+                    ));
+                }
+            }
+        }
+        let Some((leaf, parents)) = segments.split_last() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "relative path is empty",
+            ));
+        };
+        let mut held_dir: Option<OwnedHandle> = None;
+        for parent in parents {
+            let current_root = held_dir
+                .as_ref()
+                .map_or(root_dir, std::os::windows::io::AsRawHandle::as_raw_handle);
+            let next_dir = nt_open_relative(
+                current_root,
+                parent,
+                FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE,
+                FILE_ATTRIBUTE_DIRECTORY,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+            )
+            .map_err(nt_status_to_io_error)?;
+            let info = handle_info(next_dir.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "refusing to traverse reparse point without volume file identity",
+                ));
+            }
+            if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "intermediate component is not a directory",
+                ));
+            }
+            held_dir = Some(next_dir);
+        }
+        let leaf_root = held_dir
+            .as_ref()
+            .map_or(root_dir, std::os::windows::io::AsRawHandle::as_raw_handle);
+        let leaf_handle = nt_open_relative(
+            leaf_root,
+            leaf,
+            desired_access,
+            FILE_ATTRIBUTE_NORMAL,
+            share_access,
+            FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+        )
+        .map_err(|status| {
+            if status == STATUS_OBJECT_NAME_NOT_FOUND || status == STATUS_OBJECT_PATH_NOT_FOUND {
+                io::Error::new(io::ErrorKind::NotFound, "file not found")
+            } else {
+                nt_status_to_io_error(status)
+            }
+        })?;
+        let info = handle_info(leaf_handle.as_raw_handle())?;
+        if (info.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "target is a directory or reparse point",
+            ));
+        }
+        Ok(File::from(leaf_handle))
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    struct FileIdentity {
+        volume_serial: u64,
+        file_id: [u8; 16],
+    }
+
+    #[repr(C)]
+    struct FileIdInfo {
+        volume_serial_number: u64,
+        file_id: [u8; 16],
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    #[repr(C)]
+    struct FileTime {
+        low_date_time: u32,
+        high_date_time: u32,
+    }
+
+    #[repr(C)]
+    struct ByHandleFileInformation {
+        file_attributes: u32,
+        creation_time: FileTime,
+        last_access_time: FileTime,
+        last_write_time: FileTime,
+        volume_serial_number: u32,
+        file_size_high: u32,
+        file_size_low: u32,
+        number_of_links: u32,
+        file_index_high: u32,
+        file_index_low: u32,
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetFileInformationByHandle(
+            file: *mut c_void,
+            file_information: *mut ByHandleFileInformation,
+        ) -> i32;
+        fn GetFileInformationByHandleEx(
+            file: *mut c_void,
+            file_information_class: i32,
+            file_information: *mut c_void,
+            buffer_size: u32,
+        ) -> i32;
+        fn GetFinalPathNameByHandleW(
+            file: *mut c_void,
+            path: *mut u16,
+            cch_file_path: u32,
+            flags: u32,
+        ) -> u32;
+    }
+
+    fn handle_info(handle: *mut c_void) -> io::Result<ByHandleFileInformation> {
+        let mut info = std::mem::MaybeUninit::<ByHandleFileInformation>::zeroed();
+        // SAFETY: `handle` is open and `info` is writable.
+        if unsafe { GetFileInformationByHandle(handle, info.as_mut_ptr()) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `GetFileInformationByHandle` succeeded.
+        Ok(unsafe { info.assume_init() })
+    }
+
+    fn handle_identity(handle: *mut c_void) -> io::Result<FileIdentity> {
+        let mut id_info = std::mem::MaybeUninit::<FileIdInfo>::zeroed();
+        // SAFETY: `handle` is open and `id_info` is writable for `size_of::<FileIdInfo>()` bytes.
+        let ok = unsafe {
+            GetFileInformationByHandleEx(
+                handle,
+                FILE_ID_INFO_CLASS,
+                id_info.as_mut_ptr().cast::<c_void>(),
+                u32::try_from(std::mem::size_of::<FileIdInfo>()).unwrap_or(24),
+            )
+        };
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `GetFileInformationByHandleEx(FileIdInfo)` succeeded and initialized `id_info`.
+        let id_info = unsafe { id_info.assume_init() };
+        if id_info.volume_serial_number == 0 && id_info.file_id == [0u8; 16] {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "volume did not report a valid 128-bit Windows file identity",
+            ));
+        }
+        Ok(FileIdentity {
+            volume_serial: id_info.volume_serial_number,
+            file_id: id_info.file_id,
+        })
+    }
+
+    fn final_path_units(handle: *mut c_void) -> io::Result<Vec<u16>> {
+        let mut buf = vec![0_u16; 260];
+        loop {
+            let cap = u32::try_from(buf.len()).map_err(|_| io::Error::other("path too long"))?;
+            // SAFETY: `handle` is open and `buf` has `cap` writable UTF-16 code units.
+            let written = unsafe {
+                GetFinalPathNameByHandleW(handle, buf.as_mut_ptr(), cap, FILE_NAME_NORMALIZED)
+            };
+            if written == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let written_usize = usize::try_from(written).unwrap_or(usize::MAX);
+            if written_usize < buf.len() {
+                buf.truncate(written_usize);
+                return Ok(buf);
+            }
+            buf.resize(written_usize + 1, 0);
+        }
+    }
+
+    /// Verifies that `file_final_units` has the pinned package directory
+    /// (`root_dir_id`) as a strict kernel-identity ancestor, walking raw UTF-16
+    /// parent paths without case folding or lossy UTF-8 conversion (safe under
+    /// per-directory NTFS case sensitivity and unpaired UTF-16 surrogates).
+    fn is_strict_descendant_of_dir(
+        root_dir_id: FileIdentity,
+        file_final_units: &[u16],
+    ) -> io::Result<bool> {
+        let mut current = file_final_units;
+        while let Some(parent_units) = windows_parent_wide_path(current) {
+            let parent_path = PathBuf::from(OsString::from_wide(parent_units));
+            let dir = match OpenOptions::new()
+                .access_mode(FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(&parent_path)
+            {
+                Ok(dir) => dir,
+                Err(_) => return Ok(false),
+            };
+            let info = handle_info(dir.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0
+                || (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0
+            {
+                return Ok(false);
+            }
+            if handle_identity(dir.as_raw_handle())? == root_dir_id {
+                return Ok(true);
+            }
+            current = parent_units;
+        }
+        Ok(false)
+    }
+
+    pub(super) fn pinned_handle_identity(
+        handle: *mut c_void,
+    ) -> io::Result<WindowsPluginBinaryIdentity> {
+        let id = handle_identity(handle)?;
+        Ok(WindowsPluginBinaryIdentity {
+            volume_serial: id.volume_serial,
+            file_id: id.file_id,
+        })
+    }
+
+    pub(super) fn pinned_matches_path(
+        pinned: &PinnedPluginBinary,
+        binary_path: &Path,
+        metadata: &PluginBinaryMetadata,
+    ) -> bool {
+        let Some(pinned_id) = pinned.windows_identity else {
+            return false;
+        };
+        if let Some(expected_id) = metadata.windows_identity
+            && expected_id != pinned_id
+        {
+            return false;
+        }
+        let Ok(live_id) = pinned_handle_identity(pinned.pinned_handle.as_raw_handle()) else {
+            return false;
+        };
+        if live_id != pinned_id {
+            return false;
+        }
+        let Ok(fd_info) = handle_info(pinned.pinned_handle.as_raw_handle()) else {
+            return false;
+        };
+        let Ok(path_file) = OpenOptions::new()
+            .access_mode(FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .open(binary_path)
+        else {
+            return false;
+        };
+        let Ok(path_id) = pinned_handle_identity(path_file.as_raw_handle()) else {
+            return false;
+        };
+        if path_id != pinned_id {
+            return false;
+        }
+        let Ok(path_info) = handle_info(path_file.as_raw_handle()) else {
+            return false;
+        };
+        let fd_len = (u64::from(fd_info.file_size_high) << 32) | u64::from(fd_info.file_size_low);
+        let path_len =
+            (u64::from(path_info.file_size_high) << 32) | u64::from(path_info.file_size_low);
+        fd_len == metadata.length
+            && path_len == metadata.length
+            && fd_info.last_write_time == path_info.last_write_time
+    }
+
+    pub(super) fn live_pinned_binary_path(pinned: &PinnedPluginBinary) -> Option<PathBuf> {
+        let units = final_path_units(pinned.pinned_handle.as_raw_handle()).ok()?;
+        Some(PathBuf::from(OsString::from_wide(&units)))
+    }
+
+    pub(super) fn pin_direct_executable(
+        specifier: &str,
+        candidate: &Path,
+    ) -> Result<(PathBuf, PathBuf, Arc<PinnedPluginBinary>), PluginFailure> {
+        let invocation_path = candidate.to_path_buf();
+        if is_blocked_script_extension(&invocation_path) {
+            return Err(script_plugin_failure(specifier, &invocation_path));
+        }
+        let (bin_file, readable) = match OpenOptions::new()
+            .access_mode(FILE_EXECUTE | FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+            .share_mode(FILE_SHARE_READ)
+            .open(candidate)
+        {
+            Ok(file) => (file, true),
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                match OpenOptions::new()
+                    .access_mode(FILE_EXECUTE | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                    .share_mode(FILE_SHARE_READ)
+                    .open(candidate)
+                {
+                    Ok(file) => (file, false),
+                    Err(exec_error) => {
+                        return Err(PluginFailure::new(
+                            "PLUGIN_INVALID",
+                            format!(
+                                "Could not pin binary plugin \"{specifier}\" executable at {}: {exec_error}",
+                                invocation_path.display()
+                            ),
+                        ));
+                    }
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Err(PluginFailure::new(
+                    "PLUGIN_BINARY_MISSING",
+                    format!(
+                        "Configured plugin \"{specifier}\" has no executable at {}.",
+                        invocation_path.display()
+                    ),
+                ));
+            }
+            Err(error) => {
+                return Err(PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not pin binary plugin \"{specifier}\" executable at {}: {error}",
+                        invocation_path.display()
+                    ),
+                ));
+            }
+        };
+        let info = handle_info(bin_file.as_raw_handle()).map_err(|error| {
+            PluginFailure::new(
+                "PLUGIN_INVALID",
+                format!(
+                    "Could not inspect pinned binary plugin \"{specifier}\" at {}: {error}",
+                    invocation_path.display()
+                ),
+            )
+        })?;
+        if (info.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0 {
+            return Err(PluginFailure::new(
+                "PLUGIN_BINARY_MISSING",
+                format!(
+                    "Configured plugin \"{specifier}\" has no executable at {}.",
+                    invocation_path.display()
+                ),
+            ));
+        }
+        let canonical_binary = final_path_units(bin_file.as_raw_handle())
+            .ok()
+            .map(|units| PathBuf::from(OsString::from_wide(&units)))
+            .or_else(|| fs::canonicalize(candidate).ok())
+            .unwrap_or_else(|| invocation_path.clone());
+        if is_blocked_script_extension(&canonical_binary) {
+            return Err(script_plugin_failure(specifier, &canonical_binary));
+        }
+        let windows_identity = pinned_handle_identity(bin_file.as_raw_handle()).ok();
+        Ok((
+            canonical_binary,
+            invocation_path,
+            Arc::new(PinnedPluginBinary {
+                pinned_handle: OwnedHandle::from(bin_file),
+                windows_identity,
+                readable,
+            }),
+        ))
+    }
+
+    pub(super) struct PinnedPackageDir {
+        dir_file: File,
+        dir_id: Option<FileIdentity>,
+        package_dir: PathBuf,
+        canonical_dir: PathBuf,
+    }
+
+    impl PinnedPackageDir {
+        pub(super) fn open(specifier: &str, package_dir: &Path) -> Result<Self, PluginFailure> {
+            Self::open_inner(specifier, package_dir, true)
+        }
+
+        #[cfg(test)]
+        pub(super) fn open_without_file_id(
+            specifier: &str,
+            package_dir: &Path,
+        ) -> Result<Self, PluginFailure> {
+            Self::open_inner(specifier, package_dir, false)
+        }
+
+        fn open_inner(
+            specifier: &str,
+            package_dir: &Path,
+            use_file_id: bool,
+        ) -> Result<Self, PluginFailure> {
+            let dir_file = OpenOptions::new()
+                .access_mode(FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+                .open(package_dir)
+                .map_err(|error| {
+                    PluginFailure::new(
+                        "PLUGIN_INVALID",
+                        format!(
+                            "Could not pin binary plugin package directory \"{specifier}\" at {}: {error}",
+                            package_dir.display()
+                        ),
+                    )
+                })?;
+            let info = handle_info(dir_file.as_raw_handle()).map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not inspect binary plugin package directory \"{specifier}\" at {}: {error}",
+                        package_dir.display()
+                    ),
+                )
+            })?;
+            if (info.file_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 {
+                return Err(PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Binary plugin package \"{specifier}\" at {} is not a directory.",
+                        package_dir.display()
+                    ),
+                ));
+            }
+            // Volumes or network shares that do not implement 128-bit
+            // `FileIdInfo` fall back to handle-relative `NtCreateFile` walks
+            // with `FILE_OPEN_REPARSE_POINT` rather than failing discovery.
+            let dir_id = if use_file_id {
+                handle_identity(dir_file.as_raw_handle()).ok()
+            } else {
+                None
+            };
+            let canonical_dir = final_path_units(dir_file.as_raw_handle())
+                .ok()
+                .map(|units| PathBuf::from(OsString::from_wide(&units)))
+                .or_else(|| fs::canonicalize(package_dir).ok())
+                .unwrap_or_else(|| package_dir.to_path_buf());
+            Ok(Self {
+                dir_file,
+                dir_id,
+                package_dir: package_dir.to_path_buf(),
+                canonical_dir,
+            })
+        }
+
+        pub(super) fn canonical_dir(&self) -> &Path {
+            &self.canonical_dir
+        }
+
+        pub(super) fn read_manifest(&self) -> io::Result<PackageManifest> {
+            let mut file = if let Some(dir_id) = self.dir_id {
+                let dir_final = final_path_units(self.dir_file.as_raw_handle())?;
+                let manifest_path =
+                    PathBuf::from(OsString::from_wide(&dir_final)).join("package.json");
+                let file = OpenOptions::new()
+                    .access_mode(FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                    .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                    .open(&manifest_path)?;
+                let info = handle_info(file.as_raw_handle())?;
+                if (info.file_attributes
+                    & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))
+                    != 0
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "package.json is not a regular file",
+                    ));
+                }
+                let manifest_final = final_path_units(file.as_raw_handle())?;
+                if !is_strict_descendant_of_dir(dir_id, &manifest_final)?
+                    || final_path_units(file.as_raw_handle())? != manifest_final
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "package.json escapes package directory",
+                    ));
+                }
+                file
+            } else {
+                open_relative_file_no_reparse(
+                    self.dir_file.as_raw_handle(),
+                    Path::new("package.json"),
+                    FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                )?
+            };
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            serde_json::from_str(&contents).map_err(io::Error::other)
+        }
+
+        pub(super) fn resolve_and_pin_binary(
+            &self,
+            specifier: &str,
+            binary: &str,
+        ) -> Result<(PathBuf, PathBuf, Arc<PinnedPluginBinary>), PluginFailure> {
+            let relative = validate_plugin_binary_relative_path(specifier, binary)?;
+            let invocation_path = self.package_dir.join(&relative);
+            if is_blocked_script_extension(&invocation_path) {
+                return Err(script_plugin_failure(specifier, &invocation_path));
+            }
+            let Some(dir_id) = self.dir_id else {
+                // Handle-relative containment walk for volumes/shares without
+                // 128-bit `FileIdInfo`: every component is opened relative to
+                // the pinned package directory handle with
+                // `FILE_OPEN_REPARSE_POINT`, rejecting any reparse point.
+                let (bin_file, readable) = match open_relative_file_no_reparse(
+                    self.dir_file.as_raw_handle(),
+                    &relative,
+                    FILE_EXECUTE | FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_SHARE_READ,
+                ) {
+                    Ok(file) => (file, true),
+                    Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                        match open_relative_file_no_reparse(
+                            self.dir_file.as_raw_handle(),
+                            &relative,
+                            FILE_EXECUTE | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                            FILE_SHARE_READ,
+                        ) {
+                            Ok(file) => (file, false),
+                            Err(exec_error) => {
+                                return Err(PluginFailure::new(
+                                    "PLUGIN_INVALID",
+                                    format!(
+                                        "Could not pin binary plugin \"{specifier}\" executable at {}: {exec_error}",
+                                        invocation_path.display()
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                        return Err(PluginFailure::new(
+                            "PLUGIN_BINARY_MISSING",
+                            format!(
+                                "Configured plugin \"{specifier}\" has no executable at {}.",
+                                invocation_path.display()
+                            ),
+                        ));
+                    }
+                    Err(error) => {
+                        return Err(PluginFailure::new(
+                            "PLUGIN_INVALID",
+                            format!(
+                                "Could not pin binary plugin \"{specifier}\" executable at {}: {error}",
+                                invocation_path.display()
+                            ),
+                        ));
+                    }
+                };
+                let canonical_binary = final_path_units(bin_file.as_raw_handle())
+                    .ok()
+                    .map(|units| PathBuf::from(OsString::from_wide(&units)))
+                    .unwrap_or_else(|| self.canonical_dir.join(&relative));
+                if is_blocked_script_extension(&canonical_binary) {
+                    return Err(script_plugin_failure(specifier, &canonical_binary));
+                }
+                let windows_identity = pinned_handle_identity(bin_file.as_raw_handle()).ok();
+                return Ok((
+                    canonical_binary,
+                    invocation_path,
+                    Arc::new(PinnedPluginBinary {
+                        pinned_handle: OwnedHandle::from(bin_file),
+                        windows_identity,
+                        readable,
+                    }),
+                ));
+            };
+            let dir_final = final_path_units(self.dir_file.as_raw_handle()).map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not verify pinned package directory for \"{specifier}\": {error}"
+                    ),
+                )
+            })?;
+            let candidate = PathBuf::from(OsString::from_wide(&dir_final)).join(&relative);
+            // Hold the verified executable open with `FILE_EXECUTE | FILE_READ_DATA |
+            // FILE_READ_ATTRIBUTES` (falling back to execute-only ACLs without
+            // `FILE_READ_DATA` on `PermissionDenied`) and `FILE_SHARE_READ` only
+            // (no write or delete sharing) so Windows prevents overwriting,
+            // renaming, or deleting the binary or any ancestor directory before
+            // launch and allows hashing directly from the pinned handle.
+            let (bin_file, readable) = match OpenOptions::new()
+                .access_mode(FILE_EXECUTE | FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                .share_mode(FILE_SHARE_READ)
+                .open(&candidate)
+            {
+                Ok(file) => (file, true),
+                Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                    match OpenOptions::new()
+                        .access_mode(FILE_EXECUTE | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                        .share_mode(FILE_SHARE_READ)
+                        .open(&candidate)
+                    {
+                        Ok(file) => (file, false),
+                        Err(exec_error) => {
+                            return Err(PluginFailure::new(
+                                "PLUGIN_INVALID",
+                                format!(
+                                    "Could not pin binary plugin \"{specifier}\" executable at {}: {exec_error}",
+                                    invocation_path.display()
+                                ),
+                            ));
+                        }
+                    }
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    if fs::symlink_metadata(&candidate)
+                        .ok()
+                        .is_some_and(|metadata| metadata.file_type().is_symlink())
+                    {
+                        return Err(PluginFailure::new(
+                            "PLUGIN_INVALID",
+                            format!(
+                                "Binary plugin package \"{specifier}\" declares palamedes.pluginBinary \"{binary}\" which resolves to an invalid or dangling symlink."
+                            ),
+                        ));
+                    }
+                    return Err(PluginFailure::new(
+                        "PLUGIN_BINARY_MISSING",
+                        format!(
+                            "Configured plugin \"{specifier}\" has no executable at {}.",
+                            invocation_path.display()
+                        ),
+                    ));
+                }
+                Err(error) => {
+                    return Err(PluginFailure::new(
+                        "PLUGIN_INVALID",
+                        format!(
+                            "Could not pin binary plugin \"{specifier}\" executable at {}: {error}",
+                            invocation_path.display()
+                        ),
+                    ));
+                }
+            };
+            let info = handle_info(bin_file.as_raw_handle()).map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not inspect pinned binary plugin \"{specifier}\" at {}: {error}",
+                        invocation_path.display()
+                    ),
+                )
+            })?;
+            if (info.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))
+                != 0
+            {
+                return Err(PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Binary plugin \"{specifier}\" executable at {} is a directory or reparse point.",
+                        invocation_path.display()
+                    ),
+                ));
+            }
+            let bin_final = final_path_units(bin_file.as_raw_handle()).map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!("Could not verify pinned executable for \"{specifier}\": {error}"),
+                )
+            })?;
+            let contained = is_strict_descendant_of_dir(dir_id, &bin_final).map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not verify pinned package ancestry for \"{specifier}\": {error}"
+                    ),
+                )
+            })?;
+            if !contained {
+                return Err(PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Binary plugin package \"{specifier}\" declares palamedes.pluginBinary \"{binary}\" which escapes package directory {}.",
+                        self.canonical_dir.display()
+                    ),
+                ));
+            }
+            let canonical_binary = PathBuf::from(OsString::from_wide(&bin_final));
+            if is_blocked_script_extension(&canonical_binary) {
+                return Err(script_plugin_failure(specifier, &canonical_binary));
+            }
+            let windows_identity = pinned_handle_identity(bin_file.as_raw_handle()).ok();
+            Ok((
+                canonical_binary,
+                invocation_path,
+                Arc::new(PinnedPluginBinary {
+                    pinned_handle: OwnedHandle::from(bin_file),
+                    windows_identity,
+                    readable,
+                }),
+            ))
+        }
+    }
+}
+
+#[cfg(unix)]
+use unix_pinned_plugin::PinnedPackageDir;
+#[cfg(windows)]
+use windows_pinned_plugin::PinnedPackageDir;
+
+#[cfg(not(any(unix, windows)))]
+struct PinnedPackageDir;
+
+#[cfg(not(any(unix, windows)))]
+impl PinnedPackageDir {
+    fn open(specifier: &str, _package_dir: &Path) -> Result<Self, PluginFailure> {
+        Err(PluginFailure::new(
+            "PLUGIN_INVALID",
+            format!(
+                "Binary plugin package \"{specifier}\" cannot be launched safely because this platform does not support pinned plugin execution."
+            ),
+        ))
+    }
+
+    fn canonical_dir(&self) -> &Path {
+        Path::new("")
+    }
+
+    fn read_manifest(&self) -> io::Result<PackageManifest> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "pinned plugin execution is not supported on this platform",
+        ))
+    }
+
+    fn resolve_and_pin_binary(
+        &self,
+        specifier: &str,
+        _binary: &str,
+    ) -> Result<(PathBuf, PathBuf, Arc<PinnedPluginBinary>), PluginFailure> {
+        Err(PluginFailure::new(
+            "PLUGIN_INVALID",
+            format!(
+                "Binary plugin package \"{specifier}\" cannot be launched safely because this platform does not support pinned plugin execution."
+            ),
+        ))
+    }
+}
+
+fn pinned_plugin_dir(resolved: &ResolvedPlugin) -> PathBuf {
+    if let Some(ref pinned) = resolved.pinned_binary {
+        #[cfg(unix)]
+        if let Some(live_path) = unix_pinned_plugin::live_pinned_binary_path(pinned)
+            && let Some(parent) = live_path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            return parent.to_path_buf();
+        }
+        #[cfg(windows)]
+        if let Some(live_path) = windows_pinned_plugin::live_pinned_binary_path(pinned)
+            && let Some(parent) = live_path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            return parent.to_path_buf();
+        }
+        #[cfg(not(any(unix, windows)))]
+        let _ = pinned;
+        return resolved
+            .binary_path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+    }
+    resolved
+        .invocation_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
+}
+
+#[cfg(any(windows, test))]
+fn is_windows_batch_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(OsStr::to_str)
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"))
+}
+
+fn spawn_resolved_binary(
+    resolved: &ResolvedPlugin,
+    cwd: &Path,
+    native_executable: &Path,
+) -> io::Result<PluginChild> {
+    // Keep the verified handle pinned across every platform's spawn call.
+    let _pinned_guard = resolved.pinned_binary.as_ref();
+    let plugin_dir = pinned_plugin_dir(resolved);
+    let env_overrides: [(&str, &OsStr); 3] = [
+        (NATIVE_EXECUTABLE_ENV, native_executable.as_os_str()),
+        (PLUGIN_PATH_ENV, resolved.invocation_path.as_os_str()),
+        (PLUGIN_DIR_ENV, plugin_dir.as_os_str()),
+    ];
+    #[cfg(windows)]
+    if resolved.invocation_path != resolved.binary_path
+        && !is_windows_batch_file(&resolved.binary_path)
+    {
+        return windows_alias_spawn::spawn_alias_binary(
+            &resolved.binary_path,
+            &resolved.invocation_path,
+            cwd,
+            &env_overrides,
+        )
+        .map(PluginChild::WinAlias);
+    }
+
+    #[cfg(unix)]
+    let mut command = if let Some(ref pinned) = resolved.pinned_binary {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::fd::AsRawFd;
+
+            let raw_fd = pinned.file_fd.as_raw_fd();
+            let is_shebang = pinned.readable && unix_pinned_plugin::fd_starts_with_shebang(raw_fd)?;
+            let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
+                &resolved.invocation_path,
+                &env_overrides,
+            )?;
+            let mut cmd = Command::new(&resolved.binary_path);
+            // SAFETY: runs in the forked child after Rust configures stdio
+            // pipes, `current_dir`, and process group; invokes
+            // `execveat(AT_EMPTY_PATH)` directly on the verified descriptor
+            // so the kernel enforces all execute policies (mode, ACLs, noexec,
+            // IMA, LSM) with zero pathname lookup and no script body in argv.
+            unsafe {
+                cmd.pre_exec(move || {
+                    if is_shebang && libc::fcntl(raw_fd, libc::F_SETFD, 0) != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    libc::syscall(
+                        libc::SYS_execveat,
+                        raw_fd,
+                        c"".as_ptr(),
+                        exec_arrays.argv_ptr(),
+                        exec_arrays.envp_ptr(),
+                        libc::AT_EMPTY_PATH,
+                    );
+                    Err(io::Error::last_os_error())
+                });
+            }
+            cmd
+        }
+        #[cfg(target_os = "freebsd")]
+        {
+            use std::os::fd::AsRawFd;
+
+            let raw_fd = pinned.file_fd.as_raw_fd();
+            let is_shebang = pinned.readable && unix_pinned_plugin::fd_starts_with_shebang(raw_fd)?;
+            let exec_arrays = unix_pinned_plugin::PrebuiltExecArrays::build(
+                &resolved.invocation_path,
+                &env_overrides,
+            )?;
+            let mut cmd = Command::new(&resolved.binary_path);
+            // SAFETY: runs in the forked child after stdio/cwd/pgid setup
+            // and replaces the process image directly via `fexecve`.
+            unsafe {
+                cmd.pre_exec(move || {
+                    if is_shebang && libc::fcntl(raw_fd, libc::F_SETFD, 0) != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    libc::fexecve(raw_fd, exec_arrays.argv_ptr(), exec_arrays.envp_ptr());
+                    Err(io::Error::last_os_error())
+                });
+            }
+            cmd
+        }
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            // Execute via XNU volfs (`/.vol/<dev>/<ino>`) while
+            // `pinned.file_fd` keeps the inode allocated and un-reusable:
+            // the kernel binds execution directly to `(dev, ino)` with zero
+            // directory/symlink lookup, enforces all execute policies (mode,
+            // ACLs, MNT_NOEXEC), keeps script contents out of argv, and fails
+            // closed if unlinked or on a volume without volfs support.
+            let volfs_path = format!("/.vol/{}/{}", pinned.dev, pinned.ino);
+            let mut cmd = Command::new(&volfs_path);
+            cmd.arg0(&resolved.invocation_path);
+            cmd
+        }
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "macos",
+            target_os = "ios"
+        )))]
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "pinned descriptor plugin execution is not supported on this Unix target",
+            ));
+        }
+    } else {
+        let mut cmd = Command::new(&resolved.binary_path);
+        if resolved.invocation_path != resolved.binary_path {
+            cmd.arg0(&resolved.invocation_path);
+        }
+        cmd
+    };
+
+    #[cfg(not(unix))]
+    let mut command = {
+        #[cfg(not(windows))]
+        let _ = (&resolved.invocation_path, &resolved.pinned_binary);
+        Command::new(&resolved.binary_path)
+    };
+    command.current_dir(cwd);
+    for (key, value) in env_overrides {
+        command.env(key, value);
+    }
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit());
+    isolate_process_group(&mut command);
+
+    #[cfg(windows)]
+    {
+        spawn_binary(&mut command).map(PluginChild::Std)
+    }
+    #[cfg(not(windows))]
+    {
+        spawn_binary(&mut command).map(PluginChild)
+    }
+}
+
 fn spawn_binary(command: &mut Command) -> io::Result<Child> {
     #[cfg(unix)]
     {
@@ -967,7 +3893,7 @@ fn spawn_binary(command: &mut Command) -> io::Result<Child> {
 }
 
 fn wait_for_plugin_exit(
-    child: &mut Child,
+    child: &mut PluginChild,
     resolved: &ResolvedPlugin,
     policy: InvocationPolicy,
     started: Instant,
@@ -1035,7 +3961,7 @@ fn reader_failure(resolved: &ResolvedPlugin) -> PluginFailure {
 }
 
 #[cfg(unix)]
-fn terminate_plugin_tree(child: &mut Child) {
+fn terminate_plugin_tree(child: &mut PluginChild) {
     let Ok(group) = i32::try_from(child.id()) else {
         let _ = child.kill();
         return;
@@ -1047,19 +3973,82 @@ fn terminate_plugin_tree(child: &mut Child) {
     }
 }
 
+#[cfg(any(windows, test))]
+fn resolve_windows_taskkill(
+    system_dir: Option<&Path>,
+    system_root: Option<&OsStr>,
+) -> Option<PathBuf> {
+    if let Some(dir) = system_dir
+        && dir.to_str().is_some_and(is_local_windows_drive_root)
+    {
+        return Some(dir.join("taskkill.exe"));
+    }
+    let root = system_root.and_then(OsStr::to_str)?;
+    if !is_local_windows_drive_root(root) {
+        return None;
+    }
+    Some(Path::new(root).join("System32").join("taskkill.exe"))
+}
+
+#[cfg(any(windows, test))]
+fn is_local_windows_drive_root(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    if bytes.len() < 3
+        || !bytes[0].is_ascii_alphabetic()
+        || bytes[1] != b':'
+        || !matches!(bytes[2], b'\\' | b'/')
+    {
+        return false;
+    }
+    !path.chars().any(char::is_control) && !path.split(['\\', '/']).any(|segment| segment == "..")
+}
+
 #[cfg(windows)]
-fn terminate_plugin_tree(child: &mut Child) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &child.id().to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+fn windows_system_directory() -> Option<PathBuf> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetSystemDirectoryW(buffer: *mut u16, size: u32) -> u32;
+    }
+
+    let mut buffer = vec![0_u16; 260];
+    loop {
+        // SAFETY: `buffer` has `buffer.len()` writable UTF-16 code units.
+        let written =
+            unsafe { GetSystemDirectoryW(buffer.as_mut_ptr(), u32::try_from(buffer.len()).ok()?) };
+        if written == 0 {
+            return None;
+        }
+        let written_usize = usize::try_from(written).ok()?;
+        if written_usize < buffer.len() {
+            buffer.truncate(written_usize);
+            return Some(PathBuf::from(OsString::from_wide(&buffer)));
+        }
+        buffer.resize(written_usize + 1, 0);
+    }
+}
+
+#[cfg(windows)]
+fn terminate_plugin_tree(child: &mut PluginChild) {
+    let system_dir = windows_system_directory();
+    if let Some(taskkill) =
+        resolve_windows_taskkill(system_dir.as_deref(), env::var_os("SystemRoot").as_deref())
+            .filter(|path| path.is_file())
+    {
+        let _ = Command::new(taskkill)
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
     let _ = child.kill();
 }
 
 #[cfg(not(any(unix, windows)))]
-fn terminate_plugin_tree(child: &mut Child) {
+fn terminate_plugin_tree(child: &mut PluginChild) {
     let _ = child.kill();
 }
 
@@ -1123,7 +4112,7 @@ struct ChildSignalGuard;
 
 #[cfg(unix)]
 impl ChildSignalGuard {
-    fn arm(child: &std::process::Child) -> Self {
+    fn arm(child: &PluginChild) -> Self {
         static INSTALL: Once = Once::new();
         INSTALL.call_once(|| {
             let Ok(mut signals) = signal_hook::iterator::Signals::new([
@@ -1188,6 +4177,15 @@ fn resolve_binary_plugin(
         ));
     }
 
+    if package_segments(specifier).is_none() {
+        return Err(PluginFailure::new(
+            "PLUGIN_INVALID",
+            format!(
+                "Configured Palamedes binary plugin specifier \"{specifier}\" is not a valid package or path specifier."
+            ),
+        ));
+    }
+
     let package_dir = locate_package_dir(specifier, config_dir).ok_or_else(|| {
         PluginFailure::new(
             "PLUGIN_MISSING",
@@ -1204,7 +4202,8 @@ fn resolve_package_plugin(
     specifier: &str,
     package_dir: PathBuf,
 ) -> Result<ResolvedPlugin, PluginFailure> {
-    let manifest = read_package_manifest(&package_dir).map_err(|error| {
+    let pinned_pkg = PinnedPackageDir::open(specifier, &package_dir)?;
+    let manifest = pinned_pkg.read_manifest().map_err(|error| {
         PluginFailure::new(
             "PLUGIN_INVALID",
             format!(
@@ -1218,16 +4217,26 @@ fn resolve_package_plugin(
         .as_ref()
         .and_then(|palamedes| palamedes.plugin_binary.as_deref())
     {
-        return resolved_executable(specifier, package_dir.join(binary));
+        let (binary_path, invocation_path, pinned_binary) =
+            pinned_pkg.resolve_and_pin_binary(specifier, binary)?;
+        return resolved_executable_with_invocation(
+            specifier,
+            binary_path,
+            invocation_path,
+            Some(pinned_binary),
+        );
     }
 
-    let canonical_dir = fs::canonicalize(&package_dir).unwrap_or(package_dir);
+    let canonical_dir = pinned_pkg.canonical_dir().to_path_buf();
     let mut candidates = Vec::new();
     for dependency in manifest.optional_dependencies.keys() {
         let Some(dependency_dir) = locate_package_dir(dependency, &canonical_dir) else {
             continue;
         };
-        let Ok(dependency_manifest) = read_package_manifest(&dependency_dir) else {
+        let Ok(pinned_dep) = PinnedPackageDir::open(specifier, &dependency_dir) else {
+            continue;
+        };
+        let Ok(dependency_manifest) = pinned_dep.read_manifest() else {
             continue;
         };
         if !package_supports_current_target(&dependency_manifest) {
@@ -1240,11 +4249,16 @@ fn resolve_package_plugin(
         else {
             continue;
         };
-        candidates.push(dependency_dir.join(binary));
+        candidates.push(pinned_dep.resolve_and_pin_binary(specifier, binary)?);
     }
 
     match candidates.as_slice() {
-        [binary] => resolved_executable(specifier, binary.clone()),
+        [(binary, invocation, pinned)] => resolved_executable_with_invocation(
+            specifier,
+            binary.clone(),
+            invocation.clone(),
+            Some(Arc::clone(pinned)),
+        ),
         [] => Err(PluginFailure::new(
             "PLUGIN_BINARY_MISSING",
             format!(
@@ -1260,36 +4274,145 @@ fn resolve_package_plugin(
     }
 }
 
+fn validate_plugin_binary_relative_path(
+    specifier: &str,
+    binary: &str,
+) -> Result<PathBuf, PluginFailure> {
+    let invalid = || {
+        PluginFailure::new(
+            "PLUGIN_INVALID",
+            format!(
+                "Binary plugin package \"{specifier}\" declares invalid palamedes.pluginBinary \"{binary}\". It must be a relative path within the package directory."
+            ),
+        )
+    };
+    if binary.trim().is_empty()
+        || binary.chars().any(char::is_control)
+        || binary.starts_with('/')
+        || binary.starts_with('\\')
+        || has_windows_drive_prefix(binary)
+    {
+        return Err(invalid());
+    }
+    let relative = binary
+        .strip_prefix("./")
+        .or_else(|| binary.strip_prefix(r".\"))
+        .unwrap_or(binary);
+    if relative.is_empty() {
+        return Err(invalid());
+    }
+    let mut normalized = PathBuf::new();
+    for segment in relative.split(['/', '\\']) {
+        if segment.is_empty()
+            || segment == "."
+            || segment == ".."
+            || has_windows_drive_prefix(segment)
+        {
+            return Err(invalid());
+        }
+        let mut components = Path::new(segment).components();
+        match (components.next(), components.next()) {
+            (Some(Component::Normal(part)), None) => normalized.push(part),
+            _ => return Err(invalid()),
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        return Err(invalid());
+    }
+    Ok(normalized)
+}
+
+fn has_windows_drive_prefix(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
+}
+
+fn is_blocked_script_extension(path: &Path) -> bool {
+    const BLOCKED_SCRIPT_EXTENSIONS: &[&str] =
+        &["js", "mjs", "cjs", "jsx", "ts", "tsx", "mts", "cts"];
+
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            BLOCKED_SCRIPT_EXTENSIONS
+                .iter()
+                .any(|blocked| extension.eq_ignore_ascii_case(blocked))
+        })
+}
+
+fn script_plugin_failure(specifier: &str, binary_path: &Path) -> PluginFailure {
+    PluginFailure::new(
+        "PLUGIN_BINARY_REQUIRED",
+        format!(
+            "Configured plugin \"{specifier}\" points to {}. Palamedes CLI plugins must be native executables.",
+            binary_path.display()
+        ),
+    )
+}
+
 fn resolved_executable(
     specifier: &str,
     binary_path: PathBuf,
 ) -> Result<ResolvedPlugin, PluginFailure> {
-    if matches!(
-        binary_path
-            .extension()
-            .and_then(|extension| extension.to_str()),
-        Some("js" | "mjs" | "cjs" | "jsx" | "ts" | "tsx" | "mts" | "cts")
-    ) {
-        return Err(PluginFailure::new(
-            "PLUGIN_BINARY_REQUIRED",
-            format!(
-                "Configured plugin \"{specifier}\" points to {}. Palamedes CLI plugins must be native executables.",
-                binary_path.display()
-            ),
-        ));
+    #[cfg(unix)]
+    {
+        let (canonical_binary, invocation_path, pinned_binary) =
+            unix_pinned_plugin::pin_direct_executable(specifier, &binary_path)?;
+        resolved_executable_with_invocation(
+            specifier,
+            canonical_binary,
+            invocation_path,
+            Some(pinned_binary),
+        )
     }
-    if !binary_path.is_file() {
-        return Err(PluginFailure::new(
-            "PLUGIN_BINARY_MISSING",
-            format!(
-                "Configured plugin \"{specifier}\" has no executable at {}.",
-                binary_path.display()
-            ),
-        ));
+    #[cfg(windows)]
+    {
+        let (canonical_binary, invocation_path, pinned_binary) =
+            windows_pinned_plugin::pin_direct_executable(specifier, &binary_path)?;
+        resolved_executable_with_invocation(
+            specifier,
+            canonical_binary,
+            invocation_path,
+            Some(pinned_binary),
+        )
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let invocation_path = binary_path.clone();
+        resolved_executable_with_invocation(specifier, binary_path, invocation_path, None)
+    }
+}
+
+fn resolved_executable_with_invocation(
+    specifier: &str,
+    binary_path: PathBuf,
+    invocation_path: PathBuf,
+    pinned_binary: Option<Arc<PinnedPluginBinary>>,
+) -> Result<ResolvedPlugin, PluginFailure> {
+    if is_blocked_script_extension(&binary_path) || is_blocked_script_extension(&invocation_path) {
+        return Err(script_plugin_failure(specifier, &binary_path));
+    }
+    if pinned_binary.is_none() {
+        if !binary_path.is_file() {
+            return Err(PluginFailure::new(
+                "PLUGIN_BINARY_MISSING",
+                format!(
+                    "Configured plugin \"{specifier}\" has no executable at {}.",
+                    binary_path.display()
+                ),
+            ));
+        }
+        if let Ok(canonical) = fs::canonicalize(&binary_path)
+            && is_blocked_script_extension(&canonical)
+        {
+            return Err(script_plugin_failure(specifier, &canonical));
+        }
     }
     Ok(ResolvedPlugin {
         specifier: specifier.to_owned(),
         binary_path,
+        invocation_path,
+        pinned_binary,
     })
 }
 
@@ -1310,15 +4433,35 @@ fn locate_package_dir(specifier: &str, start: &Path) -> Option<PathBuf> {
 fn package_segments(specifier: &str) -> Option<Vec<&str>> {
     let segments = specifier.split('/').collect::<Vec<_>>();
     match (specifier.starts_with('@'), segments.as_slice()) {
-        (true, [scope, package]) if scope.len() > 1 && !package.is_empty() => Some(segments),
-        (false, [package]) if !package.is_empty() => Some(segments),
+        (true, [scope, package]) => {
+            let scope_name = scope.strip_prefix('@')?;
+            (is_valid_npm_package_segment(scope_name, true)
+                && is_valid_npm_package_segment(package, true))
+            .then_some(segments)
+        }
+        (false, [package]) => is_valid_npm_package_segment(package, false).then_some(segments),
         _ => None,
     }
 }
 
-fn read_package_manifest(package_dir: &Path) -> Result<PackageManifest, io::Error> {
-    let contents = fs::read_to_string(package_dir.join("package.json"))?;
-    serde_json::from_str(&contents).map_err(io::Error::other)
+fn is_valid_npm_package_segment(segment: &str, allow_leading_underscore: bool) -> bool {
+    if segment.is_empty()
+        || segment == "."
+        || segment == ".."
+        || segment.starts_with('.')
+        || (!allow_leading_underscore && segment.starts_with('_'))
+        || segment.ends_with('.')
+    {
+        return false;
+    }
+    if !segment
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    {
+        return false;
+    }
+    let mut components = Path::new(segment).components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
 }
 
 fn package_supports_current_target(manifest: &PackageManifest) -> bool {
@@ -1380,28 +4523,42 @@ fn is_kebab_name(value: &str) -> bool {
         })
 }
 
-fn plugin_catalogs(config: &LoadedConfig) -> Value {
-    Value::Array(
-        config
-            .catalogs
-            .iter()
-            .map(|catalog| {
-                json!({
-                    "path": catalog.path,
-                    "format": catalog.format,
-                    "include": catalog.include,
-                    "exclude": catalog.exclude,
-                    // The protocol documents these as real files, so they carry
-                    // the storage extension the extraction pass writes.
-                    "locales": config.locales.iter().map(|locale| json!({
-                        "locale": locale,
-                        "path": config
-                            .resolve_catalog_path(&catalog.path, locale, catalog.format),
-                    })).collect::<Vec<_>>(),
-                })
-            })
-            .collect(),
-    )
+fn plugin_catalogs(config: &LoadedConfig) -> Result<Value, PluginFailure> {
+    let mut catalogs = Vec::with_capacity(config.catalogs.len());
+    for catalog in &config.catalogs {
+        let mut locales = Vec::with_capacity(config.locales.len());
+        for locale in &config.locales {
+            let resolved_path = palamedes::try_resolve_catalog_file_path(
+                &config.root_dir,
+                &catalog.path,
+                locale,
+                catalog.format,
+            )
+            .map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_HOST_FAILED",
+                    format!(
+                        "Could not resolve safe catalog path for \"{}\" ({locale}): {error}",
+                        catalog.path
+                    ),
+                )
+            })?;
+            locales.push(json!({
+                "locale": locale,
+                "path": resolved_path,
+            }));
+        }
+        catalogs.push(json!({
+            "path": catalog.path,
+            "format": catalog.format,
+            "include": catalog.include,
+            "exclude": catalog.exclude,
+            // The protocol documents these as real files, so they carry
+            // the storage extension the extraction pass writes.
+            "locales": locales,
+        }));
+    }
+    Ok(Value::Array(catalogs))
 }
 
 /// Version of the `pmds <plugin> <command> --json` envelope (`schemaVersion`).
@@ -1747,6 +4904,8 @@ struct PluginBinaryMetadata {
     modified_ns: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     unix_identity: Option<UnixPluginBinaryIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    windows_identity: Option<WindowsPluginBinaryIdentity>,
 }
 
 impl PluginBinaryMetadata {
@@ -1755,6 +4914,21 @@ impl PluginBinaryMetadata {
         // it to the same file object; length and nanosecond mtime cover its
         // visible content metadata. Without every Unix field, rehash instead.
         self == current && current.modified_ns.is_some() && current.unix_identity.is_some()
+    }
+
+    fn has_kernel_identity(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.unix_identity.is_some()
+        }
+        #[cfg(windows)]
+        {
+            self.windows_identity.is_some()
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            false
+        }
     }
 }
 
@@ -1769,6 +4943,13 @@ struct UnixPluginBinaryIdentity {
     changed_nanoseconds: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowsPluginBinaryIdentity {
+    volume_serial: u64,
+    file_id: [u8; 16],
+}
+
 #[derive(Debug)]
 struct SkippedPlugin {
     specifier: String,
@@ -1780,12 +4961,73 @@ struct LoadedPlugin {
     resolved: ResolvedPlugin,
     manifest: PluginManifest,
     options: Value,
+    canonical_binary_path: Option<PathBuf>,
+    verified_stamp: Option<PluginBinaryStamp>,
+    expected_metadata: Option<PluginBinaryMetadata>,
+}
+
+fn prepare_selected_plugin_for_run(
+    plugin: &LoadedPlugin,
+    config_path: &Path,
+) -> Result<ResolvedPlugin, PluginFailure> {
+    if plugin.resolved.pinned_binary.is_some() {
+        return Ok(plugin.resolved.clone());
+    }
+    let repinned = resolve_binary_plugin(&plugin.resolved.specifier, config_path)?;
+    let changed_failure = |detail: &str| {
+        PluginFailure::new(
+            "PLUGIN_BINARY_CHANGED",
+            format!(
+                "Binary plugin \"{}\" changed after manifest discovery ({detail}). Re-run the command to reload its manifest.",
+                plugin.resolved.specifier
+            ),
+        )
+    };
+    if repinned.invocation_path != plugin.resolved.invocation_path {
+        return Err(changed_failure("invocation path changed"));
+    }
+    let repinned_canonical = fs::canonicalize(&repinned.binary_path)
+        .map_err(|_| changed_failure("executable path could not be canonicalized"))?;
+    if let Some(ref expected_canonical) = plugin.canonical_binary_path
+        && &repinned_canonical != expected_canonical
+    {
+        return Err(changed_failure("canonical executable path changed"));
+    }
+    if let Some(ref expected_stamp) = plugin.verified_stamp {
+        let (_, actual_stamp) = plugin_cache_identity_for_resolved(
+            &repinned,
+            &repinned_canonical,
+            Some(expected_stamp),
+            &hash_plugin_source,
+        )
+        .ok_or_else(|| changed_failure("executable identity could not be verified"))?;
+        if actual_stamp.sha256 != expected_stamp.sha256 {
+            return Err(changed_failure("executable digest mismatch"));
+        }
+    } else if let Some(ref expected_metadata) = plugin.expected_metadata {
+        if !expected_metadata.has_kernel_identity() {
+            return Err(changed_failure("executable file identity is unavailable"));
+        }
+        let actual_metadata = repinned
+            .pinned_binary_metadata()
+            .ok_or_else(|| changed_failure("executable metadata could not be verified"))?;
+        if &actual_metadata != expected_metadata
+            || !repinned.pinned_matches_path(&repinned_canonical, expected_metadata)
+        {
+            return Err(changed_failure("executable metadata mismatch"));
+        }
+    } else {
+        return Err(changed_failure("no verified executable identity recorded"));
+    }
+    Ok(repinned)
 }
 
 #[derive(Clone, Debug)]
 struct ResolvedPlugin {
     specifier: String,
     binary_path: PathBuf,
+    invocation_path: PathBuf,
+    pinned_binary: Option<Arc<PinnedPluginBinary>>,
 }
 
 #[derive(Debug)]
@@ -1926,6 +5168,8 @@ mod tests {
         let resolved = ResolvedPlugin {
             specifier: "@acme/plugin".to_owned(),
             binary_path: "/fixture/plugin".into(),
+            invocation_path: "/fixture/plugin".into(),
+            pinned_binary: None,
         };
         for namespace in ["check", "internal-check", "summary"] {
             let manifest = PluginManifest {
@@ -2031,6 +5275,8 @@ mod tests {
         let resolved = ResolvedPlugin {
             specifier: "@acme/plugin".to_owned(),
             binary_path: "/fixture/plugin".into(),
+            invocation_path: "/fixture/plugin".into(),
+            pinned_binary: None,
         };
         let output = finish_run(
             &resolved,
@@ -2065,7 +5311,10 @@ mod tests {
 
         let resolved =
             resolve_binary_plugin("./plugin", &config).expect("resolved plugin executable");
-        assert_eq!(resolved.binary_path, plugin.join("bin/acme"));
+        assert_eq!(
+            fs::canonicalize(resolved.binary_path).expect("canonical resolved binary"),
+            fs::canonicalize(plugin.join("bin/acme")).expect("canonical expected binary")
+        );
     }
 
     #[test]
@@ -2110,6 +5359,11 @@ mod tests {
             "plugin.mts",
             "plugin.cts",
             "plugin.tsx",
+            "plugin.JS",
+            "plugin.MJS",
+            "plugin.CJS",
+            "plugin.TS",
+            "plugin.Tsx",
         ] {
             fs::write(root.join(name), "export {};").expect("script fixture");
             let error =
@@ -2119,10 +5373,271 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_and_traversing_package_specifiers() {
+        use super::package_segments;
+
+        for valid in [
+            "@acme/plugin",
+            "@acme/plugin-native",
+            "@acme/_catalog",
+            "@_scope/catalog",
+            "acme.plugin_2",
+        ] {
+            assert!(package_segments(valid).is_some(), "expected valid: {valid}");
+        }
+        for invalid in [
+            "",
+            ".",
+            "..",
+            "_unscoped",
+            ".hidden",
+            "@a/..",
+            "@../..",
+            "@./pkg",
+            "@a/.",
+            "@a/.hidden",
+            "@a/pkg.",
+            r"..\..\evil",
+            r"@a\..\evil",
+            r"@a/..\evil",
+            "C:evil",
+            r"C:\evil",
+            "pkg\0evil",
+            "pkg\nevil",
+            "@@a/b",
+            "@a/b/c",
+            "@a/",
+            "@",
+        ] {
+            assert!(
+                package_segments(invalid).is_none(),
+                "expected invalid package specifier: {invalid:?}"
+            );
+        }
+
+        let root = temp_dir("invalid-package-specifier");
+        let config = root.join("palamedes.yaml");
+        fs::write(&config, "fixture").expect("config");
+        for specifier in ["..", "@a/..", "@../..", r"..\..\evil"] {
+            let error = resolve_binary_plugin(specifier, &config)
+                .expect_err("traversing package specifier rejected");
+            assert_eq!(error.code, "PLUGIN_INVALID", "for {specifier}");
+        }
+    }
+
+    #[test]
+    fn optional_dependencies_cannot_traverse_outside_node_modules() {
+        let root = temp_dir("optional-dep-traversal");
+        let app = root.join("project");
+        let plugin = app.join("node_modules/@acme/plugin");
+        fs::create_dir_all(&plugin).expect("plugin dir");
+        // Place an attacker package above node_modules that `..` / `@a/..` would reach.
+        fs::write(
+            app.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./evil"}}"#,
+        )
+        .expect("outer manifest");
+        fs::write(app.join("evil"), "fixture").expect("outer binary");
+        fs::write(
+            plugin.join("package.json"),
+            r#"{"optionalDependencies":{"..":"1.0.0","@a/..":"1.0.0","..\\..\\evil":"1.0.0"}}"#,
+        )
+        .expect("plugin manifest");
+        let config = app.join("palamedes.yaml");
+        fs::write(&config, "fixture").expect("config");
+
+        let error = resolve_binary_plugin("@acme/plugin", &config)
+            .expect_err("traversal optionalDependencies must not resolve");
+        assert_eq!(error.code, "PLUGIN_BINARY_MISSING");
+    }
+
+    #[test]
+    fn rejects_absolute_and_traversing_plugin_binary_paths() {
+        let root = temp_dir("plugin-binary-escape");
+        let outside = root.join("outside-bin");
+        fs::write(&outside, "fixture").expect("outside binary");
+        let plugin = root.join("plugin");
+        fs::create_dir_all(plugin.join("bin")).expect("plugin bin dir");
+        let config = root.join("palamedes.yaml");
+        fs::write(&config, "fixture").expect("config");
+
+        let absolute_outside = outside.to_string_lossy().replace('\\', "/");
+        for binary in [
+            absolute_outside.as_str(),
+            "../outside-bin",
+            "./../outside-bin",
+            "bin/../../outside-bin",
+            "bin/./acme",
+            ".",
+            "./",
+            r"..\outside-bin",
+            "C:/Windows/System32/cmd.exe",
+            "bin/acme\0",
+        ] {
+            let manifest = json!({ "palamedes": { "pluginBinary": binary } });
+            fs::write(plugin.join("package.json"), manifest.to_string()).expect("plugin manifest");
+            let error = resolve_binary_plugin("./plugin", &config)
+                .expect_err("unsafe pluginBinary rejected");
+            assert_eq!(error.code, "PLUGIN_INVALID", "for {binary:?}");
+        }
+
+        // Case-insensitive script extensions inside palamedes.pluginBinary must also be rejected.
+        fs::write(plugin.join("bin/script.JS"), "export {};").expect("uppercase script");
+        fs::write(
+            plugin.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./bin/script.JS"}}"#,
+        )
+        .expect("script manifest");
+        let error = resolve_binary_plugin("./plugin", &config)
+            .expect_err("uppercase script pluginBinary rejected");
+        assert_eq!(error.code, "PLUGIN_BINARY_REQUIRED");
+
+        // Contained Windows-relative pluginBinary paths resolve cleanly inside the package.
+        fs::write(plugin.join("bin/plugin.exe"), "fixture").expect("windows binary fixture");
+        for relative_windows in [r"bin\plugin.exe", r".\bin\plugin.exe"] {
+            fs::write(
+                plugin.join("package.json"),
+                json!({ "palamedes": { "pluginBinary": relative_windows } }).to_string(),
+            )
+            .expect("windows relative manifest");
+            let resolved = resolve_binary_plugin("./plugin", &config)
+                .expect("contained Windows-relative pluginBinary should resolve");
+            assert_eq!(
+                resolved.binary_path,
+                fs::canonicalize(plugin.join("bin/plugin.exe")).expect("canonical windows binary"),
+                "for {relative_windows}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlink_escaping_package_directory_for_plugin_binary() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_dir("plugin-binary-symlink-escape");
+        let outside = root.join("outside-bin");
+        fs::write(&outside, "fixture").expect("outside binary");
+        let plugin = root.join("plugin");
+        fs::create_dir_all(plugin.join("bin")).expect("plugin bin dir");
+        symlink(&outside, plugin.join("bin/escaped")).expect("create escaping symlink");
+        symlink(root.join("missing-outside"), plugin.join("bin/dangling"))
+            .expect("create dangling symlink");
+        fs::write(plugin.join("bin/real.MJS"), "export {};").expect("script target");
+        symlink(plugin.join("bin/real.MJS"), plugin.join("bin/script-link"))
+            .expect("create script symlink");
+        fs::write(plugin.join("bin/real-bin"), "fixture").expect("internal binary");
+        symlink(
+            plugin.join("bin/real-bin"),
+            plugin.join("bin/internal-link"),
+        )
+        .expect("create internal symlink");
+        let config = root.join("palamedes.yaml");
+        fs::write(&config, "fixture").expect("config");
+
+        for (binary, expected_code) in [
+            ("./bin/escaped", "PLUGIN_INVALID"),
+            ("./bin/dangling", "PLUGIN_INVALID"),
+            ("./bin/script-link", "PLUGIN_BINARY_REQUIRED"),
+        ] {
+            fs::write(
+                plugin.join("package.json"),
+                json!({ "palamedes": { "pluginBinary": binary } }).to_string(),
+            )
+            .expect("plugin manifest");
+            let error = resolve_binary_plugin("./plugin", &config)
+                .expect_err("symlink escape/script must be rejected");
+            assert_eq!(error.code, expected_code, "for {binary}");
+        }
+
+        // An internal symlink within the same package directory remains allowed.
+        fs::write(
+            plugin.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./bin/internal-link"}}"#,
+        )
+        .expect("internal symlink manifest");
+        let resolved =
+            resolve_binary_plugin("./plugin", &config).expect("internal symlink allowed");
+        assert_eq!(
+            resolved.binary_path,
+            fs::canonicalize(plugin.join("bin/real-bin")).expect("canonical internal binary")
+        );
+
+        // Also enforce containment when resolved via optionalDependencies.
+        let modules = root.join("node_modules/@acme");
+        let meta = modules.join("meta");
+        let platform = modules.join("meta-platform");
+        fs::create_dir_all(&meta).expect("meta dir");
+        fs::create_dir_all(platform.join("bin")).expect("platform bin dir");
+        symlink(&outside, platform.join("bin/escaped")).expect("platform escaping symlink");
+        fs::write(
+            meta.join("package.json"),
+            r#"{"optionalDependencies":{"@acme/meta-platform":"1.0.0"}}"#,
+        )
+        .expect("meta manifest");
+        fs::write(
+            platform.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./bin/escaped"}}"#,
+        )
+        .expect("platform manifest");
+        let error = resolve_binary_plugin("@acme/meta", &config)
+            .expect_err("optionalDependency symlink escape rejected");
+        assert_eq!(error.code, "PLUGIN_INVALID");
+    }
+
+    #[test]
+    fn resolves_windows_taskkill_only_from_valid_local_system_root() {
+        use std::ffi::OsStr;
+        use std::path::PathBuf;
+
+        use super::resolve_windows_taskkill;
+
+        // OS-reported System32 directory works even when SystemRoot is unset.
+        assert_eq!(
+            resolve_windows_taskkill(Some(Path::new(r"C:\Windows\System32")), None),
+            Some(PathBuf::from(r"C:\Windows\System32").join("taskkill.exe"))
+        );
+        assert_eq!(
+            resolve_windows_taskkill(None, Some(OsStr::new(r"C:\Windows"))),
+            Some(
+                PathBuf::from(r"C:\Windows")
+                    .join("System32")
+                    .join("taskkill.exe")
+            )
+        );
+        assert_eq!(
+            resolve_windows_taskkill(None, Some(OsStr::new("D:/Windows"))),
+            Some(
+                PathBuf::from("D:/Windows")
+                    .join("System32")
+                    .join("taskkill.exe")
+            )
+        );
+        for invalid in [
+            None,
+            Some(OsStr::new("")),
+            Some(OsStr::new(".")),
+            Some(OsStr::new("Windows")),
+            Some(OsStr::new(r"..\Windows")),
+            Some(OsStr::new(r"\\attacker\share")),
+            Some(OsStr::new(r"C:\Windows\..\evil")),
+            Some(OsStr::new("C:\\Windows\0")),
+        ] {
+            assert_eq!(
+                resolve_windows_taskkill(None, invalid),
+                None,
+                "expected invalid SystemRoot to be rejected: {invalid:?}"
+            );
+        }
+    }
+
+    #[test]
     fn validates_manifest_protocol_names_and_built_in_collisions() {
         let resolved = ResolvedPlugin {
             specifier: "@acme/plugin".to_owned(),
             binary_path: "/fixture/plugin".into(),
+            invocation_path: "/fixture/plugin".into(),
+            pinned_binary: None,
         };
         let manifest = |name: &str, protocol_version: u64| PluginManifest {
             name: name.to_owned(),
@@ -2190,7 +5705,9 @@ mod tests {
         });
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
+            pinned_binary: None,
         };
 
         let invocation = invoke_binary(
@@ -2225,7 +5742,9 @@ mod tests {
         );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
+            pinned_binary: None,
         };
 
         let mut streamed = Vec::new();
@@ -2258,7 +5777,9 @@ mod tests {
         );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
+            pinned_binary: None,
         };
 
         let policy = InvocationPolicy::new(Some(Duration::from_millis(500)), "describe");
@@ -2288,7 +5809,9 @@ mod tests {
         );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
+            pinned_binary: None,
         };
         let policy = InvocationPolicy::new(Some(Duration::from_millis(500)), "describe");
 
@@ -2321,7 +5844,9 @@ mod tests {
         );
         let resolved = ResolvedPlugin {
             specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
             binary_path: script,
+            pinned_binary: None,
         };
         let mut policy = InvocationPolicy::run(None);
         policy.max_total_bytes = 32;
@@ -2358,7 +5883,7 @@ mod tests {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         isolate_process_group(&mut command);
-        let mut child = command.spawn().expect("isolated child");
+        let mut child = super::PluginChild(command.spawn().expect("isolated child"));
         let child_id = i32::try_from(child.id()).expect("child PID");
 
         // SAFETY: queries the process group of the child we just spawned.
@@ -2428,7 +5953,8 @@ plugins:
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         use super::{
-            hash_plugin_binary, load_registry_with_binary_hasher, plugin_manifest_cache_path,
+            PluginHashSource, hash_plugin_source, load_registry_with_binary_hasher,
+            plugin_manifest_cache_path,
         };
 
         let root = temp_dir("manifest-cache");
@@ -2440,14 +5966,14 @@ plugins:
         )
         .expect("plugin manifest");
         let script = plugin.join("describe");
+        let implementation = plugin.join("implementation");
         write_executable_fixture(
             &script,
-            "#!/bin/sh\n# variant-a\n. \"$(dirname \"$0\")/implementation\"\n",
+            "#!/bin/sh\n# variant-a\n. \"${PALAMEDES_PLUGIN_DIR}/implementation\"\n",
         );
-        let implementation = plugin.join("implementation");
         fs::write(
             &implementation,
-            "read _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
+            "read _request\nprintf x >> \"${PALAMEDES_PLUGIN_DIR}/counter\"\n\
              printf '{\"event\":\"manifest\",\"name\":\"alpha\",\
              \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
         )
@@ -2467,9 +5993,9 @@ plugins:
         .expect("config");
         let config = load_config(&root, None).expect("config with plugin");
         let hash_count = AtomicUsize::new(0);
-        let counting_hasher = |path: &Path| {
+        let counting_hasher = |source: PluginHashSource<'_>| {
             hash_count.fetch_add(1, Ordering::SeqCst);
-            hash_plugin_binary(path)
+            hash_plugin_source(source)
         };
         let load = |reuse_cached_manifests| {
             load_registry_with_binary_hasher(
@@ -2574,7 +6100,7 @@ plugins:
             let script = plugin.join("describe");
             write_executable_fixture(
                 &script,
-                "#!/bin/sh\nread _request\nprintf x >> \"$(dirname \"$0\")/counter\"\n\
+                "#!/bin/sh\nread _request\nprintf x >> \"${PALAMEDES_PLUGIN_DIR}/counter\"\n\
                  printf '{\"event\":\"manifest\",\"name\":\"shared\",\
                  \"protocolVersion\":1,\"commands\":{\"inspect\":{}}}\\n'\n",
             );
@@ -2638,7 +6164,7 @@ catalogs:
         .expect("write config");
         let config = load_config(&root, Some(&config_path)).expect("load config");
 
-        let catalogs = plugin_catalogs(&config);
+        let catalogs = plugin_catalogs(&config).expect("resolve plugin catalogs");
 
         assert_eq!(
             catalogs[0]["locales"][1]["path"],
@@ -2870,5 +6396,803 @@ catalogs:
                 "diagnostics": [{ "severity": "error", "message": "failed", "code": "PLUGIN_TEST" }],
             })
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_in_package_plugin_binary_preserves_declared_argv0() {
+        let root = temp_dir("plugin-symlink-argv0");
+        let pkg_dir = root.join("node_modules/acme-multicall");
+        let bin_dir = pkg_dir.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"name":"acme-multicall","palamedes":{"pluginBinary":"bin/acme-plugin"}}"#,
+        )
+        .expect("write package.json");
+        let target_bin = bin_dir.join("multicall-runner");
+        let source_path = root.join("multicall.c");
+        fs::write(
+            &source_path,
+            concat!(
+                "#include <stdio.h>\n",
+                "#include <string.h>\n",
+                "int main(int argc, char **argv) {\n",
+                "  const char *arg0 = argc > 0 && argv[0] ? argv[0] : \"\";\n",
+                "  const char *slash = strrchr(arg0, '/');\n",
+                "  const char *base = slash ? slash + 1 : arg0;\n",
+                "  if (strcmp(base, \"acme-plugin\") == 0) {\n",
+                "    puts(\"{\\\"event\\\":\\\"manifest\\\",\\\"name\\\":\\\"acme\\\",\\\"protocolVersion\\\":1,\\\"commands\\\":{\\\"ping\\\":{}}}\");\n",
+                "    return 0;\n",
+                "  }\n",
+                "  fprintf(stderr, \"unexpected argv0: %s\\n\", arg0);\n",
+                "  return 42;\n",
+                "}\n",
+            ),
+        )
+        .expect("write C fixture source");
+        let compiled = std::process::Command::new("cc")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&target_bin)
+            .status()
+            .is_ok_and(|status| status.success());
+        if !compiled {
+            // Fallback placeholder executable when no C compiler is on PATH.
+            write_executable_fixture(&target_bin, "#!/bin/sh\nexit 0\n");
+        }
+        let symlink_path = bin_dir.join("acme-plugin");
+        std::os::unix::fs::symlink(&target_bin, &symlink_path).expect("create in-package symlink");
+        let config_path = root.join("palamedes.yaml");
+        fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
+
+        let resolved =
+            super::resolve_binary_plugin("acme-multicall", &config_path).expect("resolve plugin");
+        assert_eq!(
+            resolved.binary_path,
+            fs::canonicalize(&target_bin).expect("canonical target")
+        );
+        assert_eq!(resolved.invocation_path, symlink_path);
+
+        if compiled {
+            let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
+                .expect("multicall symlinked native plugin must receive declared argv0");
+            assert_eq!(manifest.name, "acme");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pinned_package_plugin_binary_resists_directory_swap_before_launch() {
+        let root = temp_dir("plugin-pinned-swap");
+        let pkg_dir = root.join("node_modules/acme-pinned");
+        let bin_dir = pkg_dir.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"name":"acme-pinned","palamedes":{"pluginBinary":"bin/acme-plugin"}}"#,
+        )
+        .expect("write package.json");
+        let original_bin = bin_dir.join("acme-plugin");
+        write_executable_fixture(
+            &original_bin,
+            "#!/bin/sh\necho '{\"event\":\"manifest\",\"name\":\"verified-original\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}'\n",
+        );
+
+        let evil_dir = temp_dir("plugin-pinned-evil");
+        let evil_bin_dir = evil_dir.join("bin");
+        fs::create_dir_all(&evil_bin_dir).expect("create evil bin dir");
+        write_executable_fixture(
+            &evil_bin_dir.join("acme-plugin"),
+            "#!/bin/sh\necho '{\"event\":\"manifest\",\"name\":\"evil-swapped\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}'\n",
+        );
+
+        let config_path = root.join("palamedes.yaml");
+        fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
+        let resolved =
+            super::resolve_binary_plugin("acme-pinned", &config_path).expect("resolve plugin");
+        assert!(resolved.pinned_binary.is_some());
+
+        // Swap the package directory to a symlink pointing outside after resolution.
+        let moved_pkg = root.join("node_modules/acme-pinned-moved");
+        fs::rename(&pkg_dir, &moved_pkg).expect("move original package dir");
+        std::os::unix::fs::symlink(&evil_dir, &pkg_dir).expect("swap symlink to evil dir");
+
+        let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
+            .expect("pinned plugin must launch verified original binary");
+        assert_eq!(
+            manifest.name, "verified-original",
+            "swapped package directory must never redirect execution to attacker binary"
+        );
+
+        // Replacing the binary inode in-place must fail closed instead of launching a new inode.
+        fs::remove_file(moved_pkg.join("bin/acme-plugin")).expect("unlink original");
+        write_executable_fixture(
+            &moved_pkg.join("bin/acme-plugin"),
+            "#!/bin/sh\necho '{\"event\":\"manifest\",\"name\":\"replaced-inode\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}'\n",
+        );
+        #[cfg(not(target_os = "linux"))]
+        assert!(
+            super::describe_resolved_plugin(&resolved, &root, Path::new("pmds")).is_err(),
+            "unlinked and replaced plugin binary must fail closed"
+        );
+        #[cfg(target_os = "linux")]
+        {
+            let still_original =
+                super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
+                    .expect("Linux execveat executes the original unlinked inode");
+            assert_eq!(still_original.name, "verified-original");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_only_package_plugin_binary_runs_and_cache_fingerprints_pinned_inode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("plugin-exec-only");
+        let pkg_dir = root.join("node_modules/acme-execonly");
+        let bin_dir = pkg_dir.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"name":"acme-execonly","palamedes":{"pluginBinary":"bin/acme-exec"}}"#,
+        )
+        .expect("write package.json");
+        let target_bin = bin_dir.join("acme-exec");
+        let source_path = root.join("exec_only.c");
+        fs::write(
+            &source_path,
+            concat!(
+                "#include <stdio.h>\n",
+                "int main(void) {\n",
+                "  puts(\"{\\\"event\\\":\\\"manifest\\\",\\\"name\\\":\\\"execonly\\\",\\\"protocolVersion\\\":1,\\\"commands\\\":{\\\"ping\\\":{}}}\");\n",
+                "  return 0;\n",
+                "}\n",
+            ),
+        )
+        .expect("write C fixture source");
+        let compiled = std::process::Command::new("cc")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&target_bin)
+            .status()
+            .is_ok_and(|status| status.success());
+        if !compiled {
+            return;
+        }
+        fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o111))
+            .expect("chmod 0111 binary");
+        let effectively_unreadable = matches!(
+            fs::File::open(&target_bin),
+            Err(ref err) if err.kind() == std::io::ErrorKind::PermissionDenied
+        );
+        let config_path = root.join("palamedes.yaml");
+        fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
+
+        let resolved = super::resolve_binary_plugin("acme-execonly", &config_path)
+            .expect("execute-only 0111 native plugin must resolve and pin without read permission");
+        // Execute-only pinned plugins without a reusable cached digest must skip
+        // caching without attempting to reopen or hash the pathname. When
+        // running as root / CAP_DAC_OVERRIDE, `chmod 0111` remains readable so
+        // only assert the unreadable skip branch when read access is actually
+        // denied.
+        if effectively_unreadable {
+            let exec_only_hashed = std::sync::atomic::AtomicBool::new(false);
+            assert!(
+                super::plugin_cache_identity_for_resolved(
+                    &resolved,
+                    &resolved.binary_path,
+                    None,
+                    &|source| {
+                        exec_only_hashed.store(true, std::sync::atomic::Ordering::SeqCst);
+                        super::hash_plugin_source(source)
+                    },
+                )
+                .is_none(),
+                "execute-only pinned plugin without reusable digest must skip caching"
+            );
+            assert!(
+                !exec_only_hashed.load(std::sync::atomic::Ordering::SeqCst),
+                "execute-only pinned plugin must not invoke binary hasher"
+            );
+        }
+        let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
+            .expect("execute-only 0111 native plugin must run");
+        assert_eq!(manifest.name, "execonly");
+
+        // Restore read permissions so we can verify pinned descriptor hashing
+        // (never reopening the pathname) and replacement-after-pinning cache skip.
+        fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755))
+            .expect("restore permissions");
+        let resolved_readable = super::resolve_binary_plugin("acme-execonly", &config_path)
+            .expect("resolve readable plugin");
+        let used_pinned_fd = std::sync::atomic::AtomicBool::new(false);
+        assert!(
+            super::plugin_cache_identity_for_resolved(
+                &resolved_readable,
+                &resolved_readable.binary_path,
+                None,
+                &|source| {
+                    if matches!(source, super::PluginHashSource::PinnedFile(_)) {
+                        used_pinned_fd.store(true, std::sync::atomic::Ordering::SeqCst);
+                    }
+                    super::hash_plugin_source(source)
+                },
+            )
+            .is_some(),
+            "cache identity succeeds while pathname matches pinned inode"
+        );
+        assert!(
+            used_pinned_fd.load(std::sync::atomic::Ordering::SeqCst),
+            "pinned plugin must hash the already-verified descriptor instead of reopening the path"
+        );
+        let replacement = bin_dir.join("acme-exec.new");
+        fs::write(&replacement, b"replacement-bytes").expect("write replacement");
+        fs::rename(&replacement, &target_bin).expect("replace binary inode");
+        assert!(
+            super::plugin_cache_identity_for_resolved(
+                &resolved_readable,
+                &resolved_readable.binary_path,
+                None,
+                &super::hash_plugin_source,
+            )
+            .is_none(),
+            "cache identity must skip caching once pathname no longer names pinned inode"
+        );
+    }
+
+    #[test]
+    fn windows_alias_command_line_and_env_block_preserve_declared_argv0() {
+        let invocation: Vec<u16> = r"C:\repo\node_modules\acme\bin\acme-plugin.exe"
+            .encode_utf16()
+            .collect();
+        let cmd_line = super::encode_windows_argv0_command_line(&invocation).expect("quoted argv0");
+        assert_eq!(
+            String::from_utf16(&cmd_line).expect("UTF-16"),
+            "\"C:\\repo\\node_modules\\acme\\bin\\acme-plugin.exe\"\0"
+        );
+        assert!(
+            super::encode_windows_argv0_command_line(&[]).is_err(),
+            "empty invocation path must fail"
+        );
+        let with_quote: Vec<u16> = "C:\\bad\"path.exe".encode_utf16().collect();
+        assert!(
+            super::encode_windows_argv0_command_line(&with_quote).is_err(),
+            "embedded quote in invocation path must fail"
+        );
+
+        let override_val: Vec<u16> = r"C:\bin\pmds.exe".encode_utf16().collect();
+        let plugin_dir_val: Vec<u16> = r"C:\repo\node_modules\acme\bin".encode_utf16().collect();
+        let block = super::build_windows_environment_block_units(
+            vec![
+                (
+                    "path".encode_utf16().collect(),
+                    r"C:\Windows".encode_utf16().collect(),
+                ),
+                (
+                    super::NATIVE_EXECUTABLE_ENV
+                        .to_ascii_lowercase()
+                        .encode_utf16()
+                        .collect(),
+                    r"C:\stale\pmds.exe".encode_utf16().collect(),
+                ),
+                (
+                    "ALPHA".encode_utf16().collect(),
+                    "1".encode_utf16().collect(),
+                ),
+            ],
+            &[
+                (super::NATIVE_EXECUTABLE_ENV, &override_val),
+                (super::PLUGIN_DIR_ENV, &plugin_dir_val),
+            ],
+        )
+        .expect("Windows environment block");
+        let rendered = String::from_utf16(&block).expect("UTF-16 env block");
+        let entries: Vec<&str> = rendered
+            .strip_suffix("\0\0")
+            .expect("double-NUL terminated")
+            .split('\0')
+            .collect();
+        assert_eq!(
+            entries,
+            vec![
+                "ALPHA=1",
+                &format!("{}=C:\\bin\\pmds.exe", super::NATIVE_EXECUTABLE_ENV),
+                &format!(
+                    "{}=C:\\repo\\node_modules\\acme\\bin",
+                    super::PLUGIN_DIR_ENV
+                ),
+                "path=C:\\Windows",
+            ]
+        );
+        assert!(super::is_windows_batch_file(Path::new("wrapper.cmd")));
+        assert!(super::is_windows_batch_file(Path::new("wrapper.CMD")));
+        assert!(super::is_windows_batch_file(Path::new("wrapper.bat")));
+        assert!(super::is_windows_batch_file(Path::new("wrapper.BAT")));
+        assert!(!super::is_windows_batch_file(Path::new("plugin.exe")));
+    }
+
+    #[test]
+    fn windows_parent_wide_path_walks_utf16_ancestors_without_folding() {
+        let to_u16 = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        let from_u16 = |u: &[u16]| String::from_utf16(u).expect("valid UTF-16");
+
+        let drive = to_u16(r"\\?\C:\Pkg\bin\tool.exe");
+        let p1 = super::windows_parent_wide_path(&drive).expect("bin dir");
+        assert_eq!(from_u16(p1), r"\\?\C:\Pkg\bin");
+        let p2 = super::windows_parent_wide_path(p1).expect("pkg dir");
+        assert_eq!(from_u16(p2), r"\\?\C:\Pkg");
+        let p3 = super::windows_parent_wide_path(p2).expect("drive root");
+        assert_eq!(from_u16(p3), r"\\?\C:\");
+        assert!(super::windows_parent_wide_path(p3).is_none());
+
+        let unc = to_u16(r"\\?\UNC\server\share\pkg\tool.exe");
+        let u1 = super::windows_parent_wide_path(&unc).expect("unc pkg");
+        assert_eq!(from_u16(u1), r"\\?\UNC\server\share\pkg");
+        let u2 = super::windows_parent_wide_path(u1).expect("unc root");
+        assert_eq!(from_u16(u2), r"\\?\UNC\server\share\");
+        assert!(super::windows_parent_wide_path(u2).is_none());
+
+        // Preserve unpaired UTF-16 surrogates intact while walking parents.
+        let mut with_surrogate = to_u16(r"\\?\C:\");
+        with_surrogate.push(0xD800);
+        with_surrogate.extend(to_u16(r"\bin\tool.exe"));
+        let s1 = super::windows_parent_wide_path(&with_surrogate).expect("bin");
+        let s2 = super::windows_parent_wide_path(s1).expect("surrogate dir");
+        assert_eq!(s2[7], 0xD800);
+        assert_eq!(s2.len(), 8);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_env_bash_package_plugin_runs_via_kernel_and_invokes_sibling_executable() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let root = temp_dir("plugin-private-env-bash");
+        let real_pkg = root.join("real-acme-env-wrapper");
+        let bin_dir = real_pkg.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        fs::write(
+            real_pkg.join("package.json"),
+            r#"{"name":"acme-env-wrapper","palamedes":{"pluginBinary":"bin/acme-wrapper"}}"#,
+        )
+        .expect("write package.json");
+        let sibling = bin_dir.join("real-plugin");
+        write_executable_fixture(
+            &sibling,
+            concat!(
+                "#!/bin/sh\n",
+                "printf '{\"event\":\"manifest\",\"name\":\"env-wrapper-sibling\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}\\n'\n",
+            ),
+        );
+        let wrapper = bin_dir.join("acme-wrapper");
+        write_executable_fixture(
+            &wrapper,
+            concat!(
+                "#!/usr/bin/env bash\n",
+                "# PRIVATE_TOKEN_MUST_NOT_APPEAR_IN_ARGV\n",
+                "if [ \"$#\" -ne 0 ]; then exit 99; fi\n",
+                "case \"${PALAMEDES_PLUGIN_PATH}\" in */acme-wrapper) ;; *) exit 98 ;; esac\n",
+                "exec \"${PALAMEDES_PLUGIN_DIR}/real-plugin\"\n",
+            ),
+        );
+        fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o700)).expect("chmod 0700");
+
+        let evil_pkg = root.join("evil-acme-env-wrapper");
+        let evil_bin = evil_pkg.join("bin");
+        fs::create_dir_all(&evil_bin).expect("create evil bin dir");
+        write_executable_fixture(
+            &evil_bin.join("real-plugin"),
+            concat!(
+                "#!/bin/sh\n",
+                "printf '{\"event\":\"manifest\",\"name\":\"evil-sibling\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}\\n'\n",
+            ),
+        );
+
+        let node_modules = root.join("node_modules");
+        fs::create_dir_all(&node_modules).expect("create node_modules");
+        let pkg_link = node_modules.join("acme-env-wrapper");
+        symlink(&real_pkg, &pkg_link).expect("symlink real package");
+
+        let config_path = root.join("palamedes.yaml");
+        fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
+        let resolved =
+            super::resolve_binary_plugin("acme-env-wrapper", &config_path).expect("resolve plugin");
+
+        // Retarget the package symlink after resolution: `PALAMEDES_PLUGIN_DIR`
+        // must still point at the pinned binary's real directory rather than
+        // following the retargeted `node_modules/acme-env-wrapper` symlink.
+        fs::remove_file(&pkg_link).expect("remove original package symlink");
+        symlink(&evil_pkg, &pkg_link).expect("retarget package symlink to evil package");
+
+        let manifest = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds")).expect(
+            "private env bash wrapper must launch verified sibling executable via PALAMEDES_PLUGIN_DIR",
+        );
+        assert_eq!(manifest.name, "env-wrapper-sibling");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_acl_deny_execute_blocks_shell_plugin_wrapper() {
+        let Ok(whoami) = std::process::Command::new("/usr/bin/id")
+            .arg("-un")
+            .output()
+        else {
+            return;
+        };
+        if !whoami.status.success() {
+            return;
+        }
+        let user = String::from_utf8_lossy(&whoami.stdout).trim().to_owned();
+        if user.is_empty() {
+            return;
+        }
+        let root = temp_dir("plugin-macos-acl-deny-exec");
+        let pkg_dir = root.join("node_modules/acme-denied");
+        let bin_dir = pkg_dir.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"name":"acme-denied","palamedes":{"pluginBinary":"bin/acme-plugin"}}"#,
+        )
+        .expect("write package.json");
+        let script = bin_dir.join("acme-plugin");
+        write_executable_fixture(
+            &script,
+            "#!/bin/sh\necho '{\"event\":\"manifest\",\"name\":\"should-not-run\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}'\n",
+        );
+        let acl_applied = std::process::Command::new("/bin/chmod")
+            .arg("+a")
+            .arg(format!("user:{user} deny execute"))
+            .arg(&script)
+            .status()
+            .is_ok_and(|status| status.success());
+        if !acl_applied {
+            return;
+        }
+        // Confirm the kernel/filesystem actually enforces the deny-execute ACL
+        // for a direct launch before asserting pinned launch behavior.
+        let direct_denied = std::process::Command::new(&script)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_err_and(|err| err.kind() == std::io::ErrorKind::PermissionDenied);
+        if !direct_denied {
+            return;
+        }
+
+        let config_path = root.join("palamedes.yaml");
+        fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
+        let resolved =
+            super::resolve_binary_plugin("acme-denied", &config_path).expect("resolve plugin");
+        let error = super::describe_resolved_plugin(&resolved, &root, Path::new("pmds"))
+            .expect_err("macOS deny-execute ACL must prevent pinned shell plugin execution");
+        assert_eq!(error.code, "PLUGIN_BINARY_SPAWN_FAILED");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn packaged_plugin_symlink_with_trailing_slash_or_dot_is_rejected() {
+        for (suffix, target) in [("slash", "engine/"), ("dot", "engine/.")] {
+            let root = temp_dir(&format!("plugin-symlink-trailing-{suffix}"));
+            let pkg_dir = root.join("node_modules/acme-trail");
+            let bin_dir = pkg_dir.join("bin");
+            fs::create_dir_all(&bin_dir).expect("create bin dir");
+            fs::write(
+                pkg_dir.join("package.json"),
+                r#"{"name":"acme-trail","palamedes":{"pluginBinary":"bin/acme-plugin"}}"#,
+            )
+            .expect("write package.json");
+            write_executable_fixture(
+                &bin_dir.join("engine"),
+                "#!/bin/sh\necho '{\"event\":\"manifest\",\"name\":\"trail\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}'\n",
+            );
+            std::os::unix::fs::symlink(target, bin_dir.join("acme-plugin"))
+                .expect("create symlink");
+            let config_path = root.join("palamedes.yaml");
+            fs::write(&config_path, "locales: [en]\nsource-locale: en\n").expect("write config");
+            let error = super::resolve_binary_plugin("acme-trail", &config_path)
+                .expect_err("symlink target requiring a directory must not execute a regular file");
+            assert_eq!(error.code, "PLUGIN_INVALID");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn manifest_cache_distinguishes_distinct_aliases_of_same_executable() {
+        let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        use super::{PluginHashSource, hash_plugin_source, load_registry_with_binary_hasher};
+
+        let root = temp_dir("plugin-alias-cache");
+        let pkg = root.join("node_modules/acme-multicall");
+        let bin_dir = pkg.join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let shared = bin_dir.join("shared-wrapper");
+        write_executable_fixture(
+            &shared,
+            concat!(
+                "#!/bin/sh\n",
+                "read _request\n",
+                "name=\"$(basename \"${PALAMEDES_PLUGIN_PATH}\")\"\n",
+                "printf '{\"event\":\"manifest\",\"name\":\"%s\",\"protocolVersion\":1,\"commands\":{\"ping\":{}}}\\n' \"$name\"\n",
+            ),
+        );
+        let alias_alpha = root.join("alpha");
+        let alias_beta = root.join("beta");
+        std::os::unix::fs::symlink(&shared, &alias_alpha).expect("symlink alpha");
+        std::os::unix::fs::symlink(&shared, &alias_beta).expect("symlink beta");
+
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\nplugins:\n  - './alpha'\n  - './beta'\n",
+        )
+        .expect("write config");
+        let config = load_config(&root, None).expect("load config");
+        let hash_count = AtomicUsize::new(0);
+        let counting_hasher = |source: PluginHashSource<'_>| {
+            hash_count.fetch_add(1, Ordering::SeqCst);
+            hash_plugin_source(source)
+        };
+
+        let first = load_registry_with_binary_hasher(
+            &config,
+            &root,
+            Path::new("pmds"),
+            true,
+            &counting_hasher,
+        )
+        .expect("two aliases of the same executable must not collide in manifest cache");
+        assert!(first.plugins.contains_key("alpha"));
+        assert!(first.plugins.contains_key("beta"));
+        assert_eq!(
+            hash_count.load(Ordering::SeqCst),
+            1,
+            "second alias should reuse the binary fingerprint computed for the first alias"
+        );
+
+        let warm = load_registry_with_binary_hasher(
+            &config,
+            &root,
+            Path::new("pmds"),
+            true,
+            &counting_hasher,
+        )
+        .expect("warm cached load for both aliases must succeed");
+        assert!(warm.plugins.contains_key("alpha"));
+        assert!(warm.plugins.contains_key("beta"));
+        assert_eq!(hash_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn registry_releases_unselected_handles_and_repins_selected_plugin_with_verification() {
+        let _guard = PLUGIN_REGISTRY_TEST_LOCK.lock().unwrap();
+        let fixture = tempfile::tempdir().expect("temp dir");
+        let root = fixture.path().to_path_buf();
+        let mut plugin_entries = Vec::new();
+        for idx in 0..4 {
+            let pkg_name = format!("@acme/pmds-bounded-{idx}");
+            let pkg_dir = root.join(format!("node_modules/@acme/pmds-bounded-{idx}"));
+            let bin_path = pkg_dir.join("bin/plugin");
+            fs::create_dir_all(bin_path.parent().unwrap()).expect("bin dir");
+            fs::write(
+                pkg_dir.join("package.json"),
+                r#"{"name":"@acme/pmds-bounded","palamedes":{"pluginBinary":"bin/plugin"}}"#,
+            )
+            .expect("package.json");
+            let script = format!(
+                "#!/bin/sh\nread _request\nprintf '%s\\n' '{{\"event\":\"manifest\",\"name\":\"bounded-{idx}\",\"protocolVersion\":1,\"commands\":{{\"ping\":{{}}}}}}'\n"
+            );
+            fs::write(&bin_path, script).expect("plugin script");
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&bin_path, fs::Permissions::from_mode(0o755))
+                .expect("chmod plugin");
+            plugin_entries.push(format!("  - '{pkg_name}'"));
+        }
+        fs::write(
+            root.join("palamedes.yaml"),
+            format!(
+                "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{{locale}}/messages\n    include: [src]\nplugins:\n{}\n",
+                plugin_entries.join("\n")
+            ),
+        )
+        .expect("write config");
+
+        let config = load_config(&root, None).expect("load config");
+        let registry = super::load_registry_with_binary_hasher(
+            &config,
+            &root,
+            Path::new("pmds"),
+            true,
+            &super::hash_plugin_source,
+        )
+        .expect("load registry");
+        assert_eq!(registry.plugins.len(), 4);
+        for loaded in registry.plugins.values() {
+            assert!(
+                loaded.resolved.pinned_binary.is_none(),
+                "loaded registry must not retain open executable descriptors for unselected plugins"
+            );
+            assert!(
+                loaded.verified_stamp.is_some(),
+                "loaded plugin must retain its verified stamp for pre-dispatch re-pin verification"
+            );
+        }
+
+        let selected = registry.plugins.get("bounded-2").expect("selected plugin");
+        let repinned = super::prepare_selected_plugin_for_run(selected, &config.config_path)
+            .expect("unchanged selected plugin must re-pin cleanly");
+        assert!(
+            repinned.pinned_binary.is_some(),
+            "selected plugin must be pinned again for execution"
+        );
+        drop(repinned);
+
+        // Replacing the executable after discovery must fail closed before execution.
+        let swapped_path = root.join("node_modules/@acme/pmds-bounded-2/bin/plugin");
+        fs::write(&swapped_path, "#!/bin/sh\necho tampered\n").expect("tamper binary");
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&swapped_path, fs::Permissions::from_mode(0o755))
+            .expect("chmod tampered");
+        let err = super::prepare_selected_plugin_for_run(selected, &config.config_path)
+            .expect_err("swapped plugin executable must be rejected before dispatch");
+        assert_eq!(err.code, "PLUGIN_BINARY_CHANGED");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn repin_rejects_metadata_fallback_without_kernel_file_identity() {
+        let root = temp_dir("plugin-repin-requires-kernel-id");
+        let config_path = root.join("palamedes.yaml");
+        let plugin_bin = root.join("node_modules/@acme/pmds-no-id/bin/plugin");
+        fs::create_dir_all(plugin_bin.parent().expect("bin dir")).expect("create bin dir");
+        fs::write(
+            root.join("node_modules/@acme/pmds-no-id/package.json"),
+            r#"{"name":"@acme/pmds-no-id","palamedes":{"pluginBinary":"bin/plugin"}}"#,
+        )
+        .expect("write package.json");
+        fs::write(&plugin_bin, "#!/bin/sh\necho ok\n").expect("write plugin");
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&plugin_bin, fs::Permissions::from_mode(0o755)).expect("chmod");
+        let meta = fs::metadata(&plugin_bin).expect("metadata");
+        let canonical = fs::canonicalize(&plugin_bin).expect("canonical");
+
+        let bare_metadata = super::PluginBinaryMetadata {
+            length: meta.len(),
+            modified_ns: meta.modified().ok().and_then(|t| {
+                u64::try_from(t.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos()).ok()
+            }),
+            unix_identity: None,
+            windows_identity: None,
+        };
+        assert!(!bare_metadata.has_kernel_identity());
+
+        let loaded = super::LoadedPlugin {
+            resolved: super::ResolvedPlugin {
+                specifier: "@acme/pmds-no-id".to_owned(),
+                binary_path: canonical.clone(),
+                invocation_path: plugin_bin,
+                pinned_binary: None,
+            },
+            manifest: super::PluginManifest {
+                name: "no-id".to_owned(),
+                protocol_version: 1,
+                commands: std::collections::BTreeMap::new(),
+            },
+            options: serde_json::Value::Null,
+            canonical_binary_path: Some(canonical),
+            verified_stamp: None,
+            expected_metadata: Some(bare_metadata),
+        };
+        let err = super::prepare_selected_plugin_for_run(&loaded, &config_path)
+            .expect_err("re-pin without digest or kernel file identity must fail closed");
+        assert_eq!(err.code, "PLUGIN_BINARY_CHANGED");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn execute_only_direct_executable_specifier_pins_and_repins_for_dispatch() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("direct-exec-only-plugin");
+        let source_path = root.join("plugin.c");
+        let target_bin = root.join("direct-exec-only");
+        fs::write(
+            &source_path,
+            concat!(
+                "#include <stdio.h>\n",
+                "int main(void) {\n",
+                "  puts(\"{\\\"event\\\":\\\"manifest\\\",\\\"name\\\":\\\"directexec\\\",\\\"protocolVersion\\\":1,\\\"commands\\\":{\\\"ping\\\":{}}}\");\n",
+                "  return 0;\n",
+                "}\n",
+            ),
+        )
+        .expect("write C fixture");
+        let compiled = std::process::Command::new("cc")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&target_bin)
+            .status()
+            .is_ok_and(|status| status.success());
+        if !compiled {
+            return;
+        }
+        fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o111))
+            .expect("chmod 0111 direct binary");
+        let config_path = root.join("palamedes.yaml");
+        fs::write(
+            &config_path,
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}\n    include: [src]\nplugins:\n  - ./direct-exec-only\n",
+        )
+        .expect("write config");
+        let config = load_config(&root, Some(&config_path)).expect("load config");
+        let registry = super::load_registry(&config, &root, Path::new("pmds"), false)
+            .expect("load registry for execute-only direct executable");
+        let loaded = registry
+            .plugins
+            .get("directexec")
+            .expect("execute-only direct executable must register");
+        let repinned = super::prepare_selected_plugin_for_run(loaded, &config.config_path)
+            .expect("execute-only direct executable must re-pin cleanly for dispatch");
+        assert!(
+            repinned.pinned_binary.is_some(),
+            "direct executable must be pinned for dispatch"
+        );
+        let manifest = super::describe_resolved_plugin(&repinned, &root, Path::new("pmds"))
+            .expect("execute-only direct executable must run after re-pin");
+        assert_eq!(manifest.name, "directexec");
+        let _ = fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn direct_executable_pinning_rejects_fifo_without_blocking() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = temp_dir("direct-fifo-nonblock");
+        let fifo_path = root.join("plugin-fifo");
+        let c_fifo = CString::new(fifo_path.as_os_str().as_bytes()).expect("cstr fifo");
+        // SAFETY: `c_fifo` is a valid NUL-terminated path.
+        assert_eq!(unsafe { libc::mkfifo(c_fifo.as_ptr(), 0o600) }, 0, "mkfifo");
+        let err = super::unix_pinned_plugin::pin_direct_executable("./plugin-fifo", &fifo_path)
+            .expect_err("FIFO must be rejected promptly without blocking");
+        assert_eq!(err.code, "PLUGIN_BINARY_MISSING");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_package_discovery_works_without_file_id_info() {
+        let root = temp_dir("windows-pkg-no-file-id");
+        let pkg_dir = root.join("plugin");
+        fs::create_dir_all(pkg_dir.join("bin")).expect("create bin dir");
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"palamedes":{"pluginBinary":"./bin/acme.exe"}}"#,
+        )
+        .expect("write manifest");
+        fs::write(pkg_dir.join("bin/acme.exe"), "fixture").expect("write fixture");
+
+        let pinned_dir = super::windows_pinned_plugin::PinnedPackageDir::open_without_file_id(
+            "./plugin", &pkg_dir,
+        )
+        .expect("package discovery must succeed without 128-bit FileIdInfo");
+        let manifest = pinned_dir
+            .read_manifest()
+            .expect("read_manifest must succeed via handle-relative walk");
+        let binary = manifest
+            .palamedes
+            .and_then(|p| p.plugin_binary)
+            .expect("pluginBinary");
+        let (canonical, invocation, pinned_bin) = pinned_dir
+            .resolve_and_pin_binary("./plugin", &binary)
+            .expect("resolve_and_pin_binary must succeed via handle-relative walk");
+        assert!(canonical.ends_with("acme.exe"));
+        assert!(invocation.ends_with("acme.exe"));
+        assert!(pinned_bin.readable);
     }
 }

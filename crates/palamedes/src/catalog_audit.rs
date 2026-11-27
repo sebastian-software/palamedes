@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use ferrocat::{
     CatalogAuditIcuOptions, CatalogAuditOptions, CatalogMessage, EffectiveTranslationRef,
@@ -9,6 +8,7 @@ use ferrocat::{
 use ferrocat_po::audit_catalogs as ferrocat_audit_catalogs;
 use serde::{Deserialize, Serialize};
 
+use crate::contained_fs::read_optional_contained_catalog_file;
 use crate::diagnostic::{CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::icu_compatibility::compare_runtime_icu;
@@ -165,7 +165,8 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
         let report = ferrocat_audit_catalogs(&catalogs, &options).map_err(PalamedesError::from)?;
         add_summary(&mut result.summary, &report.summary);
 
-        let paths_by_locale = paths_by_locale(&request.config, catalog);
+        let paths_by_locale = paths_by_locale(&request.config, catalog)?;
+        let source_path = source_catalog_path(&request.config, catalog)?;
         for diagnostic in report.diagnostics {
             let locale = diagnostic
                 .source_key
@@ -181,7 +182,7 @@ pub fn audit_catalogs(request: CatalogAuditRequest) -> PalamedesResult<CatalogAu
                 .as_deref()
                 .and_then(|locale| paths_by_locale.get(locale))
                 .cloned()
-                .unwrap_or_else(|| source_catalog_path(&request.config, catalog));
+                .unwrap_or_else(|| source_path.clone());
             result.diagnostics.push(CatalogAuditDiagnostic {
                 severity: diagnostic.severity.into(),
                 code: diagnostic.code.to_string(),
@@ -425,16 +426,13 @@ pub(crate) fn load_audit_catalogs(
         }
     }
 
+    let root_dir = Path::new(&config.root_dir);
     let mut loaded = Vec::new();
     for locale in locales {
-        let path = resolve_catalog_path(config, catalog, &locale);
-        if !path.exists() {
+        let path = resolve_catalog_path(config, catalog, &locale)?;
+        let Some(content) = read_optional_contained_catalog_file(root_dir, &path)? else {
             continue;
-        }
-        let content = fs::read_to_string(&path).map_err(|source| PalamedesError::ReadFile {
-            path: path.clone(),
-            source,
-        })?;
+        };
         let options = ParseCatalogOptions::new(&content, &config.source_locale)
             .with_locale(locale.as_str())
             .with_mode(catalog.format.ferrocat_mode());
@@ -453,20 +451,21 @@ pub(crate) fn load_audit_catalogs(
 fn paths_by_locale(
     config: &CatalogArtifactConfig,
     catalog: &CatalogConfig,
-) -> BTreeMap<String, PathBuf> {
-    config
-        .locales
-        .iter()
-        .map(|locale| {
-            (
-                locale.clone(),
-                resolve_catalog_path(config, catalog, locale),
-            )
-        })
-        .collect()
+) -> PalamedesResult<BTreeMap<String, PathBuf>> {
+    let mut paths = BTreeMap::new();
+    for locale in &config.locales {
+        paths.insert(
+            locale.clone(),
+            resolve_catalog_path(config, catalog, locale)?,
+        );
+    }
+    Ok(paths)
 }
 
-fn source_catalog_path(config: &CatalogArtifactConfig, catalog: &CatalogConfig) -> PathBuf {
+fn source_catalog_path(
+    config: &CatalogArtifactConfig,
+    catalog: &CatalogConfig,
+) -> PalamedesResult<PathBuf> {
     resolve_catalog_path(config, catalog, &config.source_locale)
 }
 
@@ -993,6 +992,44 @@ msgstr "Hallo {{name}}"
             }
             assert_eq!(fs::read(target_path).expect("after"), before);
         }
+    }
+
+    #[test]
+    fn audit_rejects_direct_api_unsafe_catalog_paths_and_locales() {
+        let fixture = create_fixture_dir("catalog-audit-unsafe-path");
+        let backslash_escape = audit_catalogs(CatalogAuditRequest {
+            config: CatalogArtifactConfig {
+                root_dir: fixture.to_string_lossy().into_owned(),
+                locales: vec!["en".to_owned(), "de".to_owned()],
+                source_locale: "en".to_owned(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![CatalogConfig {
+                    path: r"..\outside\{locale}".to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                }],
+            },
+            locales: vec!["de".to_owned()],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect_err("backslash traversal must be rejected");
+        assert!(
+            backslash_escape.to_string().contains("Unsafe catalog path"),
+            "unexpected error: {backslash_escape}"
+        );
+
+        let invalid_locale = audit_catalogs(CatalogAuditRequest {
+            config: config(&fixture),
+            locales: vec!["../outside".to_owned()],
+            checks: CatalogAuditCheckOptions::default(),
+            metadata: Vec::new(),
+        })
+        .expect_err("invalid requested locale must be rejected");
+        assert!(
+            invalid_locale.to_string().contains("Invalid locale"),
+            "unexpected error: {invalid_locale}"
+        );
     }
 
     fn config(root: &std::path::Path) -> CatalogArtifactConfig {

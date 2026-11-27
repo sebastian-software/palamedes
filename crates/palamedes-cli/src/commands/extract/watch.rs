@@ -15,7 +15,8 @@ use crate::commands::extract::cache::{
     rebuild_extract_cache_for_reload,
 };
 use crate::commands::extract::sources::{
-    build_exclude_set, build_include_set, matches_source_pattern, normalized_include_patterns,
+    build_exclude_set, build_include_set, is_internal_palamedes_component,
+    is_internal_palamedes_relative, matches_source_pattern, normalized_include_patterns,
     walk_roots_for_patterns,
 };
 use crate::commands::extract::{ExtractOptions, run_extraction_with_cache};
@@ -38,6 +39,10 @@ struct WatchMatchers {
     /// catalog globs. More specific targets are evaluated first for a symlink
     /// nested below a symlinked project root.
     aliases: Vec<(PathBuf, PathBuf)>,
+    /// Watched directory roots (most specific first) used to scope internal
+    /// Palamedes lock/staging exclusions strictly to paths below the watched
+    /// tree so ancestor checkout directories are never ignored.
+    watch_roots: Vec<PathBuf>,
 }
 
 impl WatchMatchers {
@@ -47,6 +52,19 @@ impl WatchMatchers {
     }
 
     fn build_with_aliases(config: &LoadedConfig, aliases: Vec<(PathBuf, PathBuf)>) -> Self {
+        let mut watch_roots = configured_watch_roots(config);
+        for (target, _) in &aliases {
+            if !watch_roots.contains(target) {
+                watch_roots.push(target.clone());
+            }
+        }
+        watch_roots.sort_by(|left, right| {
+            right
+                .components()
+                .count()
+                .cmp(&left.components().count())
+                .then_with(|| left.cmp(right))
+        });
         let sets = config
             .catalogs
             .iter()
@@ -71,21 +89,38 @@ impl WatchMatchers {
                 }
             })
             .collect();
-        Self { sets, aliases }
+        Self {
+            sets,
+            aliases,
+            watch_roots,
+        }
     }
 
     fn matches(&self, path: &Path) -> bool {
         if is_catalog_storage_path(path) {
             return false;
         }
-        if self.matches_configured_path(path) {
+        if !self.is_internal_palamedes_path(path) && self.matches_configured_path(path) {
             return true;
         }
         self.aliases.iter().any(|(target, configured)| {
-            path.strip_prefix(target)
-                .ok()
-                .is_some_and(|suffix| self.matches_configured_path(&configured.join(suffix)))
+            path.strip_prefix(target).ok().is_some_and(|suffix| {
+                !is_internal_palamedes_relative(suffix)
+                    && self.matches_configured_path(&configured.join(suffix))
+            })
         })
+    }
+
+    fn is_internal_palamedes_path(&self, path: &Path) -> bool {
+        if let Some(relative) = self
+            .watch_roots
+            .iter()
+            .find_map(|root| path.strip_prefix(root).ok())
+        {
+            return is_internal_palamedes_relative(relative);
+        }
+        path.file_name()
+            .is_some_and(is_internal_palamedes_component)
     }
 
     fn matches_configured_path(&self, path: &Path) -> bool {
@@ -735,6 +770,48 @@ catalogs:
         assert!(matchers.matches(&app.join("src/page.tsx")));
         assert!(!matchers.matches(&app.join("src/locales/en/messages.po")));
         assert!(!matchers.matches(&app.join("src/locales/en/lines.fcl")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-lock")));
+        assert!(
+            !matchers.matches(&app.join("src/locales/en/.pmds-stage-123-0-0123456789abcdef/a"))
+        );
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-tmp-123-0-0123456789abcdef")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-tmp-123-0")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-ltmp-123-0")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-ctmp-123-0")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-claim-42-0")));
+        assert!(!matchers.matches(&app.join("src/locales/en/.pmds-probe-123-0/a")));
+        assert!(
+            matchers.matches(&app.join("src/.pmds-probe-worktree/page.tsx")),
+            "user directories with similar probe prefix must still trigger watch extraction"
+        );
+        assert!(
+            matchers.matches(&app.join("src/.pmds-tmp-worktree/page.tsx")),
+            "user directories with similar prefixes must still trigger watch extraction"
+        );
+
+        // A project checked out beneath an ancestor directory whose name looks
+        // like an internal Palamedes temp name must still trigger watch runs.
+        for ancestor_name in [".pmds-tmp-worktree", ".pmds-tmp-123-0"] {
+            let nested_root = app.join(ancestor_name).join("checkout");
+            fs::create_dir_all(nested_root.join("src")).expect("create nested checkout");
+            let nested_cfg_path = nested_root.join("palamedes.yaml");
+            fs::write(
+                &nested_cfg_path,
+                "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: src/locales/{locale}/messages\n    include: [\"src/**/*\"]\n",
+            )
+            .expect("write nested config");
+            let nested_cfg =
+                load_config(&nested_root, Some(&nested_cfg_path)).expect("load nested config");
+            let nested_matchers = WatchMatchers::build(&nested_cfg);
+            assert!(
+                nested_matchers.matches(&nested_root.join("src/page.tsx")),
+                "ancestor directory {ancestor_name} outside watched root must not suppress events"
+            );
+            assert!(
+                !nested_matchers.matches(&nested_root.join("src/locales/en/.pmds-lock")),
+                "internal lock below watched root must still be suppressed"
+            );
+        }
     }
 
     #[test]

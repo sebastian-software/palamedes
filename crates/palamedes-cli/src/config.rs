@@ -539,6 +539,21 @@ impl LoadedConfig {
         palamedes::resolve_catalog_file_path(&self.root_dir, catalog_path, locale, format)
     }
 
+    /// Resolves a catalog path while enforcing both lexical and on-disk symlink
+    /// containment inside `self.root_dir`.
+    pub fn resolve_contained_catalog_path(
+        &self,
+        catalog_path: &str,
+        locale: &str,
+        format: palamedes::PalamedesCatalogFormat,
+    ) -> Result<PathBuf, ConfigError> {
+        palamedes::resolve_contained_catalog_file_path(&self.root_dir, catalog_path, locale, format)
+            .map_err(|error| ConfigError::Invalid {
+                path: self.config_path.clone(),
+                message: error.to_string(),
+            })
+    }
+
     /// Finds the configured catalog a file belongs to.
     ///
     /// Commands that receive a catalog by path rather than by config entry —
@@ -682,8 +697,27 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
     if raw.locales.iter().any(|locale| locale.trim().is_empty()) {
         return invalid(path, "\"locales\" must contain only non-empty strings.");
     }
+    for locale in &raw.locales {
+        if !palamedes::is_valid_locale(locale) {
+            return invalid(
+                path,
+                &format!(
+                    "\"locales\" entry \"{locale}\" is not a valid locale identifier. Use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+                ),
+            );
+        }
+    }
     if raw.source_locale.trim().is_empty() {
         return invalid(path, "\"source-locale\" must be a non-empty string.");
+    }
+    if !palamedes::is_valid_locale(&raw.source_locale) {
+        return invalid(
+            path,
+            &format!(
+                "\"source-locale\" (\"{}\") is not a valid locale identifier. Use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators.",
+                raw.source_locale
+            ),
+        );
     }
     if !raw
         .locales
@@ -716,6 +750,14 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
         }
     }
     if let Some(pseudo_locale) = &raw.pseudo_locale {
+        if !palamedes::is_valid_locale(pseudo_locale) {
+            return invalid(
+                path,
+                &format!(
+                    "\"pseudo-locale\" (\"{pseudo_locale}\") is not a valid locale identifier. Use only ASCII letters, digits, '-', '_', or '.', without leading/trailing dots, '..', or path separators."
+                ),
+            );
+        }
         // Documented behavior: a pseudo-locale outside `locales` is ignored.
         // Make the ignore visible instead of silent.
         if !raw.locales.iter().any(|locale| locale == pseudo_locale) {
@@ -767,6 +809,15 @@ fn validate_config(raw: &RawConfig, path: &Path) -> Result<(), ConfigError> {
             return invalid(
                 path,
                 &format!("\"catalogs[{index}].path\" must be non-empty."),
+            );
+        }
+        if let Err(reason) = palamedes::validate_catalog_path_pattern(&catalog.path) {
+            return invalid(
+                path,
+                &format!(
+                    "\"catalogs[{index}].path\" (\"{}\") is invalid: {reason}.",
+                    catalog.path
+                ),
             );
         }
         if catalog.include.is_empty() {
@@ -1223,8 +1274,8 @@ catalogs:
     include: [src]
     po:
       line-breaks: "off"
-  - path: ../api/locales/{locale}
-    include: [../api/src]
+  - path: admin/locales/{locale}
+    include: [admin/src]
 "#,
         )
         .expect("write config");
@@ -1778,6 +1829,250 @@ catalogs:
 
         let error = load_config(&app, None).expect_err("unknown fallback locale must be rejected");
         assert!(error.to_string().contains("\"fr\""), "got: {error}");
+    }
+
+    #[test]
+    fn accepts_bcp47_dotted_and_underscored_locales() {
+        let app = temp_dir("valid-locales");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en, de-DE, zh-Hans, pt.BR, en_US]
+source-locale: en
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+
+        let config = load_config(&app, None).expect("valid locales should load");
+        assert_eq!(config.locales, ["en", "de-DE", "zh-Hans", "pt.BR", "en_US"]);
+    }
+
+    #[test]
+    fn rejects_invalid_or_traversing_locales_in_config() {
+        for bad_locale in [
+            "..",
+            ".",
+            "../../../tmp/out",
+            "en/de",
+            r"en\de",
+            ".hidden",
+            "en.",
+            "en..de",
+            "-en",
+            "en de",
+        ] {
+            let app = temp_dir("bad-locale");
+            fs::write(
+                app.join(CONFIG_FILENAME),
+                format!(
+                    "locales: [en, {bad_locale:?}]\nsource-locale: en\ncatalogs:\n  - path: src/locales/{{locale}}\n    include: [src]\n"
+                ),
+            )
+            .expect("write config");
+
+            let error = load_config(&app, None).expect_err("invalid locale must be rejected");
+            assert!(
+                error.to_string().contains("not a valid locale identifier"),
+                "for {bad_locale:?}, got: {error}"
+            );
+        }
+
+        let app = temp_dir("bad-pseudo-locale");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+pseudo-locale: "../escape"
+catalogs:
+  - path: src/locales/{locale}
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let error = load_config(&app, None).expect_err("invalid pseudo-locale must be rejected");
+        assert!(error.to_string().contains("pseudo-locale"), "got: {error}");
+    }
+
+    #[test]
+    fn rejects_absolute_and_parent_escaping_catalog_paths() {
+        for bad_path in [
+            "/tmp/evil/{locale}",
+            r"\tmp\evil\{locale}",
+            "C:/evil/{locale}",
+            "../outside/{locale}",
+            "locales/../../outside/{locale}",
+            r"locales\..\..\outside\{locale}",
+            ".",
+            "./",
+        ] {
+            let app = temp_dir("bad-catalog-path");
+            fs::write(
+                app.join(CONFIG_FILENAME),
+                format!(
+                    "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: {bad_path:?}\n    include: [src]\n"
+                ),
+            )
+            .expect("write config");
+
+            let error = load_config(&app, None).expect_err("unsafe catalog path must be rejected");
+            assert!(
+                error.to_string().contains("catalogs[0].path"),
+                "for {bad_path:?}, got: {error}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_contained_catalog_path_rejects_escaping_and_dangling_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let outside = temp_dir("catalog-symlink-outside");
+        let app = temp_dir("catalog-symlink-app");
+        fs::write(
+            app.join(CONFIG_FILENAME),
+            r#"
+locales: [en]
+source-locale: en
+catalogs:
+  - path: locales/{locale}/messages
+    include: [src]
+"#,
+        )
+        .expect("write config");
+        let config = load_config(&app, None).expect("load config");
+
+        symlink(&outside, app.join("locales")).expect("symlink locales outside root");
+        let error = config
+            .resolve_contained_catalog_path(
+                &config.catalogs[0].path,
+                "en",
+                config.catalogs[0].format,
+            )
+            .expect_err("escaping symlink must be rejected");
+        assert!(
+            error.to_string().contains("escapes root directory"),
+            "got: {error}"
+        );
+
+        fs::remove_file(app.join("locales")).expect("remove escaping symlink");
+        fs::create_dir_all(app.join("locales/en")).expect("create locale dir");
+        symlink(
+            outside.join("does-not-exist.po"),
+            app.join("locales/en/messages.po"),
+        )
+        .expect("create dangling symlink");
+        let error = config
+            .resolve_contained_catalog_path(
+                &config.catalogs[0].path,
+                "en",
+                config.catalogs[0].format,
+            )
+            .expect_err("dangling symlink must be rejected");
+        assert!(
+            error.to_string().contains("dangling symlink"),
+            "got: {error}"
+        );
+    }
+
+    #[test]
+    fn shared_path_safety_parity_fixture_matches_native_config_validation() {
+        const FIXTURE: &str = include_str!("../../../test-fixtures/config-path-safety-parity.json");
+        let cases: serde_json::Value =
+            serde_json::from_str(FIXTURE).expect("parse path-safety parity fixture");
+        let string_list = |key: &str| {
+            cases[key]
+                .as_array()
+                .expect("parity fixture array")
+                .iter()
+                .map(|entry| entry.as_str().expect("parity fixture string").to_owned())
+                .collect::<Vec<_>>()
+        };
+
+        let valid_locales = string_list("validLocales");
+        let app = temp_dir("parity-valid-locales");
+        fs::write(
+            app.join("palamedes.json"),
+            serde_json::json!({
+                "locales": valid_locales,
+                "source-locale": "en",
+                "catalogs": [{ "path": "locales/{locale}", "include": ["src"] }],
+            })
+            .to_string(),
+        )
+        .expect("write valid locales config");
+        load_config(&app, None).expect("parity valid locales must load");
+
+        for invalid_locale in string_list("invalidLocales") {
+            let app = temp_dir("parity-invalid-locale");
+            fs::write(
+                app.join("palamedes.json"),
+                serde_json::json!({
+                    "locales": ["en", invalid_locale],
+                    "source-locale": "en",
+                    "catalogs": [{ "path": "locales/{locale}", "include": ["src"] }],
+                })
+                .to_string(),
+            )
+            .expect("write invalid locale config");
+            load_config(&app, None).expect_err("parity invalid locale must be rejected");
+        }
+
+        for valid_path in string_list("validCatalogPaths") {
+            let app = temp_dir("parity-valid-path");
+            fs::write(
+                app.join("palamedes.json"),
+                serde_json::json!({
+                    "locales": ["en"],
+                    "source-locale": "en",
+                    "catalogs": [{ "path": valid_path, "include": ["src"] }],
+                })
+                .to_string(),
+            )
+            .expect("write valid path config");
+            load_config(&app, None).expect("parity valid catalog path must load");
+        }
+
+        for invalid_path in string_list("invalidCatalogPaths") {
+            let app = temp_dir("parity-invalid-path");
+            fs::write(
+                app.join("palamedes.json"),
+                serde_json::json!({
+                    "locales": ["en"],
+                    "source-locale": "en",
+                    "catalogs": [{ "path": invalid_path, "include": ["src"] }],
+                })
+                .to_string(),
+            )
+            .expect("write invalid path config");
+            load_config(&app, None).expect_err("parity invalid catalog path must be rejected");
+        }
+
+        for entry in cases["resourcePathParity"]
+            .as_array()
+            .expect("resourcePathParity array")
+        {
+            let pattern = entry["path"].as_str().expect("path");
+            let locale = entry["locale"].as_str().expect("locale");
+            let format = match entry["format"].as_str().expect("format") {
+                "fcl" => palamedes::PalamedesCatalogFormat::Fcl,
+                _ => palamedes::PalamedesCatalogFormat::Po,
+            };
+            let expected_relative = entry["expectedRelative"]
+                .as_str()
+                .expect("expectedRelative");
+            let root = std::path::Path::new("/repo");
+            let actual = palamedes::try_resolve_catalog_file_path(root, pattern, locale, format)
+                .expect("parity resource path must resolve");
+            let expected = expected_relative
+                .split('/')
+                .fold(root.to_path_buf(), |acc, part| acc.join(part));
+            assert_eq!(actual, expected, "parity mismatch for pattern {pattern:?}");
+        }
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {

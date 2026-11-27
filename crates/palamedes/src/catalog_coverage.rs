@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fs;
+use std::io;
 use std::path::Path;
 
 use ferrocat::{CatalogCoverageOptions, NormalizedParsedCatalog, parse_catalog_for_review};
@@ -7,6 +7,7 @@ use ferrocat_po::measure_catalog_coverage as ferrocat_measure_catalog_coverage;
 use serde::Serialize;
 
 use crate::catalog_artifact::{CatalogArtifactConfig, CatalogConfig, resolve_catalog_path};
+use crate::contained_fs::read_optional_contained_catalog_file;
 use crate::error::{PalamedesError, PalamedesResult};
 
 /// Request for measuring configured catalog coverage.
@@ -81,18 +82,27 @@ pub fn measure_catalog_coverage(
         })
         .collect::<BTreeMap<_, _>>();
 
+    let root_dir = Path::new(&request.config.root_dir);
     for catalog_config in &request.config.catalogs {
         let source_path = resolve_catalog_path(
             &request.config,
             catalog_config,
             &request.config.source_locale,
-        );
+        )?;
         let source_catalog = load_catalog(
+            root_dir,
             &source_path,
             &request.config.source_locale,
             &request.config.source_locale,
             catalog_config,
-        )?;
+        )?
+        .ok_or_else(|| PalamedesError::ReadFile {
+            path: source_path.clone(),
+            source: io::Error::new(
+                io::ErrorKind::NotFound,
+                "source catalog file does not exist",
+            ),
+        })?;
         let source_messages = source_catalog
             .parsed_catalog()
             .messages
@@ -111,17 +121,18 @@ pub fn measure_catalog_coverage(
                 continue;
             }
 
-            let target_path = resolve_catalog_path(&request.config, catalog_config, locale);
-            if !target_path.exists() {
-                locale_coverage.missing += source_messages;
-                continue;
-            }
-            let target_catalog = load_catalog(
+            let target_path = resolve_catalog_path(&request.config, catalog_config, locale)?;
+            let Some(target_catalog) = load_catalog(
+                root_dir,
                 &target_path,
                 &request.config.source_locale,
                 locale,
                 catalog_config,
-            )?;
+            )?
+            else {
+                locale_coverage.missing += source_messages;
+                continue;
+            };
             let report = ferrocat_measure_catalog_coverage(
                 &[&source_catalog, &target_catalog],
                 &CatalogCoverageOptions::new(&request.config.source_locale),
@@ -163,20 +174,21 @@ pub fn measure_catalog_coverage(
 }
 
 fn load_catalog(
+    root_dir: &Path,
     path: &Path,
     source_locale: &str,
     locale: &str,
     catalog: &CatalogConfig,
-) -> PalamedesResult<NormalizedParsedCatalog> {
-    let content = fs::read_to_string(path).map_err(|source| PalamedesError::ReadFile {
-        path: path.to_path_buf(),
-        source,
-    })?;
+) -> PalamedesResult<Option<NormalizedParsedCatalog>> {
+    let Some(content) = read_optional_contained_catalog_file(root_dir, path)? else {
+        return Ok(None);
+    };
     parse_catalog_for_review(
         ferrocat::ParseCatalogOptions::new(&content, source_locale)
             .with_locale(locale)
             .with_mode(catalog.format.ferrocat_mode()),
     )
+    .map(Some)
     .map_err(|source| PalamedesError::ParseCatalog {
         path: path.to_path_buf(),
         source,

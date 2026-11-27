@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { createRequire } from "node:module";
 import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -424,6 +425,127 @@ describe("@palamedes/core-node", () => {
       path.join(rootDir, "legacy", "de", "messages.po"),
       path.join(rootDir, "empty", "de", "messages.po"),
     ]);
+
+    const backslashPaths = translationPatchTargetPaths({
+      config: {
+        rootDir,
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [
+          { path: String.raw`locales\{locale}\messages`, include: ["src"] },
+          { path: String.raw`admin\{locale}.fcl`, format: "Fcl", include: ["admin"] },
+          { path: String.raw`legacy\{locale}\messages.PO`, include: ["legacy"] },
+          { path: String.raw`empty\{locale}\messages.`, include: ["empty"] },
+        ],
+      },
+      patches: [
+        {
+          id: { catalog: String.raw`locales\{locale}\messages`, locale: "de", message: "Hello" },
+          fingerprint: "first",
+          translation: { kind: "Singular", value: "Hallo" },
+        },
+        {
+          id: { catalog: String.raw`admin\{locale}.fcl`, locale: "de", message: "Save" },
+          fingerprint: "second",
+          translation: { kind: "Singular", value: "Speichern" },
+        },
+        {
+          id: { catalog: String.raw`legacy\{locale}\messages.PO`, locale: "de", message: "Old" },
+          fingerprint: "third",
+          translation: { kind: "Singular", value: "Alt" },
+        },
+        {
+          id: { catalog: String.raw`empty\{locale}\messages.`, locale: "de", message: "Empty" },
+          fingerprint: "fourth",
+          translation: { kind: "Singular", value: "Leer" },
+        },
+      ],
+    });
+    expect(backslashPaths).toStrictEqual(paths);
+
+    const unsafePaths = translationPatchTargetPaths({
+      config: {
+        rootDir,
+        locales: ["en", "de"],
+        sourceLocale: "en",
+        catalogs: [
+          { path: String.raw`..\outside\{locale}`, include: ["src"] },
+          { path: "locales/{locale}/messages", include: ["src"] },
+          { path: "{locale}:/outside", include: ["src"] },
+        ],
+      },
+      patches: [
+        {
+          id: { catalog: String.raw`..\outside\{locale}`, locale: "de", message: "Escape" },
+          fingerprint: "u1",
+          translation: { kind: "Singular", value: "Nein" },
+        },
+        {
+          id: { catalog: "locales/{locale}/messages", locale: "../outside", message: "Locale" },
+          fingerprint: "u2",
+          translation: { kind: "Singular", value: "Nein" },
+        },
+        {
+          id: { catalog: "{locale}:/outside", locale: "c", message: "Drive" },
+          fingerprint: "u3",
+          translation: { kind: "Singular", value: "Nein" },
+        },
+      ],
+    });
+    expect(unsafePaths).toStrictEqual([]);
+
+    const parityFixture = JSON.parse(
+      readFileSync(
+        path.resolve(import.meta.dirname, "../../../test-fixtures/config-path-safety-parity.json"),
+        "utf8",
+      ),
+    ) as { invalidCatalogPaths: string[]; invalidLocales: string[] };
+
+    for (const invalidPath of [
+      ...parityFixture.invalidCatalogPaths,
+      "locales/\u0085/{locale}",
+      "   \t  ",
+    ]) {
+      expect(
+        translationPatchTargetPaths({
+          config: {
+            rootDir,
+            locales: ["en"],
+            sourceLocale: "en",
+            catalogs: [{ path: invalidPath, include: ["src"] }],
+          },
+          patches: [
+            {
+              id: { catalog: invalidPath, locale: "en", message: "Hello" },
+              fingerprint: "p1",
+              translation: { kind: "Singular", value: "Hallo" },
+            },
+          ],
+        }),
+        `expected invalid catalog path ${JSON.stringify(invalidPath)} to be rejected before queueing`,
+      ).toStrictEqual([]);
+    }
+
+    for (const invalidLocale of parityFixture.invalidLocales) {
+      expect(
+        translationPatchTargetPaths({
+          config: {
+            rootDir,
+            locales: ["en"],
+            sourceLocale: "en",
+            catalogs: [{ path: "locales/{locale}/messages", include: ["src"] }],
+          },
+          patches: [
+            {
+              id: { catalog: "locales/{locale}/messages", locale: invalidLocale, message: "Hello" },
+              fingerprint: "p2",
+              translation: { kind: "Singular", value: "Hallo" },
+            },
+          ],
+        }),
+        `expected invalid locale ${JSON.stringify(invalidLocale)} to be rejected before queueing`,
+      ).toStrictEqual([]);
+    }
   });
 
   it("rejects a mismatched platform binding before exposing the native surface", () => {

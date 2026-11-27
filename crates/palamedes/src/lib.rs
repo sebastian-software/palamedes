@@ -24,6 +24,7 @@ mod catalog_three_way;
 mod catalog_update;
 mod choice;
 mod component;
+mod contained_fs;
 mod descriptor;
 mod diagnostic;
 mod error;
@@ -62,8 +63,10 @@ pub use catalog_artifact::{
     CatalogArtifactSelectedRequest, CatalogArtifactSourceKey, CatalogCompilationCache,
     CatalogConfig, FallbackLocales, PalamedesCatalogFormat, compile_catalog_artifact,
     compile_catalog_artifact_selected, compile_catalog_artifact_selected_cached,
-    compile_catalog_artifact_selected_cached_without_waiting, parse_catalog_for_compile,
-    resolve_catalog_file_path,
+    compile_catalog_artifact_selected_cached_without_waiting,
+    compile_catalog_artifact_with_source_keys, ensure_catalog_path_contained, is_valid_locale,
+    parse_catalog_for_compile, resolve_catalog_file_path, resolve_contained_catalog_file_path,
+    try_resolve_catalog_file_path, validate_catalog_path_pattern,
 };
 #[doc(hidden)]
 pub use catalog_audit::{
@@ -78,7 +81,8 @@ pub use catalog_combine::{
 };
 #[doc(hidden)]
 pub use catalog_convert::{
-    CatalogFileConvertRequest, CatalogFileConvertResult, convert_catalog_file,
+    CatalogFileConvertRequest, CatalogFileConvertResult, convert_catalog_content,
+    convert_catalog_file,
 };
 #[doc(hidden)]
 pub use catalog_coverage::{
@@ -102,7 +106,14 @@ pub use catalog_update::{
     AiProvenance, CatalogOriginMetadata, CatalogParseRequest, CatalogParseResult,
     CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdatePreview, CatalogUpdateRequest,
     CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks,
-    PoOutputOptions, parse_catalog, preview_catalog_file_update, update_catalog_file,
+    PoOutputOptions, parse_catalog, preview_catalog_file_update,
+    preview_catalog_update_from_content, update_catalog_file,
+};
+#[doc(hidden)]
+pub use contained_fs::{
+    ContainedDir, ContainedFsError, ContainedNewFileMode, ContainedTargetLock,
+    ContainedWriteDurability, ContainedWriteOutcome, DirFilenameEquivalence, FileIdentity,
+    TargetLockKey, split_relative_catalog_path,
 };
 #[doc(hidden)]
 pub use diagnostic::{CatalogDiagnostic, CatalogDiagnosticSeverity, CatalogDiagnosticSourceKey};
