@@ -364,6 +364,24 @@ describe("locale controls configuration", () => {
       defineLocaleControls({
         locales: ["en", "de"],
         defaultLocale: "en",
+        hosts: { mode: "domain", locales: { en: "example.test", de: "127.1" } },
+      }),
+    ).toThrowError(
+      "defineLocaleControls: hosts.locales.de must be a DNS hostname with an optional port.",
+    );
+    expect(() =>
+      defineLocaleControls({
+        locales: ["en", "de"],
+        defaultLocale: "en",
+        hosts: { defaultHost: "shop.example.123" },
+      }),
+    ).toThrowError(
+      "defineLocaleControls: hosts.defaultHost must be a DNS hostname with an optional port.",
+    );
+    expect(() =>
+      defineLocaleControls({
+        locales: ["en", "de"],
+        defaultLocale: "en",
         hosts: { mode: "tld", defaultTld: "-com" },
       }),
     ).toThrowError("defineLocaleControls: hosts.defaultTld must be a valid DNS label.");
@@ -1210,6 +1228,24 @@ describe("security hardening", () => {
       expect(
         withLongCustomCatalog.preferredLocale(`${longCustomCatalogId};q=0, ${longCustomCatalogId}`),
       ).toBe("en");
+
+      const longExtendedSpanish = `es-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")}`;
+      const withLongExtendedSpanish = defineLocaleControls({
+        locales: ["en", "de-DE", "es", longExtendedSpanish] as const,
+        defaultLocale: "en",
+        labels: { [longExtendedSpanish]: "Español (Custom)" },
+      });
+      expect(withLongExtendedSpanish.preferredLocale(veryLongVariantGerman)).toBe("de-DE");
+      expect(withLongExtendedSpanish.preferredLocale(longExtendedSpanish)).toBe(
+        longExtendedSpanish,
+      );
+
+      const signLanguages = defineLocaleControls({
+        locales: ["en", "gsg", "gsg-AX"] as const,
+        defaultLocale: "en",
+      });
+      const overlongGermanSign = `sgn-DD-aaland-${Array.from({ length: 21 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
+      expect(signLanguages.preferredLocale(overlongGermanSign)).toBe("gsg");
 
       const ambiguousRegional = defineLocaleControls({
         locales: ["en", "fr", "de-DE", "de-DE-u-co-phonebk"] as const,

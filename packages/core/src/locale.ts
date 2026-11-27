@@ -213,16 +213,22 @@ function canonicalizeOverBudgetPrefix(
   parsed: ParsedUnicodeLanguageId,
   maxTagLength: number,
 ): string | null {
-  const initialPrefix = subtags.slice(0, parsed.variantsStart).join("-");
-  let current = languageTag(initialPrefix, maxTagLength);
-  if (!current) {
+  let currentPrefix = subtags.slice(0, parsed.variantsStart).join("-");
+  if (currentPrefix.length > maxTagLength) {
     return null;
   }
 
-  let currentPrefix = [current.language ?? "und", current.script, current.region]
-    .filter(Boolean)
-    .join("-");
   const sortedVariants = subtags.slice(parsed.variantsStart, parsed.endIndex).sort();
+  if (sortedVariants.length === 0) {
+    const parsedPrefix = languageTag(currentPrefix, maxTagLength);
+    return parsedPrefix
+      ? [parsedPrefix.language ?? "und", parsedPrefix.script, parsedPrefix.region]
+          .filter(Boolean)
+          .join("-")
+          .toLowerCase()
+      : null;
+  }
+
   let index = 0;
   while (index < sortedVariants.length) {
     let chunk = currentPrefix;
@@ -243,8 +249,7 @@ function canonicalizeOverBudgetPrefix(
     if (!parsedChunk) {
       return null;
     }
-    current = parsedChunk;
-    currentPrefix = [current.language ?? "und", current.script, current.region]
+    currentPrefix = [parsedChunk.language ?? "und", parsedChunk.script, parsedChunk.region]
       .filter(Boolean)
       .join("-");
   }
@@ -384,6 +389,7 @@ function languagePreferences(
   header: string | null | undefined,
   maxTagLength = DEFAULT_MAX_REQUEST_LANGUAGE_TAG_LENGTH,
   exactOnlyTags?: ReadonlySet<string>,
+  configuredExactTags?: ReadonlySet<string>,
 ) {
   if (!header || header.length > MAX_ACCEPT_LANGUAGE_LENGTH) {
     return [];
@@ -392,6 +398,7 @@ function languagePreferences(
   const preferences: Array<{
     quality: number;
     tag: string;
+    exactTag?: string;
     matchMode: "full" | "canonical" | "compatible";
   }> = [];
   let entryCount = 0;
@@ -435,7 +442,7 @@ function languagePreferences(
     const lowerTag = rawTag.toLowerCase();
     if (rawTag.length > maxTagLength) {
       if (exactOnlyTags?.has(lowerTag)) {
-        preferences.push({ quality, tag: lowerTag, matchMode: "full" });
+        preferences.push({ quality, tag: lowerTag, exactTag: lowerTag, matchMode: "full" });
         continue;
       }
       // Preserve well-formed over-budget tags by their canonical base tag (or
@@ -443,7 +450,12 @@ function languagePreferences(
       // many variants) without passing overlong strings to Intl.Locale.
       const reduced = extractWellFormedUnicodeBaseTag(lowerTag, maxTagLength, quality > 0);
       if (reduced) {
-        preferences.push({ quality, tag: reduced.tag, matchMode: reduced.matchMode });
+        preferences.push({
+          quality,
+          tag: reduced.tag,
+          exactTag: configuredExactTags?.has(lowerTag) ? lowerTag : undefined,
+          matchMode: reduced.matchMode,
+        });
       }
       continue;
     }
@@ -451,6 +463,7 @@ function languagePreferences(
     preferences.push({
       quality,
       tag: lowerTag,
+      exactTag: lowerTag,
       matchMode: "full",
     });
   }
@@ -745,7 +758,11 @@ function isDnsHost(value: string): boolean {
     return false;
   }
 
-  return port === undefined || (Number(port) >= 1 && Number(port) <= 65_535);
+  if (port !== undefined && (Number(port) < 1 || Number(port) > 65_535)) {
+    return false;
+  }
+
+  return parseRequestHost(value) !== null;
 }
 
 function assertDomainHosts<TLocale extends string>(
@@ -1005,7 +1022,7 @@ export function defineLocaleControls<TLocale extends string>(
     };
   });
   const configuredTagMax = languageLocales.reduce(
-    (max, entry) => (entry.parsed ? Math.max(max, entry.locale.length, entry.lower.length) : max),
+    (max, entry) => (entry.parsed ? Math.max(max, entry.lower.length) : max),
     0,
   );
   const customLocaleIds = new Set(
@@ -1013,13 +1030,21 @@ export function defineLocaleControls<TLocale extends string>(
       .filter((entry) => entry.parsed === null)
       .map((entry) => entry.locale.toLowerCase()),
   );
+  const configuredExactLocaleIds = new Set(
+    languageLocales.map((entry) => entry.locale.toLowerCase()),
+  );
   const maxRequestTagLength = Math.min(
     MAX_ACCEPT_LANGUAGE_LENGTH,
     Math.max(MAX_LANGUAGE_TAG_LENGTH, configuredTagMax) + MAX_LANGUAGE_TAG_EXTENSION_ALLOWANCE,
   );
 
   const preferredLocale = (header: string | null | undefined): TLocale => {
-    const preferences = languagePreferences(header, maxRequestTagLength, customLocaleIds);
+    const preferences = languagePreferences(
+      header,
+      maxRequestTagLength,
+      customLocaleIds,
+      configuredExactLocaleIds,
+    );
     const exclusions = preferences
       .filter(({ quality }) => quality === 0)
       .map(({ tag }) => {
@@ -1034,14 +1059,22 @@ export function defineLocaleControls<TLocale extends string>(
     const unique = (matches: typeof languageLocales): TLocale | undefined =>
       matches.length === 1 ? matches[0]?.locale : undefined;
 
-    for (const { tag, quality, matchMode } of preferences) {
+    for (const { tag, exactTag, quality, matchMode } of preferences) {
       if (quality <= 0) continue;
-      const parsed = languageTag(tag, maxRequestTagLength);
+      let parsed = languageTag(tag, maxRequestTagLength);
+      let effectiveMatchMode = matchMode;
+      if (!parsed && matchMode === "full") {
+        const reduced = extractWellFormedUnicodeBaseTag(tag, MAX_LANGUAGE_TAG_LENGTH, true);
+        if (reduced) {
+          parsed = languageTag(reduced.tag, MAX_LANGUAGE_TAG_LENGTH);
+          effectiveMatchMode = reduced.matchMode;
+        }
+      }
       const canonicalTag = parsed?.baseName.toLowerCase() ?? tag;
       const canonicalSpecificity = canonicalTag.split("-").length;
       const available = languageLocales.filter(({ lower, maximized: supported }) => {
         const specificity =
-          matchMode !== "compatible" &&
+          effectiveMatchMode !== "compatible" &&
           (lower === canonicalTag || lower.startsWith(`${canonicalTag}-`))
             ? canonicalSpecificity
             : 0;
@@ -1059,14 +1092,14 @@ export function defineLocaleControls<TLocale extends string>(
         );
       });
       const exact =
-        matchMode === "full"
-          ? unique(available.filter(({ locale }) => locale.toLowerCase() === tag))
+        exactTag !== undefined
+          ? unique(available.filter(({ locale }) => locale.toLowerCase() === exactTag))
           : undefined;
       if (exact) return exact;
 
       if (!parsed) continue;
       const canonical =
-        matchMode !== "compatible"
+        effectiveMatchMode !== "compatible"
           ? unique(available.filter((candidate) => candidate.parsed?.baseName === parsed.baseName))
           : undefined;
       if (canonical) return canonical;
