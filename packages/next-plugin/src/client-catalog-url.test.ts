@@ -26,12 +26,16 @@ describe("clientCatalogPublicPrefix", () => {
     [{ basePath: "/shop" }, "/shop"],
     [{ assetPrefix: "/cdn" }, "/cdn"],
     [{ assetPrefix: "/cdn/" }, "/cdn"],
+    [{ assetPrefix: "cdn" }, "/cdn"],
+    [{ assetPrefix: "cdn/" }, "/cdn"],
     [{ assetPrefix: "/" }, ""],
     // Next uses assetPrefix instead of basePath for /_next/ URLs, not both.
     [{ assetPrefix: "/cdn", basePath: "/shop" }, "/cdn"],
     [{ assetPrefix: "", basePath: "/shop" }, "/shop"],
     [{ assetPrefix: "https://cdn.example.com" }, "https://cdn.example.com"],
     [{ assetPrefix: "https://cdn.example.com/" }, "https://cdn.example.com"],
+    [{ assetPrefix: " https://cdn.example.com/ " }, "https://cdn.example.com"],
+    [{ assetPrefix: " //cdn.example.com/ " }, "//cdn.example.com"],
     [
       { assetPrefix: "https://cdn.example.com/app/", basePath: "/app" },
       "https://cdn.example.com/app",
@@ -110,6 +114,15 @@ describe("withPalamedes client catalog asset URLs", () => {
 
     expect(env.PALAMEDES_NEXT_CATALOG_BASE).toBe("https://cdn.example.com/_next/static/palamedes/");
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("Access-Control-Allow-Origin"));
+  });
+
+  it("normalizes relative path-style assetPrefix to a root-relative catalog base", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { env, hook } = production({ assetPrefix: "cdn" });
+    await hook({ distDir: "/app/.next", projectDir: "/app" });
+
+    expect(env.PALAMEDES_NEXT_CATALOG_BASE).toBe("/cdn/_next/static/palamedes/");
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("stays quiet for same-origin path prefixes", async () => {

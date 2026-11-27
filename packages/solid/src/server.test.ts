@@ -397,4 +397,51 @@ describe("createSolidCatalogDeliveryMiddleware", () => {
     expect(output).toContain('<script type="module" nonce="existing">');
     expect(output).toContain(`import("${SOLID_CLIENT_ENTRY}")`);
   });
+
+  it("rejects unsafe angle brackets and control characters in matched Solid entry sources", async () => {
+    const unsafeSources = [
+      `${SOLID_CLIENT_ENTRY}?x=</script><script>evil()</script>`,
+      `${SOLID_CLIENT_ENTRY}?x=<`,
+      `${SOLID_CLIENT_ENTRY}?x=>`,
+      `${SOLID_CLIENT_ENTRY}?x=\u0000`,
+      `${SOLID_CLIENT_ENTRY}?x=\u001f`,
+      `${SOLID_CLIENT_ENTRY}?x=\u007f`,
+      `${SOLID_CLIENT_ENTRY}?x=\u0085`,
+      "/assets/virtual_solid-ssr-entry-client-a\nb.js",
+      "/assets/virtual_solid-ssr-entry-client-a\rb.js",
+    ];
+
+    for (const source of unsafeSources) {
+      const html = `<html><head><script type="module" src="${source}"></script></head><body></body></html>`;
+      const output = await transformDocument(html, "solid-test");
+
+      expect(output).toContain(`<script type="module" src="${source}"></script>`);
+      expect(output).not.toContain('<script type="module" nonce="solid-test">');
+    }
+
+    const unsafeDevSource =
+      "/custom/base/@id/__x00__virtual:solid-ssr-entry-client.tsx?x=</script>";
+    const devOutput = await transformDocument(
+      `<html><head><script type="module" src="${unsafeDevSource}"></script></head><body></body></html>`,
+      "solid-test",
+      3,
+      true,
+    );
+    expect(devOutput).toContain(`<script type="module" src="${unsafeDevSource}"></script>`);
+    expect(devOutput).not.toContain('<script type="module" nonce="solid-test">');
+  });
+
+  it("escapes Unicode line and paragraph separators in inline Solid bootstrap scripts", async () => {
+    const source = "/assets/virtual_solid-ssr-entry-client-a\u2028b\u2029c.js";
+    const output = await transformDocument(
+      `<html><head><script type="module" src="${source}"></script></head><body></body></html>`,
+      "solid-test",
+    );
+
+    expect(output).toContain(
+      'import("/assets/virtual_solid-ssr-entry-client-a\\u2028b\\u2029c.js")',
+    );
+    expect(output).not.toContain("\u2028");
+    expect(output).not.toContain("\u2029");
+  });
 });
