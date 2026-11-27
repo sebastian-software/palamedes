@@ -97,10 +97,9 @@ import { getRequestNonce, isSsrHtmlResponse, runWithRequestNonce } from "./lib/c
 import { resolveApplicationLocale } from "./lib/i18n.server";
 
 const modules = Object.fromEntries(
-  Object.entries(import.meta.glob("/src/pages/**/*.{tsx,ts}")).map(([key, value]) => [
-    key.slice("/src/".length),
-    value,
-  ]),
+  Object.entries(import.meta.glob("/src/pages/**/*.{js,ts,tsx,jsx,mjs,cjs}")).map(
+    ([key, value]) => [key.slice("/src/".length), value],
+  ),
 );
 
 function buildAppCsp(nonce: string): string {
@@ -124,6 +123,11 @@ const catalogDelivery = createWakuCatalogDeliveryMiddleware({
 });
 
 export default adapter(fsRouter(modules), {
+  // Preserve Waku's managed `src/middleware/*` discovery when adding a custom server entry.
+  middlewareModules: import.meta.glob([
+    "/src/middleware/*.{js,ts,tsx,jsx,mjs,cjs}",
+    "!/src/middleware/*.{test,spec}.{js,ts,tsx,jsx,mjs,cjs}",
+  ]),
   middlewareFns: [
     () => async (context, next) =>
       runWithRequestNonce(async () => {
