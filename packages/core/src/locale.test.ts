@@ -1155,6 +1155,14 @@ describe("security hardening", () => {
       expect(posixOnlyControls.preferredLocale(`${overlongPosixExclusion}, en-US-posix`)).toBe(
         "de",
       );
+
+      const overlongRepeatedVaPosixExclusion = `en-US-u-va-foobar-va-posix-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(posixControls.preferredLocale(`${overlongRepeatedVaPosixExclusion}, en-US`)).toBe(
+        "en-US",
+      );
+      expect(
+        posixOnlyControls.preferredLocale(`${overlongRepeatedVaPosixExclusion}, en-US-posix`),
+      ).toBe("de");
     });
 
     it("handles adversarial exclusion combinations in bounded time", () => {
