@@ -2923,7 +2923,15 @@ function inspectNonShellScript(
     codeOnly += ch;
   }
 
-  const CONTAINER_CLI_WORD = /\b(?:docker|podman|buildah|docker-compose|podman-compose)\b/iu;
+  const CONTAINER_CLI_BASENAMES = new Set([
+    "docker",
+    "podman",
+    "buildah",
+    "docker-compose",
+    "podman-compose",
+  ]);
+  const CONTAINER_SHELL_CMD_PATTERN =
+    /(?:^|[;&|(\s`'"])(?:(?:[A-Za-z]:)?(?:[\\/][\w.@-]+)*[\\/])?(?:docker|podman|buildah|docker-compose|podman-compose)(?:\.exe)?(?=$|[\s;&|)'"`])/iu;
   const hasContainerSdkImport =
     /\b(?:import\s+(?:docker|podman|python_on_whales)\b|from\s+(?:docker|podman|python_on_whales)\b|require\s*\(\s*['"](?:dockerode|podman)['"]\s*\)|from\s+['"](?:dockerode|podman)['"])/u.test(
       codeOnly,
@@ -2974,52 +2982,260 @@ function inspectNonShellScript(
     return src.slice(openIndex + 1);
   };
 
-  // Track variables assigned values mentioning a container CLI (including
-  // multiline array/call initializers like `cmd = [\n "docker", "pull", ... \n]`).
+  const splitTopLevelComma = (src) => {
+    const items = [];
+    let start = 0;
+    let parenDepth = 0;
+    let bracketDepth = 0;
+    let braceDepth = 0;
+    let strQuote = null;
+    let strTriple = false;
+    for (let i = 0; i < src.length; i += 1) {
+      const ch = src[i];
+      if (strQuote) {
+        if (ch === "\\" && i + 1 < src.length) {
+          i += 1;
+          continue;
+        }
+        if (strTriple) {
+          if (src.slice(i, i + 3) === strQuote.repeat(3)) {
+            i += 2;
+            strQuote = null;
+            strTriple = false;
+          }
+        } else if (ch === strQuote) {
+          strQuote = null;
+        }
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === "`") {
+        if (ch !== "`" && src.slice(i, i + 3) === ch.repeat(3)) {
+          strQuote = ch;
+          strTriple = true;
+          i += 2;
+          continue;
+        }
+        strQuote = ch;
+        strTriple = false;
+        continue;
+      }
+      if (ch === "(") {
+        parenDepth += 1;
+      } else if (ch === ")") {
+        parenDepth = Math.max(0, parenDepth - 1);
+      } else if (ch === "[") {
+        bracketDepth += 1;
+      } else if (ch === "]") {
+        bracketDepth = Math.max(0, bracketDepth - 1);
+      } else if (ch === "{") {
+        braceDepth += 1;
+      } else if (ch === "}") {
+        braceDepth = Math.max(0, braceDepth - 1);
+      } else if (ch === "," && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
+        const part = src.slice(start, i).trim();
+        if (part) {
+          items.push(part);
+        }
+        start = i + 1;
+      }
+    }
+    const tail = src.slice(start).trim();
+    if (tail) {
+      items.push(tail);
+    }
+    return items;
+  };
+
+  const unquoteSimpleLiteral = (expr) => {
+    const trimmed = expr.trim();
+    const prefixTrimmed = trimmed.replace(/^[rRuUfFbB]{1,2}(?=['"])/u, "");
+    if (
+      prefixTrimmed.length >= 2 &&
+      ((prefixTrimmed.startsWith('"') && prefixTrimmed.endsWith('"')) ||
+        (prefixTrimmed.startsWith("'") && prefixTrimmed.endsWith("'")) ||
+        (prefixTrimmed.startsWith("`") && prefixTrimmed.endsWith("`")))
+    ) {
+      return prefixTrimmed.slice(1, -1);
+    }
+    return null;
+  };
+
+  const isContainerExecutableName = (rawName) => {
+    const base = path
+      .basename(rawName.trim())
+      .toLowerCase()
+      .replace(/\.exe$/u, "");
+    return CONTAINER_CLI_BASENAMES.has(base);
+  };
+
+  const isShellExecutableName = (rawName) => {
+    const base = path
+      .basename(rawName.trim())
+      .toLowerCase()
+      .replace(/\.exe$/u, "");
+    return (
+      SHELL_INTERPRETERS.has(base) || base === "pwsh" || base === "powershell" || base === "cmd"
+    );
+  };
+
+  const referencesContainerVar = (expr, containerVarNames) => {
+    if (containerVarNames.size === 0) {
+      return false;
+    }
+    for (const identMatch of expr.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/gu)) {
+      if (containerVarNames.has(identMatch[0])) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const argvListInvokesContainer = (elements, containerVarNames) => {
+    if (elements.length === 0) {
+      return false;
+    }
+    let idx = 0;
+    while (idx < elements.length) {
+      const lit = unquoteSimpleLiteral(elements[idx]);
+      if (lit === null) {
+        return referencesContainerVar(elements[idx], containerVarNames);
+      }
+      const base = path
+        .basename(lit.trim())
+        .toLowerCase()
+        .replace(/\.exe$/u, "");
+      if (SHELL_COMMAND_PREFIXES.has(base) || ENV_PREFIX_ASSIGNMENT_PATTERN.test(lit)) {
+        idx += 1;
+        continue;
+      }
+      if (isContainerExecutableName(lit)) {
+        return true;
+      }
+      if (isShellExecutableName(lit)) {
+        for (let sIdx = idx + 1; sIdx < elements.length; sIdx += 1) {
+          const argLit = unquoteSimpleLiteral(elements[sIdx]);
+          if (argLit !== null) {
+            if (CONTAINER_SHELL_CMD_PATTERN.test(argLit)) {
+              return true;
+            }
+          } else if (referencesContainerVar(elements[sIdx], containerVarNames)) {
+            return true;
+          }
+        }
+        return false;
+      }
+      return false;
+    }
+    return false;
+  };
+
+  // Track variables assigned a container CLI executable/argv or shell command
+  // string (never filenames like `files = [".github/workflows/docker.yml"]`).
   const containerVarNames = new Set();
   const assignPattern =
     /(?:^|[;\n])\s*(?:(?:const|let|var|my|local)\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\+?=\s*/gu;
   for (const match of codeOnly.matchAll(assignPattern)) {
     const rhsStart = match.index + match[0].length;
     const firstCh = codeOnly[rhsStart];
-    let rhsText;
     if (firstCh === "[") {
-      rhsText = extractBalancedSlice(codeOnly, rhsStart, "[", "]");
+      const inner = extractBalancedSlice(codeOnly, rhsStart, "[", "]");
+      if (argvListInvokesContainer(splitTopLevelComma(inner), containerVarNames)) {
+        containerVarNames.add(match.groups.name);
+      }
     } else if (firstCh === "(") {
-      rhsText = extractBalancedSlice(codeOnly, rhsStart, "(", ")");
-    } else if (firstCh === "{") {
-      rhsText = extractBalancedSlice(codeOnly, rhsStart, "{", "}");
+      const inner = extractBalancedSlice(codeOnly, rhsStart, "(", ")");
+      if (argvListInvokesContainer(splitTopLevelComma(inner), containerVarNames)) {
+        containerVarNames.add(match.groups.name);
+      }
     } else {
       const nl = codeOnly.indexOf("\n", rhsStart);
-      rhsText = nl === -1 ? codeOnly.slice(rhsStart) : codeOnly.slice(rhsStart, nl);
-    }
-    if (CONTAINER_CLI_WORD.test(rhsText)) {
-      containerVarNames.add(match.groups.name);
+      const rhsText = (nl === -1 ? codeOnly.slice(rhsStart) : codeOnly.slice(rhsStart, nl)).trim();
+      const lit = unquoteSimpleLiteral(rhsText);
+      if (
+        (lit !== null &&
+          (isContainerExecutableName(lit) || CONTAINER_SHELL_CMD_PATTERN.test(lit))) ||
+        (lit === null &&
+          (CONTAINER_SHELL_CMD_PATTERN.test(rhsText) ||
+            referencesContainerVar(rhsText, containerVarNames)))
+      ) {
+        containerVarNames.add(match.groups.name);
+      }
     }
   }
 
-  const argInvokesContainerCli = (argText) => {
-    if (CONTAINER_CLI_WORD.test(argText)) {
-      return true;
+  const shellStringInvokesContainer = (text) =>
+    CONTAINER_SHELL_CMD_PATTERN.test(text) || referencesContainerVar(text, containerVarNames);
+
+  const SHELL_STRING_CALLEES = new Set([
+    "os.system",
+    "os.popen",
+    "subprocess.getoutput",
+    "subprocess.getstatusoutput",
+    "execSync",
+    "exec",
+    "child_process.execSync",
+    "child_process.exec",
+    "shell_exec",
+    "passthru",
+  ]);
+
+  const callInvokesContainerCli = (callee, argText) => {
+    const args = splitTopLevelComma(argText);
+    if (args.length === 0) {
+      return false;
     }
-    if (containerVarNames.size > 0) {
-      for (const identMatch of argText.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/gu)) {
-        if (containerVarNames.has(identMatch[0])) {
-          return true;
-        }
+    const usesShellMode =
+      SHELL_STRING_CALLEES.has(callee) ||
+      /\bshell\s*(?:=|:)\s*(?:True|true|['"])/u.test(argText) ||
+      ((callee === "system" || callee === "popen") && args.length === 1);
+    if (usesShellMode) {
+      const firstLit = unquoteSimpleLiteral(args[0]);
+      if (firstLit !== null) {
+        return CONTAINER_SHELL_CMD_PATTERN.test(firstLit);
       }
+      return shellStringInvokesContainer(args[0]);
     }
-    return false;
+
+    // Argument-vector execution API: inspect the executable (first arg or
+    // element 0 of the argv list) rather than trailing filenames/arguments.
+    const firstArg = args[0].trim();
+    if (firstArg.startsWith("[") && firstArg.endsWith("]")) {
+      return argvListInvokesContainer(splitTopLevelComma(firstArg.slice(1, -1)), containerVarNames);
+    }
+    if (firstArg.startsWith("(") && firstArg.endsWith(")")) {
+      return argvListInvokesContainer(splitTopLevelComma(firstArg.slice(1, -1)), containerVarNames);
+    }
+    const firstLit = unquoteSimpleLiteral(firstArg);
+    if (firstLit !== null) {
+      if (isContainerExecutableName(firstLit)) {
+        return true;
+      }
+      if (isShellExecutableName(firstLit) && args.length > 1) {
+        return args.slice(1).some((arg) => shellStringInvokesContainer(arg));
+      }
+      if (SHELL_COMMAND_PREFIXES.has(path.basename(firstLit).toLowerCase()) && args.length > 1) {
+        const secondArg = args[1].trim();
+        if (secondArg.startsWith("[") && secondArg.endsWith("]")) {
+          return argvListInvokesContainer(
+            splitTopLevelComma(secondArg.slice(1, -1)),
+            containerVarNames,
+          );
+        }
+        return argvListInvokesContainer(args.slice(1), containerVarNames);
+      }
+      return false;
+    }
+    return referencesContainerVar(firstArg, containerVarNames);
   };
 
   let invokesContainerTool = hasContainerSdkImport;
   if (!invokesContainerTool) {
     const execCallPattern =
-      /\b(?:subprocess\.(?:run|Popen|call|check_call|check_output|getoutput|getstatusoutput)|os\.(?:system|popen|spawn\w*|exec\w*)|pty\.spawn|asyncio\.create_subprocess\w*|(?:child_process\.)?(?:execSync|execFileSync|spawnSync|execFile|spawn|exec)|Bun\.spawn\w*|Deno\.(?:Command|run)|Open3\.\w+|system|popen|shell_exec|proc_open|passthru)\s*\(/gu;
+      /\b(?<callee>subprocess\.(?:run|Popen|call|check_call|check_output|getoutput|getstatusoutput)|os\.(?:system|popen|spawn\w*|exec\w*)|pty\.spawn|asyncio\.create_subprocess\w*|(?:child_process\.)?(?:execSync|execFileSync|spawnSync|execFile|spawn|exec)|Bun\.spawn\w*|Deno\.(?:Command|run)|Open3\.\w+|system|popen|shell_exec|proc_open|passthru)\s*\(/gu;
     for (const match of codeOnly.matchAll(execCallPattern)) {
       const openParenIdx = match.index + match[0].length - 1;
       const argText = extractBalancedSlice(codeOnly, openParenIdx, "(", ")");
-      if (argInvokesContainerCli(argText)) {
+      if (callInvokesContainerCli(match.groups.callee, argText)) {
         invokesContainerTool = true;
         break;
       }
@@ -3027,7 +3243,7 @@ function inspectNonShellScript(
   }
   if (!invokesContainerTool) {
     for (const match of codeOnly.matchAll(/\bBun\.\$`(?<body>[^`]*)`/gu)) {
-      if (argInvokesContainerCli(match.groups.body)) {
+      if (shellStringInvokesContainer(match.groups.body)) {
         invokesContainerTool = true;
         break;
       }
@@ -3042,7 +3258,7 @@ function inspectNonShellScript(
         openCh === closeCh
           ? (match.groups.body.split(closeCh)[0] ?? "")
           : extractBalancedSlice(codeOnly, openIdx, openCh, closeCh);
-      if (argInvokesContainerCli(bodyText)) {
+      if (shellStringInvokesContainer(bodyText)) {
         invokesContainerTool = true;
         break;
       }
@@ -5790,6 +6006,7 @@ function extractShellDashCScriptInfo(tokens, tokenSingleQuoted, tokenEscapedDoll
       }
       return {
         script: tokens[index + 1],
+        scriptIndex: index + 1,
         singleQuoted: Boolean(tokenSingleQuoted?.[index + 1]),
         escapedDollarOffsets: tokenEscapedDollarOffsets?.[index + 1] ?? [],
       };
@@ -5819,6 +6036,7 @@ function extractShellDashCScriptInfo(tokens, tokenSingleQuoted, tokenEscapedDoll
     return sawDashC
       ? {
           script: token,
+          scriptIndex: index,
           singleQuoted: Boolean(tokenSingleQuoted?.[index]),
           escapedDollarOffsets: tokenEscapedDollarOffsets?.[index] ?? [],
         }
@@ -7399,6 +7617,7 @@ function inspectShellText(
   depth = 0,
   buildFileContext = null,
   emittedGithubOutput = null,
+  initialArrays = null,
 ) {
   if (depth > MAX_SHELL_NESTING_DEPTH) {
     problems.push(
@@ -7473,7 +7692,7 @@ function inspectShellText(
   const scopeStack = [
     {
       vars: cloneVarMap(shellVars),
-      arrays: new Map(),
+      arrays: initialArrays ? cloneArrayMap(initialArrays) : new Map(),
       exportedVars: initialExportedVars,
       functions: new Map(),
       branches: [],
@@ -9761,6 +9980,140 @@ function inspectShellText(
               ...new Set(parentExpanded.candidates.map((candidate) => candidate.text)),
             ];
           }
+          // Bind trailing arguments passed after `sh -c <script> <$0> [$1 ...]`:
+          // the first trailing argument becomes `$0` (`command_name`) and
+          // subsequent arguments populate `$1`, `$2`, ... and `"$@"`.
+          const trailingRawIdxs = [];
+          for (let argIdx = dashCInfo.scriptIndex + 1; argIdx < tokens.length;) {
+            const redirSkip = consumeShellRedirection(
+              tokens,
+              argIdx,
+              [],
+              peeledQuoted,
+              peeledTokenOffsets,
+            );
+            if (redirSkip > 0) {
+              argIdx += redirSkip;
+              continue;
+            }
+            trailingRawIdxs.push(argIdx);
+            argIdx += 1;
+          }
+          const childShellVars = cloneVarMap(exportedCommandVars);
+          for (const key of childShellVars.keys()) {
+            if (/^[1-9][0-9]*$/u.test(key)) {
+              childShellVars.delete(key);
+            }
+          }
+          clearArrayMirrorInVars(childShellVars, "@");
+          let childInitialArrays = null;
+          if (trailingRawIdxs.length > 1) {
+            let childPosVariants = [[]];
+            let childPosTruncated = false;
+            const childArrExpPattern = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
+            for (const argIdx of trailingRawIdxs.slice(1)) {
+              const rawArg = tokens[argIdx];
+              const isSingleQuotedArg = Boolean(peeledSingleQuoted[argIdx]);
+              const isAnyQuotedArg = Boolean(peeledQuoted[argIdx]);
+              const argLine = resolveFoldedLine(peeledTokenOffsets[argIdx], rawArg, lineNumber);
+              const arrExpMatch = !isSingleQuotedArg ? childArrExpPattern.exec(rawArg) : null;
+              const isPosForward =
+                !isSingleQuotedArg &&
+                (rawArg === "$@" || rawArg === "${@}" || rawArg === "$*" || rawArg === "${*}");
+              if (arrExpMatch || isPosForward) {
+                const srcArr = frame.arrays.get(arrExpMatch ? arrExpMatch.groups.name : "@");
+                if (srcArr && srcArr.variants.length > 0) {
+                  if (srcArr.truncated) {
+                    childPosTruncated = true;
+                  }
+                  const nextVariants = [];
+                  for (const base of childPosVariants) {
+                    for (const added of srcArr.variants) {
+                      if (nextVariants.length >= MAX_VAR_VALUES) {
+                        childPosTruncated = true;
+                        break;
+                      }
+                      const items =
+                        isAnyQuotedArg &&
+                        (rawArg === "$*" || rawArg === "${*}" || rawArg.endsWith("[*]}"))
+                          ? [
+                              {
+                                text: added.map((it) => it.text).join(" "),
+                                line: added[0]?.line ?? argLine,
+                                preExpanded: true,
+                              },
+                            ]
+                          : added;
+                      nextVariants.push([...base, ...items]);
+                    }
+                  }
+                  childPosVariants = nextVariants;
+                  continue;
+                }
+              }
+              const expandedArg = isSingleQuotedArg
+                ? { candidates: [{ text: rawArg, line: argLine }], truncated: false }
+                : resolveImageTokenCandidates(rawArg, stepEnv, frame.vars, argLine, shellMode);
+              if (expandedArg.truncated) {
+                childPosTruncated = true;
+              }
+              const hasExpansion =
+                !isSingleQuotedArg && (rawArg.includes("$") || rawArg.includes("${{"));
+              const nextVariants = [];
+              for (const base of childPosVariants) {
+                for (const cand of expandedArg.candidates) {
+                  if (nextVariants.length >= MAX_VAR_VALUES) {
+                    childPosTruncated = true;
+                    break;
+                  }
+                  if (!isAnyQuotedArg && hasExpansion) {
+                    const trimmed = cand.text.trim();
+                    const splitItems =
+                      trimmed.length > 0
+                        ? trimmed
+                            .split(/\s+/u)
+                            .map((part) => ({ text: part, line: cand.line, preExpanded: true }))
+                        : [];
+                    nextVariants.push([...base, ...splitItems]);
+                  } else {
+                    nextVariants.push([
+                      ...base,
+                      { text: cand.text, line: cand.line, preExpanded: true },
+                    ]);
+                  }
+                }
+              }
+              childPosVariants = nextVariants;
+            }
+            const childPosArrayEntry = {
+              variants: childPosVariants.slice(0, MAX_VAR_VALUES),
+              truncated: childPosTruncated || childPosVariants.length > MAX_VAR_VALUES,
+            };
+            childInitialArrays = new Map([["@", childPosArrayEntry]]);
+            syncArrayMirrorToVars(childShellVars, "@", childPosArrayEntry, lineNumber);
+            const maxChildPosLen = childPosArrayEntry.variants.reduce(
+              (acc, v) => Math.max(acc, v.length),
+              0,
+            );
+            for (let pIdx = 0; pIdx < maxChildPosLen; pIdx += 1) {
+              let slotEntries = [];
+              for (const variant of childPosArrayEntry.variants) {
+                if (pIdx < variant.length) {
+                  slotEntries = mergeVarEntries(slotEntries, [
+                    { value: variant[pIdx].text, line: variant[pIdx].line },
+                  ]);
+                } else {
+                  slotEntries = mergeVarEntries(slotEntries, [{ value: "", line: 0, unset: true }]);
+                }
+              }
+              if (childPosArrayEntry.truncated) {
+                slotEntries = mergeVarEntries(slotEntries, [
+                  { value: "", line: lineNumber, truncated: true },
+                ]);
+              }
+              childShellVars.set(String(pIdx + 1), slotEntries);
+            }
+          }
           const seenChildProblems = new Set();
           for (const childScript of childScripts) {
             const scriptProblems = [];
@@ -9769,7 +10122,7 @@ function inspectShellText(
               lineNumber,
               sourceLines,
               childStepEnv,
-              exportedCommandVars,
+              childShellVars,
               matrixRows,
               filePath,
               scriptProblems,
@@ -9778,6 +10131,7 @@ function inspectShellText(
               depth + 1,
               childBuildContext,
               emittedGithubOutput,
+              childInitialArrays,
             );
             for (const message of scriptProblems) {
               if (!seenChildProblems.has(message)) {
@@ -10068,22 +10422,35 @@ function inspectShellText(
               );
             }
             const flagImages = [];
+            let candidateMissingImage = false;
             for (const varCandidate of expandedOpt.candidates) {
               for (const candidate of expandMatrixReferences(
                 varCandidate.text,
                 rowList,
                 varCandidate.line,
               )) {
-                for (const imageRef of extractDriverOptImages(candidate.text)) {
-                  flagImages.push({
-                    text: imageRef,
-                    line: candidate.line,
-                  });
+                const candidateImages = extractDriverOptImages(candidate.text);
+                if (candidateImages.length > 0) {
+                  for (const imageRef of candidateImages) {
+                    flagImages.push({
+                      text: imageRef,
+                      line: candidate.line,
+                    });
+                  }
+                } else {
+                  candidateMissingImage = true;
                 }
               }
             }
             if (flagImages.length > 0) {
-              effectiveImageCandidates = flagImages;
+              if (candidateMissingImage) {
+                effectiveImageCandidates =
+                  effectiveImageCandidates.length > 0
+                    ? [...effectiveImageCandidates, ...flagImages]
+                    : [{ text: "", line: lineNumber }, ...flagImages];
+              } else {
+                effectiveImageCandidates = flagImages;
+              }
             }
           }
 

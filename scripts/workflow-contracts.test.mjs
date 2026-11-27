@@ -4933,6 +4933,45 @@ describe("workflow contracts", () => {
       "<memory>:10: moby/buildkit:v0.35.1 is not pinned to a sha256 digest",
       "<memory>:26: container tool invocation in non-shell run step cannot be verified statically",
     ]);
+    // Branching `docker buildx create --driver-opt` preserves default-image
+    // branches that omit `image=`, `sh -c '...' _ <args>` binds `$1`/`$@` in
+    // the nested shell, and argument-vector subprocesses inspect the executable
+    // rather than filenames like `.github/workflows/docker.yml`.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r69:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: |",
+          '          if [ "$CUSTOM" = 1 ]; then',
+          `            opt="image=moby/buildkit:v0.35.1@${digest}"`,
+          "          else",
+          '            opt="network=host"',
+          "          fi",
+          '          docker buildx create --driver-opt "$opt"',
+          `          sh -c 'docker pull "$1"' _ node:24@${digest}`,
+          "          sh -c 'docker pull \"$1\"' _ alpine:3.20",
+          "          bash -c 'docker run \"$@\"' _ --rm busybox:1.36 echo bad",
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["git", "diff", "--", ".github/workflows/docker.yml"], check=True)',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["docker", "pull", "debian:12"], check=True)',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:12: docker buildx create uses unpinned default BuildKit image (pass --driver-opt image=...@sha256:...)",
+      "<memory>:14: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:15: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:22: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
