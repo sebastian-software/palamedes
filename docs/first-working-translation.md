@@ -1,4 +1,4 @@
-# First Working Translation In 5 Minutes
+# First Working Translation
 
 This guide is the shortest path to the good Palamedes feeling: write a message,
 extract it, translate it, and see it render without changing the mental model.

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { accessSync, constants, readFileSync, realpathSync, statSync } from "node:fs";
+import fs, { accessSync, constants, readFileSync, realpathSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { access } from "node:fs/promises";
 import { createJiti } from "jiti";
@@ -127,6 +127,146 @@ export function getConfigDependencies(config: ConfigDependencyInput): string[] {
   return Array.isArray(config.configDependencies) ? config.configDependencies : [config.configPath];
 }
 
+const CONFIG_DIGEST_RACY_WINDOW_MS = 1000;
+const CONFIG_DIGEST_CACHE_MAX_ENTRIES = 128;
+
+type DependencyStatFingerprint = {
+  dev: number;
+  ino: number;
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+};
+
+type CachedConfigDigest = {
+  dependencies: string[];
+  stats: DependencyStatFingerprint[];
+  capturedAtMs: number;
+  digest: string;
+};
+
+type ConfigDependencyResolutionCacheEntry = {
+  rawDependencies: string[];
+  rawSnapshot: string[];
+  sortedDependencies: string[];
+  cacheKey: string;
+};
+
+const configDigestCache = new Map<string, CachedConfigDigest>();
+const configDependencyOrderCache = new WeakMap<
+  ConfigDependencyInput,
+  ConfigDependencyResolutionCacheEntry
+>();
+
+function toStatFingerprint(stat: fs.Stats): DependencyStatFingerprint {
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    ctimeMs: stat.ctimeMs,
+  };
+}
+
+function statMatchesFingerprint(current: fs.Stats, previous: DependencyStatFingerprint): boolean {
+  return (
+    current.dev === previous.dev &&
+    current.ino === previous.ino &&
+    current.size === previous.size &&
+    current.mtimeMs === previous.mtimeMs &&
+    current.ctimeMs === previous.ctimeMs
+  );
+}
+
+function isStatSettled(stat: DependencyStatFingerprint, capturedAtMs: number): boolean {
+  return (
+    stat.mtimeMs <= capturedAtMs &&
+    stat.ctimeMs <= capturedAtMs &&
+    capturedAtMs - stat.mtimeMs >= CONFIG_DIGEST_RACY_WINDOW_MS &&
+    capturedAtMs - stat.ctimeMs >= CONFIG_DIGEST_RACY_WINDOW_MS
+  );
+}
+
+function setCachedConfigDigest(cacheKey: string, entry: CachedConfigDigest): void {
+  if (
+    configDigestCache.size >= CONFIG_DIGEST_CACHE_MAX_ENTRIES &&
+    !configDigestCache.has(cacheKey)
+  ) {
+    const oldestKey = configDigestCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      configDigestCache.delete(oldestKey);
+    }
+  }
+  configDigestCache.set(cacheKey, entry);
+}
+
+function resolveMultiDependencyOrder(
+  config: ConfigDependencyInput,
+  rawDependencies: string[],
+): { sortedDependencies: string[]; cacheKey: string } {
+  const cached = configDependencyOrderCache.get(config);
+  if (
+    cached &&
+    cached.rawDependencies === rawDependencies &&
+    cached.rawSnapshot.length === rawDependencies.length
+  ) {
+    let unchanged = true;
+    for (let index = 0; index < rawDependencies.length; index += 1) {
+      if (rawDependencies[index] !== cached.rawSnapshot[index]) {
+        unchanged = false;
+        break;
+      }
+    }
+    if (unchanged) {
+      return cached;
+    }
+  }
+
+  const rawSnapshot = [...rawDependencies];
+  const sortedDependencies = [...rawDependencies].sort();
+  const cacheKey = sortedDependencies.join("\0");
+  configDependencyOrderCache.set(config, {
+    rawDependencies,
+    rawSnapshot,
+    sortedDependencies,
+    cacheKey,
+  });
+  return { sortedDependencies, cacheKey };
+}
+
+function digestSingleDependency(dependency: string): string {
+  const capturedAtMs = Date.now();
+  const stat = fs.statSync(dependency);
+  const cached = configDigestCache.get(dependency);
+  if (
+    cached &&
+    cached.dependencies.length === 1 &&
+    cached.dependencies[0] === dependency &&
+    stat.isFile() &&
+    statMatchesFingerprint(stat, cached.stats[0]!) &&
+    isStatSettled(cached.stats[0]!, cached.capturedAtMs)
+  ) {
+    return cached.digest;
+  }
+
+  const digest = createHash("sha256");
+  digest.update(dependency);
+  digest.update("\0");
+  digest.update(fs.readFileSync(dependency));
+  digest.update("\0");
+  const hex = digest.digest("hex");
+
+  if (stat.isFile()) {
+    setCachedConfigDigest(dependency, {
+      dependencies: [dependency],
+      stats: [toStatFingerprint(stat)],
+      capturedAtMs,
+      digest: hex,
+    });
+  }
+  return hex;
+}
+
 /**
  * Hash a configuration's dependency paths and contents in a stable order.
  *
@@ -134,14 +274,67 @@ export function getConfigDependencies(config: ConfigDependencyInput): string[] {
  * unchanged so framework integrations invalidate identically on every host.
  */
 export function digestConfig(config: ConfigDependencyInput): string {
+  const rawDependencies = Array.isArray(config.configDependencies)
+    ? config.configDependencies
+    : null;
+  if (rawDependencies === null) {
+    return digestSingleDependency(config.configPath);
+  }
+  if (rawDependencies.length === 1) {
+    return digestSingleDependency(rawDependencies[0]!);
+  }
+  if (rawDependencies.length === 0) {
+    return createHash("sha256").digest("hex");
+  }
+
+  const { sortedDependencies, cacheKey } = resolveMultiDependencyOrder(config, rawDependencies);
+  const capturedAtMs = Date.now();
+  const currentStats: fs.Stats[] = [];
+  let allRegularFiles = true;
+  for (const dependency of sortedDependencies) {
+    const stat = fs.statSync(dependency);
+    currentStats.push(stat);
+    if (!stat.isFile()) {
+      allRegularFiles = false;
+    }
+  }
+
+  const cached = configDigestCache.get(cacheKey);
+  if (allRegularFiles && cached && cached.dependencies.length === sortedDependencies.length) {
+    let valid = true;
+    for (let index = 0; index < sortedDependencies.length; index += 1) {
+      if (
+        cached.dependencies[index] !== sortedDependencies[index] ||
+        !statMatchesFingerprint(currentStats[index]!, cached.stats[index]!) ||
+        !isStatSettled(cached.stats[index]!, cached.capturedAtMs)
+      ) {
+        valid = false;
+        break;
+      }
+    }
+    if (valid) {
+      return cached.digest;
+    }
+  }
+
   const digest = createHash("sha256");
-  for (const dependency of [...getConfigDependencies(config)].sort()) {
+  for (const dependency of sortedDependencies) {
     digest.update(dependency);
     digest.update("\0");
-    digest.update(readFileSync(dependency));
+    digest.update(fs.readFileSync(dependency));
     digest.update("\0");
   }
-  return digest.digest("hex");
+  const hex = digest.digest("hex");
+
+  if (allRegularFiles) {
+    setCachedConfigDigest(cacheKey, {
+      dependencies: sortedDependencies,
+      stats: currentStats.map(toStatFingerprint),
+      capturedAtMs,
+      digest: hex,
+    });
+  }
+  return hex;
 }
 
 export type LoadPalamedesConfigOptions = {

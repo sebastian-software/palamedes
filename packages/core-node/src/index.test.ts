@@ -1194,6 +1194,343 @@ msgstr ""
     }
   });
 
+  it("preserves __proto__, sparse arrays, and array metadata safely while rejecting malformed keys", () => {
+    const withProto: Record<string, unknown> = { ok: "value" };
+    Object.defineProperty(withProto, "__proto__", {
+      configurable: true,
+      enumerable: true,
+      value: { polluted: true },
+      writable: true,
+    });
+    const protoSnapshot = snapshotNativeArguments("renderCatalogModule", [withProto])[0] as Record<
+      string,
+      unknown
+    >;
+    expect(Object.getPrototypeOf(protoSnapshot)).toBe(Object.prototype);
+    expect(Object.hasOwn(protoSnapshot, "__proto__")).toBe(true);
+    expect(Reflect.get(protoSnapshot, "__proto__")).toStrictEqual({ polluted: true });
+    expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
+
+    const sparse: unknown[] = [];
+    sparse[2] = "two";
+    sparse.length = 4;
+    const sparseSnapshot = snapshotNativeArguments("compileCatalogArtifactSelected", [
+      sparse,
+    ])[0] as unknown[];
+    expect(sparseSnapshot).toHaveLength(4);
+    expect(0 in sparseSnapshot).toBe(false);
+    expect(2 in sparseSnapshot).toBe(true);
+    expect(sparseSnapshot[2]).toBe("two");
+    expect(3 in sparseSnapshot).toBe(false);
+
+    const originTuple = Object.assign(["src/page.tsx", 12, 4], { scope: "header" });
+    const tupleSnapshot = snapshotNativeArguments("updateCatalogFile", [
+      originTuple,
+    ])[0] as unknown[] & { scope?: string };
+    expect(tupleSnapshot[0]).toBe("src/page.tsx");
+    expect(tupleSnapshot[1]).toBe(12);
+    expect(tupleSnapshot[2]).toBe(4);
+    expect(tupleSnapshot.scope).toBe("header");
+    expect(tupleSnapshot).toHaveLength(3);
+
+    expect(() =>
+      snapshotNativeArguments("renderCatalogModule", [{ "bad\ud800": "value" }]),
+    ).toThrow(/renderCatalogModule\.argument\[0\]\.bad\ud800\.<key>/u);
+
+    const badArrayKey = Object.assign(["ok"], { "bad\udc00": "value" });
+    expect(() => snapshotNativeArguments("compileCatalogArtifactSelected", [badArrayKey])).toThrow(
+      /compileCatalogArtifactSelected\.argument\[0\]\.bad\udc00\.<key>/u,
+    );
+  });
+
+  it("avoids double snapshotting in hot-path wrappers while keeping TOCTOU and surrogate safety", async () => {
+    const fixtureBindings = {
+      getNativeInfo: () => ({ palamedesVersion: "fixture", ferrocatVersion: "0.1.0" }),
+      compileCatalogArtifact: vi.fn(() => ({
+        messages: {},
+        watchFiles: [],
+        missing: [],
+        diagnostics: [],
+      })),
+      compileCatalogArtifactAsync: vi.fn(async () => ({
+        messages: {},
+        watchFiles: [],
+        missing: [],
+        diagnostics: [],
+      })),
+      compileCatalogArtifactSelected: vi.fn(() => ({
+        messages: {},
+        watchFiles: [],
+        missing: [],
+        diagnostics: [],
+      })),
+      compileCatalogArtifactSelectedAsync: vi.fn(async () => ({
+        messages: {},
+        watchFiles: [],
+        missing: [],
+        diagnostics: [],
+      })),
+      compileCatalogModule: vi.fn(() => ({
+        code: "export const messages = {};",
+        warnings: [],
+        watchFiles: [],
+      })),
+      compileCatalogModuleAsync: vi.fn(async () => ({
+        code: "export const messages = {};",
+        warnings: [],
+        watchFiles: [],
+      })),
+      analyzeSource: vi.fn(() => ({ messages: [], diagnostics: [] })),
+      analyzeMdx: vi.fn(() => ({ messages: [], diagnostics: [] })),
+      auditCatalogs: vi.fn(() => ({
+        summary: {
+          catalogs: 0,
+          locales: 0,
+          errors: 0,
+          warnings: 0,
+          info: 0,
+        },
+        diagnostics: [],
+      })),
+      listTranslationCandidates: vi.fn(() => ({ candidates: [], diagnostics: [] })),
+      checkTranslationTargets: vi.fn(() => []),
+      transformMacros: vi.fn(() => ({ code: "", map: null, compiledIds: [] })),
+    };
+
+    vi.resetModules();
+    vi.doMock("./native-loader", async () => {
+      const nativeLoader = await vi.importActual<typeof NativeLoaderModule>("./native-loader");
+      return {
+        ...nativeLoader,
+        loadNativeBindings: () =>
+          nativeLoader.loadNativeBindings({
+            packageDir: "/fixture/core-node",
+            nativePackageName: "fixture-native",
+            require(specifier) {
+              return specifier.endsWith("package.json") ? { version: "fixture" } : fixtureBindings;
+            },
+          }),
+      };
+    });
+
+    try {
+      const mod = await import("./index");
+      const baseConfig = {
+        rootDir: "/repo",
+        locales: ["en"],
+        sourceLocale: "en",
+        catalogs: [{ path: "locales/{locale}", include: ["src"] }],
+      };
+
+      // Each wrapper snapshots once and marks the wrapper-owned request prepared,
+      // so Object.keys is never walked a second time inside guardNativeBindings.
+      const keysSpy = vi.spyOn(Object, "keys");
+      try {
+        // { config, resourcePath } + config + locales + catalogs + catalogs[0] + catalogs[0].include = 6
+        mod.compileCatalogArtifact(baseConfig, "locales/en.po");
+        expect(keysSpy).toHaveBeenCalledTimes(6);
+
+        keysSpy.mockClear();
+        await mod.compileCatalogArtifactAsync(baseConfig, "locales/en.po");
+        expect(keysSpy).toHaveBeenCalledTimes(6);
+
+        keysSpy.mockClear();
+        // + compiledIds = 7
+        mod.compileCatalogArtifactSelected(baseConfig, "locales/en.po", ["id-1"]);
+        expect(keysSpy).toHaveBeenCalledTimes(7);
+
+        keysSpy.mockClear();
+        await mod.compileCatalogArtifactSelectedAsync(baseConfig, "locales/en.po", ["id-1"]);
+        expect(keysSpy).toHaveBeenCalledTimes(7);
+
+        keysSpy.mockClear();
+        mod.compileCatalogModule(baseConfig, "locales/en.po", { locale: "en" });
+        expect(keysSpy).toHaveBeenCalledTimes(6);
+
+        keysSpy.mockClear();
+        await mod.compileCatalogModuleAsync(baseConfig, "locales/en.po", { locale: "en" });
+        expect(keysSpy).toHaveBeenCalledTimes(6);
+
+        keysSpy.mockClear();
+        // options + rules = 2 (no second snapshot in guardNativeBindings)
+        mod.analyzeSourceNative("export const x = 1;", "sample.ts", {
+          rules: { pseudoPlural: "warning" },
+        });
+        expect(keysSpy).toHaveBeenCalledTimes(2);
+
+        keysSpy.mockClear();
+        // options = 1
+        mod.analyzeMdxNative("# Hello", "page.mdx", { framework: "react" });
+        expect(keysSpy).toHaveBeenCalledTimes(1);
+
+        keysSpy.mockClear();
+        mod.auditCatalogs(baseConfig);
+        expect(keysSpy).toHaveBeenCalledTimes(6);
+
+        keysSpy.mockClear();
+        mod.listTranslationCandidates({ config: baseConfig });
+        expect(keysSpy).toHaveBeenCalledTimes(6);
+      } finally {
+        keysSpy.mockRestore();
+      }
+
+      // Single-read TOCTOU guarantee remains intact across wrapper conversions.
+      let rootDirReads = 0;
+      let catalogsReads = 0;
+      const toctouConfig = {
+        get rootDir() {
+          rootDirReads += 1;
+          return rootDirReads === 1 ? "/stable-root" : "\ud800";
+        },
+        locales: ["en"],
+        sourceLocale: "en",
+        get catalogs() {
+          catalogsReads += 1;
+          return catalogsReads === 1
+            ? [{ path: "locales/{locale}", include: ["src"] }]
+            : [{ path: "other/{locale}", include: ["src"] }];
+        },
+      };
+      mod.compileCatalogArtifact(toctouConfig, "locales/en.po");
+      expect(rootDirReads).toBe(1);
+      expect(catalogsReads).toBe(1);
+      expect(fixtureBindings.compileCatalogArtifact).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            rootDir: "/stable-root",
+            catalogs: [expect.objectContaining({ path: "locales/{locale}" })],
+          }),
+        }),
+      );
+
+      // Malformed UTF-16 surrogates are still rejected with exact argument paths.
+      expect(() =>
+        mod.compileCatalogArtifact({ ...baseConfig, rootDir: "\ud800" }, "locales/en.po"),
+      ).toThrow(/compileCatalogArtifact\.argument\[0\]\.config\.rootDir/u);
+      expect(() =>
+        mod.analyzeSourceNative("const x = 1;", "sample.ts", {
+          rules: { pseudoPlural: "\ud800" as never },
+        }),
+      ).toThrow(/analyzeSource\.argument\[2\]\.rules\.pseudoPlural/u);
+      expect(() => mod.analyzeMdxNative("# Hi", "page.mdx", { ignoreDirective: "\udc00" })).toThrow(
+        /analyzeMdx\.argument\[2\]\.ignoreDirective/u,
+      );
+      expect(() =>
+        mod.transformMacrosNative("const x = 1;", "sample.ts", {
+          runtimeModule: "\ud800",
+        }),
+      ).toThrow(/transformMacros\.argument\[2\]\.runtimeModule/u);
+
+      // Uninvolved plugin options and extra catalog metadata (such as Map instances)
+      // must not break catalog compilation wrappers.
+      await expect(
+        mod.compileCatalogArtifactSelectedAsync(
+          {
+            ...baseConfig,
+            plugins: [["./custom-plugin.mjs", { cache: new Map([["k", "v"]]) }]],
+            catalogs: [
+              {
+                path: "locales/{locale}",
+                include: ["src"],
+                metadata: { aliases: new Map([["en", "en-US"]]) },
+              },
+            ],
+          } as unknown as typeof baseConfig,
+          "locales/en.po",
+          ["id-1"],
+        ),
+      ).resolves.toMatchObject({ messages: {} });
+
+      // Own .toJSON methods on snapshotted arrays must not run during selected-build
+      // key serialization or mutate the prepared native request.
+      let toJsonCalls = 0;
+      const hijackedLocales = Object.assign(["en"], {
+        toJSON(this: string[]) {
+          toJsonCalls += 1;
+          this[0] = "\ud800";
+          return ["en"];
+        },
+      });
+      await mod.compileCatalogArtifactSelectedAsync(
+        { ...baseConfig, locales: hijackedLocales },
+        "locales/en.po",
+        ["id-1"],
+      );
+      expect(toJsonCalls).toBe(0);
+      expect(fixtureBindings.compileCatalogArtifactSelectedAsync).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({ locales: ["en"] }),
+        }),
+        undefined,
+      );
+
+      // Own .map methods on snapshotted arrays must not run during wrapper conversion.
+      const customMapCalls: unknown[] = [];
+      const hijackedCatalogs = Object.assign([{ path: "locales/{locale}", include: ["src"] }], {
+        map() {
+          customMapCalls.push("catalogs");
+          return [{ path: "\ud800", include: ["src"] }];
+        },
+      });
+      mod.compileCatalogArtifact({ ...baseConfig, catalogs: hijackedCatalogs }, "locales/en.po");
+      const hijackedTargets = Object.assign(
+        [
+          {
+            id: { catalog: "locales/{locale}", locale: "de", message: "Hello" },
+            translation: { kind: "singular" as const, value: "Hallo" },
+          },
+        ],
+        {
+          map() {
+            customMapCalls.push("targets");
+            return [{ translation: { kind: "Singular", value: "\ud800" } }];
+          },
+        },
+      );
+      mod.checkTranslationTargets({ targets: hijackedTargets });
+      expect(customMapCalls).toEqual([]);
+      expect(fixtureBindings.compileCatalogArtifact).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            catalogs: [
+              { path: "locales/{locale}", format: undefined, include: ["src"], exclude: undefined },
+            ],
+          }),
+        }),
+      );
+      expect(fixtureBindings.checkTranslationTargets).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          targets: [
+            expect.objectContaining({
+              translation: { kind: "Singular", value: "Hallo" },
+            }),
+          ],
+        }),
+      );
+
+      // Already-aborted async calls reject with the caller's abort reason before
+      // snapshotting or reading request getters.
+      const abortReason = new Error("cancelled by caller");
+      let filesReads = 0;
+      await expect(
+        mod.extractCatalogMessagesFromFilesAsync(
+          {
+            rootDir: "/repo",
+            get files(): string[] {
+              filesReads += 1;
+              throw new Error("should not be read when already aborted");
+            },
+          },
+          { signal: AbortSignal.abort(abortReason) },
+        ),
+      ).rejects.toBe(abortReason);
+      expect(filesReads).toBe(0);
+    } finally {
+      vi.doUnmock("./native-loader");
+      vi.resetModules();
+    }
+  });
+
   it("uses the content-addressed test-support addon prepared before tests", async () => {
     const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
     const addonPath = await testSupportAddonPath(repoRoot);

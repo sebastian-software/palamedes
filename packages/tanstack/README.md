@@ -14,7 +14,7 @@ pnpm add @palamedes/core @palamedes/runtime @palamedes/tanstack @tanstack/react-
 ## Verified React baseline and representative coverage
 
 The React fixtures pin `@tanstack/react-start@1.169.4` and
-`@tanstack/react-router@1.170.46`, with Seroval 1.6.9.
+`@tanstack/react-router@1.170.46`, with Seroval 1.6.11.
 
 Palamedes v2 verifies TanStack Start through React and Solid through the
 separate Solid 2 Start Mode/Nitro stack. The four `tanstack-*` and four
@@ -27,7 +27,7 @@ This representative coverage does not promise every framework combination.
 TanStack Solid Start is outside the v2 scope; there is no
 `@palamedes/tanstack/solid` export. The Solid/Nitro evidence establishes the
 Solid integration, not compatibility with TanStack's Solid host. See the
-[framework example notes](../../docs/framework-example-notes.md) for the
+[framework example notes](https://github.com/sebastian-software/palamedes/blob/main/docs/framework-example-notes.md) for the
 checked hosts and verification commands.
 
 ## Global server-function middleware

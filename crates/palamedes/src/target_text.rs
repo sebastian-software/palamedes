@@ -6,6 +6,7 @@ use ferrocat_icu::IcuNode;
 use serde::{Deserialize, Serialize};
 
 use crate::icu_text::parse_runtime_icu;
+use crate::runtime_message::{MAX_NESTING_DEPTH, exceeds_icu_nesting_depth};
 use crate::{CatalogDiagnosticSeverity, TranslationCandidateId, TranslationValue};
 
 /// Optional target-text review checks. Both checks default to disabled.
@@ -131,6 +132,11 @@ pub(crate) fn check_target_text(
     checks: TargetTextCheckOptions,
 ) -> Vec<TargetTextWarning> {
     if !checks.boundary_whitespace && !checks.metadata_leakage {
+        return Vec::new();
+    }
+    if exceeds_icu_nesting_depth(source, MAX_NESTING_DEPTH)
+        || exceeds_icu_nesting_depth(target, MAX_NESTING_DEPTH)
+    {
         return Vec::new();
     }
     let (Ok(source_message), Ok(target_message)) =
@@ -478,5 +484,12 @@ mod tests {
             super::probed_marker(&nodes, "START_", "_END"),
             Some("#needle".to_owned())
         );
+
+        let huge_choices = format!(
+            "{}leaf{}",
+            "{kind, select, other {".repeat(10_000),
+            "}}".repeat(10_000)
+        );
+        assert!(check_target_text(&huge_choices, &huge_choices, CHECKS).is_empty());
     }
 }

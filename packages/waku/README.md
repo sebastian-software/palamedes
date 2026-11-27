@@ -9,7 +9,7 @@ and `react-server-dom-webpack` `19.3.1`. Waku is an upstream release candidate,
 and the adapter uses its `unstable_getRequest` and host CSP `unstable_setNonce`
 APIs, so each new tested Waku version must pass the request, action, streaming,
 catalog recovery, and CSP proofs before the peer range moves.
-See the [stability policy](../../docs/stability.md#waku-contract).
+See the [stability policy](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md#waku-contract).
 
 ```sh
 pnpm add @palamedes/core @palamedes/runtime @palamedes/waku waku

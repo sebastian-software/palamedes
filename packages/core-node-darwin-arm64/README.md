@@ -11,7 +11,7 @@ Platform-specific native bindings for `@palamedes/core-node` on macOS arm64.
 
 You usually should not install this package directly.
 
-`@palamedes/core-node` pulls in the correct native package for the current platform as an optional dependency. This package exists so Palamedes can ship native binaries in a way that works cleanly across npm, CI, and multiple operating systems.
+`@palamedes/core-node` selects and loads the matching native package for the current platform as an optional dependency. This package ships the macOS arm64 binary in lockstep with `@palamedes/core-node`.
 
 ## Installation
 
@@ -25,6 +25,7 @@ pnpm add @palamedes/core-node
 
 - contains the `.node` binary for `darwin-arm64`
 - is loaded internally by `@palamedes/core-node`
+- is versioned in lockstep with `@palamedes/core-node`
 - is not a stable direct integration surface
 
 ## Related Packages

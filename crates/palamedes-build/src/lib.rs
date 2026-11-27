@@ -447,8 +447,25 @@ impl CompiledCatalogs {
             let path = entry.path();
             if entry.file_type().map_err(Error::io(&path))?.is_file() {
                 let target = directory.join(entry.file_name());
+                let source_mode = {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        Some(
+                            fs::metadata(&path)
+                                .map_err(Error::io(&path))?
+                                .permissions()
+                                .mode()
+                                & 0o777,
+                        )
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        None
+                    }
+                };
                 let bytes = fs::read(&path).map_err(Error::io(&path))?;
-                catalogs::atomic_write_file(&target, &bytes)?;
+                catalogs::atomic_write_file_with_new_mode(&target, &bytes, source_mode)?;
             }
         }
         Ok(())
@@ -582,6 +599,23 @@ mod tests {
                 .mode()
                 & 0o777,
             0o640
+        );
+
+        // Private source catalogs must not be widened when installed to a fresh target.
+        let private_source = recompiled.catalog_directory.join("en.pmd.json");
+        std::fs::set_permissions(&private_source, std::fs::Permissions::from_mode(0o600))
+            .expect("chmod private source");
+        let fresh_install_dir = dir.path().join("private-installed");
+        recompiled
+            .install_to(&fresh_install_dir)
+            .expect("install private catalog");
+        assert_eq!(
+            std::fs::metadata(fresh_install_dir.join("en.pmd.json"))
+                .expect("private installed meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
         );
     }
 }

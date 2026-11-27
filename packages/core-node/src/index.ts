@@ -516,13 +516,13 @@ export function checkTranslationTargets(
   request: TranslationTargetTextRequest,
 ): TranslationTargetTextResult[] {
   const snapshot = snapshotNativeArgument("checkTranslationTargets", request);
-  const nativeRequest = {
+  const nativeRequest = markPreparedNativeArgument({
     ...snapshot,
-    targets: snapshot.targets.map((target) => ({
+    targets: mapPlainArray(snapshot.targets, (target) => ({
       ...target,
       translation: toNativeTranslationValue(target.translation),
     })),
-  };
+  });
   return native.checkTranslationTargets(nativeRequest).map((result) => ({
     ...result,
     diagnostics: result.diagnostics.map((diagnostic) => ({ ...diagnostic, severity: "warning" })),
@@ -544,6 +544,7 @@ export async function updateCatalogFileAsync(
   request: CatalogUpdateRequest,
   options?: AsyncTaskOptions,
 ): Promise<CatalogUpdateResult> {
+  options?.signal?.throwIfAborted();
   const nativeRequest = toNativeUpdateRequest("updateCatalogFileAsync", request);
   const result = await serializeCatalogMutation([nativeRequest.targetPath], () =>
     startAbortableNativeTask(options, (signal) =>
@@ -561,7 +562,7 @@ function fromNativeCatalogUpdateResult(result: GeneratedCatalogUpdateResult): Ca
 }
 
 export function parseCatalog(request: CatalogParseRequest): CatalogParseResult {
-  const result = native.parseCatalog(toNativeParseRequest(request));
+  const result = native.parseCatalog(toNativeParseRequest("parseCatalog", request));
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
@@ -571,12 +572,18 @@ export function parseCatalog(request: CatalogParseRequest): CatalogParseResult {
 export function listTranslationCandidates(
   request: TranslationCandidateRequest,
 ): TranslationCandidateResult {
-  const nativeRequest: NativeTranslationCandidateRequest = {
-    config: toNativeArtifactConfig(request.config),
+  const source = snapshotNativeArgument("listTranslationCandidates", {
+    config: pickCatalogArtifactConfigInput(request.config),
     locales: request.locales,
     targets: request.targets,
     maxOrigins: request.maxOrigins,
-  };
+  });
+  const nativeRequest: NativeTranslationCandidateRequest = markPreparedNativeArgument({
+    config: toNativeArtifactConfig(source.config),
+    locales: source.locales,
+    targets: source.targets,
+    maxOrigins: source.maxOrigins,
+  });
   const result: GeneratedTranslationCandidateResult =
     native.listTranslationCandidates(nativeRequest);
   return {
@@ -590,13 +597,15 @@ export function findTranslationReferences(
   request: TranslationReferenceRequest,
 ): TranslationReferenceResult {
   const snapshot = snapshotNativeArgument("findTranslationReferences", request);
-  const result = native.findTranslationReferences({
-    ...snapshot,
-    references: snapshot.references.map((reference) => ({
-      ...reference,
-      translation: toNativeTranslationValue(reference.translation),
-    })),
-  });
+  const result = native.findTranslationReferences(
+    markPreparedNativeArgument({
+      ...snapshot,
+      references: mapPlainArray(snapshot.references, (reference) => ({
+        ...reference,
+        translation: toNativeTranslationValue(reference.translation),
+      })),
+    }),
+  );
   return {
     ...result,
     matches: result.matches.map((matches) => ({
@@ -625,6 +634,7 @@ export async function applyTranslationPatchesAsync(
   request: TranslationPatchRequest,
   options?: AsyncTaskOptions,
 ): Promise<TranslationPatchResult> {
+  options?.signal?.throwIfAborted();
   const nativeRequest = toNativeTranslationPatchRequest("applyTranslationPatchesAsync", request);
   try {
     const result = await serializeCatalogMutation(translationPatchTargetPaths(nativeRequest), () =>
@@ -642,10 +652,14 @@ function toNativeTranslationPatchRequest(
   operation: string,
   request: TranslationPatchRequest,
 ): NativeTranslationPatchRequest {
-  const source = snapshotNativeArgument(operation, request);
+  const source = snapshotNativeArgument(operation, {
+    config: pickCatalogArtifactConfigInput(request.config),
+    patches: request.patches,
+    po: request.po,
+  });
   return markPreparedNativeArgument({
     config: toOwnedNativeArtifactConfig(source.config),
-    patches: source.patches.map(toNativeTranslationPatch),
+    patches: mapPlainArray(source.patches, toNativeTranslationPatch),
     po: toNativePoOptions(source.po),
   });
 }
@@ -831,11 +845,17 @@ export function inspectCatalogMachineTranslations(
   config: CatalogArtifactConfig,
   options: CatalogMachineTranslationInspectionOptions = {},
 ): CatalogMachineTranslationInspectionResult {
+  const source = snapshotNativeArgument("inspectCatalogMachineTranslations", {
+    config: pickCatalogArtifactConfigInput(config),
+    locales: options.locales,
+  });
   return mapMachineTranslationInspection(
-    native.inspectCatalogMachineTranslations({
-      config: toNativeArtifactConfig(config),
-      locales: options.locales,
-    }),
+    native.inspectCatalogMachineTranslations(
+      markPreparedNativeArgument({
+        config: toNativeArtifactConfig(source.config),
+        locales: source.locales,
+      }),
+    ),
   );
 }
 
@@ -845,15 +865,18 @@ export async function inspectCatalogMachineTranslationsAsync(
   options: CatalogMachineTranslationInspectionOptions = {},
   taskOptions: AsyncTaskOptions = {},
 ): Promise<CatalogMachineTranslationInspectionResult> {
+  taskOptions?.signal?.throwIfAborted();
+  const source = snapshotNativeArgument("inspectCatalogMachineTranslationsAsync", {
+    config: pickCatalogArtifactConfigInput(config),
+    locales: options.locales,
+  });
+  const request = markPreparedNativeArgument({
+    config: toNativeArtifactConfig(source.config),
+    locales: source.locales,
+  });
   return mapMachineTranslationInspection(
     await startAbortableNativeTask(taskOptions, (signal) =>
-      native.inspectCatalogMachineTranslationsAsync(
-        {
-          config: toNativeArtifactConfig(config),
-          locales: options.locales,
-        },
-        signal,
-      ),
+      native.inspectCatalogMachineTranslationsAsync(request, signal),
     ),
   );
 }
@@ -862,12 +885,18 @@ export function auditCatalogs(
   config: CatalogArtifactConfig,
   options: CatalogAuditOptions = {},
 ): CatalogAuditResult {
-  const request: NativeCatalogAuditRequest = {
-    config: toNativeArtifactConfig(config),
+  const source = snapshotNativeArgument("auditCatalogs", {
+    config: pickCatalogArtifactConfigInput(config),
     locales: options.locales,
     checks: options.checks,
     metadata: options.metadata,
-  };
+  });
+  const request: NativeCatalogAuditRequest = markPreparedNativeArgument({
+    config: toNativeArtifactConfig(source.config),
+    locales: source.locales,
+    checks: source.checks,
+    metadata: source.metadata,
+  });
   const result = native.auditCatalogs(request);
 
   return {
@@ -908,7 +937,9 @@ export function combineCatalogs(request: CatalogCombineRequest): CatalogCombineR
 }
 
 export function combineCatalogFiles(request: CatalogFileCombineRequest): CatalogFileCombineResult {
-  const result = native.combineCatalogFiles(toNativeFileCombineRequest(request));
+  const result = native.combineCatalogFiles(
+    toNativeFileCombineRequest("combineCatalogFiles", request),
+  );
   return {
     ...result,
     format: fromNativeFileFormat(result.format),
@@ -917,7 +948,9 @@ export function combineCatalogFiles(request: CatalogFileCombineRequest): Catalog
 }
 
 export function mergeCatalogsThreeWay(request: CatalogThreeWayMergeRequest): CatalogCombineResult {
-  const result = native.mergeCatalogsThreeWay(toNativeThreeWayMergeRequest(request));
+  const result = native.mergeCatalogsThreeWay(
+    toNativeThreeWayMergeRequest("mergeCatalogsThreeWay", request),
+  );
   return {
     ...result,
     diagnostics: mapCatalogDiagnostics(result.diagnostics),
@@ -927,7 +960,9 @@ export function mergeCatalogsThreeWay(request: CatalogThreeWayMergeRequest): Cat
 export function mergeCatalogFilesThreeWay(
   request: CatalogFileThreeWayMergeRequest,
 ): CatalogFileCombineResult {
-  const result = native.mergeCatalogFilesThreeWay(toNativeFileThreeWayMergeRequest(request));
+  const result = native.mergeCatalogFilesThreeWay(
+    toNativeFileThreeWayMergeRequest("mergeCatalogFilesThreeWay", request),
+  );
   return {
     ...result,
     format: fromNativeFileFormat(result.format),
@@ -943,7 +978,10 @@ function toNativeCombineRequest(
   const conflictStrategy = source.conflictStrategy;
   const selection = source.selection;
   return markPreparedNativeArgument({
-    inputs: source.inputs.map((input) => ({ content: input.content, label: input.label })),
+    inputs: mapPlainArray(source.inputs, (input) => ({
+      content: input.content,
+      label: input.label,
+    })),
     sourceLocale: source.sourceLocale,
     locale: source.locale,
     conflictStrategy: conflictStrategy ? toNativeConflictStrategy(conflictStrategy) : undefined,
@@ -953,20 +991,22 @@ function toNativeCombineRequest(
 }
 
 function toNativeThreeWayMergeRequest(
+  operation: string,
   request: CatalogThreeWayMergeRequest,
 ): NativeCatalogThreeWayMergeRequest {
-  return {
-    ancestor: request.ancestor,
-    ours: request.ours,
-    theirs: request.theirs,
-    format: toNativeFileFormat(request.format),
-    sourceLocale: request.sourceLocale,
-    locale: request.locale,
-    conflictStrategy: request.conflictStrategy
-      ? toNativeConflictStrategy(request.conflictStrategy)
+  const source = snapshotNativeArgument(operation, request);
+  return markPreparedNativeArgument({
+    ancestor: source.ancestor,
+    ours: source.ours,
+    theirs: source.theirs,
+    format: toNativeFileFormat(source.format),
+    sourceLocale: source.sourceLocale,
+    locale: source.locale,
+    conflictStrategy: source.conflictStrategy
+      ? toNativeConflictStrategy(source.conflictStrategy)
       : undefined,
-    po: toNativePoOptions(request.po),
-  };
+    po: toNativePoOptions(source.po),
+  });
 }
 
 function toNativeConflictStrategy(
@@ -986,37 +1026,41 @@ function toNativeConflictStrategy(
 }
 
 function toNativeFileCombineRequest(
+  operation: string,
   request: CatalogFileCombineRequest,
 ): NativeCatalogFileCombineRequest {
-  return {
-    inputPaths: request.inputPaths,
-    outputPath: request.outputPath,
-    format: request.format ? toNativeFileFormat(request.format) : undefined,
-    sourceLocale: request.sourceLocale,
-    locale: request.locale,
-    conflictStrategy: request.conflictStrategy
-      ? toNativeConflictStrategy(request.conflictStrategy)
+  const source = snapshotNativeArgument(operation, request);
+  return markPreparedNativeArgument({
+    inputPaths: source.inputPaths,
+    outputPath: source.outputPath,
+    format: source.format ? toNativeFileFormat(source.format) : undefined,
+    sourceLocale: source.sourceLocale,
+    locale: source.locale,
+    conflictStrategy: source.conflictStrategy
+      ? toNativeConflictStrategy(source.conflictStrategy)
       : undefined,
-    po: toNativePoOptions(request.po),
-  };
+    po: toNativePoOptions(source.po),
+  });
 }
 
 function toNativeFileThreeWayMergeRequest(
+  operation: string,
   request: CatalogFileThreeWayMergeRequest,
 ): NativeCatalogFileThreeWayMergeRequest {
-  return {
-    ancestorPath: request.ancestorPath,
-    oursPath: request.oursPath,
-    theirsPath: request.theirsPath,
-    outputPath: request.outputPath,
-    format: request.format ? toNativeFileFormat(request.format) : undefined,
-    sourceLocale: request.sourceLocale,
-    locale: request.locale,
-    conflictStrategy: request.conflictStrategy
-      ? toNativeConflictStrategy(request.conflictStrategy)
+  const source = snapshotNativeArgument(operation, request);
+  return markPreparedNativeArgument({
+    ancestorPath: source.ancestorPath,
+    oursPath: source.oursPath,
+    theirsPath: source.theirsPath,
+    outputPath: source.outputPath,
+    format: source.format ? toNativeFileFormat(source.format) : undefined,
+    sourceLocale: source.sourceLocale,
+    locale: source.locale,
+    conflictStrategy: source.conflictStrategy
+      ? toNativeConflictStrategy(source.conflictStrategy)
       : undefined,
-    po: toNativePoOptions(request.po),
-  };
+    po: toNativePoOptions(source.po),
+  });
 }
 
 function toNativePoOptions(po: PoOutputOptions | undefined): NativeCatalogUpdateRequest["po"] {
@@ -1062,7 +1106,7 @@ function toNativeUpdateRequest(
     forceClean: source.forceClean,
     format: format ? toNativeConfigFormat(format) : undefined,
     po: toNativePoOptions(source.po),
-    messages: source.messages.map((message) => {
+    messages: mapPlainArray(source.messages, (message) => {
       const placeholders = message.placeholders;
       return {
         message: message.message,
@@ -1073,7 +1117,7 @@ function toNativeUpdateRequest(
             )
           : undefined,
         extractedComments: [...message.extractedComments],
-        origins: message.origins.map((origin) => ({
+        origins: mapPlainArray(message.origins, (origin) => ({
           file: origin.file,
           line: origin.line,
           scope: origin.scope,
@@ -1096,19 +1140,184 @@ function toNativePoLineBreaks(
   }
 }
 
-function toNativeParseRequest(request: CatalogParseRequest): NativeCatalogParseRequest {
-  return {
-    ...request,
-    format: request.format ? toNativeConfigFormat(request.format) : undefined,
-  };
+function toNativeParseRequest(
+  operation: string,
+  request: CatalogParseRequest,
+): NativeCatalogParseRequest {
+  const source = snapshotNativeArgument(operation, request);
+  return markPreparedNativeArgument({
+    ...source,
+    format: source.format ? toNativeConfigFormat(source.format) : undefined,
+  });
+}
+
+function mapPlainArray<T, U>(items: T[], mapper: (item: T) => U): U[] {
+  if (!Array.isArray(items)) {
+    throw new TypeError("Expected an array.");
+  }
+  const result: U[] = [];
+  for (let index = 0, { length } = items; index < length; index += 1) {
+    result.push(mapper(items[index]!));
+  }
+  return result;
+}
+
+function copyPlainArray<T>(items: T[]): T[] {
+  const result: T[] = [];
+  for (let index = 0, { length } = items; index < length; index += 1) {
+    result.push(items[index]!);
+  }
+  return result;
+}
+
+function isMapObject(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  for (let current = prototype; current !== null; current = Object.getPrototypeOf(current)) {
+    if (current === Map.prototype) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pickCatalogEntryInput(
+  catalog: CatalogArtifactCatalogConfig,
+): CatalogArtifactCatalogConfig {
+  if (catalog === null || typeof catalog !== "object" || Array.isArray(catalog)) {
+    return catalog;
+  }
+  try {
+    if (isMapObject(catalog)) {
+      return catalog;
+    }
+    return {
+      path: catalog.path,
+      format: catalog.format,
+      include: catalog.include,
+      exclude: catalog.exclude,
+    };
+  } catch {
+    // Let snapshotNativeArgument surface boundary read errors with the exact field path.
+    return catalog;
+  }
+}
+
+function pickCatalogArtifactConfigInput(config: CatalogArtifactConfig): CatalogArtifactConfig {
+  if (config === null || typeof config !== "object" || Array.isArray(config)) {
+    return config;
+  }
+  try {
+    if (isMapObject(config)) {
+      return config;
+    }
+    const catalogs = config.catalogs;
+    return {
+      rootDir: config.rootDir,
+      locales: config.locales,
+      sourceLocale: config.sourceLocale,
+      fallbackLocales: config.fallbackLocales,
+      pseudoLocale: config.pseudoLocale,
+      catalogs: Array.isArray(catalogs) ? mapPlainArray(catalogs, pickCatalogEntryInput) : catalogs,
+    };
+  } catch {
+    // Let snapshotNativeArgument surface boundary read errors with the exact field path.
+    return config;
+  }
+}
+
+function toPlainFallbackLocales(
+  fallbackLocales: CatalogArtifactConfig["fallbackLocales"],
+): GeneratedCatalogArtifactConfig["fallbackLocales"] {
+  if (Array.isArray(fallbackLocales)) {
+    return copyPlainArray(fallbackLocales);
+  }
+  if (fallbackLocales && typeof fallbackLocales === "object") {
+    return Object.fromEntries(
+      Object.entries(fallbackLocales).map(([locale, fallbacks]) => [
+        locale,
+        Array.isArray(fallbacks) ? copyPlainArray(fallbacks) : fallbacks,
+      ]),
+    );
+  }
+  return fallbackLocales;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  for (let index = 0, { length } = value; index < length; index += 1) {
+    if (typeof value[index] !== "string") {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function isSafeForPreparedSerialization(
+  config: GeneratedCatalogArtifactConfig,
+  resourcePath: unknown,
+): boolean {
+  if (
+    typeof config.rootDir !== "string" ||
+    typeof resourcePath !== "string" ||
+    typeof config.sourceLocale !== "string" ||
+    !isOptionalString(config.pseudoLocale) ||
+    !isStringArray(config.locales)
+  ) {
+    return false;
+  }
+  const fallbackLocales = config.fallbackLocales;
+  if (fallbackLocales !== undefined) {
+    if (Array.isArray(fallbackLocales)) {
+      if (!isStringArray(fallbackLocales)) {
+        return false;
+      }
+    } else if (fallbackLocales && typeof fallbackLocales === "object") {
+      for (const [locale, fallbacks] of Object.entries(fallbackLocales)) {
+        if (locale === "toJSON" || !isStringArray(fallbacks)) {
+          return false;
+        }
+      }
+    } else {
+      return false;
+    }
+  }
+  if (!Array.isArray(config.catalogs)) {
+    return false;
+  }
+  for (let index = 0, { length } = config.catalogs; index < length; index += 1) {
+    const catalog = config.catalogs[index];
+    if (
+      !catalog ||
+      typeof catalog !== "object" ||
+      typeof catalog.path !== "string" ||
+      !isOptionalString(catalog.format) ||
+      (catalog.include !== undefined && !isStringArray(catalog.include)) ||
+      (catalog.exclude !== undefined && !isStringArray(catalog.exclude))
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function toNativeArtifactConfig(config: CatalogArtifactConfig): GeneratedCatalogArtifactConfig {
   return {
-    ...config,
-    catalogs: config.catalogs.map((catalog) => ({
-      ...catalog,
+    rootDir: config.rootDir,
+    locales: Array.isArray(config.locales) ? copyPlainArray(config.locales) : config.locales,
+    sourceLocale: config.sourceLocale,
+    fallbackLocales: toPlainFallbackLocales(config.fallbackLocales),
+    pseudoLocale: config.pseudoLocale,
+    catalogs: mapPlainArray(config.catalogs, (catalog) => ({
+      path: catalog.path,
       format: catalog.format ? toNativeConfigFormat(catalog.format) : undefined,
+      include: Array.isArray(catalog.include) ? copyPlainArray(catalog.include) : catalog.include,
+      exclude: Array.isArray(catalog.exclude) ? copyPlainArray(catalog.exclude) : catalog.exclude,
     })),
   };
 }
@@ -1116,31 +1325,7 @@ function toNativeArtifactConfig(config: CatalogArtifactConfig): GeneratedCatalog
 function toOwnedNativeArtifactConfig(
   config: CatalogArtifactConfig,
 ): GeneratedCatalogArtifactConfig {
-  const fallbackLocales = config.fallbackLocales;
-  return {
-    rootDir: config.rootDir,
-    locales: [...config.locales],
-    sourceLocale: config.sourceLocale,
-    fallbackLocales: Array.isArray(fallbackLocales)
-      ? [...fallbackLocales]
-      : fallbackLocales
-        ? Object.fromEntries(
-            Object.entries(fallbackLocales).map(([locale, fallbacks]) => [locale, [...fallbacks]]),
-          )
-        : undefined,
-    pseudoLocale: config.pseudoLocale,
-    catalogs: config.catalogs.map((catalog) => {
-      const format = catalog.format;
-      const include = catalog.include;
-      const exclude = catalog.exclude;
-      return {
-        path: catalog.path,
-        format: format ? toNativeConfigFormat(format) : undefined,
-        include: include ? [...include] : undefined,
-        exclude: exclude ? [...exclude] : undefined,
-      };
-    }),
-  };
+  return toNativeArtifactConfig(config);
 }
 
 function fromNativeFileFormat(
@@ -1198,10 +1383,14 @@ export function compileCatalogArtifact(
   config: CatalogArtifactConfig,
   resourcePath: string,
 ): CatalogArtifactResult {
-  const request: NativeCatalogArtifactRequest = {
-    config: toNativeArtifactConfig(config),
+  const source = snapshotNativeArgument("compileCatalogArtifact", {
+    config: pickCatalogArtifactConfigInput(config),
     resourcePath,
-  };
+  });
+  const request: NativeCatalogArtifactRequest = markPreparedNativeArgument({
+    config: toNativeArtifactConfig(source.config),
+    resourcePath: source.resourcePath,
+  });
   return fromNativeCatalogArtifactResult(native.compileCatalogArtifact(request));
 }
 
@@ -1211,10 +1400,15 @@ export async function compileCatalogArtifactAsync(
   resourcePath: string,
   options?: AsyncTaskOptions,
 ): Promise<CatalogArtifactResult> {
-  const request: NativeCatalogArtifactRequest = {
-    config: toNativeArtifactConfig(config),
+  options?.signal?.throwIfAborted();
+  const source = snapshotNativeArgument("compileCatalogArtifactAsync", {
+    config: pickCatalogArtifactConfigInput(config),
     resourcePath,
-  };
+  });
+  const request: NativeCatalogArtifactRequest = markPreparedNativeArgument({
+    config: toNativeArtifactConfig(source.config),
+    resourcePath: source.resourcePath,
+  });
   return fromNativeCatalogArtifactResult(
     await startAbortableNativeTask(options, (signal) =>
       native.compileCatalogArtifactAsync(request, signal),
@@ -1227,11 +1421,16 @@ export function compileCatalogArtifactSelected(
   resourcePath: string,
   compiledIds: string[],
 ): CatalogArtifactResult {
-  const request: NativeCatalogArtifactSelectedRequest = {
-    config: toNativeArtifactConfig(config),
+  const source = snapshotNativeArgument("compileCatalogArtifactSelected", {
+    config: pickCatalogArtifactConfigInput(config),
     resourcePath,
     compiledIds,
-  };
+  });
+  const request: NativeCatalogArtifactSelectedRequest = markPreparedNativeArgument({
+    config: toNativeArtifactConfig(source.config),
+    resourcePath: source.resourcePath,
+    compiledIds: source.compiledIds,
+  });
   return fromNativeCatalogArtifactResult(native.compileCatalogArtifactSelected(request));
 }
 
@@ -1242,11 +1441,23 @@ export async function compileCatalogArtifactSelectedAsync(
   compiledIds: string[],
   options?: AsyncTaskOptions,
 ): Promise<CatalogArtifactResult> {
-  const request: NativeCatalogArtifactSelectedRequest = {
-    config: toOwnedNativeArtifactConfig(config),
+  options?.signal?.throwIfAborted();
+  const source = snapshotNativeArgument("compileCatalogArtifactSelectedAsync", {
+    config: pickCatalogArtifactConfigInput(config),
     resourcePath,
-    compiledIds: [...compiledIds],
+    compiledIds,
+  });
+  const nativeConfig = toNativeArtifactConfig(source.config);
+  const request: NativeCatalogArtifactSelectedRequest = {
+    config: nativeConfig,
+    resourcePath: source.resourcePath,
+    compiledIds: Array.isArray(source.compiledIds)
+      ? copyPlainArray(source.compiledIds)
+      : source.compiledIds,
   };
+  if (isSafeForPreparedSerialization(nativeConfig, request.resourcePath)) {
+    markPreparedNativeArgument(request);
+  }
   const key = selectedCatalogBuildKey(request.config, request.resourcePath);
   return coordinateInitialCatalogBuild(key, async () =>
     fromNativeCatalogArtifactResult(
@@ -1263,16 +1474,12 @@ export function compileCatalogModule(
   options: CatalogModuleOptions,
 ): CatalogModuleResult {
   assertNoRemovedPalamedesOptions(options, ["failOnCompileError"]);
-  const request: NativeCatalogModuleRequest = {
-    config: toNativeArtifactConfig(config),
+  const request = toNativeCatalogModuleRequest(
+    "compileCatalogModule",
+    config,
     resourcePath,
-    locale: options.locale,
-    pseudoLocale: options.pseudoLocale,
-    failOnMissing: options.failOnMissing ?? false,
-    missingFailureHint: options.missingFailureHint,
-    compileFailureHint: options.compileFailureHint,
-    diagnosticsWarningHint: options.diagnosticsWarningHint,
-  };
+    options,
+  );
   return native.compileCatalogModule(request);
 }
 
@@ -1283,9 +1490,27 @@ export async function compileCatalogModuleAsync(
   options: CatalogModuleOptions,
   taskOptions?: AsyncTaskOptions,
 ): Promise<CatalogModuleResult> {
+  taskOptions?.signal?.throwIfAborted();
   assertNoRemovedPalamedesOptions(options, ["failOnCompileError"]);
-  const request: NativeCatalogModuleRequest = {
-    config: toNativeArtifactConfig(config),
+  const request = toNativeCatalogModuleRequest(
+    "compileCatalogModuleAsync",
+    config,
+    resourcePath,
+    options,
+  );
+  return startAbortableNativeTask(taskOptions, (signal) =>
+    native.compileCatalogModuleAsync(request, signal),
+  );
+}
+
+function toNativeCatalogModuleRequest(
+  operation: string,
+  config: CatalogArtifactConfig,
+  resourcePath: string,
+  options: CatalogModuleOptions,
+): NativeCatalogModuleRequest {
+  const source = snapshotNativeArgument(operation, {
+    config: pickCatalogArtifactConfigInput(config),
     resourcePath,
     locale: options.locale,
     pseudoLocale: options.pseudoLocale,
@@ -1293,10 +1518,11 @@ export async function compileCatalogModuleAsync(
     missingFailureHint: options.missingFailureHint,
     compileFailureHint: options.compileFailureHint,
     diagnosticsWarningHint: options.diagnosticsWarningHint,
-  };
-  return startAbortableNativeTask(taskOptions, (signal) =>
-    native.compileCatalogModuleAsync(request, signal),
-  );
+  });
+  return markPreparedNativeArgument({
+    ...source,
+    config: toNativeArtifactConfig(source.config),
+  });
 }
 
 /** Render an already-compiled message map through the canonical native generator. */
@@ -1328,7 +1554,11 @@ export function extractMessagesNative(
   options?: MdxOptions,
 ): NativeExtractedMessage[] {
   return mapExtractedMessages(
-    native.extractMessages(source, filename, toNativeMdxOptions(options)),
+    native.extractMessages(
+      source,
+      filename,
+      toPreparedNativeMdxOptions("extractMessages", options, 2),
+    ),
   );
 }
 
@@ -1337,12 +1567,14 @@ export function analyzeSourceNative(
   filename: string,
   options?: SourceAnalysisOptions,
 ): SourceAnalysisResult {
-  const nativeOptions: GeneratedNativeSourceAnalysisOptions | undefined = options
-    ? {
-        ...options,
-        mdx: toNativeMdxOptions(options.mdx),
-      }
-    : undefined;
+  let nativeOptions: GeneratedNativeSourceAnalysisOptions | undefined;
+  if (options !== undefined) {
+    const snapshot = snapshotNativeArgument("analyzeSource", options, 2);
+    nativeOptions = markPreparedNativeArgument({
+      ...snapshot,
+      mdx: toNativeMdxOptionsFromSnapshot(snapshot.mdx),
+    });
+  }
   const result = native.analyzeSource(source, filename, nativeOptions);
   return {
     ...result,
@@ -1359,20 +1591,39 @@ export function analyzeMdxNative(
   filename: string,
   options?: MdxOptions,
 ): MdxAnalysisResult {
-  const result = native.analyzeMdx(source, filename, toNativeMdxOptions(options));
+  const result = native.analyzeMdx(
+    source,
+    filename,
+    toPreparedNativeMdxOptions("analyzeMdx", options, 2),
+  );
   return {
     ...result,
     messages: mapExtractedMessages(result.messages),
   };
 }
 
-function toNativeMdxOptions(options?: MdxOptions): GeneratedNativeMdxOptions | undefined {
+function toPreparedNativeMdxOptions(
+  operation: string,
+  options: MdxOptions | undefined,
+  argumentIndex: number,
+): GeneratedNativeMdxOptions | undefined {
+  if (!options) {
+    return undefined;
+  }
+  const snapshot = snapshotNativeArgument(operation, options, argumentIndex);
+  const nativeOptions = toNativeMdxOptionsFromSnapshot(snapshot);
+  return nativeOptions ? markPreparedNativeArgument(nativeOptions) : undefined;
+}
+
+function toNativeMdxOptionsFromSnapshot(
+  options?: MdxOptions,
+): GeneratedNativeMdxOptions | undefined {
   if (!options) {
     return undefined;
   }
   assertNoRemovedPalamedesOptions(options, ["keepSourceFallbacks"]);
   const framework: GeneratedNativeMdxFramework | undefined =
-    options?.framework === "solid" ? "Solid" : options?.framework === "react" ? "React" : undefined;
+    options.framework === "solid" ? "Solid" : options.framework === "react" ? "React" : undefined;
   return {
     ...options,
     framework,
@@ -1382,10 +1633,9 @@ function toNativeMdxOptions(options?: MdxOptions): GeneratedNativeMdxOptions | u
 export function extractCatalogMessagesFromFiles(
   request: ExtractCatalogMessagesRequest,
 ): ExtractCatalogMessagesResult {
-  return native.extractCatalogMessagesFromFiles({
-    ...request,
-    mdx: toNativeMdxOptions(request.mdx),
-  });
+  return native.extractCatalogMessagesFromFiles(
+    toNativeExtractCatalogMessagesRequest("extractCatalogMessagesFromFiles", request),
+  );
 }
 
 /** Read and extract source files on Node's shared libuv worker pool. */
@@ -1393,15 +1643,25 @@ export async function extractCatalogMessagesFromFilesAsync(
   request: ExtractCatalogMessagesRequest,
   options?: AsyncTaskOptions,
 ): Promise<ExtractCatalogMessagesResult> {
-  return startAbortableNativeTask(options, (signal) =>
-    native.extractCatalogMessagesFromFilesAsync(
-      {
-        ...request,
-        mdx: toNativeMdxOptions(request.mdx),
-      },
-      signal,
-    ),
+  options?.signal?.throwIfAborted();
+  const nativeRequest = toNativeExtractCatalogMessagesRequest(
+    "extractCatalogMessagesFromFilesAsync",
+    request,
   );
+  return startAbortableNativeTask(options, (signal) =>
+    native.extractCatalogMessagesFromFilesAsync(nativeRequest, signal),
+  );
+}
+
+function toNativeExtractCatalogMessagesRequest(
+  operation: string,
+  request: ExtractCatalogMessagesRequest,
+): GeneratedExtractCatalogMessagesRequest {
+  const source = snapshotNativeArgument(operation, request);
+  return markPreparedNativeArgument({
+    ...source,
+    mdx: toNativeMdxOptionsFromSnapshot(source.mdx),
+  });
 }
 
 function startAbortableNativeTask<TResult>(

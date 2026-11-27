@@ -29,7 +29,7 @@ async function loadConfigCached(configPath, loadConfig, projectRoot) {
 }
 
 function getCacheKey(configPath, projectRoot) {
-  return JSON.stringify([configPath ?? "", projectRoot ?? process.cwd()]);
+  return `${configPath ?? ""}\0${projectRoot ?? process.cwd()}`;
 }
 
 function getCachedConfig(cacheKey) {

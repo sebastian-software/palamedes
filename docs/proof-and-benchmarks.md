@@ -30,7 +30,7 @@ evidence easy to inspect.
 | Catalog model         | Source-string-first, `message + context` identity; PO default, FCL opt-in                         |
 | Native core           | Rust + `napi-rs`                                                                                  |
 | Catalog semantics     | Delegated to `ferrocat`, including audit and ICU diagnostics                                      |
-| Node requirement      | Package-specific; see the [platform support table](./platform-support.md#node-js-requirements)    |
+| Node requirement      | Package-specific; see the [platform support table](./platform-support.md#nodejs-requirements)     |
 | Not yet productized   | Top-level `palamedes` install, `create-palamedes` scaffold                                        |
 
 ## What Counts As Proof In This Repo
@@ -287,7 +287,7 @@ The goal is simpler: show the work and make local verification easy.
 
 ## Related Proof Assets
 
-- [First working translation in 5 minutes](./first-working-translation.md)
+- [First working translation](./first-working-translation.md)
 - [Catalog formats: PO and FCL](./catalog-formats.md)
 - [Migrating to Palamedes 1.0](./migrations/1.0.0.md)
 - [Examples](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)

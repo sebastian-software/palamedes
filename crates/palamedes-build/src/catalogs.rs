@@ -154,6 +154,16 @@ impl PreparedCatalogs {
 /// existing regular-file permissions and respecting the process umask for new
 /// files.
 pub(crate) fn atomic_write_file(path: &Path, bytes: &[u8]) -> BuildResult<()> {
+    atomic_write_file_with_new_mode(path, bytes, None)
+}
+
+/// Atomically writes `bytes` to `path`, using `new_file_mode` (masked by the
+/// process umask on Unix) as the creation mode when `path` does not yet exist.
+pub(crate) fn atomic_write_file_with_new_mode(
+    path: &Path,
+    bytes: &[u8],
+    new_file_mode: Option<u32>,
+) -> BuildResult<()> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -169,9 +179,13 @@ pub(crate) fn atomic_write_file(path: &Path, bytes: &[u8]) -> BuildResult<()> {
     #[cfg(unix)]
     if existing_permissions.is_none() {
         use std::os::unix::fs::PermissionsExt;
-        // Match ordinary data-file creation while respecting umask.
-        builder.permissions(fs::Permissions::from_mode(0o666));
+        // Match ordinary data-file creation (or cap to caller-provided source mode)
+        // while respecting umask.
+        let mode = new_file_mode.map_or(0o666, |mode| mode & 0o777);
+        builder.permissions(fs::Permissions::from_mode(mode));
     }
+    #[cfg(not(unix))]
+    let _ = new_file_mode;
     let mut temporary = builder.tempfile_in(parent).map_err(Error::io(parent))?;
     std::io::Write::write_all(&mut temporary, bytes).map_err(Error::io(temporary.path()))?;
     std::io::Write::flush(&mut temporary).map_err(Error::io(temporary.path()))?;

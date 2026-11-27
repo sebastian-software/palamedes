@@ -8,7 +8,7 @@ modules await only their own active-locale fragments. Share a
 `createRemixI18nServer({ catalogAssets: { registry } })`, then render
 `renderClientCatalog(locale)` and `await renderClientEntry(entryPath, { assetServer })` in the document.
 The adapter owns startup and catalog failure recovery; applications choose the
-locale and may supply ordinary error markup. See [the Remix API guide](../../docs/api/remix.md#client-catalog-assets).
+locale and may supply ordinary error markup. See [the Remix API guide](https://github.com/sebastian-software/palamedes/blob/main/docs/api/remix.md#client-catalog-assets).
 
 ## Installation
 
@@ -380,21 +380,8 @@ A `remix@next` run is a non-blocking canary and does not expand the supported
 peer range to prereleases.
 
 All four strategies run as public demos. Hosting is managed separately from
-this package; the [demo deployments](../../docs/demo-deployments.md#remix) list
+this package; the [demo deployments](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md#remix) list
 their URLs.
-
-<!-- ferramenta-family:start -->
-
-**palamedes** is part of the [Ferramenta](https://ferramenta.dev) family — A family of Rust tools.
-
-Siblings: [ferroni](https://sebastian-software.github.io/ferroni/) — Oniguruma-compatible regex engine · [ferriki](https://github.com/sebastian-software/ferriki) — Shiki-compatible syntax highlighting · [ferromark](https://sebastian-software.github.io/ferromark/) — Markdown to HTML with a secure default and every GFM extension included. · [ferrolex](https://github.com/sebastian-software/ferrolex) — Spell checking for text and code · [ferrocat](https://ferrocat.dev) — Translation catalog engine · [ferrovia](https://github.com/sebastian-software/ferrovia) — SVGO-compatible SVG optimizer · [ferralk](https://github.com/sebastian-software/ferralk) — Glob matching and parallel filesystem walking · [ferrugo](https://github.com/sebastian-software/ferrugo) — PDF previews for untrusted files.
-<!-- ferramenta-family:end -->
-
-## License
-
-[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
-
-MIT OR Apache-2.0 © 2026 Sebastian Software
 
 ## Four-Strategy Browser Verification
 
@@ -409,4 +396,17 @@ Route Frame URLs retain the locale prefix (`/de/frames` and
 
 `node scripts/verify-hosted-examples.mjs remix-cookie remix-route remix-subdomain remix-tld`
 runs the same Chromium checks against the public deployments. The
-[demo deployments](../../docs/demo-deployments.md#remix) list their URLs.
+[demo deployments](https://github.com/sebastian-software/palamedes/blob/main/docs/demo-deployments.md#remix) list their URLs.
+
+<!-- ferramenta-family:start -->
+
+**palamedes** is part of the [Ferramenta](https://ferramenta.dev) family — A family of Rust tools.
+
+Siblings: [ferroni](https://sebastian-software.github.io/ferroni/) — Oniguruma-compatible regex engine · [ferriki](https://github.com/sebastian-software/ferriki) — Shiki-compatible syntax highlighting · [ferromark](https://sebastian-software.github.io/ferromark/) — Markdown to HTML with a secure default and every GFM extension included. · [ferrolex](https://github.com/sebastian-software/ferrolex) — Spell checking for text and code · [ferrocat](https://ferrocat.dev) — Translation catalog engine · [ferrovia](https://github.com/sebastian-software/ferrovia) — SVGO-compatible SVG optimizer · [ferralk](https://github.com/sebastian-software/ferralk) — Glob matching and parallel filesystem walking · [ferrugo](https://github.com/sebastian-software/ferrugo) — PDF previews for untrusted files.
+<!-- ferramenta-family:end -->
+
+## License
+
+[![Sebastian Software](https://sebastian-brand.vercel.app/sebastian-software/logo-software.svg)](https://oss.sebastian-software.com/)
+
+MIT OR Apache-2.0 © 2026 Sebastian Software

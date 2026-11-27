@@ -315,10 +315,10 @@ For each normal release:
 4. Verify that every coordinated npm and Cargo package is available. If any
    upload fails, follow [partial-release recovery](#recovering-a-partial-release).
 
-Registry names, ownership, trusted publishers, and the initial functional Rust
-SDK publication were completed in [#1309](https://github.com/sebastian-software/palamedes/issues/1309).
-[#1309](https://github.com/sebastian-software/palamedes/issues/1309) tracks the
-crates.io-only installed application proof. The coordinated v2 acceptance epic
+Registry names, ownership, trusted publishers, initial functional Rust SDK
+publication, and the crates.io-only installed application proof were completed
+in [#1309](https://github.com/sebastian-software/palamedes/issues/1309). The
+coordinated v2 acceptance epic
 [#1204](https://github.com/sebastian-software/palamedes/issues/1204) is closed.
 `node scripts/check-first-publish.mjs` verifies that the expected npm package names already exist; a passing
 dry run does not establish publication permissions. The
@@ -386,5 +386,3 @@ merge the correction and remove stale release overrides, then use Release Please
 to prepare a new coordinated version. Run the Publish dry run on that release
 PR's exact revision before merging it. Verify that the new version is available
 for the complete npm and Cargo release set before closing the failure issue.
-
-#

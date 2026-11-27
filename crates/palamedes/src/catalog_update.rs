@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -11,9 +12,10 @@ use ferrocat::{
     ApiError, CatalogOrigin, CatalogStats, CatalogUpdateInput, CatalogUpdateResult,
     EffectiveTranslationRef, ObsoleteStrategy, ParseCatalogOptions, ParsedCatalog,
     PlaceholderCommentMode, RenderOptions, SerializeOptions, SourceExtractedMessage,
-    UpdateCatalogFileOptions, UpdateCatalogOptions, parse_catalog as ferrocat_parse_catalog,
-    update_catalog as ferrocat_update_catalog, update_catalog_file as ferrocat_update_catalog_file,
+    UpdateCatalogOptions, parse_catalog as ferrocat_parse_catalog,
+    update_catalog as ferrocat_update_catalog,
 };
+use ferrocat_po::parse_po_borrowed;
 use serde::{Deserialize, Serialize};
 
 /// Source origin used for catalog updates and parsed catalog messages.
@@ -103,6 +105,28 @@ pub struct CatalogUpdateRequest {
     pub po: Option<PoOutputOptions>,
     /// Extracted messages to project into the catalog.
     pub messages: Vec<CatalogUpdateMessage>,
+}
+
+/// Borrowed request for updating or previewing a catalog without cloning the
+/// extracted message slice per locale.
+#[derive(Debug)]
+pub struct CatalogUpdateRequestRef<'a> {
+    /// Target catalog file path.
+    pub target_path: &'a str,
+    /// Locale of the target catalog.
+    pub locale: &'a str,
+    /// Source locale used for source translation behavior.
+    pub source_locale: &'a str,
+    /// Whether obsolete messages should be deleted instead of marked.
+    pub clean: bool,
+    /// Whether obsolete messages should be deleted immediately, including undated entries.
+    pub force_clean: bool,
+    /// Catalog storage format.
+    pub format: super::catalog_artifact::PalamedesCatalogFormat,
+    /// Optional PO-specific output controls.
+    pub po: Option<&'a PoOutputOptions>,
+    /// Extracted messages to project into the catalog.
+    pub messages: &'a [CatalogUpdateMessage],
 }
 
 /// Request for parsing a catalog file into the public semantic shape.
@@ -255,7 +279,34 @@ impl From<FerrocatAiProvenance> for AiProvenance {
 pub fn update_catalog_file(
     request: CatalogUpdateRequest,
 ) -> PalamedesResult<CatalogUpdateResponse> {
-    update_catalog_file_source_first(request)
+    let target_path = validated_target_path(&request.target_path)?;
+    validate_po_options(request.format, request.po.as_ref())?;
+    let existing = read_optional_catalog(&target_path)?;
+    let result = update_catalog_owned(request, existing.as_deref())?;
+    if result.created || result.updated {
+        atomic_write_catalog_file(&target_path, &result.content)?;
+    }
+    Ok(public_update_result(result))
+}
+
+/// Updates a catalog file using borrowed extracted messages without cloning
+/// the message vector per locale.
+///
+/// # Errors
+///
+/// Returns an error when the target file cannot be updated, when Ferrocat
+/// rejects the projected messages, or when any extracted message is empty.
+pub fn update_catalog_file_ref(
+    request: &CatalogUpdateRequestRef<'_>,
+) -> PalamedesResult<CatalogUpdateResponse> {
+    let target_path = validated_target_path(request.target_path)?;
+    validate_po_options(request.format, request.po)?;
+    let existing = read_optional_catalog(&target_path)?;
+    let result = update_catalog_borrowed(request, existing.as_deref())?;
+    if result.created || result.updated {
+        atomic_write_catalog_file(&target_path, &result.content)?;
+    }
+    Ok(public_update_result(result))
 }
 
 /// Renders the update for a catalog file without creating or changing it.
@@ -290,7 +341,25 @@ pub fn preview_catalog_update_from_content(
     request: CatalogUpdateRequest,
     existing: Option<&str>,
 ) -> PalamedesResult<CatalogUpdatePreview> {
-    let result = update_catalog_source_first(request, CatalogUpdateDestination::Preview(existing))?;
+    validate_po_options(request.format, request.po.as_ref())?;
+    let result = update_catalog_owned(request, existing)?;
+    Ok(public_preview_result(result))
+}
+
+/// Renders the update for a catalog from caller-supplied existing content and
+/// a borrowed message slice, avoiding per-locale `Vec<CatalogUpdateMessage>`
+/// clones.
+///
+/// # Errors
+///
+/// Returns an error when Ferrocat rejects the projected messages or when any
+/// extracted message is empty.
+pub fn preview_catalog_update_from_content_ref(
+    request: &CatalogUpdateRequestRef<'_>,
+    existing: Option<&str>,
+) -> PalamedesResult<CatalogUpdatePreview> {
+    validate_po_options(request.format, request.po)?;
+    let result = update_catalog_borrowed(request, existing)?;
     Ok(public_preview_result(result))
 }
 
@@ -316,48 +385,81 @@ pub fn parse_catalog(request: &CatalogParseRequest) -> PalamedesResult<CatalogPa
     Ok(public_parse_result(parsed))
 }
 
-fn update_catalog_file_source_first(
+struct CatalogUpdateSettings<'a> {
+    locale: &'a str,
+    source_locale: &'a str,
+    clean: bool,
+    force_clean: bool,
+    format: super::catalog_artifact::PalamedesCatalogFormat,
+    po: Option<&'a PoOutputOptions>,
+}
+
+fn update_catalog_owned(
     request: CatalogUpdateRequest,
-) -> PalamedesResult<CatalogUpdateResponse> {
-    let target_path = validated_target_path(&request.target_path)?;
-    let result =
-        update_catalog_source_first(request, CatalogUpdateDestination::File(&target_path))?;
-    Ok(public_update_result(result))
-}
-
-#[derive(Clone, Copy)]
-enum CatalogUpdateDestination<'a> {
-    File(&'a Path),
-    Preview(Option<&'a str>),
-}
-
-fn update_catalog_source_first(
-    mut request: CatalogUpdateRequest,
-    destination: CatalogUpdateDestination<'_>,
+    existing: Option<&str>,
 ) -> PalamedesResult<CatalogUpdateResult> {
-    validate_po_options(request.format, request.po.as_ref())?;
-    match destination {
-        CatalogUpdateDestination::File(target_path) => {
-            preserve_existing_po_apostrophe_identities(&mut request, target_path)?;
-        }
-        CatalogUpdateDestination::Preview(existing) => {
-            preserve_existing_po_apostrophe_identities_from_content(&mut request, existing)?;
-        }
-    }
+    let mut overrides =
+        resolve_existing_po_apostrophe_identities(request.format, &request.messages, existing)?;
+    let projected = request
+        .messages
+        .into_iter()
+        .enumerate()
+        .map(|(index, mut message)| {
+            if let Some(preserved) = overrides.remove(&index) {
+                message.message = preserved;
+            }
+            project_message(message)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let settings = CatalogUpdateSettings {
+        locale: &request.locale,
+        source_locale: &request.source_locale,
+        clean: request.clean,
+        force_clean: request.force_clean,
+        format: request.format,
+        po: request.po.as_ref(),
+    };
+    update_catalog_projected(projected, &settings, existing)
+}
+
+fn update_catalog_borrowed(
+    request: &CatalogUpdateRequestRef<'_>,
+    existing: Option<&str>,
+) -> PalamedesResult<CatalogUpdateResult> {
+    let mut overrides =
+        resolve_existing_po_apostrophe_identities(request.format, request.messages, existing)?;
+    let projected = request
+        .messages
+        .iter()
+        .enumerate()
+        .map(|(index, message)| project_message_ref(message, overrides.remove(&index)))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let settings = CatalogUpdateSettings {
+        locale: request.locale,
+        source_locale: request.source_locale,
+        clean: request.clean,
+        force_clean: request.force_clean,
+        format: request.format,
+        po: request.po,
+    };
+    update_catalog_projected(projected, &settings, existing)
+}
+
+fn update_catalog_projected(
+    projected: Vec<SourceExtractedMessage>,
+    settings: &CatalogUpdateSettings<'_>,
+    existing: Option<&str>,
+) -> PalamedesResult<CatalogUpdateResult> {
     let custom_header_attributes =
         BTreeMap::from([("X-Generator".to_owned(), "palamedes".to_owned())]);
-    let input = CatalogUpdateInput::SourceFirst(
-        request
-            .messages
-            .into_iter()
-            .map(project_message)
-            .collect::<Result<Vec<_>, _>>()?,
-    );
+    let input = CatalogUpdateInput::SourceFirst(projected);
 
     let now = current_iso_date();
-    let obsolete_strategy = if request.force_clean {
+    let obsolete_strategy = if settings.force_clean {
         ObsoleteStrategy::Delete
-    } else if request.clean {
+    } else if settings.clean {
         ObsoleteStrategy::DropObsoleteBefore(clean_cutoff_date(&now))
     } else {
         ObsoleteStrategy::Mark
@@ -366,43 +468,62 @@ fn update_catalog_source_first(
     let mut render = RenderOptions::default()
         .with_include_origins(true)
         .with_placeholder_comments(PlaceholderCommentMode::Enabled { limit: 3 });
-    let is_po = request.format == super::catalog_artifact::PalamedesCatalogFormat::Po;
+    let is_po = settings.format == super::catalog_artifact::PalamedesCatalogFormat::Po;
     if is_po {
         render = render
             .with_custom_header_attributes(&custom_header_attributes)
-            .with_po_serialize_options(po_serialize_options(request.po.as_ref()));
+            .with_po_serialize_options(po_serialize_options(settings.po));
     }
-    let mut update_options = UpdateCatalogOptions::new(&request.source_locale, input)
-        .with_locale(&request.locale)
-        .with_mode(request.format.ferrocat_mode())
+    let mut update_options = UpdateCatalogOptions::new(settings.source_locale, input)
+        .with_locale(settings.locale)
+        .with_mode(settings.format.ferrocat_mode())
         .with_obsolete_strategy(obsolete_strategy)
         .with_overwrite_source_translations(true)
         .with_render(render)
         .with_now(&now);
-    match destination {
-        CatalogUpdateDestination::File(target_path) => {
-            /*
-             * Catalog files are repository-owned, regenerable artifacts, so
-             * the write skips Ferrocat's per-file durability barriers
-             * (File::sync_all is F_FULLFSYNC on macOS and was the dominant
-             * fixed cost of the write phase there). The rename stays atomic;
-             * after a crash the worst case is an old or missing catalog that
-             * the next extract rewrites.
-             */
-            let file_options = UpdateCatalogFileOptions::new(
-                target_path,
-                &request.source_locale,
-                CatalogUpdateInput::default(),
-            )
-            .with_options(update_options)
-            .with_durability(ferrocat::WriteDurability::Rename);
-            ferrocat_update_catalog_file(file_options).map_err(PalamedesError::from)
-        }
-        CatalogUpdateDestination::Preview(existing) => {
-            update_options.existing = existing;
-            ferrocat_update_catalog(update_options).map_err(PalamedesError::from)
-        }
+    update_options.existing = existing;
+    ferrocat_update_catalog(update_options).map_err(PalamedesError::from)
+}
+
+/*
+ * Catalog files are repository-owned, regenerable artifacts, so the write
+ * matches Ferrocat's `WriteDurability::Rename` atomic replacement: create
+ * parent directories, write to a sibling `NamedTempFile` (private permissions
+ * on Unix), and atomically persist over `target_path` without per-file fsync
+ * stalls.
+ */
+fn atomic_write_catalog_file(target_path: &Path, content: &str) -> PalamedesResult<()> {
+    if target_path.file_name().is_none() {
+        return Err(PalamedesError::from(ApiError::InvalidArguments(
+            "target_path must have a file name".to_owned(),
+        )));
     }
+    let directory = target_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(directory).map_err(|source| PalamedesError::WriteFile {
+        path: directory.to_path_buf(),
+        source,
+    })?;
+    let mut temp_file =
+        tempfile::NamedTempFile::new_in(directory).map_err(|source| PalamedesError::WriteFile {
+            path: directory.to_path_buf(),
+            source,
+        })?;
+    temp_file
+        .write_all(content.as_bytes())
+        .map_err(|source| PalamedesError::WriteFile {
+            path: target_path.to_path_buf(),
+            source,
+        })?;
+    temp_file
+        .persist(target_path)
+        .map_err(|error| PalamedesError::WriteFile {
+            path: target_path.to_path_buf(),
+            source: error.error,
+        })?;
+    Ok(())
 }
 
 fn validated_target_path(value: &str) -> PalamedesResult<PathBuf> {
@@ -435,94 +556,80 @@ fn read_optional_catalog(target_path: &Path) -> PalamedesResult<Option<String>> 
 /// spelling only when both canonicalize to the same runtime-literal ICU text.
 /// Exact identities win, and ambiguous candidates are left alone rather than
 /// silently merging distinct catalog entries.
-fn preserve_existing_po_apostrophe_identities(
-    request: &mut CatalogUpdateRequest,
-    target_path: &Path,
-) -> PalamedesResult<()> {
-    if request.format != super::catalog_artifact::PalamedesCatalogFormat::Po {
-        return Ok(());
-    }
-    if !request
-        .messages
-        .iter()
-        .any(|message| message.message.contains('\''))
-    {
-        return Ok(());
-    }
-
-    let content = read_optional_catalog(target_path)?;
-    preserve_existing_po_apostrophe_identities_from_content(request, content.as_deref())
-}
-
-fn preserve_existing_po_apostrophe_identities_from_content(
-    request: &mut CatalogUpdateRequest,
+///
+/// Returns a sparse index-to-`msgid` override map so callers can preserve
+/// existing identities without cloning borrowed message slices or running a
+/// full semantic catalog import before `ferrocat::update_catalog`.
+fn resolve_existing_po_apostrophe_identities(
+    format: super::catalog_artifact::PalamedesCatalogFormat,
+    messages: &[CatalogUpdateMessage],
     content: Option<&str>,
-) -> PalamedesResult<()> {
-    if request.format != super::catalog_artifact::PalamedesCatalogFormat::Po {
-        return Ok(());
+) -> PalamedesResult<HashMap<usize, String>> {
+    if format != super::catalog_artifact::PalamedesCatalogFormat::Po || messages.is_empty() {
+        return Ok(HashMap::new());
     }
-    if !request
-        .messages
+    // Only non-empty existing PO files can supply apostrophe-spelling targets.
+    // Avoid scanning raw PO text for literal `'` because Ferrocat also decodes
+    // octal/hex escapes such as `\047` and `\x27` into `'`.
+    let Some(content) = content.filter(|content| !content.is_empty()) else {
+        return Ok(HashMap::new());
+    };
+    if !messages
         .iter()
         .any(|message| message.message.contains('\''))
     {
-        return Ok(());
-    }
-    let Some(content) = content.filter(|content| !content.is_empty()) else {
-        return Ok(());
-    };
-    if request.messages.is_empty() {
-        return Ok(());
+        return Ok(HashMap::new());
     }
 
-    let parsed = ferrocat_parse_catalog(
-        ParseCatalogOptions::new(content, &request.source_locale)
-            .with_locale(&request.locale)
-            .with_mode(request.format.ferrocat_mode()),
-    )
-    .map_err(PalamedesError::from)?;
+    let parsed = parse_po_borrowed(content)
+        .map_err(ApiError::from)
+        .map_err(PalamedesError::from)?;
     let existing = parsed
-        .messages
+        .items
         .into_iter()
-        .map(|message| (message.msgid, message.msgctxt))
+        .filter(|item| item.msgid.contains('\''))
+        .map(|item| (item.msgid, item.msgctxt))
         .collect::<Vec<_>>();
-    let extracted_identities = request
-        .messages
+    if existing.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let extracted_identities = messages
         .iter()
+        .filter(|message| message.message.contains('\''))
         .map(|message| (message.message.as_str(), message.context.as_deref()))
         .collect::<HashSet<_>>();
     let existing_identities = existing
         .iter()
-        .map(|(msgid, msgctxt)| (msgid.as_str(), msgctxt.as_deref()))
+        .map(|(msgid, msgctxt)| (msgid.as_ref(), msgctxt.as_deref()))
         .collect::<HashSet<_>>();
-    let migrating = request
-        .messages
+    let migrating = messages
         .iter()
         .enumerate()
         .filter(|(_, message)| {
-            !existing_identities.contains(&(message.message.as_str(), message.context.as_deref()))
+            message.message.contains('\'')
+                && !existing_identities
+                    .contains(&(message.message.as_str(), message.context.as_deref()))
         })
         .collect::<Vec<_>>();
+    if migrating.is_empty() {
+        return Ok(HashMap::new());
+    }
 
     /*
-     * Canonicalizing every migration target once, rather than once per
-     * (message, entry) pair, is what keeps this path off the quadratic scan it
-     * used to run for any corpus containing an apostrophe. Entries without one
-     * are indexed too: the equivalence below rejects a pair only when *neither*
-     * side has an apostrophe, so an entry's own spelling does not decide
-     * whether it can be a target.
+     * Canonicalizing every apostrophe-bearing migration target once, rather
+     * than once per (message, entry) pair, keeps this path linear even on
+     * large catalogs.
      */
     let mut canonical_identities = HashMap::<(Cow<'_, str>, Option<&str>), Vec<usize>>::new();
-    if !migrating.is_empty() {
-        for (index, (msgid, msgctxt)) in existing.iter().enumerate() {
-            if extracted_identities.contains(&(msgid.as_str(), msgctxt.as_deref())) {
-                continue;
-            }
-            canonical_identities
-                .entry((canonicalize_runtime_icu(msgid), msgctxt.as_deref()))
-                .or_default()
-                .push(index);
+    for (index, (msgid, msgctxt)) in existing.iter().enumerate() {
+        if extracted_identities.contains(&(msgid.as_ref(), msgctxt.as_deref())) {
+            continue;
         }
+        canonical_identities
+            .entry((canonicalize_runtime_icu(msgid.as_ref()), msgctxt.as_deref()))
+            .or_default()
+            .push(index);
     }
 
     let mut proposed = Vec::new();
@@ -534,36 +641,31 @@ fn preserve_existing_po_apostrophe_identities_from_content(
         let Some(candidates) = canonical_identities.get(&key) else {
             continue;
         };
-        let has_apostrophe = message.message.contains('\'');
-        let candidates = candidates
-            .iter()
-            .filter(|index| has_apostrophe || existing[**index].0.contains('\''))
-            .collect::<Vec<_>>();
         if let [existing_index] = candidates.as_slice() {
-            proposed.push((message_index, **existing_index));
+            proposed.push((message_index, *existing_index));
         }
     }
 
-    let mut candidate_inputs = BTreeMap::<usize, BTreeSet<(String, Option<String>)>>::new();
-    for (message_index, existing_index) in &proposed {
-        let message = &request.messages[*message_index];
+    let mut candidate_inputs = BTreeMap::<usize, BTreeSet<(&str, Option<&str>)>>::new();
+    for &(message_index, existing_index) in &proposed {
+        let message = &messages[message_index];
         candidate_inputs
-            .entry(*existing_index)
+            .entry(existing_index)
             .or_default()
-            .insert((message.message.clone(), message.context.clone()));
+            .insert((message.message.as_str(), message.context.as_deref()));
     }
+
+    let mut overrides = HashMap::new();
     for (message_index, existing_index) in proposed {
         if candidate_inputs
             .get(&existing_index)
             .is_some_and(|identities| identities.len() == 1)
         {
-            request.messages[message_index]
-                .message
-                .clone_from(&existing[existing_index].0);
+            overrides.insert(message_index, existing[existing_index].0.to_string());
         }
     }
 
-    Ok(())
+    Ok(overrides)
 }
 
 fn validate_po_options(
@@ -605,6 +707,33 @@ fn project_message(message: CatalogUpdateMessage) -> PalamedesResult<SourceExtra
         comments: message.extracted_comments,
         origin: origins,
         placeholders: message.placeholders,
+    })
+}
+
+fn project_message_ref(
+    message: &CatalogUpdateMessage,
+    msgid_override: Option<String>,
+) -> PalamedesResult<SourceExtractedMessage> {
+    let msgid = msgid_override.unwrap_or_else(|| message.message.clone());
+    if msgid.trim().is_empty() {
+        return Err(PalamedesError::EmptyCatalogMessage);
+    }
+
+    let origins = message
+        .origins
+        .iter()
+        .map(|origin| CatalogOrigin {
+            file: origin.file.clone(),
+            scope: origin.scope.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    Ok(SourceExtractedMessage {
+        msgid,
+        msgctxt: message.context.clone(),
+        comments: message.extracted_comments.clone(),
+        origin: origins,
+        placeholders: message.placeholders.clone(),
     })
 }
 
@@ -753,8 +882,9 @@ mod tests {
 
     use super::{
         CatalogParseRequest, CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdateRequest,
-        PoLineBreaks, PoOutputOptions, parse_catalog, preview_catalog_file_update,
-        update_catalog_file,
+        CatalogUpdateRequestRef, PoLineBreaks, PoOutputOptions, parse_catalog,
+        preview_catalog_file_update, preview_catalog_update_from_content_ref,
+        resolve_existing_po_apostrophe_identities, update_catalog_file, update_catalog_file_ref,
     };
     use crate::parse_po;
     use ferrocat::{EffectiveTranslationRef, machine_translation_hash};
@@ -2021,5 +2151,111 @@ msgstr "Zebra""#;
 
         let output = std::fs::read_to_string(&path).expect("read");
         assert!(output.contains("#. placeholder {0}: user.name"));
+    }
+
+    #[test]
+    fn borrowed_update_and_preview_preserve_apostrophe_identities_without_cloning_messages() {
+        let path = temp_file("borrowed-apostrophe-preservation");
+        std::fs::write(
+            &path,
+            concat!(
+                "# Translator note\n",
+                "msgid \"don't stop\"\n",
+                "msgstr \"nicht aufhören\"\n",
+            ),
+        )
+        .expect("write existing");
+
+        let messages = [
+            message("don''t stop", None, "src/App.tsx"),
+            message("Hello", None, "src/App.tsx"),
+        ];
+        let request_ref = CatalogUpdateRequestRef {
+            target_path: &path,
+            locale: "de",
+            source_locale: "en",
+            clean: false,
+            force_clean: true,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: None,
+            messages: &messages,
+        };
+
+        let existing = std::fs::read_to_string(&path).expect("read existing");
+        let preview = preview_catalog_update_from_content_ref(&request_ref, Some(&existing))
+            .expect("preview");
+        assert!(!preview.created);
+        assert!(preview.updated);
+        assert!(preview.content.contains("msgid \"don't stop\""));
+        assert!(preview.content.contains("msgstr \"nicht aufhören\""));
+        assert!(preview.content.contains("# Translator note"));
+
+        let applied = update_catalog_file_ref(&request_ref).expect("apply borrowed update");
+        assert!(!applied.created);
+        assert!(applied.updated);
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read updated file"),
+            preview.content
+        );
+
+        let repeated = update_catalog_file_ref(&request_ref).expect("repeat borrowed update");
+        assert!(!repeated.created);
+        assert!(!repeated.updated);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn apostrophe_identity_preservation_decodes_octal_and_hex_escaped_po_apostrophes() {
+        let path = temp_file("escaped-po-apostrophe-preservation");
+        // Existing PO encodes apostrophes via `\047` and `\x27` (no literal `'`).
+        std::fs::write(
+            &path,
+            concat!(
+                "msgid \"don\\047t stop\"\n",
+                "msgstr \"nicht aufhören\"\n\n",
+                "msgid \"client\\x27s booking\"\n",
+                "msgstr \"Buchung des Kunden\"\n",
+            ),
+        )
+        .expect("write escaped existing PO");
+
+        let messages = [
+            message("don''t stop", None, "src/App.tsx"),
+            message("client''s booking", None, "src/Client.tsx"),
+        ];
+        let request_ref = CatalogUpdateRequestRef {
+            target_path: &path,
+            locale: "de",
+            source_locale: "en",
+            clean: false,
+            force_clean: true,
+            format: crate::PalamedesCatalogFormat::Po,
+            po: None,
+            messages: &messages,
+        };
+
+        let applied = update_catalog_file_ref(&request_ref).expect("preserve escaped apostrophes");
+        assert_eq!(applied.stats.added, 0);
+        assert_eq!(applied.stats.obsolete_removed, 0);
+
+        let output = std::fs::read_to_string(&path).expect("read updated PO");
+        assert!(output.contains("msgstr \"nicht aufhören\""));
+        assert!(output.contains("msgstr \"Buchung des Kunden\""));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn apostrophe_identity_resolution_skips_po_parse_when_extracted_has_no_apostrophe() {
+        let messages = [message("Hello world", None, "src/App.tsx")];
+        // Deliberately malformed PO: when no extracted message has an
+        // apostrophe, identity resolution skips PO parsing and leaves
+        // `ferrocat::update_catalog` as the single parse pass.
+        let overrides = resolve_existing_po_apostrophe_identities(
+            crate::PalamedesCatalogFormat::Po,
+            &messages,
+            Some("not valid po syntax"),
+        )
+        .expect("fast guard skips parsing when extracted messages have no apostrophes");
+        assert!(overrides.is_empty());
     }
 }

@@ -20,11 +20,11 @@ use std::time::Instant;
 
 use clap::Args;
 use palamedes::{
-    CatalogUpdateMessage, CatalogUpdateRequest, ContainedDir, ContainedFsError,
+    CatalogUpdateMessage, CatalogUpdateRequestRef, ContainedDir, ContainedFsError,
     ContainedNewFileMode, ContainedWriteDurability, DirFilenameEquivalence, ExtractCache,
     ExtractCatalogFileFailure, FileIdentity, SourceFileAnalysisRequest,
     collect_runtime_macro_manifest, extract_catalog_messages_cached,
-    preview_catalog_update_from_content, split_relative_catalog_path,
+    preview_catalog_update_from_content_ref, split_relative_catalog_path,
 };
 use serde::Serialize;
 use unicode_normalization::UnicodeNormalization;
@@ -433,15 +433,40 @@ fn write_runtime_manifest(
             ),
         });
     }
-    if let Some(parent) = target.parent() {
+    let write_target = match fs::symlink_metadata(&target) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            let resolved = fs::canonicalize(&target).map_err(|source| CliError::Io {
+                path: target.clone(),
+                source,
+            })?;
+            let resolved_metadata = fs::metadata(&resolved).map_err(|source| CliError::Io {
+                path: resolved.clone(),
+                source,
+            })?;
+            if !resolved_metadata.is_file() {
+                return Err(CliError::Io {
+                    path: target,
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "runtime manifest symlink target must be a regular file",
+                    ),
+                });
+            }
+            resolved
+        }
+        _ => target.clone(),
+    };
+    if let Some(parent) = write_target.parent() {
         fs::create_dir_all(parent).map_err(|source| CliError::Io {
             path: parent.to_path_buf(),
             source,
         })?;
     }
-    palamedes::atomic_write_file(&target, contents.as_bytes()).map_err(|source| CliError::Io {
-        path: target.clone(),
-        source,
+    palamedes::atomic_write_file(&write_target, contents.as_bytes()).map_err(|source| {
+        CliError::Io {
+            path: target.clone(),
+            source,
+        }
     })
 }
 
@@ -2357,15 +2382,17 @@ fn process_catalog(
             path: catalog_path.clone(),
             source: error.into_io_error(),
         })?;
-    let make_request = || CatalogUpdateRequest {
-        target_path: catalog_path.to_string_lossy().into_owned(),
-        locale: locale.to_owned(),
-        source_locale: config.source_locale.clone(),
+    let po_options = catalog.po.clone().map(Into::into);
+    let target_path = catalog_path.to_string_lossy();
+    let update_request = CatalogUpdateRequestRef {
+        target_path: target_path.as_ref(),
+        locale,
+        source_locale: &config.source_locale,
         clean: options.clean,
         force_clean: options.force_clean,
         format: catalog.format,
-        po: catalog.po.clone().map(Into::into),
-        messages: messages.to_vec(),
+        po: po_options.as_ref(),
+        messages,
     };
 
     let mut lines = Vec::new();
@@ -2392,7 +2419,7 @@ fn process_catalog(
                         source: error.into_io_error(),
                     })?;
                 let preview =
-                    preview_catalog_update_from_content(make_request(), existing.as_deref())?;
+                    preview_catalog_update_from_content_ref(&update_request, existing.as_deref())?;
                 if !preview.created && !preview.updated {
                     unchanged_result = Some(preview);
                 } else {
@@ -2433,8 +2460,8 @@ fn process_catalog(
                             })?;
                         let result = match preview_candidate.take() {
                             Some((prior_bytes, preview)) if prior_bytes == existing => preview,
-                            _ => preview_catalog_update_from_content(
-                                make_request(),
+                            _ => preview_catalog_update_from_content_ref(
+                                &update_request,
                                 existing.as_deref(),
                             )?,
                         };
@@ -2500,7 +2527,8 @@ fn process_catalog(
                     }
                     None => None,
                 };
-            let result = preview_catalog_update_from_content(make_request(), existing.as_deref())?;
+            let result =
+                preview_catalog_update_from_content_ref(&update_request, existing.as_deref())?;
             if options.verbose {
                 lines.push(tr!("  -> checked {path}", path = catalog_path.display()));
                 for diagnostic in result.diagnostics {
@@ -4070,6 +4098,47 @@ catalogs:
                 .mode()
                 & 0o777,
             0o640
+        );
+
+        // Existing symlink to a regular file must remain a symlink and update its target.
+        let shared_target = root.join("shared/runtime-manifest.json");
+        fs::create_dir_all(shared_target.parent().unwrap()).expect("create shared dir");
+        fs::write(&shared_target, "{}\n").expect("seed shared target");
+        let symlink_rel = std::path::Path::new(".palamedes/linked-manifest.json");
+        let symlink_abs = root.join(symlink_rel);
+        std::os::unix::fs::symlink(&shared_target, &symlink_abs).expect("create manifest symlink");
+
+        super::write_runtime_manifest(&config, symlink_rel, &[source_file.as_path()], false)
+            .expect("manifest update through symlink");
+        assert!(
+            fs::symlink_metadata(&symlink_abs)
+                .expect("symlink meta")
+                .file_type()
+                .is_symlink(),
+            "symlink must not be replaced by a regular file"
+        );
+        assert!(
+            fs::read_to_string(&shared_target)
+                .expect("read shared target")
+                .contains("Updated"),
+            "shared symlink target must receive the updated manifest"
+        );
+
+        // Dangling symlink must fail explicitly instead of silently replacing the link.
+        let dangling_rel = std::path::Path::new(".palamedes/dangling-manifest.json");
+        let dangling_abs = root.join(dangling_rel);
+        std::os::unix::fs::symlink(root.join("missing/target.json"), &dangling_abs)
+            .expect("create dangling symlink");
+        assert!(
+            super::write_runtime_manifest(&config, dangling_rel, &[source_file.as_path()], false)
+                .is_err(),
+            "dangling symlink must return an error"
+        );
+        assert!(
+            fs::symlink_metadata(&dangling_abs)
+                .expect("dangling symlink meta")
+                .file_type()
+                .is_symlink()
         );
 
         let _ = fs::remove_dir_all(&root);

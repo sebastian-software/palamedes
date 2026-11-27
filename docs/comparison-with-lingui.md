@@ -154,7 +154,7 @@ translation model that stays coherent from source to runtime.**
 
 ## Continue Here
 
-- [First working translation in 5 minutes](./first-working-translation.md)
+- [First working translation](./first-working-translation.md)
 - [Migration from Lingui to Palamedes](./migrate-from-lingui.md)
 - [Benchmarking against Lingui v6 Preview](./benchmark-lingui-v6-preview.md)
 - [Comparing modern i18n approaches](./approach-comparison.md)

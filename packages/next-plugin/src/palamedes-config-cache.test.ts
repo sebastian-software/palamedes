@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -96,6 +97,50 @@ describe("palamedes-config-cache.cjs", () => {
       value: "second",
     });
     expect(loadConfig).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips rereading settled config files on cache hits and invalidates on edits", async () => {
+    const configPath = await createConfigFile("locales: [en]\n");
+    const first = { configPath, value: "first" };
+    const second = { configPath, value: "second" };
+    const loadSync = vi.fn(() => first);
+    const loadAsync = vi.fn(async () => second);
+
+    const baseNow = Date.now();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(baseNow + 5000);
+    const readSpy = vi.spyOn(fs, "readFileSync");
+    try {
+      expect(loadConfigCachedSync(configPath, loadSync)).toBe(first);
+      expect(readSpy).toHaveBeenCalledTimes(1);
+
+      readSpy.mockClear();
+      expect(loadConfigCachedSync(configPath, loadSync)).toBe(first);
+      await expect(loadConfigCached(configPath, loadAsync)).resolves.toBe(first);
+      expect(readSpy).not.toHaveBeenCalled();
+      expect(loadSync).toHaveBeenCalledOnce();
+      expect(loadAsync).not.toHaveBeenCalled();
+
+      nowSpy.mockRestore();
+      await writeFile(configPath, "locales: [en, de]\n");
+      await expect(loadConfigCached(configPath, loadAsync)).resolves.toBe(second);
+      expect(loadAsync).toHaveBeenCalledOnce();
+    } finally {
+      nowSpy.mockRestore();
+      readSpy.mockRestore();
+    }
+  });
+
+  it("reloads on same-size content overwrites inside the racy mtime window", async () => {
+    const configPath = await createConfigFile("aaaa");
+    const first = { configPath, value: "aaaa" };
+    const second = { configPath, value: "bbbb" };
+
+    expect(loadConfigCachedSync(configPath, () => first)).toBe(first);
+    await writeFile(configPath, "bbbb");
+    const loadSync = vi.fn(() => second);
+
+    expect(loadConfigCachedSync(configPath, loadSync)).toBe(second);
+    expect(loadSync).toHaveBeenCalledOnce();
   });
 });
 

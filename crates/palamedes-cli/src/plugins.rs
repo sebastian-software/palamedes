@@ -383,6 +383,9 @@ fn load_registry_with_binary_hasher(
                     }
                     manifest
                 }
+                Err(failure) if failure.code == "PLUGIN_BINARY_TERMINATED" => {
+                    return Err(failure);
+                }
                 Err(failure) => {
                     registry.skipped.push(SkippedPlugin {
                         specifier: declaration.specifier().to_owned(),
@@ -1129,7 +1132,11 @@ fn invoke_binary(
         }
     }
     #[cfg(unix)]
-    if failure.is_none() && signal_guard.was_escalated() {
+    if signal_guard.was_signaled()
+        && failure
+            .as_ref()
+            .is_none_or(|err| err.code != "PLUGIN_BINARY_TERMINATED")
+    {
         failure = Some(terminated_failure(resolved));
     }
     drop(stdout_rx);
@@ -1143,11 +1150,34 @@ fn invoke_binary(
         join_or_detach(writer, &writer_done_rx, PLUGIN_IO_SHUTDOWN_GRACE);
         return Err(failure);
     }
-    if reader.join().is_err() {
-        join_or_detach(writer, &writer_done_rx, PLUGIN_IO_SHUTDOWN_GRACE);
-        return Err(reader_failure(resolved));
+    match wait_for_io_thread(
+        reader,
+        &reader_done_rx,
+        resolved,
+        policy,
+        started,
+        #[cfg(unix)]
+        &signal_guard,
+    ) {
+        Ok(Ok(())) => {}
+        Ok(Err(_)) => {
+            join_or_detach(writer, &writer_done_rx, PLUGIN_IO_SHUTDOWN_GRACE);
+            return Err(reader_failure(resolved));
+        }
+        Err(error) => {
+            join_or_detach(writer, &writer_done_rx, PLUGIN_IO_SHUTDOWN_GRACE);
+            return Err(error);
+        }
     }
-    match writer.join() {
+    match wait_for_io_thread(
+        writer,
+        &writer_done_rx,
+        resolved,
+        policy,
+        started,
+        #[cfg(unix)]
+        &signal_guard,
+    )? {
         Ok(Ok(())) => {}
         Ok(Err(error)) => {
             return Err(PluginFailure::new(
@@ -4033,6 +4063,53 @@ fn join_or_detach<T>(handle: thread::JoinHandle<T>, done_rx: &mpsc::Receiver<()>
     }
 }
 
+fn wait_for_io_thread<T>(
+    handle: thread::JoinHandle<T>,
+    done_rx: &mpsc::Receiver<()>,
+    resolved: &ResolvedPlugin,
+    policy: InvocationPolicy,
+    started: Instant,
+    #[cfg(unix)] signal_guard: &ChildSignalGuard,
+) -> Result<thread::Result<T>, PluginFailure> {
+    loop {
+        #[cfg(unix)]
+        if signal_guard.was_escalated() {
+            drop(handle);
+            return Err(terminated_failure(resolved));
+        }
+        let wait = match policy.deadline {
+            Some(deadline) => {
+                let Some(remaining) = deadline.checked_sub(started.elapsed()) else {
+                    drop(handle);
+                    return Err(timeout_failure(resolved, policy));
+                };
+                #[cfg(unix)]
+                {
+                    remaining.min(SIGNAL_POLL_INTERVAL)
+                }
+                #[cfg(not(unix))]
+                {
+                    remaining
+                }
+            }
+            None => {
+                #[cfg(unix)]
+                {
+                    SIGNAL_POLL_INTERVAL
+                }
+                #[cfg(not(unix))]
+                {
+                    return Ok(handle.join());
+                }
+            }
+        };
+        match done_rx.recv_timeout(wait) {
+            Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(handle.join()),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
 #[cfg(unix)]
 fn terminate_plugin_tree(child: &mut PluginChild) {
     let Ok(group) = i32::try_from(child.id()) else {
@@ -4182,7 +4259,7 @@ fn parse_event_line(line: &str, resolved: &ResolvedPlugin) -> Result<PluginEvent
 struct ActivePluginTarget {
     group: i32,
     generation: u64,
-    signaled: bool,
+    signaled: Arc<AtomicBool>,
     escalated: Arc<AtomicBool>,
 }
 
@@ -4214,7 +4291,7 @@ fn forward_signal_to_active_plugin(signal: i32, grace: Duration) -> ForwardedSig
     };
     let group = target.group;
     let generation = target.generation;
-    if target.signaled {
+    if target.signaled.swap(true, Ordering::SeqCst) {
         target.escalated.store(true, Ordering::SeqCst);
         drop(guard);
         if group > 0 {
@@ -4224,7 +4301,6 @@ fn forward_signal_to_active_plugin(signal: i32, grace: Duration) -> ForwardedSig
         }
         return ForwardedSignalOutcome::EscalatedKill { group };
     }
-    target.signaled = true;
     drop(guard);
     if group > 0 {
         // SAFETY: a negative PID addresses the isolated process group led by
@@ -4265,6 +4341,7 @@ fn forward_signal_to_active_plugin(signal: i32, grace: Duration) -> ForwardedSig
 #[cfg(unix)]
 struct ChildSignalGuard {
     generation: u64,
+    signaled: Arc<AtomicBool>,
     escalated: Arc<AtomicBool>,
 }
 
@@ -4297,6 +4374,7 @@ impl ChildSignalGuard {
 
     fn arm_group(group: i32) -> Self {
         let generation = NEXT_PLUGIN_GENERATION.fetch_add(1, Ordering::SeqCst);
+        let signaled = Arc::new(AtomicBool::new(false));
         let escalated = Arc::new(AtomicBool::new(false));
         let (lock, condvar) = active_plugin_signal_state();
         let mut guard = lock
@@ -4305,14 +4383,19 @@ impl ChildSignalGuard {
         *guard = (group > 0).then(|| ActivePluginTarget {
             group,
             generation,
-            signaled: false,
+            signaled: Arc::clone(&signaled),
             escalated: Arc::clone(&escalated),
         });
         condvar.notify_all();
         Self {
             generation,
+            signaled,
             escalated,
         }
+    }
+
+    fn was_signaled(&self) -> bool {
+        self.signaled.load(Ordering::SeqCst)
     }
 
     fn was_escalated(&self) -> bool {
@@ -7519,5 +7602,127 @@ catalogs:
             }
             assert!(guard.was_escalated());
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn timeout_enforced_when_detached_grandchild_holds_stdin_open_after_plugin_exit() {
+        use super::invoke_binary;
+
+        let root = temp_dir("detached-grandchild-stdin-timeout");
+        let pid_file = root.join("grandchild.pid");
+        let script = root.join("plugin");
+        // Spawn a detached grandchild that explicitly inherits stdin (without
+        // reading it; POSIX `/bin/sh` redirects `&` jobs from `/dev/null` unless
+        // stdin is duplicated explicitly) and closes stdout, while the plugin
+        // itself emits a result and exits 0.
+        let body = format!(
+            "#!/bin/sh\n\
+             exec 3<&0\n\
+             /usr/bin/perl -MPOSIX -e 'POSIX::setsid(); close STDOUT; open my $f, \">\", $ARGV[0]; print $f $$; close $f; sleep 15;' '{}' <&3 &\n\
+             while [ ! -s '{}' ]; do sleep 0.01; done\n\
+             printf '%s\\n' '{{\"event\":\"result\",\"exitCode\":0}}'\n\
+             exit 0\n",
+            pid_file.display(),
+            pid_file.display()
+        );
+        write_executable_fixture(&script, &body);
+        let resolved = ResolvedPlugin {
+            specifier: "./plugin".to_owned(),
+            invocation_path: script.clone(),
+            binary_path: script,
+            pinned_binary: None,
+        };
+        // Oversized payload ensures the writer thread blocks in stdin.write_all
+        // once the OS pipe buffer fills.
+        let large_payload = "x".repeat(512 * 1024);
+        let policy = InvocationPolicy::new(Some(Duration::from_millis(250)), "run");
+
+        let started = Instant::now();
+        let error = invoke_binary(
+            &resolved,
+            &json!({
+                "palamedesBinaryPluginProtocol": 1,
+                "kind": "run",
+                "payload": large_payload,
+            }),
+            &root,
+            Path::new("pmds"),
+            None,
+            policy,
+        )
+        .expect_err("deadline must still apply while waiting on the request writer");
+        let elapsed = started.elapsed();
+
+        if let Ok(pid_text) = fs::read_to_string(&pid_file)
+            && let Ok(pid) = pid_text.trim().parse::<i32>()
+        {
+            // SAFETY: kills the test fixture's own detached sleeper PID.
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+        }
+
+        assert_eq!(error.code, "PLUGIN_BINARY_TIMEOUT");
+        assert!(
+            elapsed < Duration::from_secs(3),
+            "invoke_binary hung waiting for detached grandchild stdin: elapsed={elapsed:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn load_registry_aborts_when_plugin_describe_is_terminated_by_signal() {
+        use std::thread;
+
+        use super::{forward_signal_to_active_plugin, load_registry};
+        use crate::config::load_config;
+
+        let _registry_guard = PLUGIN_REGISTRY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let root = temp_dir("signal-abort-discovery");
+        let first = root.join("first-plugin");
+        let second = root.join("second-plugin");
+        let first_ready = root.join("first.ready");
+        let second_ran = root.join("second.ran");
+        write_executable_fixture(
+            &first,
+            format!(
+                "#!/bin/sh\ntrap '' INT TERM\nread _request\n: > '{}'\nwhile :; do sleep 1; done\n",
+                first_ready.display()
+            ),
+        );
+        write_executable_fixture(
+            &second,
+            format!(
+                "#!/bin/sh\nread _request\n: > '{}'\nprintf '%s\\n' '{{\"event\":\"manifest\",\"name\":\"second\",\"protocolVersion\":1,\"commands\":{{\"ping\":{{}}}}}}'\n",
+                second_ran.display()
+            ),
+        );
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\nplugins:\n  - ./first-plugin\n  - ./second-plugin\n",
+        )
+        .expect("write config");
+        let config = load_config(&root, None).expect("load config");
+
+        let signaler = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while !first_ready.exists() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(10));
+            }
+            let _ = forward_signal_to_active_plugin(libc::SIGTERM, Duration::from_millis(50));
+            let _ = forward_signal_to_active_plugin(libc::SIGTERM, Duration::from_millis(50));
+        });
+
+        let error = load_registry(&config, &root, Path::new("pmds"), false)
+            .expect_err("terminated discovery must abort instead of skipping plugin");
+        signaler.join().expect("signaler thread");
+
+        assert_eq!(error.code, "PLUGIN_BINARY_TERMINATED");
+        assert!(
+            !second_ran.exists(),
+            "subsequent plugin must not be described after signal termination"
+        );
     }
 }

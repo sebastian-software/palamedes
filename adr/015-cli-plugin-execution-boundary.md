@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-11-27
 
 The Rust CLI dispatches explicitly configured executable plugins without making the npm launcher a second runtime.
 
@@ -12,9 +12,10 @@ Use one native command boundary:
 
 1. The Rust `pmds` executable owns built-in and plugin command dispatch.
 2. Built-in feature commands (`extract`, `lint`, `audit`, `report`, `catalog`,
-   and `version`) execute before configuration or plugin resolution. The current
-   reserved plugin namespace tokens are those commands plus Clap's `help`
-   subcommand; visible and hidden aliases of any root command are also reserved.
+   `version`, and `telemetry`) execute before configuration or plugin
+   resolution. The current reserved plugin namespace tokens are those commands
+   plus Clap's `help` subcommand; visible and hidden aliases of any root command
+   are also reserved.
 3. Any other namespace is resolved only from the explicit `plugins` list in a
    Palamedes data config (`yaml`, `yml`, `json`, or `toml`). JavaScript and
    TypeScript files are not CLI configuration.
