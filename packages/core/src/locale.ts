@@ -218,7 +218,7 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number)
           return null;
         }
         const tLang = subtags.slice(tLangStart, nextIndex).join("-");
-        if (tLang.length > maxTagLength || !languageTag(`und-t-${tLang}`)) {
+        if (!languageTag(`und-t-${tLang}`)) {
           return null;
         }
         hasLangOrField = true;

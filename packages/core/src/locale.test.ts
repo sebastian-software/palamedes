@@ -1073,6 +1073,9 @@ describe("security hardening", () => {
       const longNonPosixVariantExclusion = `de-AT,de-u-va-${Array.from({ length: 30 }, (_, i) => `var${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(longNonPosixVariantExclusion)).toBe("en");
 
+      const longTransformedLangExclusion = `de-AT,de-t-en-${Array.from({ length: 25 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")};q=0`;
+      expect(controls.preferredLocale(longTransformedLangExclusion)).toBe("en");
+
       const unrelatedOverBudgetExclusion = `de-AT,fr-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-frpar-x-${Array.from({ length: 24 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(unrelatedOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(unrelatedOverBudgetExclusion)).toStrictEqual(["de-at", "de"]);
