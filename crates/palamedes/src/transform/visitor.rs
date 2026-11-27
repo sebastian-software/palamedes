@@ -33,7 +33,7 @@ pub(super) struct TransformVisitor<'a> {
     pub trans_imports: HashSet<(String, String)>,
     pub reused_trans_imports: HashSet<String>,
     trans_replacements: Vec<TransReplacement>,
-    pub consumed_binding_ranges: Vec<(SymbolId, usize, usize)>,
+    pub consumed_binding_ranges: Vec<(Option<SymbolId>, usize, usize)>,
     pub error: Option<PalamedesError>,
     jsx_child_element_spans: Vec<(usize, usize)>,
 }
@@ -122,12 +122,12 @@ impl<'a> TransformVisitor<'a> {
     }
 
     fn record_consumed_binding(&mut self, symbol_id: SymbolId, start: usize, end: usize) {
-        self.consumed_binding_ranges.push((symbol_id, start, end));
+        self.consumed_binding_ranges
+            .push((Some(symbol_id), start, end));
     }
 
-    fn record_consumed_binding_outside_retained(
+    fn record_discarded_outside_retained(
         &mut self,
-        symbol_id: SymbolId,
         outer_start: usize,
         outer_end: usize,
         mut retained: Vec<(usize, usize)>,
@@ -138,12 +138,12 @@ impl<'a> TransformVisitor<'a> {
             let start = start.clamp(outer_start, outer_end);
             let end = end.clamp(outer_start, outer_end);
             if start > cursor {
-                self.record_consumed_binding(symbol_id, cursor, start);
+                self.consumed_binding_ranges.push((None, cursor, start));
             }
             cursor = cursor.max(end);
         }
         if cursor < outer_end {
-            self.record_consumed_binding(symbol_id, cursor, outer_end);
+            self.consumed_binding_ranges.push((None, cursor, outer_end));
         }
     }
 
@@ -351,8 +351,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                         &it.opening_element.attributes,
                         is_plural,
                     );
-                    self.record_consumed_binding_outside_retained(
-                        macro_symbol_id,
+                    self.record_discarded_outside_retained(
                         it.span.start as usize,
                         it.span.end as usize,
                         retained,
@@ -406,8 +405,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         };
 
-        let Some((macro_info, macro_symbol_id)) = self.imports.macro_at(local_name, tag_span)
-        else {
+        let Some((macro_info, _)) = self.imports.macro_at(local_name, tag_span) else {
             walk::walk_tagged_template_expression(self, it);
             return;
         };
@@ -453,8 +451,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     text,
                 });
                 self.push_compiled_id(&compiled_id);
-                self.record_consumed_binding_outside_retained(
-                    macro_symbol_id,
+                self.record_discarded_outside_retained(
                     it.span.start as usize,
                     it.span.end as usize,
                     retained,
@@ -505,8 +502,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             return;
         }
 
-        let Some((macro_info, macro_symbol_id)) = self.imports.macro_at(local_name, callee_span)
-        else {
+        let Some((macro_info, _)) = self.imports.macro_at(local_name, callee_span) else {
             walk::walk_call_expression(self, it);
             return;
         };
@@ -542,8 +538,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             text,
                         });
                         self.push_compiled_id(&compiled_id);
-                        self.record_consumed_binding_outside_retained(
-                            macro_symbol_id,
+                        self.record_discarded_outside_retained(
                             it.span.start as usize,
                             it.span.end as usize,
                             retained,
@@ -596,8 +591,7 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             text,
                         });
                         self.push_compiled_id(&compiled_id);
-                        self.record_consumed_binding_outside_retained(
-                            macro_symbol_id,
+                        self.record_discarded_outside_retained(
                             it.span.start as usize,
                             it.span.end as usize,
                             retained,
@@ -699,8 +693,7 @@ impl TransformVisitor<'_> {
                     );
                 } else {
                     let retained = retained_lowered_choice_call_spans(call, is_plural);
-                    self.record_consumed_binding_outside_retained(
-                        macro_symbol_id,
+                    self.record_discarded_outside_retained(
                         call.span.start as usize,
                         call.span.end as usize,
                         retained,

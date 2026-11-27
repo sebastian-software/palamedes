@@ -3249,14 +3249,15 @@ fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements()
         .expect("lowered choice macro with discarded key/overwritten value prop should transform");
     assert_eq!(transformed.compiled_ids.len(), 2);
 
-    // Valid: macro references only in discarded descriptor fields still allow import removal,
-    // while bare macro references in retained values preserve the import.
-    let discarded_spread = "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"Welcome\", ...{ tooltip: t`Help` } }); }\n";
+    // Valid: macro references only in discarded descriptor fields still allow import removal
+    // (including distinct aliased macro bindings), while bare macro references in retained values
+    // preserve the import.
+    let discarded_spread = "import { t, t as tooltip } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"Welcome\", ...{ label: tooltip`Help` } }); }\n";
     let transformed = transform_macros_raw(discarded_spread, "discarded-spread.ts", None)
         .expect("discarded descriptor field should transform cleanly");
     assert!(
         !transformed.code.contains("@palamedes/core/macro"),
-        "unused macro import from discarded descriptor field must be removed:\n{}",
+        "unused macro imports from discarded descriptor field must be removed:\n{}",
         transformed.code
     );
 
