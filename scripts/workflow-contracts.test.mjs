@@ -1047,6 +1047,7 @@ describe("workflow contracts", () => {
     expect(audit.text).not.toMatch(/^ {6}issues:/mu);
     expect(audit.text).toContain("npm_audit_outcome: ${{ steps.npm-audit.outcome }}");
     expect(audit.text).toContain("cargo_audit_outcome: ${{ steps.cargo-audit.outcome }}");
+    expect(audit.text).toContain("upload_report_outcome: ${{ steps.upload-report.outcome }}");
 
     // `|| true` here would pin both step outcomes to success and make the issue
     // job below permanently unreachable.
@@ -1059,6 +1060,9 @@ describe("workflow contracts", () => {
 
     expect(report).toBeDefined();
     expect(report.needs).toEqual(["audit"]);
+    expect(report.text).toContain("needs.audit.result != 'cancelled'");
+    expect(report.text).toContain("needs.audit.outputs.upload_report_outcome == 'success'");
+    expect(report.text).not.toContain("needs.audit.result == 'success'");
     expect(report.text).toMatch(/permissions:\n {6}contents: read\n {6}issues: write/u);
     expect(report.text).toContain("needs.audit.outputs.npm_audit_outcome == 'failure'");
     expect(report.text).toContain("needs.audit.outputs.cargo_audit_outcome == 'failure'");
@@ -3849,6 +3853,28 @@ describe("workflow contracts", () => {
     } finally {
       await rm(r48Fixture, { recursive: true, force: true });
     }
+    // An empty final `|| ''` fallback operand and `format(...)` expressions are
+    // evaluated so mutable image references cannot slip past the pin gate.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "jobs:",
+          "  expr-pins:",
+          "    runs-on: ubuntu-latest",
+          "    container: alpine:3.20${{ inputs.digest || '' }}",
+          "    steps:",
+          "      - run: |",
+          "          docker pull \"${{ format('{0}:{1}', 'node', '24') }}\"",
+          `          docker pull "\${{ format('{0}@{1}', 'node:24', '${digest}') }}"`,
+          "          docker pull \"${{ format('ghcr.io/{0}/app:latest', github.repository_owner) }}\"",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:4: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:7: node:24 is not pinned to a sha256 digest",
+      "<memory>:9: ghcr.io/${{ dynamic }}/app:latest is not pinned to a sha256 digest",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(

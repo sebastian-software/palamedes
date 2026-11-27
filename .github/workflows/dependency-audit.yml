@@ -28,6 +28,7 @@ jobs:
     outputs:
       npm_audit_outcome: ${{ steps.npm-audit.outcome }}
       cargo_audit_outcome: ${{ steps.cargo-audit.outcome }}
+      upload_report_outcome: ${{ steps.upload-report.outcome }}
 
     steps:
       - name: Check out repository
@@ -85,6 +86,7 @@ jobs:
           exit "$status"
 
       - name: Upload audit report
+        id: upload-report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dependency-audit
@@ -98,7 +100,8 @@ jobs:
     needs: audit
     if: >-
       always() &&
-      needs.audit.result == 'success' &&
+      needs.audit.result != 'cancelled' &&
+      needs.audit.outputs.upload_report_outcome == 'success' &&
       (needs.audit.outputs.npm_audit_outcome == 'failure' ||
       needs.audit.outputs.cargo_audit_outcome == 'failure')
     runs-on: ubuntu-24.04

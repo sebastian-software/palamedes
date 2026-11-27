@@ -1297,6 +1297,160 @@ function parseActionsSingleQuotedLiteral(rawExpr) {
   return value;
 }
 
+function splitTopLevelFunctionArgs(rawArgs) {
+  const args = [];
+  let start = 0;
+  let depth = 0;
+  let inSingle = false;
+  for (let i = 0; i < rawArgs.length; i += 1) {
+    const ch = rawArgs[i];
+    if (inSingle) {
+      if (ch === "'") {
+        if (rawArgs[i + 1] === "'") {
+          i += 1;
+        } else {
+          inSingle = false;
+        }
+      }
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+    } else if (ch === "(") {
+      depth += 1;
+    } else if (ch === ")") {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0 && ch === ",") {
+      args.push(rawArgs.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  const tail = rawArgs.slice(start).trim();
+  if (tail || args.length > 0) {
+    args.push(tail);
+  }
+  return args;
+}
+
+function applyActionsFormatTemplate(template, argValues) {
+  let out = "";
+  for (let i = 0; i < template.length;) {
+    if (template[i] === "{") {
+      if (template[i + 1] === "{") {
+        out += "{";
+        i += 2;
+        continue;
+      }
+      const close = template.indexOf("}", i + 1);
+      if (close !== -1) {
+        const indexText = template.slice(i + 1, close);
+        if (/^\d+$/u.test(indexText)) {
+          const argIndex = Number(indexText);
+          if (argIndex < argValues.length) {
+            out += argValues[argIndex];
+            i = close + 1;
+            continue;
+          }
+        }
+      }
+    } else if (template[i] === "}" && template[i + 1] === "}") {
+      out += "}";
+      i += 2;
+      continue;
+    }
+    out += template[i];
+    i += 1;
+  }
+  return out;
+}
+
+function evaluateActionsFormatCall(branch, stepEnv) {
+  const formatPrefix = /^format\s*\(/iu.exec(branch);
+  if (!formatPrefix || !branch.endsWith(")")) {
+    return null;
+  }
+  const inner = branch.slice(formatPrefix[0].length, -1);
+  const rawArgs = splitTopLevelFunctionArgs(inner);
+  if (rawArgs.length === 0) {
+    return null;
+  }
+  const templateEval = evaluateActionsValueVariants(rawArgs[0], stepEnv);
+  if (!templateEval || templateEval.values.length === 0) {
+    return null;
+  }
+  const argOptionLists = [];
+  let allArgsKnown = templateEval.known;
+  for (let i = 1; i < rawArgs.length; i += 1) {
+    const argEval = evaluateActionsValueVariants(rawArgs[i], stepEnv);
+    if (!argEval || !argEval.known || argEval.values.length === 0) {
+      allArgsKnown = false;
+      argOptionLists.push(["${{ dynamic }}"]);
+    } else {
+      argOptionLists.push(argEval.values);
+    }
+  }
+  let combinations = [[]];
+  for (const options of argOptionLists) {
+    const next = [];
+    for (const combo of combinations) {
+      for (const opt of options) {
+        if (next.length >= MAX_TOKEN_EXPANSIONS) {
+          break;
+        }
+        next.push([...combo, opt]);
+      }
+      if (next.length >= MAX_TOKEN_EXPANSIONS) {
+        break;
+      }
+    }
+    combinations = next;
+  }
+  const formatted = [];
+  const seen = new Set();
+  for (const tmpl of templateEval.values) {
+    for (const combo of combinations) {
+      const rendered = applyActionsFormatTemplate(tmpl, combo);
+      if (!seen.has(rendered)) {
+        seen.add(rendered);
+        formatted.push(rendered);
+      }
+    }
+  }
+  if (!allArgsKnown && formatted.every((val) => val === "${{ dynamic }}")) {
+    return null;
+  }
+  return {
+    known: allArgsKnown,
+    values: formatted,
+    mayBeEmpty: formatted.includes(""),
+  };
+}
+
+function evaluateActionsValueVariants(rawExpr, stepEnv) {
+  const expr = stripBalancedOuterParens(rawExpr.trim());
+  if (!expr) {
+    return null;
+  }
+  const orParts = splitTopLevelLogicalOp(expr, "||");
+  if (orParts) {
+    const entries = evaluateActionsFallbackExpression(expr, stepEnv, 0);
+    if (!entries) {
+      return null;
+    }
+    const vals = entries.map((e) => e.value);
+    return { known: true, values: vals, mayBeEmpty: vals.includes("") };
+  }
+  const branchRes = evaluateActionsFallbackBranch(expr, stepEnv);
+  if (!branchRes.known) {
+    return null;
+  }
+  const vals = [...branchRes.values];
+  if (branchRes.falsyValue !== undefined && !vals.includes(branchRes.falsyValue)) {
+    vals.push(branchRes.falsyValue);
+  }
+  return { known: true, values: vals, mayBeEmpty: branchRes.mayBeEmpty };
+}
+
 function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
   const branch = stripBalancedOuterParens(rawBranch.trim());
   if (!branch) {
@@ -1309,8 +1463,11 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
   }
 
   const lowerBranch = branch.toLowerCase();
-  if (lowerBranch === "false" || lowerBranch === "null") {
-    return { known: true, values: [], mayBeEmpty: true };
+  if (lowerBranch === "false") {
+    return { known: true, values: [], falsyValue: "false", mayBeEmpty: true };
+  }
+  if (lowerBranch === "null") {
+    return { known: true, values: [], falsyValue: "", mayBeEmpty: true };
   }
   if (lowerBranch === "true") {
     return { known: true, values: ["true"], mayBeEmpty: false };
@@ -1323,7 +1480,7 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
         return { known: true, values: ["true"], mayBeEmpty: false };
       }
       if (!inner.mayBeEmpty) {
-        return { known: true, values: [], mayBeEmpty: true };
+        return { known: true, values: [], falsyValue: "false", mayBeEmpty: true };
       }
     }
     return { known: false, values: [], mayBeEmpty: true };
@@ -1331,9 +1488,14 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
   if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(branch)) {
     const numVal = Number(branch);
     if (numVal === 0 || Number.isNaN(numVal)) {
-      return { known: true, values: [], mayBeEmpty: true };
+      return { known: true, values: [], falsyValue: branch, mayBeEmpty: true };
     }
     return { known: true, values: [branch], mayBeEmpty: false };
+  }
+
+  const formatResult = evaluateActionsFormatCall(branch, stepEnv);
+  if (formatResult) {
+    return formatResult;
   }
 
   const envMatch =
@@ -1433,6 +1595,11 @@ function evaluateActionsFallbackExpression(rawExpr, stepEnv, fallbackLine) {
     return [{ value: standaloneLiteral, line: fallbackLine }];
   }
 
+  const formatResult = evaluateActionsFormatCall(expr, stepEnv);
+  if (formatResult && formatResult.values.length > 0) {
+    return formatResult.values.map((value) => ({ value, line: fallbackLine }));
+  }
+
   const orParts = splitTopLevelLogicalOp(expr, "||");
   if (!orParts) {
     const andParts = splitTopLevelLogicalOp(expr, "&&");
@@ -1457,15 +1624,19 @@ function evaluateActionsFallbackExpression(rawExpr, stepEnv, fallbackLine) {
   };
 
   let canReachNext = true;
-  for (const part of orParts) {
+  for (let i = 0; i < orParts.length; i += 1) {
     if (!canReachNext) {
       break;
     }
-    const result = evaluateActionsFallbackBranch(part, stepEnv);
+    const isLast = i === orParts.length - 1;
+    const result = evaluateActionsFallbackBranch(orParts[i], stepEnv);
     for (const val of result.values) {
-      if (val.length > 0) {
+      if (val.length > 0 || isLast) {
         pushVal(val);
       }
+    }
+    if (isLast && result.falsyValue !== undefined) {
+      pushVal(result.falsyValue);
     }
     if (result.known && !result.mayBeEmpty) {
       canReachNext = false;
@@ -7568,7 +7739,7 @@ function inspectShellRunScript(
       (new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(value) ||
         new RegExp(STEP_OUTPUT_EXPRESSION_PATTERN.source, "iu").test(value) ||
         new RegExp(NEEDS_OUTPUT_EXPRESSION_PATTERN.source, "iu").test(value))) ||
-    /\$\{\{[^}]*(?:\|\||&&|')/u.test(value);
+    /\$\{\{[^}]*(?:\|\||&&|'|format\s*\()/iu.test(value);
   const hasEnvExpr = hasExpandableActionsExpr(scriptText);
   if (hasMatrixExpr || hasEnvExpr) {
     const seenStepProblems = new Set();
