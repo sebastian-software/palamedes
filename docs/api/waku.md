@@ -67,7 +67,8 @@ host or edge proxy):
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
 
-type CspRequestState = { nonce: string; ssrBody?: NonNullable<Response["body"]> };
+type TrackedHtml = { body: NonNullable<Response["body"]>; ssr: boolean };
+type CspRequestState = { nonce: string; html?: TrackedHtml };
 const cspNonceStorage = new AsyncLocalStorage<CspRequestState>();
 
 export function runWithRequestNonce<T>(fn: () => T): T {
@@ -78,13 +79,14 @@ export function getRequestNonce(): string | undefined {
   return cspNonceStorage.getStore()?.nonce;
 }
 
-export function trackSsrHtmlBody(body: NonNullable<Response["body"]>): void {
+export function trackRouterHtmlBody(body: NonNullable<Response["body"]>, ssr: boolean): void {
   const state = cspNonceStorage.getStore();
-  if (state) state.ssrBody = body;
+  if (state) state.html = { body, ssr };
 }
 
-export function isTrackedSsrHtmlBody(body: Response["body"]): boolean {
-  return body !== null && cspNonceStorage.getStore()?.ssrBody === body;
+export function getTrackedRouterHtml(body: Response["body"]): TrackedHtml | undefined {
+  const html = cspNonceStorage.getStore()?.html;
+  return body !== null && html?.body === body ? html : undefined;
 }
 ```
 
@@ -93,7 +95,7 @@ export function isTrackedSsrHtmlBody(body: Response["body"]): boolean {
 import { fsRouter } from "waku";
 import adapter from "waku/adapters/default";
 import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
-import { getRequestNonce, isTrackedSsrHtmlBody, runWithRequestNonce } from "./lib/csp.server";
+import { getRequestNonce, getTrackedRouterHtml, runWithRequestNonce } from "./lib/csp.server";
 import { resolveApplicationLocale } from "./lib/i18n.server";
 
 const modules = Object.fromEntries(
@@ -140,12 +142,14 @@ export default adapter(fsRouter(modules), {
         await next();
         // Rewrite and apply the nonce CSP only to the exact SSR HTML stream rendered
         // by Waku. If a `src/middleware/*` handler replaced `context.res` (for example,
-        // with an HTML error or maintenance page) or handled a raw HTML `_api` route,
-        // leave that response and its CSP untouched.
-        if (!isTrackedSsrHtmlBody(context.res.body)) {
+        // with an HTML error or maintenance page), leave that response and its CSP untouched.
+        const tracked = getTrackedRouterHtml(context.res.body);
+        if (!tracked) {
           return;
         }
-        await catalogDelivery(context, async () => {});
+        if (tracked.ssr) {
+          await catalogDelivery(context, async () => {});
+        }
         const nonce = getRequestNonce();
         // Apply this nonce-enabled same-origin policy in production builds;
         // Vite dev injects HMR scripts and inline styles that need a separate dev policy.
@@ -154,13 +158,17 @@ export default adapter(fsRouter(modules), {
           nonce &&
           context.res.headers.get("content-type")?.startsWith("text/html")
         ) {
-          // Omit this write if an existing `src/middleware/*` handler already sets
-          // Content-Security-Policy using `getRequestNonce()`; otherwise this runs
-          // after `middlewareModules` and replaces that header. Always keep Cache-Control.
-          context.header("content-security-policy", buildAppCsp(nonce));
-          // Nonce-bearing HTML must never be replayed across visitors by a shared or
-          // in-app cache: exclude these SSR routes from any `src/middleware/*` cache
-          // (or keep cache middleware outside this middleware so it honors no-store).
+          if (tracked.ssr) {
+            // Omit this write if an existing `src/middleware/*` handler already sets
+            // Content-Security-Policy using `getRequestNonce()`; otherwise this runs
+            // after `middlewareModules` and replaces that header. Always keep Cache-Control.
+            context.header("content-security-policy", buildAppCsp(nonce));
+          }
+          // Nonce-bearing HTML (including Waku's `unstable_disableSSR: true` fallback
+          // shell, which also receives `unstable_setNonce`) must never be replayed
+          // across visitors by a shared or in-app cache: exclude these routes from
+          // any `src/middleware/*` cache (or keep cache middleware outside this
+          // middleware so it honors no-store).
           context.header("cache-control", "private, no-store");
         }
       }),
@@ -172,7 +180,7 @@ export default adapter(fsRouter(modules), {
 // src/pages/_interceptors/zz-csp.server.ts
 // Waku loads `_interceptors/*` in sorted filename order and nests earlier files
 // outside later ones. Keep this file sorted last (after any response-replacing
-// interceptor) so it wraps Waku's render directly and tracks only Waku's SSR body;
+// interceptor) so it wraps Waku's render directly and tracks only Waku's router HTML;
 // move any HTML-cloning or body-wrapping interceptors (such as `response.clone()`)
 // to outer Hono middleware before the Palamedes/CSP wrapper in `src/waku.server.ts`.
 import {
@@ -180,24 +188,22 @@ import {
   unstable_setNonce,
   type HandlerInterceptor,
 } from "waku/router/server";
-import { getRequestNonce, trackSsrHtmlBody } from "../../lib/csp.server";
+import { getRequestNonce, trackRouterHtmlBody } from "../../lib/csp.server";
 
 const cspInterceptor: HandlerInterceptor = async (next) => {
   const nonce = getRequestNonce();
   if (!import.meta.env.DEV && nonce) unstable_setNonce(nonce);
   const result = await next();
-  // This recipe covers SSR-enabled dynamic pages: Waku sets an RSC path for SSR
-  // pages, leaves it unset for `_api` handlers (so raw HTML handlers stay
-  // untouched under their own CSP), and returns null for unmatched `/` before
-  // its unnonced root fallback shell runs. `unstable_disableSSR: true` routes
-  // are outside scope.
+  // Waku sets an RSC path for SSR pages and leaves it unset for `_api` handlers
+  // and `unstable_disableSSR: true` fallback shells (which still receive the
+  // interceptor's nonce, so tracking non-SSR router HTML ensures `no-store` is
+  // applied without injecting split catalogs or overwriting `_api` CSP).
   if (
-    unstable_getRscPath() !== undefined &&
     result instanceof Response &&
     result.body !== null &&
     result.headers.get("content-type")?.startsWith("text/html")
   ) {
-    trackSsrHtmlBody(result.body);
+    trackRouterHtmlBody(result.body, unstable_getRscPath() !== undefined);
   }
   return result;
 };
