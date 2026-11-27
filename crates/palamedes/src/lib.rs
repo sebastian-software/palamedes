@@ -100,7 +100,8 @@ pub use catalog_module::render_catalog_module;
 #[doc(hidden)]
 pub use catalog_three_way::{
     CATALOG_MODIFY_DELETE_RESOLVED, CatalogFileThreeWayMergeRequest, CatalogMergeSide,
-    CatalogThreeWayMergeRequest, merge_catalog_files_three_way, merge_catalogs_three_way,
+    CatalogThreeWayMergeRequest, atomic_write_file, merge_catalog_files_three_way,
+    merge_catalogs_three_way,
 };
 #[doc(hidden)]
 pub use catalog_update::{

@@ -143,31 +143,53 @@ impl PreparedCatalogs {
         fs::create_dir_all(output).map_err(Error::io(output))?;
         let mut files = Vec::new();
         for (path, bytes) in serialized {
-            // Readers see either the old file or the complete replacement.
-            let mut builder = tempfile::Builder::new();
-            builder.prefix(".pmd-");
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                // Match ordinary data-file creation while respecting umask.
-                builder.permissions(fs::Permissions::from_mode(0o666));
-            }
-            let mut temporary = builder.tempfile_in(output).map_err(Error::io(output))?;
-            if let Ok(metadata) = fs::metadata(&path) {
-                temporary
-                    .as_file()
-                    .set_permissions(metadata.permissions())
-                    .map_err(Error::io(temporary.path()))?;
-            }
-            std::io::Write::write_all(&mut temporary, &bytes)
-                .map_err(Error::io(temporary.path()))?;
-            temporary
-                .persist(&path)
-                .map_err(|error| Error::io(&path)(error.error))?;
+            atomic_write_file(&path, &bytes)?;
             files.push(path);
         }
         Ok(files)
     }
+}
+
+/// Atomically writes `bytes` to `path` via a sibling temporary file, preserving
+/// existing regular-file permissions and respecting the process umask for new
+/// files.
+pub(crate) fn atomic_write_file(path: &Path, bytes: &[u8]) -> BuildResult<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let existing_permissions = fs::symlink_metadata(path)
+        .ok()
+        .filter(|metadata| metadata.file_type().is_file())
+        .map(|metadata| metadata.permissions());
+
+    // Readers see either the old file or the complete replacement.
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".pmd-");
+    #[cfg(unix)]
+    if existing_permissions.is_none() {
+        use std::os::unix::fs::PermissionsExt;
+        // Match ordinary data-file creation while respecting umask.
+        builder.permissions(fs::Permissions::from_mode(0o666));
+    }
+    let mut temporary = builder.tempfile_in(parent).map_err(Error::io(parent))?;
+    std::io::Write::write_all(&mut temporary, bytes).map_err(Error::io(temporary.path()))?;
+    std::io::Write::flush(&mut temporary).map_err(Error::io(temporary.path()))?;
+    if let Some(permissions) = existing_permissions {
+        #[cfg(unix)]
+        let permissions = {
+            use std::os::unix::fs::PermissionsExt;
+            fs::Permissions::from_mode(permissions.mode() & 0o777)
+        };
+        temporary
+            .as_file()
+            .set_permissions(permissions)
+            .map_err(Error::io(temporary.path()))?;
+    }
+    temporary
+        .persist(path)
+        .map_err(|error| Error::io(path)(error.error))?;
+    Ok(())
 }
 
 pub(crate) fn prepare(builder: &CatalogBuilder) -> BuildResult<PreparedCatalogs> {

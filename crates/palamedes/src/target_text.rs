@@ -191,33 +191,61 @@ pub(crate) fn check_target_text(
 }
 
 fn literal_contains(nodes: &[IcuNode], text: &str) -> bool {
-    nodes.iter().any(|node| match node {
-        IcuNode::Literal(value) => value.contains(text),
-        IcuNode::Tag { children, .. } => literal_contains(children, text),
-        IcuNode::Plural { options, .. } | IcuNode::Select { options, .. } => options
-            .iter()
-            .any(|option| literal_contains(&option.value, text)),
-        _ => false,
-    })
+    let mut stack = vec![nodes];
+    while let Some(slice) = stack.pop() {
+        for node in slice {
+            match node {
+                IcuNode::Literal(value) => {
+                    if value.contains(text) {
+                        return true;
+                    }
+                }
+                IcuNode::Tag { children, .. } => stack.push(children),
+                IcuNode::Plural { options, .. } | IcuNode::Select { options, .. } => {
+                    for option in options {
+                        stack.push(&option.value);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    false
 }
 
 fn probed_marker(nodes: &[IcuNode], start_probe: &str, end_probe: &str) -> Option<String> {
-    for node in nodes {
-        let marker = match node {
-            IcuNode::Literal(value) => value.find(start_probe).and_then(|start| {
-                let remaining = &value[start + start_probe.len()..];
-                remaining
-                    .find(end_probe)
-                    .map(|end| format!("#{}", &remaining[..end]))
-            }),
-            IcuNode::Tag { children, .. } => probed_marker(children, start_probe, end_probe),
-            IcuNode::Plural { options, .. } | IcuNode::Select { options, .. } => options
-                .iter()
-                .find_map(|option| probed_marker(&option.value, start_probe, end_probe)),
-            _ => None,
-        };
-        if marker.is_some() {
-            return marker;
+    let mut stack = vec![nodes];
+    while let Some(slice) = stack.pop() {
+        for (index, node) in slice.iter().enumerate() {
+            match node {
+                IcuNode::Literal(value) => {
+                    if let Some(marker) = value.find(start_probe).and_then(|start| {
+                        let remaining = &value[start + start_probe.len()..];
+                        remaining
+                            .find(end_probe)
+                            .map(|end| format!("#{}", &remaining[..end]))
+                    }) {
+                        return Some(marker);
+                    }
+                }
+                IcuNode::Tag { children, .. } => {
+                    if index + 1 < slice.len() {
+                        stack.push(&slice[index + 1..]);
+                    }
+                    stack.push(children);
+                    break;
+                }
+                IcuNode::Plural { options, .. } | IcuNode::Select { options, .. } => {
+                    if index + 1 < slice.len() {
+                        stack.push(&slice[index + 1..]);
+                    }
+                    for option in options.iter().rev() {
+                        stack.push(&option.value);
+                    }
+                    break;
+                }
+                _ => {}
+            }
         }
     }
     None
@@ -433,5 +461,22 @@ mod tests {
             .is_empty()
         );
         assert!(check_target_text("Save", " {bad", CHECKS).is_empty());
+    }
+
+    #[test]
+    fn handles_deeply_nested_icu_nodes_without_stack_overflow() {
+        let mut nodes = vec![IcuNode::Literal("START_needle_END".to_owned())];
+        for level in 0..500 {
+            nodes = vec![IcuNode::Tag {
+                name: format!("b{level}"),
+                children: nodes,
+            }];
+        }
+        assert!(super::literal_contains(&nodes, "needle"));
+        assert!(!super::literal_contains(&nodes, "absent"));
+        assert_eq!(
+            super::probed_marker(&nodes, "START_", "_END"),
+            Some("#needle".to_owned())
+        );
     }
 }

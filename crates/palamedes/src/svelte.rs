@@ -595,132 +595,159 @@ fn expression_scan(
     start: usize,
     on_word: &mut dyn FnMut(usize, usize),
 ) -> Option<usize> {
+    enum ScanMode {
+        Expression { depth: usize, regex_allowed: bool },
+        Template,
+    }
+
     let bytes = source.as_bytes();
     if let Some(end) = closing_block_end(source, start) {
         return Some(end);
     }
-    let mut depth = 1;
+    let mut stack = vec![ScanMode::Expression {
+        depth: 1,
+        regex_allowed: true,
+    }];
     let mut cursor = start + 1;
-    let mut regex_allowed = true;
-    while let Some(&byte) = bytes.get(cursor) {
-        match byte {
-            b'\'' | b'"' => {
-                cursor = string_end(bytes, cursor, byte)?;
-                regex_allowed = false;
-            }
-            b'`' => {
-                cursor += 1;
-                loop {
-                    match *bytes.get(cursor)? {
-                        b'\\' => cursor += 2,
-                        b'`' => {
-                            cursor += 1;
-                            break;
-                        }
-                        b'$' if bytes.get(cursor + 1) == Some(&b'{') => {
-                            cursor = expression_scan(source, cursor + 1, on_word)?;
-                        }
-                        _ => cursor += 1,
-                    }
-                }
-                regex_allowed = false;
-            }
-            b'/' if bytes.get(cursor + 1) == Some(&b'/') => {
-                cursor = source[cursor..]
-                    .find('\n')
-                    .map_or(bytes.len(), |end| cursor + end);
-            }
-            b'/' if bytes.get(cursor + 1) == Some(&b'*') => {
-                cursor += 2 + source[cursor + 2..].find("*/")? + 2;
-            }
-            b'/' if regex_allowed => {
-                cursor += 1;
-                let mut class = false;
-                loop {
-                    match *bytes.get(cursor)? {
-                        b'\\' => cursor += 2,
-                        b'[' => {
-                            class = true;
-                            cursor += 1;
-                        }
-                        b']' => {
-                            class = false;
-                            cursor += 1;
-                        }
-                        b'/' if !class => {
-                            cursor += 1;
-                            break;
-                        }
-                        _ => cursor += 1,
-                    }
-                }
-                regex_allowed = false;
-            }
-            b'{' => {
-                depth += 1;
-                cursor += 1;
-                regex_allowed = true;
-            }
-            b'}' => {
-                depth -= 1;
-                cursor += 1;
-                if depth == 0 {
-                    return Some(cursor);
-                }
-                regex_allowed = false;
-            }
-            byte if byte.is_ascii_whitespace() => cursor += 1,
-            byte if byte.is_ascii_alphabetic() || matches!(byte, b'_' | b'$') => {
-                let word = cursor;
-                while bytes
-                    .get(cursor)
-                    .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$'))
-                {
+    loop {
+        match stack.last_mut()? {
+            ScanMode::Template => match *bytes.get(cursor)? {
+                b'\\' => cursor += 2,
+                b'`' => {
                     cursor += 1;
+                    stack.pop();
+                    if let Some(ScanMode::Expression { regex_allowed, .. }) = stack.last_mut() {
+                        *regex_allowed = false;
+                    }
                 }
-                on_word(word, cursor);
-                regex_allowed = matches!(
-                    &source[word..cursor],
-                    "if" | "each"
-                        | "key"
-                        | "html"
-                        | "return"
-                        | "throw"
-                        | "case"
-                        | "typeof"
-                        | "void"
-                        | "delete"
-                        | "yield"
-                        | "await"
-                        | "in"
-                        | "of"
-                );
-            }
-            _ => {
-                regex_allowed = matches!(
-                    byte,
-                    b'(' | b'['
-                        | b'='
-                        | b','
-                        | b':'
-                        | b';'
-                        | b'!'
-                        | b'?'
-                        | b'&'
-                        | b'|'
-                        | b'+'
-                        | b'-'
-                        | b'*'
-                        | b'%'
-                        | b'~'
-                        | b'^'
-                        | b'>'
-                );
-                cursor += 1;
+                b'$' if bytes.get(cursor + 1) == Some(&b'{') => {
+                    let expr_start = cursor + 1;
+                    if let Some(end) = closing_block_end(source, expr_start) {
+                        cursor = end;
+                    } else {
+                        cursor = expr_start + 1;
+                        stack.push(ScanMode::Expression {
+                            depth: 1,
+                            regex_allowed: true,
+                        });
+                    }
+                }
+                _ => cursor += 1,
+            },
+            ScanMode::Expression {
+                depth,
+                regex_allowed,
+            } => {
+                let &byte = bytes.get(cursor)?;
+                match byte {
+                    b'\'' | b'"' => {
+                        cursor = string_end(bytes, cursor, byte)?;
+                        *regex_allowed = false;
+                    }
+                    b'`' => {
+                        cursor += 1;
+                        stack.push(ScanMode::Template);
+                    }
+                    b'/' if bytes.get(cursor + 1) == Some(&b'/') => {
+                        cursor = source[cursor..]
+                            .find('\n')
+                            .map_or(bytes.len(), |end| cursor + end);
+                    }
+                    b'/' if bytes.get(cursor + 1) == Some(&b'*') => {
+                        cursor += 2 + source[cursor + 2..].find("*/")? + 2;
+                    }
+                    b'/' if *regex_allowed => {
+                        cursor += 1;
+                        let mut class = false;
+                        loop {
+                            match *bytes.get(cursor)? {
+                                b'\\' => cursor += 2,
+                                b'[' => {
+                                    class = true;
+                                    cursor += 1;
+                                }
+                                b']' => {
+                                    class = false;
+                                    cursor += 1;
+                                }
+                                b'/' if !class => {
+                                    cursor += 1;
+                                    break;
+                                }
+                                _ => cursor += 1,
+                            }
+                        }
+                        *regex_allowed = false;
+                    }
+                    b'{' => {
+                        *depth += 1;
+                        cursor += 1;
+                        *regex_allowed = true;
+                    }
+                    b'}' => {
+                        *depth -= 1;
+                        cursor += 1;
+                        if *depth == 0 {
+                            stack.pop();
+                            if stack.is_empty() {
+                                return Some(cursor);
+                            }
+                        } else {
+                            *regex_allowed = false;
+                        }
+                    }
+                    byte if byte.is_ascii_whitespace() => cursor += 1,
+                    byte if byte.is_ascii_alphabetic() || matches!(byte, b'_' | b'$') => {
+                        let word = cursor;
+                        while bytes.get(cursor).is_some_and(|byte| {
+                            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$')
+                        }) {
+                            cursor += 1;
+                        }
+                        on_word(word, cursor);
+                        *regex_allowed = matches!(
+                            &source[word..cursor],
+                            "if" | "each"
+                                | "key"
+                                | "html"
+                                | "return"
+                                | "throw"
+                                | "case"
+                                | "typeof"
+                                | "void"
+                                | "delete"
+                                | "yield"
+                                | "await"
+                                | "in"
+                                | "of"
+                        );
+                    }
+                    _ => {
+                        *regex_allowed = matches!(
+                            byte,
+                            b'(' | b'['
+                                | b'='
+                                | b','
+                                | b':'
+                                | b';'
+                                | b'!'
+                                | b'?'
+                                | b'&'
+                                | b'|'
+                                | b'+'
+                                | b'-'
+                                | b'*'
+                                | b'%'
+                                | b'~'
+                                | b'^'
+                                | b'>'
+                        );
+                        cursor += 1;
+                    }
+                }
             }
         }
     }
-    None
 }
 
 // A slash at the start of an interpolation can also begin a regex literal.
@@ -1111,5 +1138,28 @@ const seats = $derived(plural(count, { one: '# seat', other: '# seats' }));
             "{}",
             result.code
         );
+    }
+
+    #[test]
+    fn handles_deeply_nested_template_expressions_without_stack_overflow() {
+        let depth = 2_000;
+        let mut expr = String::from("{");
+        for _ in 0..depth {
+            expr.push_str("`${");
+        }
+        expr.push_str("value");
+        for _ in 0..depth {
+            expr.push_str("}`");
+        }
+        expr.push('}');
+
+        assert_eq!(super::expression_end(&expr, 0), Some(expr.len()));
+
+        let source = format!(
+            "<script>import {{ t }} from '@palamedes/core/macro'; const label = t`Hello`;</script><p>{expr}</p>"
+        );
+        let extracted = extract_messages(&source, "Deep.svelte").expect("deep template parses");
+        assert_eq!(extracted.len(), 1);
+        assert_eq!(extracted[0].message, "Hello");
     }
 }

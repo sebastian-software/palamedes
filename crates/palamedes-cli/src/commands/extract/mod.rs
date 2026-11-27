@@ -439,7 +439,7 @@ fn write_runtime_manifest(
             source,
         })?;
     }
-    fs::write(&target, contents).map_err(|source| CliError::Io {
+    palamedes::atomic_write_file(&target, contents.as_bytes()).map_err(|source| CliError::Io {
         path: target.clone(),
         source,
     })
@@ -4009,6 +4009,68 @@ catalogs:
             err,
             CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
         ));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_runtime_manifest_preserves_existing_permissions_and_umask() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("runtime-manifest-perms");
+        fs::create_dir_all(root.join("src")).expect("create src");
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        let source_file = root.join("src/app.ts");
+        fs::write(
+            &source_file,
+            "import { t } from '@palamedes/core/macro';\nexport const msg = () => t`Hello`;\n",
+        )
+        .expect("write source");
+        let config = load_config(&root, None).expect("load config");
+
+        let baseline = root.join("baseline.txt");
+        fs::write(&baseline, "x").expect("write baseline");
+        let expected_umask_mode = fs::metadata(&baseline)
+            .expect("baseline meta")
+            .permissions()
+            .mode()
+            & 0o777;
+
+        let manifest_rel = std::path::Path::new(".palamedes/runtime-manifest.json");
+        let manifest_abs = root.join(manifest_rel);
+        super::write_runtime_manifest(&config, manifest_rel, &[source_file.as_path()], false)
+            .expect("initial manifest write");
+        assert_eq!(
+            fs::metadata(&manifest_abs)
+                .expect("manifest meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            expected_umask_mode
+        );
+
+        fs::set_permissions(&manifest_abs, fs::Permissions::from_mode(0o640))
+            .expect("chmod manifest");
+        fs::write(
+            &source_file,
+            "import { t } from '@palamedes/core/macro';\nexport const msg = () => t`Updated`;\n",
+        )
+        .expect("update source");
+        super::write_runtime_manifest(&config, manifest_rel, &[source_file.as_path()], false)
+            .expect("updated manifest write");
+        assert_eq!(
+            fs::metadata(&manifest_abs)
+                .expect("updated meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
 
         let _ = fs::remove_dir_all(&root);
     }
