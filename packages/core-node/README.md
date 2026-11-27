@@ -95,14 +95,19 @@ console.log(po.headers.Language);
 bounded exact source/context/locale hints from caller-selected translated facts.
 It builds one native index per batch and never infers quality or replaces values.
 Use known explicit candidate IDs to read translated PO/FCL facts; default candidate
-enumeration supplies missing entries. See [reference hints](../../docs/translation-candidate-patches.md#exact-reference-hints).
+enumeration supplies missing entries. See [reference hints](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-candidate-patches.md#exact-reference-hints).
 
 `checkTranslationTargets({ targets: patches, checks: { boundaryWhitespace: true,
 metadataLeakage: true } })` provides read-only, opt-in review warnings before
 patch writeback. The same native checks run during `auditCatalogs` through
 `checks.targetText`. Results group candidate identity, checked text, and UTF-8 byte spans;
-see [target-text review](../../docs/api/core-node.md#review-proposed-or-stored-target-text)
+see [target-text review](https://github.com/sebastian-software/palamedes/blob/main/docs/api/core-node.md#review-proposed-or-stored-target-text)
 for source-aware exemptions and span semantics.
+
+`matchTerminology({ message, entries })` matches caller-supplied protected or
+advisory terms against decoded ICU literals and returns deterministic
+longest-first relevance with UTF-8 byte ranges. See
+[caller-supplied terminology](https://github.com/sebastian-software/palamedes/blob/main/docs/translation-candidate-patches.md#caller-supplied-terminology).
 
 ## Available APIs
 
@@ -118,6 +123,7 @@ for source-aware exemptions and span semantics.
 - `isTranslationPatchWriteError(error)`
 - `auditCatalogs(config, options?)`
 - `checkTranslationTargets(request)`
+- `matchTerminology(request)`
 - `inspectCatalogMachineTranslations(config, options?)`
 - `inspectCatalogMachineTranslationsAsync(config, options?, taskOptions?: AsyncTaskOptions)`
 - `deriveMessageMetadata(message, context?)`
@@ -156,7 +162,7 @@ PO/FCL machine claims without rewriting files. They expose Ferrocat
 `current`/`stale`/`absent`/`invalid` counters and identity/status details.
 Integrity does not verify authorship or translation quality; malformed metadata
 may be rejected or discarded before review. See the
-[inspection API](../../docs/api/core-node.md#inspect-stored-machine-translation-claims).
+[inspection API](https://github.com/sebastian-software/palamedes/blob/main/docs/api/core-node.md#inspect-stored-machine-translation-claims).
 
 Catalog operations use Ferrocat for parsing, updates, audits, ICU authoring
 diagnostics, metadata validation, and deterministic combine workflows. That
@@ -191,7 +197,7 @@ The opt-in `pseudoPlural` rule defaults to `"off"`. Pass
 `{ sourceLocale: "en", rules: { pseudoPlural: "warning" } }` to diagnose a
 single runtime interpolation followed by an English `word(s)` spelling.
 Unknown and non-English source locales are skipped. The
-[source lint configuration](../../docs/configuration.md#source-lint) defines
+[source lint configuration](https://github.com/sebastian-software/palamedes/blob/main/docs/configuration.md#source-lint) defines
 the narrow syntax and ignored ambiguous forms; this diagnostic has no autofix.
 
 `compileCatalogModule(config, resourcePath, options)` is the direct module
@@ -209,7 +215,7 @@ result and error shapes, but schedule one owned operation on Node's shared
 libuv worker pool. The first-party Vite and Next loaders await these variants;
 the Remix synchronous module hook keeps the compatible synchronous API.
 
-The six async APIs accept an optional `{ signal }` task-options object. Aborting
+The seven async APIs accept an optional `{ signal }` task-options object. Aborting
 the signal rejects work that is still queued for a libuv worker with an
 `AbortError`; native work that has already started finishes normally. When
 custom tooling starts many independent operations, still limit its own

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-11-27
 
 One tracked setup record owns the project-specific Effective Flow configuration; runtime state stays local and ignored.
 
@@ -34,7 +34,7 @@ runtime directory and completely gitignored.
 | delivery.completion               | pr                         |
 | delivery.baseBranch               | origin/main                |
 | tracker.mode                      | remote                     |
-| plan.dir                          | docs/plan                  |
+| plan.dir                          | docs/plans                 |
 | language.project                  | en                         |
 | mergeGate.completion              | merge                      |
 

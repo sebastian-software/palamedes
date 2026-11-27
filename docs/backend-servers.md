@@ -381,7 +381,7 @@ render trees. It also fits classic request/response servers.
 ## Related Docs
 
 - [Root README](https://github.com/sebastian-software/palamedes/blob/main/README.md)
-- [First working translation in 5 minutes](./first-working-translation.md)
+- [First working translation](./first-working-translation.md)
 - [Security and deployment hardening](./security.md)
 - [Migration from Lingui](./migrate-from-lingui.md)
 - [Example matrix](https://github.com/sebastian-software/palamedes/blob/main/examples/README.md)

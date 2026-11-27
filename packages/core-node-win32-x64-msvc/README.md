@@ -11,7 +11,7 @@ Platform-specific native bindings for `@palamedes/core-node` on Windows x64 with
 
 You usually should not install this package directly.
 
-`@palamedes/core-node` pulls in the matching native package for the current environment. This package exists so the Windows binary can ship as a normal npm artifact instead of through a custom installer story.
+`@palamedes/core-node` selects and loads the matching native package for the current platform as an optional dependency. This package ships the Windows x64 MSVC binary in lockstep with `@palamedes/core-node`.
 
 ## Installation
 
@@ -25,6 +25,7 @@ pnpm add @palamedes/core-node
 
 - contains the `.node` binary for `win32-x64-msvc`
 - is loaded internally by `@palamedes/core-node`
+- is versioned in lockstep with `@palamedes/core-node`
 - is not intended as a stable direct dependency
 
 ## Related Packages

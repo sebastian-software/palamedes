@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 
 import {
   checkDocsDrift,
+  findParentRelativeLinks,
   findRemovedOptionUses,
   findUnpinnedSolidInstalls,
   isDocsSurface,
   isMigrationContextFile,
+  isPublishedPackageReadme,
   listDocsSurfaces,
   readRemovedOptionKeys,
   readSolidPins,
@@ -149,6 +151,69 @@ test("scopes the guard to npm-facing docs and exempts migration files", () => {
   assert.ok(isMigrationContextFile("packages/core/CHANGELOG.md"));
   assert.ok(!isMigrationContextFile("packages/vite-plugin/README.md"));
   assert.ok(!isMigrationContextFile("llms.txt"));
+
+  assert.ok(isPublishedPackageReadme("packages/cli/README.md", read));
+  assert.ok(isPublishedPackageReadme("packages/cli-darwin-arm64/README.md", read));
+  assert.ok(!isPublishedPackageReadme("packages/site-ui/README.md", read));
+  assert.ok(!isPublishedPackageReadme("README.md", read));
+  assert.ok(!isPublishedPackageReadme("docs/cli.md", read));
+});
+
+test("flags parent-relative links in published package READMEs while ignoring code", () => {
+  const sample = [
+    "See [the guide](../../docs/cli.md#output-language) and [notes](<../../docs/notes.md>).",
+    "Normalized [dot-prefix](./../../docs/cli.md) and [subpath](sub/../../docs/cli.md) still escape.",
+    "Wrapped [link",
+    "text](../other/README.md) still breaks.",
+    "[ref-link]: ../../docs/stability.md#waku-contract",
+    "> Quoted [ref][quoted-ref]",
+    ">",
+    "> [quoted-ref]: ../../docs/cli.md",
+    "[wrapped-ref]:",
+    "  ./../../docs/cli.md",
+    "[not-a-ref]:",
+    "See [following-link](../../docs/cli.md).",
+    "[not-a-ref-inline]:",
+    "[inline-next-line](../../docs/cli.md)",
+    "- List item with code:",
+    "",
+    "      [list-indented-code](../../docs/cli.md)",
+    "",
+    "  [list-prose-link](../../docs/cli.md)",
+    "10. Parent item:",
+    "    - Nested child item.",
+    "",
+    "    Continued parent paragraph.",
+    "",
+    "    [nested-parent-link](../../docs/cli.md)",
+    "Inline code `[ignored](../../docs/cli.md)` and ``[also](../ignored.md)`` stay allowed.",
+    "",
+    "    [indented-code](../../docs/cli.md)",
+    "",
+    `> ${fence}md`,
+    "> [quoted-fence](../../docs/cli.md)",
+    `> ${fence}`,
+    `${fence}md`,
+    "See [example](../../docs/cli.md).",
+    "[code-ref]: ../../docs/cli.md",
+    fence,
+    "Canonical [docs](https://github.com/sebastian-software/palamedes/blob/main/docs/cli.md), [local](./CHANGELOG.md), and [in-pkg](sub/../CHANGELOG.md) are fine.",
+  ].join("\n");
+
+  assert.deepEqual(findParentRelativeLinks(sample), [
+    { line: 1, target: "../../docs/cli.md#output-language" },
+    { line: 1, target: "../../docs/notes.md" },
+    { line: 2, target: "./../../docs/cli.md" },
+    { line: 2, target: "sub/../../docs/cli.md" },
+    { line: 4, target: "../other/README.md" },
+    { line: 5, target: "../../docs/stability.md#waku-contract" },
+    { line: 8, target: "../../docs/cli.md" },
+    { line: 10, target: "./../../docs/cli.md" },
+    { line: 12, target: "../../docs/cli.md" },
+    { line: 14, target: "../../docs/cli.md" },
+    { line: 19, target: "../../docs/cli.md" },
+    { line: 25, target: "../../docs/cli.md" },
+  ]);
 });
 
 test("the repository docs pass, and a reintroduced regression fails", () => {
@@ -159,18 +224,24 @@ test("the repository docs pass, and a reintroduced regression fails", () => {
 
   const mutated = (file) =>
     file === "packages/vite-plugin/README.md"
-      ? `${read(file)}\n${fence}ts\npalamedes({ cwd: process.cwd() });\n${fence}\n\npnpm add solid-js\n`
+      ? `${read(file)}\n${fence}ts\npalamedes({ cwd: process.cwd() });\n${fence}\n\npnpm add solid-js\n\nSee [docs](../../docs/cli.md).\n`
       : file === "docs/migration-v2.md"
-        ? `${read(file)}\n${fence}ts\npalamedes({ cwd: process.cwd() });\n${fence}\n`
-        : read(file);
+        ? `${read(file)}\n${fence}ts\npalamedes({ cwd: process.cwd() });\n${fence}\n\nSee [stability](../docs/stability.md).\n`
+        : file === "packages/site-ui/README.md"
+          ? `${read(file)}\nSee [docs](../../docs/cli.md).\n`
+          : read(file);
   const problems = checkDocsDrift({
-    files: ["packages/vite-plugin/README.md", "docs/migration-v2.md"],
+    files: ["packages/vite-plugin/README.md", "docs/migration-v2.md", "packages/site-ui/README.md"],
     read: mutated,
   });
-  assert.equal(problems.length, 2, problems.join("\n"));
+  assert.equal(problems.length, 3, problems.join("\n"));
   assert.match(
     problems[0],
     /^packages\/vite-plugin\/README\.md:\d+ uses the removed option `cwd`/u,
   );
   assert.match(problems[1], /^packages\/vite-plugin\/README\.md:\d+ installs `solid-js`/u);
+  assert.match(
+    problems[2],
+    /^packages\/vite-plugin\/README\.md:\d+ uses parent-relative link `\.\.\/\.\.\/docs\/cli\.md`/u,
+  );
 });

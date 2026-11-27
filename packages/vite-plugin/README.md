@@ -24,7 +24,7 @@ tooling instead of bolted on from an older Babel path.
 
 Use the full copy-paste setup guide:
 
-- [First working translation in 5 minutes](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
+- [First working translation](https://github.com/sebastian-software/palamedes/blob/main/docs/first-working-translation.md)
 
 ## Installation
 
@@ -142,8 +142,8 @@ snapshot; production keeps ordinary fragments. Message membership/config changes
 message identities reload the document. Solid and other hosts retain their
 existing reload behavior. Source/catalog scoping stays validated; conflicting
 same-ID values across catalogs require ordinary fragment delivery instead.
-See the [experimental React HMR contract](../../docs/api/vite-plugin.md#experimental-react-catalog-hmr). Solid apps can opt into tracked updates with `framework: "solid"` and
-`experimentalSolidCatalogHmr: true`; see the [Solid HMR contract](../../docs/api/vite-plugin.md#experimental-solid-catalog-hmr).
+See the [experimental React HMR contract](https://github.com/sebastian-software/palamedes/blob/main/docs/api/vite-plugin.md#experimental-react-catalog-hmr). Solid apps can opt into tracked updates with `framework: "solid"` and
+`experimentalSolidCatalogHmr: true`; see the [Solid HMR contract](https://github.com/sebastian-software/palamedes/blob/main/docs/api/vite-plugin.md#experimental-solid-catalog-hmr).
 
 `environment` defaults to `"auto"`, which reads the Vite environment to tell
 server builds from browser builds. Bundlers without Vite environments, such as
@@ -182,7 +182,7 @@ Static Vite HTML entries receive the same locale binding automatically.
 Frameworks that emit HTML after Vite's build, including React Router's static
 SPA mode, use `createStaticViteCatalogBootstrap` after prerender. The host
 provides its locale policy and an explicit script allowlist; see the
-[static document integration](../../docs/api/vite-plugin.md#static-documents-generated-after-the-vite-build).
+[static document integration](https://github.com/sebastian-software/palamedes/blob/main/docs/api/vite-plugin.md#static-documents-generated-after-the-vite-build).
 
 The package requires Vite 8. The macro transform declares `id` and `code` hook
 filters so files without a Palamedes macro import are skipped before the

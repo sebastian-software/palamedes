@@ -11,7 +11,7 @@ Platform-specific native bindings for `@palamedes/core-node` on Linux arm64 with
 
 You usually should not install this package directly.
 
-`@palamedes/core-node` selects the correct native package for the current runtime. This package is an internal delivery vehicle for the Linux arm64 GNU binary.
+`@palamedes/core-node` selects and loads the matching native package for the current platform as an optional dependency. This package ships the Linux arm64 glibc binary in lockstep with `@palamedes/core-node`.
 
 ## Installation
 
@@ -25,6 +25,7 @@ pnpm add @palamedes/core-node
 
 - contains the `.node` binary for `linux-arm64-gnu`
 - is loaded internally by `@palamedes/core-node`
+- is versioned in lockstep with `@palamedes/core-node`
 - is not intended as a direct public API surface
 
 ## Related Packages

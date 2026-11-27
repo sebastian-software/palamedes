@@ -10,6 +10,9 @@
  * 2. Solid pins. Solid 2 is still published only as prereleases, so an
  *    unpinned `solid-js` resolves to Solid 1. Every install command that names
  *    a Solid package must pin the version from examples/solid-cookie.
+ * 3. Published npm README links. Files outside a package directory are absent
+ *    from its published npm tarball, so published package READMEs under
+ *    `packages/` must not contain parent-relative (`../`) Markdown links.
  *
  *   node scripts/check-docs-drift.mjs
  */
@@ -199,6 +202,226 @@ export function findUnpinnedSolidInstalls(text, pins) {
   return findings;
 }
 
+function stripInlineCodeSpans(line) {
+  let result = "";
+  let cursor = 0;
+  while (cursor < line.length) {
+    if (line[cursor] !== "`") {
+      result += line[cursor];
+      cursor += 1;
+      continue;
+    }
+    let backslashes = 0;
+    for (let index = cursor - 1; index >= 0 && line[index] === "\\"; index -= 1) {
+      backslashes += 1;
+    }
+    if (backslashes % 2 === 1) {
+      result += line[cursor];
+      cursor += 1;
+      continue;
+    }
+    let openerEnd = cursor;
+    while (line[openerEnd] === "`") openerEnd += 1;
+    const delimiterLength = openerEnd - cursor;
+    let closingStart = -1;
+    let search = openerEnd;
+    while (search < line.length) {
+      if (line[search] !== "`") {
+        search += 1;
+        continue;
+      }
+      let runEnd = search;
+      while (line[runEnd] === "`") runEnd += 1;
+      if (runEnd - search === delimiterLength) {
+        closingStart = search;
+        break;
+      }
+      search = runEnd;
+    }
+    if (closingStart === -1) {
+      result += line.slice(cursor, openerEnd);
+      cursor = openerEnd;
+      continue;
+    }
+    cursor = closingStart + delimiterLength;
+  }
+  return result;
+}
+
+function escapesPackageRoot(target) {
+  const pathPart = target.split(/[?#]/u, 1)[0];
+  if (!pathPart || /^[a-z][a-z\d+.-]*:/iu.test(pathPart) || pathPart.startsWith("/")) {
+    return false;
+  }
+  const normalized = path.posix.normalize(pathPart);
+  return normalized === ".." || normalized.startsWith("../");
+}
+
+function stripBlockquotePrefix(line) {
+  let rest = line;
+  let quoteDepth = 0;
+  for (;;) {
+    const match = /^ {0,3}>[ \t]?/u.exec(rest);
+    if (!match) break;
+    quoteDepth += 1;
+    rest = rest.slice(match[0].length);
+  }
+  return { content: rest, quoteDepth };
+}
+
+function leadingIndentColumns(line) {
+  let columns = 0;
+  for (const ch of line) {
+    if (ch === " ") {
+      columns += 1;
+    } else if (ch === "\t") {
+      columns += 4 - (columns % 4);
+    } else {
+      break;
+    }
+  }
+  return columns;
+}
+
+export function findParentRelativeLinks(text) {
+  const findings = [];
+  let openFence = null;
+  let prevBlank = true;
+  let prevQuoteDepth = 0;
+  let inIndentedCode = false;
+  let listIndents = [];
+  let pendingRefQuoteDepth = null;
+
+  for (const [index, rawLine] of text.split(/\r?\n/u).entries()) {
+    const { content, quoteDepth } = stripBlockquotePrefix(rawLine);
+
+    if (openFence) {
+      if (quoteDepth < openFence.quoteDepth) {
+        openFence = null;
+      } else {
+        if (quoteDepth === openFence.quoteDepth) {
+          const closingIndent = leadingIndentColumns(content);
+          const closing = /^[ \t]*(`+|~+)[ \t]*$/u.exec(content);
+          if (
+            closing &&
+            closingIndent <= openFence.maxCloseIndent &&
+            closing[1][0] === openFence.marker &&
+            closing[1].length >= openFence.length
+          ) {
+            openFence = null;
+          }
+        }
+        prevQuoteDepth = quoteDepth;
+        continue;
+      }
+    }
+
+    if (quoteDepth !== prevQuoteDepth) {
+      prevBlank = true;
+      inIndentedCode = false;
+      listIndents = [];
+      prevQuoteDepth = quoteDepth;
+    }
+
+    if (content.trim() === "") {
+      prevBlank = true;
+      inIndentedCode = false;
+      pendingRefQuoteDepth = null;
+      continue;
+    }
+
+    if (pendingRefQuoteDepth !== null && quoteDepth === pendingRefQuoteDepth) {
+      pendingRefQuoteDepth = null;
+      const wrappedRef =
+        /^\s*(?:<([^>\r\n]+)>|([^\s<>]+))(?:\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^)\r\n]*\)))?\s*$/u.exec(
+          content,
+        );
+      if (wrappedRef && (wrappedRef[1] || !wrappedRef[2].includes("]("))) {
+        const target = wrappedRef[1] ?? wrappedRef[2];
+        if (escapesPackageRoot(target)) {
+          findings.push({ line: index + 1, target });
+        }
+        prevBlank = false;
+        continue;
+      }
+    }
+    pendingRefQuoteDepth = null;
+
+    const indent = leadingIndentColumns(content);
+    while (listIndents.length > 0 && indent < listIndents[listIndents.length - 1]) {
+      listIndents.pop();
+    }
+    const listContentIndent = listIndents[listIndents.length - 1] ?? 0;
+
+    if ((prevBlank || inIndentedCode) && indent >= listContentIndent + 4) {
+      inIndentedCode = true;
+      prevBlank = false;
+      continue;
+    }
+    inIndentedCode = false;
+
+    const fenceOpener = /^[ \t]*(`{3,}|~{3,})(.*)$/u.exec(content);
+    if (
+      fenceOpener &&
+      indent <= listContentIndent + 3 &&
+      (fenceOpener[1][0] !== "`" || !fenceOpener[2].includes("`"))
+    ) {
+      openFence = {
+        marker: fenceOpener[1][0],
+        length: fenceOpener[1].length,
+        quoteDepth,
+        maxCloseIndent: listContentIndent + 3,
+      };
+      prevBlank = false;
+      continue;
+    }
+
+    const listMarker = /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+)/u.exec(content);
+    if (listMarker && indent <= listContentIndent + 3) {
+      listIndents.push(leadingIndentColumns(listMarker[1].replace(/[^\t]/gu, " ")));
+    }
+    prevBlank = false;
+
+    const prose = stripInlineCodeSpans(content);
+    for (const match of prose.matchAll(
+      /\]\(\s*(?:<([^>\r\n]+)>|([^)\s]+))(?:\s+["'(][^)\r\n]*)?\)/gu,
+    )) {
+      const target = match[1] ?? match[2];
+      if (escapesPackageRoot(target)) {
+        findings.push({ line: index + 1, target });
+      }
+    }
+    const refMatch =
+      /^[ \t]*\[[^\]]+\]:\s*(?:<([^>\r\n]+)>|([^\s<>]+))(?:\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^)\r\n]*\)))?\s*$/u.exec(
+        prose,
+      );
+    if (refMatch && indent <= listContentIndent + 3) {
+      const target = refMatch[1] ?? refMatch[2];
+      if (escapesPackageRoot(target)) {
+        findings.push({ line: index + 1, target });
+      }
+    } else if (indent <= listContentIndent + 3 && /^[ \t]*\[[^\]]+\]:\s*$/u.test(prose)) {
+      pendingRefQuoteDepth = quoteDepth;
+    }
+  }
+  return findings;
+}
+
+export function isPublishedPackageReadme(
+  file,
+  read = (pathName) => readFileSync(path.join(root, pathName), "utf8"),
+) {
+  const match = /^packages\/([^/]+)\/README\.md$/u.exec(file);
+  if (!match) return false;
+  try {
+    const manifest = JSON.parse(read(`packages/${match[1]}/package.json`));
+    return !manifest.private;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 export function isDocsSurface(file) {
   return (
     /(?:^|\/)README\.md$/u.test(file) ||
@@ -233,6 +456,13 @@ export function checkDocsDrift({ files, read } = {}) {
         `${file}:${line} installs \`${found}\`; pin \`${expected}\` like ${SOLID_PIN_SOURCE}.`,
       );
     }
+    if (isPublishedPackageReadme(file, readFile)) {
+      for (const { line, target } of findParentRelativeLinks(text)) {
+        problems.push(
+          `${file}:${line} uses parent-relative link \`${target}\`, which breaks on npmjs.com. Use a canonical https://github.com/sebastian-software/palamedes/blob/main/... or https://palamedes.dev/... URL instead.`,
+        );
+      }
+    }
   }
   return problems;
 }
@@ -244,7 +474,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       for (const problem of problems) console.error(`check-docs-drift: ${problem}`);
       process.exitCode = 1;
     } else {
-      console.log("Docs use no removed options, and every Solid install is pinned.");
+      console.log(
+        "Docs use no removed options, every Solid install is pinned, and published package READMEs use no parent-relative links.",
+      );
     }
   } catch (error) {
     console.error(`check-docs-drift: ${error.message}`);

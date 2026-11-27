@@ -145,9 +145,12 @@ See the [configuration field](./configuration.md#cli-plugins), the
 Extracts messages from configured source files and writes source-string-first
 catalogs.
 
-Bare source directories include `.vue` files. Inline `<script setup>` and
-`<script>` macros use the same native extraction as JavaScript and TypeScript,
-with references pointing to the original SFC. Template text is not extracted.
+Bare source directories include `.js`, `.jsx`, `.ts`, `.tsx`, `.mdx`, `.vue`,
+and `.svelte` files. Semantic MDX content is extracted through the native MDX
+analyzer; inline Vue (`<script setup>`, `<script>`) and Svelte (instance and
+module `<script>`) macros use the same native extraction as JavaScript and
+TypeScript, with references pointing to the original component file. Vue and
+Svelte template markup text is not extracted.
 
 ```bash
 pmds extract

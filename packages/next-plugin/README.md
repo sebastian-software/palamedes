@@ -21,7 +21,7 @@ and catalog problems show up while the app is still easy to fix.
   need the Next 16 config surface, and `@palamedes/next-plugin/server` keys
   requests to an internal Next module
   ([Next.js contract](https://github.com/sebastian-software/palamedes/blob/main/docs/stability.md#nextjs-contract))
-- Uses Turbopack as the verified default path on Next.js 16.4.1
+- Uses Turbopack as the verified default path on Next.js 16.4.6
 - Automatic client catalog delivery is verified under Turbopack and webpack
 - The shipped example proves server rendering, localized `"use server"`
   actions, hydration, and client navigation
@@ -145,7 +145,7 @@ imports behind `server-only`; they require Node and are not Edge runtime
 entry points.
 
 The Next render-lifetime adapter supports the package's declared Next 16 peer
-range and is verified against Next 16.3.4. It intentionally binds to Next's
+range and is verified against Next 16.4.6. It intentionally binds to Next's
 server render storage because public React async context does not span both
 App Router render passes. If a future Next 16 release removes that server
 storage module, the import fails during the application build instead of
