@@ -26,6 +26,48 @@ function isAsciiAlnum(code: number): boolean {
   return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
+function isDefaultIgnorableCodePoint(codePoint: number): boolean {
+  return (
+    codePoint === 0x00_ad ||
+    codePoint === 0x03_4f ||
+    codePoint === 0x06_1c ||
+    (codePoint >= 0x11_5f && codePoint <= 0x11_60) ||
+    (codePoint >= 0x17_b4 && codePoint <= 0x17_b5) ||
+    (codePoint >= 0x18_0b && codePoint <= 0x18_0f) ||
+    (codePoint >= 0x20_0b && codePoint <= 0x20_0f) ||
+    (codePoint >= 0x20_2a && codePoint <= 0x20_2e) ||
+    (codePoint >= 0x20_60 && codePoint <= 0x20_6f) ||
+    codePoint === 0x31_64 ||
+    (codePoint >= 0xfe_00 && codePoint <= 0xfe_0f) ||
+    codePoint === 0xfe_ff ||
+    codePoint === 0xff_a0 ||
+    (codePoint >= 0xff_f0 && codePoint <= 0xff_f8) ||
+    (codePoint >= 0x1_bc_a0 && codePoint <= 0x1_bc_a3) ||
+    (codePoint >= 0x1_d1_73 && codePoint <= 0x1_d1_7a) ||
+    (codePoint >= 0xe_00_00 && codePoint <= 0xe_0f_ff)
+  );
+}
+
+function isReservedLockSegment(segment: string): boolean {
+  let normalized = "";
+  for (const ch of segment) {
+    const codePoint = ch.codePointAt(0);
+    if (codePoint === undefined || isDefaultIgnorableCodePoint(codePoint)) {
+      continue;
+    }
+    if (codePoint === 0x01_7f) {
+      normalized += "s";
+    } else if (codePoint === 0x21_2a) {
+      normalized += "k";
+    } else if (codePoint >= 0x41 && codePoint <= 0x5a) {
+      normalized += String.fromCharCode(codePoint + 32);
+    } else {
+      normalized += ch;
+    }
+  }
+  return normalized.replace(/[. ]+$/, "") === ".pmds-lock";
+}
+
 function isSafeRelativeCatalogPath(value: string): boolean {
   if (value.trim().length === 0) {
     return false;
@@ -59,7 +101,7 @@ function isSafeRelativeCatalogPath(value: string): boolean {
     if (segment === ".") {
       continue;
     }
-    if (segment === "..") {
+    if (segment === ".." || isReservedLockSegment(segment)) {
       return false;
     }
     if (firstNormal === undefined) {

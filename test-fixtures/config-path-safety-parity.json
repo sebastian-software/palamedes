@@ -46,7 +46,12 @@
     "locales\\{locale}\\",
     "locales/{locale}/.",
     "locales\\{locale}\\.",
-    "locales/\u0000/{locale}"
+    "locales/\u0000/{locale}",
+    ".pmds-lock/{locale}",
+    "locales/.PMDS-LOCK/{locale}",
+    "locales/.pmds-lock./{locale}",
+    "locales/.pmds\u200b-lock/{locale}",
+    "locales/{locale}/.pmds-lock"
   ],
   "resourcePathParity": [
     { "path": "{locale}\\.po", "locale": "en", "format": "po", "expectedRelative": "en/.po.po" },

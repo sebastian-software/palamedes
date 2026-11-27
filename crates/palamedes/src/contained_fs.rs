@@ -147,13 +147,9 @@ fn normalize_anchor_root(root_dir: &Path) -> &Path {
 #[cfg(any(unix, windows))]
 const DIR_LOCK_MAGIC: &[u8] = b"palamedes-dir-lock-v1\n";
 
-fn is_reserved_lock_file_name(file_name: &OsStr) -> bool {
-    let Some(text) = file_name.to_str() else {
-        return false;
-    };
-    let trimmed = text.trim_end_matches(['.', ' ']);
-    let mut normalized = String::with_capacity(trimmed.len());
-    for ch in trimmed.chars() {
+pub(crate) fn is_reserved_lock_segment(text: &str) -> bool {
+    let mut normalized = String::with_capacity(text.len());
+    for ch in text.chars() {
         if matches!(
             ch,
             '\u{00ad}'
@@ -182,7 +178,11 @@ fn is_reserved_lock_file_name(file_name: &OsStr) -> bool {
             other => normalized.push(other.to_ascii_lowercase()),
         }
     }
-    normalized == ".pmds-lock"
+    normalized.trim_end_matches(['.', ' ']) == ".pmds-lock"
+}
+
+fn is_reserved_lock_file_name(file_name: &OsStr) -> bool {
+    file_name.to_str().is_some_and(is_reserved_lock_segment)
 }
 
 fn validate_writable_file_name(file_name: &OsStr) -> Result<(), ContainedFsError> {
@@ -191,6 +191,17 @@ fn validate_writable_file_name(file_name: &OsStr) -> Result<(), ContainedFsError
         return Err(ContainedFsError::Containment(format!(
             "refusing to write reserved catalog lock filename \"{}\"",
             file_name.to_string_lossy()
+        )));
+    }
+    Ok(())
+}
+
+fn validate_dir_segment(segment: &OsStr) -> Result<(), ContainedFsError> {
+    validate_single_file_name(segment)?;
+    if is_reserved_lock_file_name(segment) {
+        return Err(ContainedFsError::Containment(format!(
+            "refusing to use reserved catalog lock directory name \"{}\"",
+            segment.to_string_lossy()
         )));
     }
     Ok(())
@@ -360,7 +371,10 @@ fn validate_relative_dir_segments(relative_dir: &Path) -> Result<Vec<OsString>, 
     for component in relative_dir.components() {
         match component {
             Component::CurDir => continue,
-            Component::Normal(part) => segments.push(part.to_os_string()),
+            Component::Normal(part) => {
+                validate_dir_segment(part)?;
+                segments.push(part.to_os_string());
+            }
             Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
                 return Err(ContainedFsError::Containment(format!(
                     "relative directory {} contains an escaping component",
@@ -390,8 +404,8 @@ mod platform {
 
     use super::{
         ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
-        DirFilenameEquivalence, FileIdentity, TargetLockKey, validate_relative_dir_segments,
-        validate_single_file_name,
+        DirFilenameEquivalence, FileIdentity, TargetLockKey, validate_dir_segment,
+        validate_relative_dir_segments, validate_single_file_name,
     };
 
     pub(super) const UNIX_DIR_LOCK_NAME: &std::ffi::CStr = c".pmds-lock";
@@ -499,7 +513,7 @@ mod platform {
         #[cfg(target_os = "linux")]
         linux_flags: Option<libc::c_int>,
         #[cfg(target_os = "linux")]
-        linux_projid: Option<u32>,
+        linux_fsxattr: Option<super::LinuxFsxattrSnapshot>,
     }
 
     enum SnapshotMatch {
@@ -816,7 +830,7 @@ mod platform {
             &self,
             segment: &OsStr,
         ) -> Result<Option<Self>, ContainedFsError> {
-            validate_single_file_name(segment)?;
+            validate_dir_segment(segment)?;
             let c_segment = os_str_to_cstring(segment)?;
             // SAFETY: `self.fd` is an open directory descriptor and `c_segment` is valid.
             let next = unsafe {
@@ -1565,7 +1579,7 @@ mod platform {
             #[cfg(target_os = "linux")]
             let linux_flags = read_linux_inode_flags(existing_fd.as_raw_fd())?;
             #[cfg(target_os = "linux")]
-            let linux_projid = read_linux_project_id(existing_fd.as_raw_fd())?;
+            let linux_fsxattr = read_linux_fsxattr(existing_fd.as_raw_fd())?;
             Ok(Some(ExistingTarget {
                 entry,
                 acl,
@@ -1573,7 +1587,7 @@ mod platform {
                 #[cfg(target_os = "linux")]
                 linux_flags,
                 #[cfg(target_os = "linux")]
-                linux_projid,
+                linux_fsxattr,
             }))
         }
 
@@ -1948,7 +1962,7 @@ mod platform {
             }
             #[cfg(target_os = "linux")]
             let linux_flags_changed = current.linux_flags != expected.linux_flags
-                || current.linux_projid != expected.linux_projid;
+                || current.linux_fsxattr != expected.linux_fsxattr;
             #[cfg(not(target_os = "linux"))]
             let linux_flags_changed = false;
             if current.entry != expected.entry
@@ -5320,7 +5334,9 @@ mod platform {
     const FS_IOC_FSSETXATTR: libc::Ioctl = 0x401C_5820_u32 as libc::Ioctl;
 
     #[cfg(target_os = "linux")]
-    fn read_linux_project_id(fd: std::os::fd::RawFd) -> io::Result<Option<u32>> {
+    fn read_linux_fsxattr(
+        fd: std::os::fd::RawFd,
+    ) -> io::Result<Option<super::LinuxFsxattrSnapshot>> {
         let mut attr = LinuxFsxattr {
             fsx_xflags: 0,
             fsx_extsize: 0,
@@ -5331,7 +5347,12 @@ mod platform {
         };
         // SAFETY: Linux `FS_IOC_FSGETXATTR` writes a 28-byte `struct fsxattr`.
         if unsafe { libc::ioctl(fd, FS_IOC_FSGETXATTR, &mut attr) } == 0 {
-            return Ok(Some(attr.fsx_projid));
+            return Ok(Some(super::snapshot_from_linux_fsxattr(
+                attr.fsx_xflags,
+                attr.fsx_extsize,
+                attr.fsx_projid,
+                attr.fsx_cowextsize,
+            )));
         }
         let error = io::Error::last_os_error();
         if matches!(
@@ -5344,11 +5365,11 @@ mod platform {
     }
 
     #[cfg(target_os = "linux")]
-    fn apply_linux_project_id(
+    fn apply_linux_fsxattr(
         temp_fd: std::os::fd::RawFd,
-        expected_projid: Option<u32>,
+        expected_fsxattr: Option<super::LinuxFsxattrSnapshot>,
     ) -> io::Result<()> {
-        let Some(expected) = expected_projid else {
+        let Some(expected) = expected_fsxattr else {
             return Ok(());
         };
         let mut attr = LinuxFsxattr {
@@ -5362,7 +5383,7 @@ mod platform {
         // SAFETY: Linux `FS_IOC_FSGETXATTR` writes a 28-byte `struct fsxattr`.
         if unsafe { libc::ioctl(temp_fd, FS_IOC_FSGETXATTR, &mut attr) } != 0 {
             let error = io::Error::last_os_error();
-            if expected == 0
+            if expected.is_default()
                 && matches!(
                     error.raw_os_error(),
                     Some(libc::ENOTTY | libc::EOPNOTSUPP | libc::EINVAL | libc::ENOSYS)
@@ -5372,14 +5393,27 @@ mod platform {
             }
             return Err(error);
         }
-        if attr.fsx_projid != expected {
-            attr.fsx_projid = expected;
+        let current = super::snapshot_from_linux_fsxattr(
+            attr.fsx_xflags,
+            attr.fsx_extsize,
+            attr.fsx_projid,
+            attr.fsx_cowextsize,
+        );
+        if current != expected {
+            let (next_xflags, next_extsize, next_projid, next_cowextsize) =
+                super::merge_linux_fsxattr_for_set(attr.fsx_xflags, expected);
+            attr.fsx_xflags = next_xflags;
+            attr.fsx_extsize = next_extsize;
+            attr.fsx_projid = next_projid;
+            attr.fsx_cowextsize = next_cowextsize;
             // SAFETY: Linux `FS_IOC_FSSETXATTR` reads a 28-byte `struct fsxattr`.
             if unsafe { libc::ioctl(temp_fd, FS_IOC_FSSETXATTR, &mut attr) } != 0 {
                 let error = io::Error::last_os_error();
                 return Err(io::Error::new(
                     error.kind(),
-                    format!("cannot safely preserve Linux project ID on replacement: {error}"),
+                    format!(
+                        "cannot safely preserve Linux extended file allocation attributes on replacement: {error}"
+                    ),
                 ));
             }
             let mut verified = LinuxFsxattr {
@@ -5394,10 +5428,16 @@ mod platform {
             if unsafe { libc::ioctl(temp_fd, FS_IOC_FSGETXATTR, &mut verified) } != 0 {
                 return Err(io::Error::last_os_error());
             }
-            if verified.fsx_projid != expected {
+            let verified_snapshot = super::snapshot_from_linux_fsxattr(
+                verified.fsx_xflags,
+                verified.fsx_extsize,
+                verified.fsx_projid,
+                verified.fsx_cowextsize,
+            );
+            if verified_snapshot != expected {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
-                    "cannot verify Linux project ID preservation on replacement",
+                    "cannot verify Linux extended file allocation attributes preservation on replacement",
                 ));
             }
         }
@@ -5409,7 +5449,7 @@ mod platform {
         temp_fd: std::os::fd::RawFd,
         existing: &ExistingTarget,
     ) -> io::Result<()> {
-        apply_linux_project_id(temp_fd, existing.linux_projid)?;
+        apply_linux_fsxattr(temp_fd, existing.linux_fsxattr)?;
         let Some(expected) = existing.linux_flags else {
             return Ok(());
         };
@@ -5897,6 +5937,93 @@ mod platform {
 
 #[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct LinuxFsxattrSnapshot {
+    xflags: u32,
+    extsize: u32,
+    projid: u32,
+    cowextsize: u32,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl LinuxFsxattrSnapshot {
+    const fn is_default(self) -> bool {
+        self.xflags == 0 && self.extsize == 0 && self.projid == 0 && self.cowextsize == 0
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+const LINUX_FS_XFLAG_REALTIME: u32 = 0x0000_0001;
+#[cfg(any(target_os = "linux", test))]
+const LINUX_FS_XFLAG_PREALLOC: u32 = 0x0000_0002;
+#[cfg(any(target_os = "linux", test))]
+const LINUX_FS_XFLAG_EXTSIZE: u32 = 0x0000_0800;
+#[cfg(any(target_os = "linux", test))]
+const LINUX_FS_XFLAG_NODEFRAG: u32 = 0x0000_2000;
+#[cfg(any(target_os = "linux", test))]
+const LINUX_FS_XFLAG_FILESTREAM: u32 = 0x0000_4000;
+#[cfg(any(target_os = "linux", test))]
+const LINUX_FS_XFLAG_DAX: u32 = 0x0000_8000;
+#[cfg(any(target_os = "linux", test))]
+const LINUX_FS_XFLAG_COWEXTSIZE: u32 = 0x0001_0000;
+#[cfg(any(target_os = "linux", test))]
+const LINUX_FS_XFLAG_HASATTR: u32 = 0x8000_0000;
+
+/// Settable `fsx_xflags` allocation/storage policy bits from `<uapi/linux/fs.h>`
+/// not already managed via `FS_IOC_GETFLAGS`/`FS_IOC_SETFLAGS`.
+#[cfg(any(target_os = "linux", test))]
+const LINUX_PRESERVED_FSX_XFLAGS: u32 = LINUX_FS_XFLAG_REALTIME
+    | LINUX_FS_XFLAG_EXTSIZE
+    | LINUX_FS_XFLAG_NODEFRAG
+    | LINUX_FS_XFLAG_FILESTREAM
+    | LINUX_FS_XFLAG_DAX
+    | LINUX_FS_XFLAG_COWEXTSIZE;
+
+/// Read-only status bits returned by `FS_IOC_FSGETXATTR` that must never be
+/// echoed back into `FS_IOC_FSSETXATTR`.
+#[cfg(any(target_os = "linux", test))]
+const LINUX_READONLY_FSX_XFLAGS: u32 = LINUX_FS_XFLAG_PREALLOC | LINUX_FS_XFLAG_HASATTR;
+
+#[cfg(any(target_os = "linux", test))]
+const fn snapshot_from_linux_fsxattr(
+    xflags: u32,
+    extsize: u32,
+    projid: u32,
+    cowextsize: u32,
+) -> LinuxFsxattrSnapshot {
+    let preserved = xflags & LINUX_PRESERVED_FSX_XFLAGS;
+    LinuxFsxattrSnapshot {
+        xflags: preserved,
+        extsize: if (preserved & LINUX_FS_XFLAG_EXTSIZE) != 0 {
+            extsize
+        } else {
+            0
+        },
+        projid,
+        cowextsize: if (preserved & LINUX_FS_XFLAG_COWEXTSIZE) != 0 {
+            cowextsize
+        } else {
+            0
+        },
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+const fn merge_linux_fsxattr_for_set(
+    current_xflags: u32,
+    expected: LinuxFsxattrSnapshot,
+) -> (u32, u32, u32, u32) {
+    let next_xflags = (current_xflags & !(LINUX_PRESERVED_FSX_XFLAGS | LINUX_READONLY_FSX_XFLAGS))
+        | expected.xflags;
+    (
+        next_xflags,
+        expected.extsize,
+        expected.projid,
+        expected.cowextsize,
+    )
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LinuxCopyableXattrKind {
     Copyable,
     UnpreservableTrusted,
@@ -6011,7 +6138,8 @@ mod platform {
 
     use super::{
         ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
-        FileIdentity, validate_relative_dir_segments, validate_single_file_name,
+        FileIdentity, validate_dir_segment, validate_relative_dir_segments,
+        validate_single_file_name,
     };
 
     static TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
@@ -6619,7 +6747,7 @@ mod platform {
             &self,
             segment: &OsStr,
         ) -> Result<Option<Self>, ContainedFsError> {
-            validate_single_file_name(segment)?;
+            validate_dir_segment(segment)?;
             let next = match nt_create_relative(
                 self.handle.as_raw_handle(),
                 segment,
@@ -8781,8 +8909,8 @@ mod platform {
 
     use super::{
         ContainedFsError, ContainedNewFileMode, ContainedWriteDurability, ContainedWriteOutcome,
-        DirFilenameEquivalence, FileIdentity, TargetLockKey, validate_relative_dir_segments,
-        validate_single_file_name,
+        DirFilenameEquivalence, FileIdentity, TargetLockKey, validate_dir_segment,
+        validate_relative_dir_segments, validate_single_file_name,
     };
 
     /// Target lock guard fallback for platforms without Unix/Windows locking.
@@ -8857,7 +8985,7 @@ mod platform {
             &self,
             segment: &OsStr,
         ) -> Result<Option<Self>, ContainedFsError> {
-            validate_single_file_name(segment)?;
+            validate_dir_segment(segment)?;
             let next = self.dir.join(segment);
             match fs::symlink_metadata(&next) {
                 Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -10486,6 +10614,39 @@ mod tests {
             "ordinary permission bits must still be preserved"
         );
     }
+
+    #[test]
+    fn open_subpath_and_open_existing_child_dir_reject_reserved_lock_directory_names() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        for reserved in [
+            ".pmds-lock",
+            ".PMDS-LOCK",
+            ".pmds-lock.",
+            ".pmds-lock ",
+            ".pmds\u{200b}-lock",
+            ".pmds-lock.\u{200b}",
+            ".pmds-loc\u{212a}",
+        ] {
+            let err = ContainedDir::open_subpath(root.path(), Path::new(reserved), true)
+                .expect_err("open_subpath must reject reserved lock directory name");
+            assert!(
+                matches!(err, ContainedFsError::Containment(_)),
+                "expected Containment error for {reserved:?}, got {err:?}"
+            );
+            assert!(
+                !root.path().join(reserved).exists(),
+                "must not create reserved directory {reserved:?}"
+            );
+            let child_err = dir
+                .open_existing_child_dir(OsStr::new(reserved))
+                .expect_err("open_existing_child_dir must reject reserved lock directory name");
+            assert!(
+                matches!(child_err, ContainedFsError::Containment(_)),
+                "expected Containment error for child {reserved:?}, got {child_err:?}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -10633,5 +10794,60 @@ mod cross_platform_tests {
                 LinuxCopyableXattrKind::Ignore
             );
         }
+    }
+
+    #[test]
+    fn linux_fsxattr_snapshot_preserves_allocation_attributes_and_strips_readonly_bits() {
+        use super::{
+            LINUX_FS_XFLAG_COWEXTSIZE, LINUX_FS_XFLAG_DAX, LINUX_FS_XFLAG_EXTSIZE,
+            LINUX_FS_XFLAG_FILESTREAM, LINUX_FS_XFLAG_HASATTR, LINUX_FS_XFLAG_NODEFRAG,
+            LINUX_FS_XFLAG_PREALLOC, LINUX_FS_XFLAG_REALTIME, LinuxFsxattrSnapshot,
+            merge_linux_fsxattr_for_set, snapshot_from_linux_fsxattr,
+        };
+
+        let raw_xflags = LINUX_FS_XFLAG_REALTIME
+            | LINUX_FS_XFLAG_PREALLOC
+            | LINUX_FS_XFLAG_EXTSIZE
+            | LINUX_FS_XFLAG_NODEFRAG
+            | LINUX_FS_XFLAG_FILESTREAM
+            | LINUX_FS_XFLAG_DAX
+            | LINUX_FS_XFLAG_COWEXTSIZE
+            | LINUX_FS_XFLAG_HASATTR;
+        let snap = snapshot_from_linux_fsxattr(raw_xflags, 65_536, 42, 131_072);
+        assert_eq!(
+            snap,
+            LinuxFsxattrSnapshot {
+                xflags: LINUX_FS_XFLAG_REALTIME
+                    | LINUX_FS_XFLAG_EXTSIZE
+                    | LINUX_FS_XFLAG_NODEFRAG
+                    | LINUX_FS_XFLAG_FILESTREAM
+                    | LINUX_FS_XFLAG_DAX
+                    | LINUX_FS_XFLAG_COWEXTSIZE,
+                extsize: 65_536,
+                projid: 42,
+                cowextsize: 131_072,
+            }
+        );
+        assert!(!snap.is_default());
+
+        // Without EXTSIZE/COWEXTSIZE flags, hint sizes normalize to zero.
+        let cleared = snapshot_from_linux_fsxattr(LINUX_FS_XFLAG_HASATTR, 65_536, 0, 131_072);
+        assert!(cleared.is_default());
+
+        // Merging preserves unrelated settable flags (e.g. FS_XFLAG_NODUMP = 0x80)
+        // while clearing read-only status bits and applying expected allocation fields.
+        const FS_XFLAG_NODUMP: u32 = 0x0000_0080;
+        let (next_xflags, next_extsize, next_projid, next_cowextsize) = merge_linux_fsxattr_for_set(
+            FS_XFLAG_NODUMP | LINUX_FS_XFLAG_HASATTR | LINUX_FS_XFLAG_PREALLOC | LINUX_FS_XFLAG_DAX,
+            snap,
+        );
+        assert_eq!(next_xflags, FS_XFLAG_NODUMP | snap.xflags);
+        assert_eq!(
+            next_xflags & (LINUX_FS_XFLAG_HASATTR | LINUX_FS_XFLAG_PREALLOC),
+            0
+        );
+        assert_eq!(next_extsize, 65_536);
+        assert_eq!(next_projid, 42);
+        assert_eq!(next_cowextsize, 131_072);
     }
 }

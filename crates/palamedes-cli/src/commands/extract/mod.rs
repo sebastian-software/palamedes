@@ -1300,25 +1300,9 @@ fn fold_os_segment(segment: &std::ffi::OsStr, equivalence: DirFilenameEquivalenc
     )
 }
 
-fn default_platform_equivalence() -> DirFilenameEquivalence {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    {
-        DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
-    }
-    #[cfg(target_os = "windows")]
-    {
-        DirFilenameEquivalence::CaseInsensitiveNtfs
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
-    {
-        DirFilenameEquivalence::Exact
-    }
-}
-
 fn resolve_directory_equivalence(
     dir: &ContainedDir,
     identity: Option<FileIdentity>,
-    parent: Option<(Option<FileIdentity>, DirFilenameEquivalence, bool)>,
     cache: &mut HashMap<FileIdentity, (DirFilenameEquivalence, bool)>,
 ) -> (DirFilenameEquivalence, bool) {
     if let Some(id) = identity
@@ -1326,21 +1310,16 @@ fn resolve_directory_equivalence(
     {
         return cached;
     }
-    let same_vol_parent = match (identity, parent) {
-        (Some(id), Some((Some(parent_id), parent_eq, true))) if id.same_volume(parent_id) => {
-            Some((parent_eq, true))
-        }
-        _ => None,
-    };
-    // Keep directory traversal strictly read-only: when the mount's policy is
-    // unknown, bucket under the broadest equivalence (`confirmed = false`) and
-    // defer any mutating probe until two candidate paths actually collide in
-    // the same bucket.
-    let resolved = dir
-        .filename_equivalence()
-        .map(|eq| (eq, true))
-        .or(same_vol_parent)
-        .unwrap_or((DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf, false));
+    // Keep directory traversal strictly read-only: when a directory's own
+    // filename-equivalence policy cannot be queried (for example, a
+    // search-only directory on ext4/NTFS where casefolding is per-directory),
+    // never inherit a parent's confirmed policy. Bucket under the broadest
+    // equivalence (`confirmed = false`) and defer any live probe until two
+    // candidate paths actually collide in the same bucket.
+    let resolved = dir.filename_equivalence().map_or(
+        (DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf, false),
+        |eq| (eq, true),
+    );
     if let Some(id) = identity {
         cache.insert(id, resolved);
     }
@@ -1374,23 +1353,18 @@ fn segment_pair_collides_on_dir(
     {
         return true;
     }
-    // When equivalence is unconfirmed (for example, a read-only share where
-    // filesystem metadata queries are unsupported) or names are non-ASCII,
-    // consult actual entry identities (and, for write operations, a live
-    // directory probe) before reporting a collision.
+    // When equivalence is unconfirmed (for example, a read-only share or
+    // search-only directory where filesystem metadata queries are unsupported)
+    // or names are non-ASCII, consult actual entry identities (and, for write
+    // operations, a live directory probe) before reporting a collision. If
+    // probing cannot disprove equivalence (`None`), fail closed rather than
+    // guessing from the host OS default.
     let probed = if allow_mutating_probe {
         anchor_dir.probe_names_equivalent(left, right)
     } else {
         anchor_dir.probe_existing_names_equivalent(left, right)
     };
-    match probed {
-        Some(equivalent) => equivalent,
-        None if !equivalence_confirmed => {
-            let fallback = default_platform_equivalence();
-            fold_os_segment(left, fallback) == fold_os_segment(right, fallback)
-        }
-        None => true,
-    }
+    probed != Some(false)
 }
 
 #[cfg(test)]
@@ -1484,7 +1458,7 @@ pub(crate) fn reject_colliding_catalog_targets(
             source: error.into_io_error(),
         })?;
         let (mut current_eq, mut current_eq_confirmed) =
-            resolve_directory_equivalence(&current, current_id, None, &mut dir_eq_cache);
+            resolve_directory_equivalence(&current, current_id, &mut dir_eq_cache);
         let mut existing_prefix = PathBuf::new();
         let mut folded_segments: Vec<OsString> = Vec::new();
         let mut raw_segments: Vec<OsString> = Vec::new();
@@ -1524,12 +1498,8 @@ pub(crate) fn reject_colliding_catalog_targets(
                         }
                         needed_existing_dirs.entry(id).or_insert(*scope);
                     }
-                    let (child_eq, child_eq_confirmed) = resolve_directory_equivalence(
-                        &child,
-                        child_id,
-                        Some((current_id, current_eq, current_eq_confirmed)),
-                        &mut dir_eq_cache,
-                    );
+                    let (child_eq, child_eq_confirmed) =
+                        resolve_directory_equivalence(&child, child_id, &mut dir_eq_cache);
                     current = child;
                     current_id = child_id;
                     current_eq = child_eq;
@@ -2433,7 +2403,7 @@ catalogs:
         let root_dir = super::ContainedDir::open_root(&app).expect("open root");
         let equivalence = root_dir
             .filename_equivalence()
-            .unwrap_or_else(super::default_platform_equivalence);
+            .unwrap_or(DirFilenameEquivalence::Exact);
         let is_unicode_norm = matches!(
             equivalence,
             DirFilenameEquivalence::UnicodeNfd
@@ -2782,5 +2752,55 @@ catalogs:
             );
             let _ = fs::remove_dir_all(&root);
         }
+    }
+
+    #[test]
+    fn unconfirmed_equivalence_fails_closed_when_probing_is_unavailable() {
+        use super::{ContainedDir, DirFilenameEquivalence};
+        use std::ffi::OsStr;
+
+        let root = temp_dir("extract-unconfirmed-no-probe");
+        let dir = ContainedDir::open_root(&root).expect("open temp dir");
+        // Neither `Messages.po` nor `messages.po` exists and mutating probes
+        // are disallowed (`extract --check` / read-only share): without a live
+        // proof that the two spellings are distinct, we must fail closed.
+        assert!(super::segment_pair_collides_on_dir(
+            &dir,
+            DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
+            false,
+            false,
+            OsStr::new("Messages.po"),
+            OsStr::new("messages.po"),
+        ));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn extract_rejects_reserved_lock_directory_component_before_creating_dirs() {
+        let root = temp_dir("extract-reserved-lock-dir");
+        let src_dir = root.join("src");
+        fs::create_dir_all(&src_dir).expect("create src");
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales:\n  - en\nsource-locale: en\ncatalogs:\n  - path: .pmds-lock/{locale}\n    include:\n      - src\n",
+        )
+        .expect("write config");
+        fs::write(
+            src_dir.join("app.ts"),
+            "import { t } from '@palamedes/core/macro';\nexport function msg() { return t`Hello`; }\n",
+        )
+        .expect("write source");
+
+        let err = load_config(&root, Some(&root.join("palamedes.yaml")))
+            .expect_err("reserved lock directory component must be rejected in config");
+        assert!(
+            err.to_string().contains(".pmds-lock"),
+            "unexpected config error: {err}"
+        );
+        assert!(
+            !root.join(".pmds-lock").exists(),
+            "no .pmds-lock directory should be created"
+        );
+        let _ = fs::remove_dir_all(&root);
     }
 }

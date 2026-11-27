@@ -148,12 +148,28 @@ fn locale_and_catalog_path_validators_reject_traversal_and_accept_valid_inputs()
         "locales/../../outside/{locale}",
         r"locales\..\..\outside\{locale}",
         "locales/\0/{locale}",
+        ".pmds-lock/{locale}",
+        "locales/.PMDS-LOCK/{locale}",
+        "locales/.pmds-lock./{locale}",
+        "locales/.pmds\u{200b}-lock/{locale}",
+        "locales/{locale}/.pmds-lock",
     ] {
         assert!(
             validate_catalog_path_pattern(invalid).is_err(),
             "expected invalid catalog path: {invalid:?}"
         );
     }
+
+    assert!(
+        try_resolve_catalog_file_path(
+            Path::new("workspace"),
+            "locales/.pmds-{locale}/messages",
+            "lock",
+            PalamedesCatalogFormat::Po
+        )
+        .is_err(),
+        "expanded reserved lock directory segment must be rejected"
+    );
 
     let root = Path::new("workspace");
     assert_eq!(

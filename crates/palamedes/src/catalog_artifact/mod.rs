@@ -90,7 +90,15 @@ pub fn validate_catalog_path_pattern(catalog_path: &str) -> Result<(), &'static 
     let mut has_normal = false;
     for component in Path::new(&portable).components() {
         match component {
-            Component::Normal(_) => has_normal = true,
+            Component::Normal(part) => {
+                if part
+                    .to_str()
+                    .is_some_and(crate::contained_fs::is_reserved_lock_segment)
+                {
+                    return Err("catalog path must not use the reserved '.pmds-lock' lock name");
+                }
+                has_normal = true;
+            }
             Component::CurDir => {}
             Component::ParentDir => {
                 return Err("catalog path must not contain parent-directory ('..') segments");

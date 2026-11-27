@@ -2608,12 +2608,18 @@ mod windows_pinned_plugin {
     const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0000_0010;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
     const FILE_NAME_NORMALIZED: u32 = 0x0;
+    const FILE_ID_INFO_CLASS: i32 = 18;
 
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     struct FileIdentity {
-        volume_serial: u32,
-        file_index_high: u32,
-        file_index_low: u32,
+        volume_serial: u64,
+        file_id: [u8; 16],
+    }
+
+    #[repr(C)]
+    struct FileIdInfo {
+        volume_serial_number: u64,
+        file_id: [u8; 16],
     }
 
     #[repr(C)]
@@ -2636,21 +2642,17 @@ mod windows_pinned_plugin {
         file_index_low: u32,
     }
 
-    impl ByHandleFileInformation {
-        fn identity(&self) -> FileIdentity {
-            FileIdentity {
-                volume_serial: self.volume_serial_number,
-                file_index_high: self.file_index_high,
-                file_index_low: self.file_index_low,
-            }
-        }
-    }
-
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn GetFileInformationByHandle(
             file: *mut c_void,
             file_information: *mut ByHandleFileInformation,
+        ) -> i32;
+        fn GetFileInformationByHandleEx(
+            file: *mut c_void,
+            file_information_class: i32,
+            file_information: *mut c_void,
+            buffer_size: u32,
         ) -> i32;
         fn GetFinalPathNameByHandleW(
             file: *mut c_void,
@@ -2668,6 +2670,34 @@ mod windows_pinned_plugin {
         }
         // SAFETY: `GetFileInformationByHandle` succeeded.
         Ok(unsafe { info.assume_init() })
+    }
+
+    fn handle_identity(handle: *mut c_void) -> io::Result<FileIdentity> {
+        let mut id_info = std::mem::MaybeUninit::<FileIdInfo>::zeroed();
+        // SAFETY: `handle` is open and `id_info` is writable for `size_of::<FileIdInfo>()` bytes.
+        let ok = unsafe {
+            GetFileInformationByHandleEx(
+                handle,
+                FILE_ID_INFO_CLASS,
+                id_info.as_mut_ptr().cast::<c_void>(),
+                u32::try_from(std::mem::size_of::<FileIdInfo>()).unwrap_or(24),
+            )
+        };
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `GetFileInformationByHandleEx(FileIdInfo)` succeeded and initialized `id_info`.
+        let id_info = unsafe { id_info.assume_init() };
+        if id_info.volume_serial_number == 0 && id_info.file_id == [0u8; 16] {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "volume did not report a valid 128-bit Windows file identity",
+            ));
+        }
+        Ok(FileIdentity {
+            volume_serial: id_info.volume_serial_number,
+            file_id: id_info.file_id,
+        })
     }
 
     fn final_path_units(handle: *mut c_void) -> io::Result<Vec<u16>> {
@@ -2716,7 +2746,7 @@ mod windows_pinned_plugin {
             {
                 return Ok(false);
             }
-            if info.identity() == root_dir_id {
+            if handle_identity(dir.as_raw_handle())? == root_dir_id {
                 return Ok(true);
             }
             current = parent_units;
@@ -2770,7 +2800,15 @@ mod windows_pinned_plugin {
                     ),
                 ));
             }
-            let dir_id = info.identity();
+            let dir_id = handle_identity(dir_file.as_raw_handle()).map_err(|error| {
+                PluginFailure::new(
+                    "PLUGIN_INVALID",
+                    format!(
+                        "Could not read 128-bit identity for binary plugin package directory \"{specifier}\" at {}: {error}",
+                        package_dir.display()
+                    ),
+                )
+            })?;
             let dir_final = final_path_units(dir_file.as_raw_handle()).map_err(|error| {
                 PluginFailure::new(
                     "PLUGIN_INVALID",
