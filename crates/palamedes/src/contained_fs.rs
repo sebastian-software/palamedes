@@ -919,10 +919,13 @@ mod platform {
         /// equivalent, `Some(false)` when both coexist as distinct files, or
         /// `None` when the directory is read-only, unsafe to stage in, or
         /// cannot be probed safely.
+        /// Probes whether two single-segment filenames resolve to the same
+        /// entry inside a brand-new private `0700` staging directory created
+        /// under `self` (never inspecting pre-existing entries in `self`).
         #[must_use]
-        pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
-            if let Some(result) = self.probe_existing_names_equivalent(left, right) {
-                return Some(result);
+        fn probe_names_equivalent_in_fresh_dir(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if left == right {
+                return Some(true);
             }
             if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
             {
@@ -1002,6 +1005,29 @@ mod platform {
             }
             drop(cleanup);
             result
+        }
+
+        /// Probes whether two single-segment filenames resolve to the same
+        /// entry on this directory's mounted filesystem, first checking
+        /// existing entries in `self` and otherwise testing inside a fresh
+        /// private `0700` staging subdirectory.
+        #[must_use]
+        pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if let Some(result) = self.probe_existing_names_equivalent(left, right) {
+                return Some(result);
+            }
+            self.probe_names_equivalent_in_fresh_dir(left, right)
+        }
+
+        /// Probes whether this volume synthesizes 8.3 short-name aliases inside
+        /// a fresh empty private subdirectory (unaffected by any pre-existing
+        /// entries in `self`).
+        #[must_use]
+        pub fn probe_8dot3_short_names_enabled(&self) -> Option<bool> {
+            self.probe_names_equivalent_in_fresh_dir(
+                OsStr::new("palamedes-83-probe.txt"),
+                OsStr::new("PALAME~1.TXT"),
+            )
         }
 
         /// Detects whether filenames in this specific directory are compared
@@ -1239,39 +1265,52 @@ mod platform {
         }
 
         /// Writes `bytes` to `file_name` through this verified directory
-        /// handle without following symlinks or overwriting hard-linked files.
+        /// handle without following symlinks or overwriting pre-existing
+        /// hard-linked files.
         ///
         /// When `file_name` already exists as a single-link regular file
-        /// (`st_nlink == 1`), updates the existing inode in place under the
-        /// directory target lock after verifying its handle identity against
-        /// `fstatat(AT_SYMLINK_NOFOLLOW)` and stripping `S_ISUID | S_ISGID`.
-        /// Updating the existing inode preserves all inode-bound and
-        /// kernel-hidden metadata (including Linux `trusted.*` xattrs that
-        /// `flistxattr` hides from callers without `CAP_SYS_ADMIN`, IMA/EVM
-        /// metadata, and unreadable macOS/BSD attributes), matching
-        /// `std::fs::write` semantics without following symlinks or mutating
-        /// hard links.
+        /// (`st_nlink == 1`), opens it with `O_NOFOLLOW`, acquires an exclusive
+        /// advisory lock directly on the opened target descriptor (so updates
+        /// succeed even when the containing directory is read-only or
+        /// search-only and cannot host a `.pmds-lock` entry), re-verifies
+        /// `S_ISREG`, `st_nlink == 1`, and `fstatat(AT_SYMLINK_NOFOLLOW)`
+        /// identity, clears and verifies removal of `S_ISUID | S_ISGID` before
+        /// modifying any bytes, and truncates/writes in place. Updating the
+        /// existing inode preserves all inode-bound and kernel-hidden metadata
+        /// (including Linux `trusted.*` xattrs hidden from callers without
+        /// `CAP_SYS_ADMIN`, IMA/EVM metadata, and unreadable macOS/BSD
+        /// attributes), matching `std::fs::write` semantics.
         ///
-        /// When `file_name` does not exist yet, creates it atomically via
-        /// [`Self::write_file_atomically`] with
-        /// [`ContainedNewFileMode::RespectUmask`] so umask and directory ACL
-        /// inheritance are respected without following symlinks.
+        /// Because POSIX provides no atomic "truncate only if `st_nlink == 1`"
+        /// primitive, an inode-preserving in-place write cannot prevent a
+        /// concurrent external process from creating a new hard link to the
+        /// same inode between the `st_nlink == 1` check and `ftruncate`.
+        /// Callers that require isolation against concurrent external hard
+        /// links (at the cost of replacing the inode and requiring a writable
+        /// directory) must use [`Self::write_file_atomically`].
+        ///
+        /// When `file_name` does not exist yet, creates it atomically with
+        /// no-replace semantics (`ContainedNewFileMode::RespectUmask`) so umask
+        /// and directory ACL inheritance are respected without following
+        /// symlinks.
         ///
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid,
-        /// reserved, refers to a symlink, or has multiple hard links, or
-        /// [`ContainedFsError::Io`] on OS errors.
+        /// reserved, refers to a symlink, or already has multiple hard links,
+        /// or [`ContainedFsError::Io`] on OS errors.
         pub fn write_file_in_place(
             &self,
             file_name: &OsStr,
             bytes: &[u8],
         ) -> Result<(), ContainedFsError> {
             super::validate_writable_file_name(file_name)?;
-            let _target_lock = self.lock_target(file_name)?;
             let c_target = os_str_to_cstring(file_name)?;
 
             for _ in 0..8 {
+                // Open an existing target directly without creating any sibling
+                // lock file so compiling into an existing writable file inside
+                // a read-only or search-only directory succeeds.
                 // SAFETY: `self.fd` is an open directory descriptor and `c_target` is valid.
                 let raw = unsafe {
                     libc::openat(
@@ -1283,11 +1322,12 @@ mod platform {
                 if raw < 0 {
                     let error = io::Error::last_os_error();
                     if error.raw_os_error() == Some(libc::ENOENT) {
-                        match self.write_file_atomically(
+                        match self.write_file_atomically_inner(
                             file_name,
                             bytes,
                             ContainedNewFileMode::RespectUmask,
                             ContainedWriteDurability::Rename,
+                            false,
                         ) {
                             Ok(_) => return Ok(()),
                             Err(ContainedFsError::Io(io_err))
@@ -1308,6 +1348,23 @@ mod platform {
                 }
                 // SAFETY: `raw` is a newly opened valid file descriptor.
                 let mut file = File::from(unsafe { OwnedFd::from_raw_fd(raw) });
+                let pre_stat = fstat_fd(file.as_raw_fd())?;
+                if (pre_stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "refusing to write non-regular file \"{}\"",
+                            file_name.to_string_lossy()
+                        ),
+                    )));
+                }
+                if pre_stat.st_nlink > 1 {
+                    return Err(ContainedFsError::Containment(format!(
+                        "refusing to overwrite hard-linked file \"{}\"",
+                        file_name.to_string_lossy()
+                    )));
+                }
+                lock_existing_in_place_fd(file.as_raw_fd()).map_err(ContainedFsError::Io)?;
                 let stat = fstat_fd(file.as_raw_fd())?;
                 if (stat.st_mode & libc::S_IFMT) != libc::S_IFREG {
                     return Err(ContainedFsError::Io(io::Error::new(
@@ -1341,23 +1398,30 @@ mod platform {
                         libc::fcntl(file.as_raw_fd(), libc::F_SETFL, fl & !libc::O_NONBLOCK)
                     };
                 }
+                // Clear and verify removal of `S_ISUID` / `S_ISGID` BEFORE
+                // truncating or writing any bytes so a failed chmod or partial
+                // write can never leave modified contents under set-ID bits.
+                let mode = stat.st_mode & 0o7777;
+                let stripped_mode = mode & !(libc::S_ISUID | libc::S_ISGID);
+                if stripped_mode != mode {
+                    // SAFETY: `file` is an open regular file descriptor.
+                    if unsafe { libc::fchmod(file.as_raw_fd(), stripped_mode) } != 0 {
+                        return Err(ContainedFsError::Io(io::Error::last_os_error()));
+                    }
+                    let verified_stat = fstat_fd(file.as_raw_fd())?;
+                    if (verified_stat.st_mode & (libc::S_ISUID | libc::S_ISGID)) != 0 {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::PermissionDenied,
+                            "cannot verify removal of set-ID bits before updating file in place",
+                        )));
+                    }
+                }
                 // SAFETY: `file` is an open writable regular file descriptor.
                 if unsafe { libc::ftruncate(file.as_raw_fd(), 0) } != 0 {
                     return Err(ContainedFsError::Io(io::Error::last_os_error()));
                 }
                 file.write_all(bytes)?;
                 file.flush()?;
-                // Ensure `S_ISUID` and `S_ISGID` are cleared even on kernels
-                // that keep them when the file owner writes in place.
-                let after_stat = fstat_fd(file.as_raw_fd())?;
-                let after_mode = after_stat.st_mode & 0o7777;
-                let stripped_mode = after_mode & !(libc::S_ISUID | libc::S_ISGID);
-                if stripped_mode != after_mode {
-                    // SAFETY: `file` is an open regular file descriptor.
-                    if unsafe { libc::fchmod(file.as_raw_fd(), stripped_mode) } != 0 {
-                        return Err(ContainedFsError::Io(io::Error::last_os_error()));
-                    }
-                }
                 return Ok(());
             }
             Err(ContainedFsError::Io(io::Error::other(format!(
@@ -1409,12 +1473,32 @@ mod platform {
             new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
+            self.write_file_atomically_inner(file_name, bytes, new_file_mode, durability, true)
+        }
+
+        fn write_file_atomically_inner(
+            &self,
+            file_name: &OsStr,
+            bytes: &[u8],
+            new_file_mode: ContainedNewFileMode,
+            durability: ContainedWriteDurability,
+            allow_replace: bool,
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             super::validate_writable_file_name(file_name)?;
             let _target_lock = self.lock_target(file_name)?;
             let c_target = os_str_to_cstring(file_name)?;
 
             for _ in 0..8 {
                 let existing = self.open_existing_for_replace(file_name)?;
+                if !allow_replace && existing.is_some() {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "destination \"{}\" was created concurrently",
+                            file_name.to_string_lossy()
+                        ),
+                    )));
+                }
                 enum StageOutcome {
                     Published,
                     Retry,
@@ -2503,6 +2587,35 @@ mod platform {
             return Ok(false);
         }
         Err(error)
+    }
+
+    #[cfg(not(any(target_os = "solaris", target_os = "illumos")))]
+    fn lock_existing_in_place_fd(fd: std::os::fd::RawFd) -> io::Result<()> {
+        flock_exclusive(fd)
+    }
+
+    #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+    fn lock_existing_in_place_fd(fd: std::os::fd::RawFd) -> io::Result<()> {
+        let lock = libc::flock {
+            l_type: libc::F_WRLCK as libc::c_short,
+            l_whence: libc::SEEK_SET as libc::c_short,
+            l_start: 0,
+            l_len: 0,
+            l_sysid: 0,
+            l_pid: 0,
+            l_pad: [0; 4],
+        };
+        loop {
+            // SAFETY: `fd` is an open writable descriptor and `lock` is initialized.
+            if unsafe { libc::fcntl(fd, libc::F_SETLKW, &lock) } == 0 {
+                return Ok(());
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            return Err(error);
+        }
     }
 
     #[cfg(any(target_os = "solaris", target_os = "illumos"))]
@@ -6981,9 +7094,9 @@ mod platform {
         /// checks whether creating `left` makes `right` resolve to the same
         /// file identity.
         #[must_use]
-        pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
-            if let Some(result) = self.probe_existing_names_equivalent(left, right) {
-                return Some(result);
+        fn probe_names_equivalent_in_fresh_dir(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if left == right {
+                return Some(true);
             }
             if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
             {
@@ -7069,6 +7182,25 @@ mod platform {
             drop(left_handle);
             drop(probe_dir);
             result
+        }
+
+        #[must_use]
+        pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if let Some(result) = self.probe_existing_names_equivalent(left, right) {
+                return Some(result);
+            }
+            self.probe_names_equivalent_in_fresh_dir(left, right)
+        }
+
+        /// Probes whether this volume synthesizes 8.3 short-name aliases inside
+        /// a fresh empty private subdirectory (unaffected by any pre-existing
+        /// entries in `self`).
+        #[must_use]
+        pub fn probe_8dot3_short_names_enabled(&self) -> Option<bool> {
+            self.probe_names_equivalent_in_fresh_dir(
+                OsStr::new("palamedes-83-probe.txt"),
+                OsStr::new("PALAME~1.TXT"),
+            )
         }
 
         /// Detects whether filenames in this directory are compared
@@ -9174,6 +9306,12 @@ mod platform {
             None
         }
 
+        /// Unsupported 8.3 short-name capability probe fallback.
+        #[must_use]
+        pub fn probe_8dot3_short_names_enabled(&self) -> Option<bool> {
+            None
+        }
+
         /// Unsupported directory case-sensitivity lookup fallback.
         #[must_use]
         pub fn is_case_insensitive(&self) -> Option<bool> {
@@ -10814,6 +10952,55 @@ mod tests {
                 "expected Containment error for child {reserved:?}, got {child_err:?}"
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_in_place_updates_writable_file_in_read_only_and_search_only_dir() {
+        for dir_mode in [0o555, 0o111] {
+            let root = tempfile::tempdir().expect("temp dir");
+            let file_path = root.path().join("en.mjs");
+            fs::write(&file_path, "export default { v: 1 };\n").expect("seed module");
+            fs::set_permissions(&file_path, fs::Permissions::from_mode(0o644))
+                .expect("chmod file 0644");
+            fs::set_permissions(root.path(), fs::Permissions::from_mode(dir_mode))
+                .expect("chmod dir");
+
+            let dir = ContainedDir::open_root(root.path()).expect("open non-writable dir");
+            let write_result =
+                dir.write_file_in_place(OsStr::new("en.mjs"), b"export default { v: 2 };\n");
+
+            fs::set_permissions(root.path(), fs::Permissions::from_mode(0o755))
+                .expect("restore dir permissions");
+            write_result.unwrap_or_else(|err| {
+                panic!(
+                    "write_file_in_place must update existing writable file in 0o{dir_mode:03o} dir without creating .pmds-lock: {err}"
+                )
+            });
+            assert_eq!(
+                fs::read_to_string(&file_path).expect("read updated module"),
+                "export default { v: 2 };\n"
+            );
+            assert!(
+                !root.path().join(".pmds-lock").exists(),
+                "must not create .pmds-lock for existing in-place write"
+            );
+        }
+    }
+
+    #[test]
+    fn probe_8dot3_short_names_ignores_preexisting_entries_in_target_dir() {
+        let root = tempfile::tempdir().expect("temp dir");
+        fs::write(root.path().join("PALAME~1.TXT"), b"unrelated").expect("seed unrelated file");
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        // Verify probing runs in a fresh empty subdir rather than returning a
+        // cached answer from the pre-existing `PALAME~1.TXT` file.
+        assert_eq!(
+            dir.probe_8dot3_short_names_enabled(),
+            ContainedDir::open_root(tempfile::tempdir().expect("clean dir").path())
+                .expect("open clean")
+                .probe_8dot3_short_names_enabled()
+        );
     }
 }
 

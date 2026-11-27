@@ -1577,12 +1577,10 @@ fn dir_generates_ntfs_short_names(
     }
     let generates = if allow_mutating_probe {
         // Probe whether this volume actually synthesizes 8.3 short aliases
-        // inside a private staging directory. `Some(false)` proves 8.3 names
+        // inside a brand-new empty private staging directory (unaffected by
+        // any pre-existing entries in `dir`). `Some(false)` proves 8.3 names
         // are disabled; `Some(true)` or `None` fails closed.
-        dir.probe_names_equivalent(
-            OsStr::new("palamedes-83-probe.txt"),
-            OsStr::new("PALAME~1.TXT"),
-        ) != Some(false)
+        dir.probe_8dot3_short_names_enabled() != Some(false)
     } else {
         true
     };
@@ -1788,6 +1786,16 @@ pub(crate) fn reject_colliding_catalog_targets(
             || ExtractTargetAnchor::Path(existing_prefix),
             ExtractTargetAnchor::Identity,
         );
+        let leaf_identity = if !hit_missing {
+            current
+                .file_identity(&file_name)
+                .map_err(|error| CliError::Io {
+                    path: catalog_path.clone(),
+                    source: error.into_io_error(),
+                })?
+        } else {
+            None
+        };
         folded_segments.push(fold_os_segment(&file_name, current_eq));
         raw_segments.push(file_name.clone());
 
@@ -1799,7 +1807,12 @@ pub(crate) fn reject_colliding_catalog_targets(
             let is_leaf = idx + 1 == total_segments;
             let folded = &folded_segments[idx];
             let raw = &raw_segments[idx];
-            if can_have_ntfs_short_names(current_eq, current_eq_confirmed)
+            // Only apply the 8.3 short-name heuristic when on-disk entry
+            // identities cannot already settle whether two targets alias
+            // (for example, absent files/directories or volumes lacking IDs).
+            let settled_by_identity = is_leaf && !hit_missing && leaf_identity.is_some();
+            if !settled_by_identity
+                && can_have_ntfs_short_names(current_eq, current_eq_confirmed)
                 && let Some(first_scope) = node.check_and_record_ntfs_short_name(raw, scope)
                 && dir_generates_ntfs_short_names(
                     &current,
@@ -1876,15 +1889,7 @@ pub(crate) fn reject_colliding_catalog_targets(
             }
         }
 
-        if !hit_missing
-            && let Some(identity) =
-                current
-                    .file_identity(&file_name)
-                    .map_err(|error| CliError::Io {
-                        path: catalog_path.clone(),
-                        source: error.into_io_error(),
-                    })?
-        {
+        if let Some(identity) = leaf_identity {
             if let Some(dir_scope) = needed_existing_dirs.get(&identity) {
                 return Err(CliError::Io {
                     path: catalog_path.clone(),
@@ -3159,5 +3164,24 @@ catalogs:
                 "did not expect false reverse collision for ({left:?}, {right:?})"
             );
         }
+    }
+
+    #[test]
+    fn reject_colliding_catalog_targets_allows_distinct_existing_long_and_short_files() {
+        let root = temp_dir("extract-distinct-83-existing");
+        let locales = root.join("locales/en");
+        fs::create_dir_all(&locales).expect("create locales");
+        let long_path = locales.join("LongFilename.po");
+        let short_path = locales.join("LONGFI~2.po");
+        fs::write(&long_path, "msgid \"\"\nmsgstr \"\"\n").expect("write long");
+        fs::write(&short_path, "msgid \"\"\nmsgstr \"\"\n").expect("write short");
+
+        let targets = [
+            ("locales/{locale}/LongFilename", long_path),
+            ("locales/{locale}/LONGFI~2", short_path),
+        ];
+        super::reject_colliding_catalog_targets(&root, &targets, false)
+            .expect("distinct existing long and short files must not be rejected");
+        let _ = fs::remove_dir_all(&root);
     }
 }
