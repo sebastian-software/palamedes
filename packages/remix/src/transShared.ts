@@ -33,6 +33,7 @@ type ResettableRemixMessageRuntime = {
   runtime: CompiledMessageRuntime<RemixNode[]>;
 };
 type CachedRemixMessageRuntime = ResettableRemixMessageRuntime & {
+  inUse: boolean;
   locale: string;
   timeZone: string | undefined;
 };
@@ -53,44 +54,51 @@ export function createTrans(useI18n: () => RendererI18n) {
         context,
         comment,
       };
-      const runtime = runtimeCache.get(i18n, components ?? EMPTY_COMPONENTS);
-      return renderI18nMessage(i18n, id, values ?? EMPTY_VALUES, runtime, metadata);
+      const lease = runtimeCache.acquire(i18n, components ?? EMPTY_COMPONENTS);
+      try {
+        return renderI18nMessage(i18n, id, values ?? EMPTY_VALUES, lease.runtime, metadata);
+      } finally {
+        runtimeCache.release(lease);
+      }
     };
   };
 }
 
 export function createRemixMessageRuntimeCache() {
-  // Component names define the runtime shape; each synchronous reset installs
-  // the current elements so fresh inline object literals can reuse the runtime.
-  const cache = new WeakMap<RendererI18n, Map<string, CachedRemixMessageRuntime>>();
+  // Cache one idle renderer per i18n instance. Nested synchronous renders get a
+  // temporary renderer so they cannot overwrite an outer render's components
+  // or keys. Weak keys keep request-scoped instances collectable.
+  const cache = new WeakMap<RendererI18n, CachedRemixMessageRuntime>();
 
   return {
-    get(
+    acquire(
       i18n: RendererI18n,
       components: Record<string, RemixElement>,
-    ): CompiledMessageRuntime<RemixNode[]> {
-      let byComponents = cache.get(i18n);
-      if (byComponents === undefined) {
-        byComponents = new Map();
-        cache.set(i18n, byComponents);
-      }
-
-      const componentShape = componentShapeKey(components);
-      let cached = byComponents.get(componentShape);
+    ): CachedRemixMessageRuntime {
+      let cached = cache.get(i18n);
       if (
         cached === undefined ||
+        cached.inUse ||
         cached.locale !== i18n.locale ||
         cached.timeZone !== i18n.timeZone
       ) {
+        const canCache = cached?.inUse !== true;
         cached = {
           ...createResettableRemixMessageRuntime(i18n, components),
           locale: i18n.locale,
           timeZone: i18n.timeZone,
+          inUse: false,
         };
-        byComponents.set(componentShape, cached);
+        if (canCache) cache.set(i18n, cached);
       }
+      cached.inUse = true;
       cached.reset(components);
-      return cached.runtime;
+      return cached;
+    },
+    release(cached: CachedRemixMessageRuntime): void {
+      // Do not keep the last rendered Remix elements and their props alive.
+      cached.reset(EMPTY_COMPONENTS);
+      cached.inUse = false;
     },
   };
 }
@@ -163,10 +171,6 @@ function createResettableRemixMessageRuntime(
     },
     runtime,
   };
-}
-
-function componentShapeKey(components: Record<string, RemixElement>): string {
-  return JSON.stringify(Object.keys(components).sort());
 }
 
 function renderVariable(value: unknown): RemixNode[] {

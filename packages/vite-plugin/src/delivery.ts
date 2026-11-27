@@ -50,6 +50,7 @@ export type ViteDocumentTransformOptions = {
 };
 
 const HTML_ATTRIBUTE_NAME = /^[a-z][a-z0-9-]*$/iu;
+const MAX_HEAD_BUFFER_LENGTH = 1024 * 1024;
 
 /**
  * Owns the server half of Vite's locale-bound catalog delivery for SSR hosts
@@ -200,18 +201,21 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
       : "";
     const decoder = new StringDecoder("utf8");
     let buffered = "";
-    let injected = false;
+    let headScanOffset = 0;
+    let passthrough = false;
     return new Transform({
       transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
         let output: string | undefined;
         try {
-          const text = Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
-          if (injected) {
+          const text = decodeChunk(decoder, chunk);
+          if (passthrough) {
             output = text;
           } else {
             buffered += text;
-            const headEnd = buffered.indexOf("</head>");
-            if (headEnd !== -1) {
+            const headClose = findHeadClose(buffered, headScanOffset);
+            headScanOffset = headClose.nextScanOffset;
+            if (headClose.index !== -1) {
+              const headEnd = headClose.index;
               const head = buffered.slice(0, headEnd);
               const tail = buffered.slice(headEnd);
               // A recovery link must start a new document and module graph, even
@@ -247,7 +251,11 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
                 sanitizedHead = setHtmlAttributes(sanitizedHead, htmlAttributes);
               }
               output = `${sanitizedHead.replace(/<head\b[^>]*>/iu, (tag) => `${tag}${importMap}`)}${probe}${links}${tail}`;
-              injected = true;
+              passthrough = true;
+              buffered = "";
+            } else if (buffered.length > MAX_HEAD_BUFFER_LENGTH) {
+              output = buffered;
+              passthrough = true;
               buffered = "";
             }
           }
@@ -338,6 +346,44 @@ function isMissingFile(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
+function decodeChunk(decoder: StringDecoder, chunk: unknown): string {
+  if (Buffer.isBuffer(chunk)) return decoder.write(chunk);
+  if (chunk instanceof Uint8Array) {
+    return decoder.write(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+  }
+  return String(chunk);
+}
+
+function findHeadClose(value: string, from: number): { index: number; nextScanOffset: number } {
+  const lower = value.slice(from).toLowerCase();
+  const needle = "</head";
+  let cursor = 0;
+  while (cursor < lower.length) {
+    const match = lower.indexOf(needle, cursor);
+    if (match === -1) {
+      return {
+        index: -1,
+        nextScanOffset: Math.max(from, value.length - (needle.length - 1)),
+      };
+    }
+    let after = match + needle.length;
+    while (after < lower.length && /\s/u.test(lower[after] ?? "")) {
+      after += 1;
+    }
+    if (after >= lower.length) {
+      return { index: -1, nextScanOffset: from + match };
+    }
+    if (lower[after] === ">") {
+      return { index: from + match, nextScanOffset: from + match };
+    }
+    cursor = match + needle.length;
+  }
+  return {
+    index: -1,
+    nextScanOffset: Math.max(from, value.length - (needle.length - 1)),
+  };
+}
+
 function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 }
@@ -354,8 +400,8 @@ function setHtmlAttributes(head: string, attributes: Readonly<Record<string, str
         "iu",
       );
       result = existing.test(result)
-        ? result.replace(existing, attribute)
-        : result.replace(/^<html/iu, `<html${attribute}`);
+        ? result.replace(existing, () => attribute)
+        : result.replace(/^<html/iu, () => `<html${attribute}`);
     }
     return result;
   });

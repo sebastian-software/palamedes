@@ -146,6 +146,7 @@ export function createTanStackCatalogResponseDelivery(
 
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
+const MAX_SCRIPT_BUFFER_LENGTH = 256 * 1024;
 const UNSAFE_SCRIPT_SOURCE_PATTERN = /[<>]|\p{Cc}/u;
 
 let driftWarned = false;
@@ -178,7 +179,13 @@ function createTanStackBootstrapGateTransform(options: {
   baseOrigin: string;
 }): Transform {
   const decoder = new StringDecoder("utf8");
+  let mode: "text" | "opening-tag" | "gated-script" | "pass-through-script" = "text";
   let buffered = "";
+  let scanOffset = 0;
+  let tagQuote: "" | '"' | "'" = "";
+  let gatedOpeningEnd = -1;
+  let gatedSource = "";
+  let closeTagStart = -1;
   let gatedEntries = 0;
   let unmatchedAssetScripts = 0;
 
@@ -186,13 +193,17 @@ function createTanStackBootstrapGateTransform(options: {
     transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
       let output: string;
       try {
-        buffered += Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
+        buffered += decodeChunk(decoder, chunk);
         output = flushMarkup(false);
       } catch (error) {
         callback(error instanceof Error ? error : new Error(String(error)));
         return;
       }
-      callback(null, output);
+      if (output) {
+        callback(null, output);
+      } else {
+        callback();
+      }
     },
     flush(callback) {
       let output: string;
@@ -204,52 +215,234 @@ function createTanStackBootstrapGateTransform(options: {
         callback(error instanceof Error ? error : new Error(String(error)));
         return;
       }
-      callback(null, output);
+      if (output) {
+        callback(null, output);
+      } else {
+        callback();
+      }
     },
   });
 
   function flushMarkup(final: boolean): string {
-    const lower = buffered.toLowerCase();
-    let cursor = 0;
     let output = "";
-    while (cursor < buffered.length) {
-      const open = findScriptOpen(lower, cursor);
-      if (open === -1) {
-        const keep = final ? buffered.length : trailingPrefixLength(lower, cursor, "<script");
-        output += buffered.slice(cursor, keep);
-        cursor = keep;
+    while (buffered.length > 0) {
+      if (mode === "text") {
+        const lower = buffered.toLowerCase();
+        const open = findScriptOpen(lower, 0);
+        if (open === -1) {
+          if (final) {
+            output += buffered;
+            buffered = "";
+          } else {
+            const keepFrom = trailingPrefixStart(lower, "<script");
+            if (keepFrom > 0) {
+              output += buffered.slice(0, keepFrom);
+              buffered = buffered.slice(keepFrom);
+            }
+          }
+          break;
+        }
+        if (open + "<script".length === buffered.length) {
+          if (final) {
+            output += buffered;
+            buffered = "";
+          } else if (open > 0) {
+            output += buffered.slice(0, open);
+            buffered = buffered.slice(open);
+          }
+          break;
+        }
+        if (open > 0) {
+          output += buffered.slice(0, open);
+          buffered = buffered.slice(open);
+        }
+        mode = "opening-tag";
+        scanOffset = "<script".length;
+        tagQuote = "";
+        continue;
+      }
+
+      if (mode === "opening-tag") {
+        const scan = scanTagEnd(buffered, scanOffset, tagQuote);
+        tagQuote = scan.quote;
+        if (scan.index === -1) {
+          scanOffset = buffered.length;
+          if (final || buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+            output += buffered;
+            buffered = "";
+            mode = "text";
+            scanOffset = 0;
+            tagQuote = "";
+          }
+          break;
+        }
+        const openingEnd = scan.index;
+        const openingTag = buffered.slice(0, openingEnd + 1);
+        tagQuote = "";
+        const candidate = readTagAttribute(openingTag, "src");
+        const source =
+          candidate && isTanStackEntryScript(openingTag, candidate, options)
+            ? candidate
+            : undefined;
+        if (source) {
+          mode = "gated-script";
+          gatedOpeningEnd = openingEnd;
+          gatedSource = source;
+          scanOffset = openingEnd + 1;
+          closeTagStart = -1;
+          continue;
+        }
+        if (candidate && isBuiltAssetModuleScript(openingTag, candidate, options)) {
+          unmatchedAssetScripts += 1;
+        }
+        output += openingTag;
+        buffered = buffered.slice(openingEnd + 1);
+        mode = "pass-through-script";
+        scanOffset = 0;
+        closeTagStart = -1;
+        continue;
+      }
+
+      if (mode === "pass-through-script") {
+        if (closeTagStart === -1) {
+          const closeMatch = findScriptCloseStart(buffered, scanOffset);
+          if (closeMatch.kind === "none") {
+            output += buffered;
+            buffered = "";
+            scanOffset = 0;
+            break;
+          }
+          if (closeMatch.kind === "incomplete") {
+            if (final) {
+              output += buffered;
+              buffered = "";
+              mode = "text";
+              scanOffset = 0;
+            } else {
+              if (closeMatch.index > 0) {
+                output += buffered.slice(0, closeMatch.index);
+                buffered = buffered.slice(closeMatch.index);
+              }
+              scanOffset = 0;
+            }
+            break;
+          }
+          if (closeMatch.index > 0) {
+            output += buffered.slice(0, closeMatch.index);
+            buffered = buffered.slice(closeMatch.index);
+          }
+          closeTagStart = 0;
+          scanOffset = "</script".length;
+          tagQuote = "";
+        }
+
+        const closeEnd = scanTagEnd(buffered, scanOffset, tagQuote);
+        tagQuote = closeEnd.quote;
+        if (closeEnd.index === -1) {
+          scanOffset = buffered.length;
+          if (final || buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+            output += buffered;
+            buffered = "";
+            mode = "text";
+            closeTagStart = -1;
+            scanOffset = 0;
+            tagQuote = "";
+          }
+          break;
+        }
+        output += buffered.slice(0, closeEnd.index + 1);
+        buffered = buffered.slice(closeEnd.index + 1);
+        mode = "text";
+        closeTagStart = -1;
+        scanOffset = 0;
+        tagQuote = "";
+        continue;
+      }
+
+      // mode === "gated-script"
+      if (closeTagStart === -1) {
+        const closeMatch = findScriptCloseStart(buffered, scanOffset);
+        if (closeMatch.kind === "found") {
+          closeTagStart = closeMatch.index;
+          scanOffset = closeMatch.index + "</script".length;
+          tagQuote = "";
+          continue;
+        }
+        if (final) {
+          output += buffered;
+          buffered = "";
+          mode = "text";
+          gatedOpeningEnd = -1;
+          gatedSource = "";
+          scanOffset = 0;
+          break;
+        }
+        if (buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+          if (closeMatch.kind === "incomplete") {
+            output += buffered.slice(0, closeMatch.index);
+            buffered = buffered.slice(closeMatch.index);
+          } else {
+            output += buffered;
+            buffered = "";
+          }
+          mode = "pass-through-script";
+          gatedOpeningEnd = -1;
+          gatedSource = "";
+          scanOffset = 0;
+          closeTagStart = -1;
+          break;
+        }
+        scanOffset = closeMatch.kind === "incomplete" ? closeMatch.index : buffered.length;
         break;
       }
-      output += buffered.slice(cursor, open);
-      const openingEnd = findTagEnd(buffered, open);
-      if (openingEnd === -1) {
-        cursor = open;
+
+      const gatedCloseEnd = scanTagEnd(buffered, scanOffset, tagQuote);
+      tagQuote = gatedCloseEnd.quote;
+      if (gatedCloseEnd.index === -1) {
+        scanOffset = buffered.length;
+        if (final) {
+          output += buffered;
+          buffered = "";
+          mode = "text";
+          gatedOpeningEnd = -1;
+          gatedSource = "";
+          closeTagStart = -1;
+          scanOffset = 0;
+          tagQuote = "";
+          break;
+        }
+        if (buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+          if (buffered.length - closeTagStart > MAX_SCRIPT_BUFFER_LENGTH) {
+            output += buffered;
+            buffered = "";
+            mode = "text";
+            closeTagStart = -1;
+            scanOffset = 0;
+            tagQuote = "";
+          } else {
+            output += buffered.slice(0, closeTagStart);
+            buffered = buffered.slice(closeTagStart);
+            scanOffset -= closeTagStart;
+            closeTagStart = 0;
+            mode = "pass-through-script";
+          }
+          gatedOpeningEnd = -1;
+          gatedSource = "";
+        }
         break;
       }
-      const close = lower.indexOf("</script", openingEnd + 1);
-      if (close === -1) {
-        cursor = open;
-        break;
-      }
-      const closingEnd = findTagEnd(buffered, close);
-      if (closingEnd === -1) {
-        cursor = open;
-        break;
-      }
-      const openingTag = buffered.slice(open, openingEnd + 1);
-      const candidate = readTagAttribute(openingTag, "src");
-      const source =
-        candidate && isTanStackEntryScript(openingTag, candidate, options) ? candidate : undefined;
-      if (source) gatedEntries += 1;
-      else if (candidate && isBuiltAssetModuleScript(openingTag, candidate, options)) {
-        unmatchedAssetScripts += 1;
-      }
-      output += source
-        ? gateTanStackEntry(openingTag, source, options)
-        : buffered.slice(open, closingEnd + 1);
-      cursor = closingEnd + 1;
+
+      const gatedOpeningTag = buffered.slice(0, gatedOpeningEnd + 1);
+      gatedEntries += 1;
+      output += gateTanStackEntry(gatedOpeningTag, gatedSource, options);
+      buffered = buffered.slice(gatedCloseEnd.index + 1);
+      mode = "text";
+      gatedOpeningEnd = -1;
+      gatedSource = "";
+      closeTagStart = -1;
+      scanOffset = 0;
+      tagQuote = "";
     }
-    buffered = buffered.slice(cursor);
     return output;
   }
 }
@@ -406,18 +599,55 @@ function findTagAttribute(tag: string, name: string): { start: number; end: numb
   return undefined;
 }
 
+function decodeChunk(decoder: StringDecoder, chunk: unknown): string {
+  if (Buffer.isBuffer(chunk)) return decoder.write(chunk);
+  if (chunk instanceof Uint8Array) {
+    return decoder.write(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+  }
+  return String(chunk);
+}
+
 function findScriptOpen(lower: string, from: number): number {
   let index = lower.indexOf("<script", from);
   while (index !== -1) {
     const next = lower[index + "<script".length];
     if (next === undefined || /[\s/>]/u.test(next)) return index;
-    index = lower.indexOf("<script", index + 1);
+    index = lower.indexOf("<script", index + "<script".length);
   }
   return -1;
 }
 
-function findTagEnd(value: string, from: number): number {
-  let quote = "";
+function findScriptCloseStart(
+  value: string,
+  from: number,
+): { kind: "found"; index: number } | { kind: "incomplete"; index: number } | { kind: "none" } {
+  const slice = value.slice(from).toLowerCase();
+  let cursor = 0;
+  while (cursor < slice.length) {
+    const match = slice.indexOf("</script", cursor);
+    if (match === -1) break;
+    const next = slice[match + "</script".length];
+    if (next === undefined) {
+      return { kind: "incomplete", index: from + match };
+    }
+    if (/[\s/>]/u.test(next)) {
+      return { kind: "found", index: from + match };
+    }
+    cursor = match + "</script".length;
+  }
+  const prefixStart = trailingPrefixStart(slice, "</script");
+  if (prefixStart < slice.length) {
+    return { kind: "incomplete", index: from + prefixStart };
+  }
+  return { kind: "none" };
+}
+
+function scanTagEnd(
+  value: string,
+  from: number,
+  initialQuote: "" | '"' | "'",
+): { index: number; quote: "" | '"' | "'" } {
+  let quote = initialQuote;
   for (let index = from; index < value.length; index += 1) {
     const character = value[index];
     if (quote) {
@@ -425,19 +655,20 @@ function findTagEnd(value: string, from: number): number {
     } else if (character === '"' || character === "'") {
       quote = character;
     } else if (character === ">") {
-      return index;
+      return { index, quote: "" };
     }
   }
-  return -1;
+  return { index: -1, quote };
 }
 
-function trailingPrefixLength(value: string, from: number, prefix: string): number {
-  const suffix = value.slice(from);
-  const max = Math.min(prefix.length, suffix.length);
+function trailingPrefixStart(lower: string, prefix: string): number {
+  const max = Math.min(prefix.length - 1, lower.length);
   for (let length = max; length > 0; length -= 1) {
-    if (suffix.endsWith(prefix.slice(0, length))) return value.length - length;
+    if (lower.endsWith(prefix.slice(0, length))) {
+      return lower.length - length;
+    }
   }
-  return value.length;
+  return lower.length;
 }
 
 function isHtmlResponse(response: Response): boolean {

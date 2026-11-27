@@ -1,8 +1,10 @@
 import {
   copyFileSync,
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   realpathSync,
   symlinkSync,
   rmSync,
@@ -1130,6 +1132,110 @@ describe("createPalamedesRemixAssetLoader", () => {
     expect(String(load("/repo/app/public/included.js").source)).toContain("getI18n()._(");
     expect(load("/repo/app/private/not-included.js").source).toBe(source);
     expect(load("/repo/app/public/excluded/skip.js").source).toBe(source);
+  });
+
+  it("cleans up temporary server module directories on close without leaking exit listeners", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "palamedes-remix-tmpdir-cleanup-"));
+    tempDirectories.push(rootDir);
+    mkdirSync(path.join(rootDir, "app", "locales"), { recursive: true });
+    writeFileSync(
+      path.join(rootDir, "palamedes.yaml"),
+      [
+        "locales: [en, de]",
+        "source-locale: en",
+        "catalogs:",
+        "  - path: app/locales/{locale}",
+        "    include: [app/**/*.tsx]",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "en.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hello"\n',
+    );
+    writeFileSync(
+      path.join(rootDir, "app", "locales", "de.po"),
+      'msgid ""\nmsgstr ""\n\nmsgid "Greeting"\nmsgstr "Hallo"\n',
+    );
+
+    const beforeDirs = new Set(
+      readdirSync(tmpdir()).filter((name) => name.startsWith("palamedes-remix-modules-")),
+    );
+    const exitListenersBefore = process.listenerCount("exit");
+
+    const first = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir, watch: false });
+    const second = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir, watch: false });
+    try {
+      await first.load?.("de");
+      await second.load?.("de");
+
+      const createdDirs = readdirSync(tmpdir())
+        .filter((name) => name.startsWith("palamedes-remix-modules-") && !beforeDirs.has(name))
+        .map((name) => path.join(tmpdir(), name));
+      expect(createdDirs).toHaveLength(2);
+      // Only a single shared exit listener is registered regardless of registry count.
+      expect(process.listenerCount("exit")).toBeLessThanOrEqual(exitListenersBefore + 1);
+
+      first.close?.();
+      expect(createdDirs.filter((directory) => existsSync(directory))).toHaveLength(1);
+
+      second.close?.();
+      expect(createdDirs.filter((directory) => existsSync(directory))).toHaveLength(0);
+      expect(process.listenerCount("exit")).toBe(exitListenersBefore);
+
+      // Loading after close fails cleanly without creating an orphaned temp directory.
+      await expect(first.load?.("en")).rejects.toThrow("closed");
+      const leakedAfterClose = readdirSync(tmpdir()).filter(
+        (name) => name.startsWith("palamedes-remix-modules-") && !beforeDirs.has(name),
+      );
+      expect(leakedAfterClose).toHaveLength(0);
+    } finally {
+      first.close?.();
+      second.close?.();
+    }
+  });
+
+  it("sanitizes HTTP 500 fragment responses outside development while logging full diagnostics", async () => {
+    const source =
+      'import { t } from "@palamedes/core/macro"; export const text = () => t`Greeting`;';
+    const fixture = createAssetFixture("message.ts", source);
+    writeFragmentCatalogFixture(fixture.rootDir);
+    // Remove the de.po catalog so fragment compilation throws an error containing filesystem paths.
+    rmSync(path.join(fixture.rootDir, "locales", "de.po"));
+
+    const registry = createPalamedesRemixCatalogAssetRegistry({
+      projectRoot: fixture.rootDir,
+      watch: false,
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const ids = transformPalamedesMacros(source, fixture.modulePath).compiledIds;
+      const key = registry.register(fixture.modulePath, ids);
+      const fragmentRequest = new Request(
+        `https://example.test${registry.sidecarUrl(key)}?fragment=1&locale=de`,
+      );
+
+      vi.stubEnv("NODE_ENV", "production");
+      const prodResponse = registry.serve(fragmentRequest);
+      expect(prodResponse?.status).toBe(500);
+      const prodBody = await prodResponse?.text();
+      expect(prodBody).toBe("Palamedes catalog fragment failed.");
+      expect(prodBody).not.toContain(fixture.modulePath);
+      expect(prodBody).not.toContain(fixture.rootDir);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(fixture.modulePath),
+        expect.any(Error),
+      );
+
+      errorSpy.mockClear();
+      vi.stubEnv("NODE_ENV", "development");
+      const devResponse = registry.serve(fragmentRequest);
+      expect(devResponse?.status).toBe(500);
+      expect(await devResponse?.text()).toContain(fixture.modulePath);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.close?.();
+      errorSpy.mockRestore();
+    }
   });
 });
 

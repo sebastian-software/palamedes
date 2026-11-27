@@ -54,8 +54,7 @@ function isDevelopmentBuild(): boolean {
 
 const CATALOG_READY_PROMISE = 'Symbol.for("palamedes.document-catalogs-ready-promise")';
 const CATALOG_READY = 'Symbol.for("palamedes.document-catalogs-ready")';
-const TAIL_SIZE = 512;
-const SCRIPT_BLOCK_PATTERN = /<script\b[^>]*>[\s\S]*?<\/script>/iu;
+const MAX_SCRIPT_BUFFER_LENGTH = 256 * 1024;
 const UNSAFE_SCRIPT_SOURCE_PATTERN = /[<>]|\p{Cc}/u;
 const SOLID_PRODUCTION_ENTRY_PATTERN =
   /(?:^|\/)virtual[_-]solid-ssr-entry-client(?:-[^/?#]+)?\.(?:c|m)?js(?:[?#].*)?$/iu;
@@ -122,42 +121,107 @@ function createSolidBootstrapGateTransform(options: {
   trustedOrigins: readonly string[];
 }): Transform {
   const decoder = new StringDecoder("utf8");
-  let tail = "";
+  let mode: "text" | "opening-tag" | "gated-script" | "pass-through-script" = "text";
+  let buffered = "";
+  let scanOffset = 0;
+  let tagQuote: "" | '"' | "'" = "";
+  let gatedOpeningEnd = -1;
+  let gatedModuleSource = "";
+  let closeTagStart = -1;
 
   return new Transform({
     transform(chunk: unknown, _encoding: BufferEncoding, callback: TransformCallback) {
+      let output: string;
       try {
-        tail += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
-        flushSafePrefix(this, false);
-        callback();
+        buffered += decodeChunk(decoder, chunk);
+        output = flushMarkup(false);
       } catch (error) {
         callback(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
+      if (output) {
+        callback(null, output);
+      } else {
+        callback();
       }
     },
     flush(callback: TransformCallback) {
+      let output: string;
       try {
-        tail += decoder.end();
-        flushSafePrefix(this, true);
-        callback();
+        buffered += decoder.end();
+        output = flushMarkup(true);
       } catch (error) {
         callback(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
+      if (output) {
+        callback(null, output);
+      } else {
+        callback();
       }
     },
   });
 
-  function flushSafePrefix(stream: Transform, flush: boolean) {
-    while (true) {
-      const match = SCRIPT_BLOCK_PATTERN.exec(tail);
-      if (match) {
-        const end = match.index + match[0].length;
-        if (!flush && end > tail.length - TAIL_SIZE) break;
-        const script = match[0];
-        const openingTag = script.slice(0, findTagEnd(script) + 1);
+  function flushMarkup(final: boolean): string {
+    let output = "";
+    while (buffered.length > 0) {
+      if (mode === "text") {
+        const lower = buffered.toLowerCase();
+        const open = findScriptOpen(lower, 0);
+        if (open === -1) {
+          if (final) {
+            output += buffered;
+            buffered = "";
+          } else {
+            const keepFrom = trailingPrefixStart(lower, "<script");
+            if (keepFrom > 0) {
+              output += buffered.slice(0, keepFrom);
+              buffered = buffered.slice(keepFrom);
+            }
+          }
+          break;
+        }
+        if (open + "<script".length === buffered.length) {
+          if (final) {
+            output += buffered;
+            buffered = "";
+          } else if (open > 0) {
+            output += buffered.slice(0, open);
+            buffered = buffered.slice(open);
+          }
+          break;
+        }
+        if (open > 0) {
+          output += buffered.slice(0, open);
+          buffered = buffered.slice(open);
+        }
+        mode = "opening-tag";
+        scanOffset = "<script".length;
+        tagQuote = "";
+        continue;
+      }
+
+      if (mode === "opening-tag") {
+        const scan = scanTagEnd(buffered, scanOffset, tagQuote);
+        tagQuote = scan.quote;
+        if (scan.index === -1) {
+          scanOffset = buffered.length;
+          if (final || buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+            output += buffered;
+            buffered = "";
+            mode = "text";
+            scanOffset = 0;
+            tagQuote = "";
+          }
+          break;
+        }
+        const openingEnd = scan.index;
+        const openingTag = buffered.slice(0, openingEnd + 1);
+        tagQuote = "";
         const moduleSource =
           readTagAttribute(openingTag, "type")?.toLowerCase() === "module"
             ? readTagAttribute(openingTag, "src")
             : undefined;
-        let replacement = script;
         if (
           moduleSource &&
           isTrustedSolidEntrySource(
@@ -166,47 +230,178 @@ function createSolidBootstrapGateTransform(options: {
             options.trustedOrigins,
           )
         ) {
-          const unsupportedAttributes = (
-            ["integrity", "crossorigin", "referrerpolicy"] as const
-          ).filter((attribute) => readTagAttribute(openingTag, attribute) !== undefined);
-          if (unsupportedAttributes.length > 0) {
-            throw new Error(
-              `Cannot defer Solid entry ${moduleSource} with unsupported fetch attributes: ${unsupportedAttributes.join(", ")}.`,
-            );
-          }
-          const source = escapeScriptData(JSON.stringify(moduleSource));
-          const nonceValue = options.nonce ?? readCspNonce(script);
-          const nonce = nonceValue ? ` nonce="${escapeAttribute(nonceValue)}"` : "";
-          const importExpression = options.allowMissingPromise
-            ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source})) : import(${source}))`
-            : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source}))`;
-          replacement = `<script type="module"${nonce}>${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}]) throw error; globalThis.dispatchEvent(new CustomEvent("palamedes:catalogError", { detail: error })); });</script>`;
+          mode = "gated-script";
+          gatedOpeningEnd = openingEnd;
+          gatedModuleSource = moduleSource;
+          scanOffset = openingEnd + 1;
+          closeTagStart = -1;
+          continue;
         }
-        stream.push(tail.slice(0, match.index) + replacement);
-        tail = tail.slice(end);
+        // Inline and foreign scripts never need rewriting; stream their body
+        // without buffering while still waiting for </script> so script text
+        // cannot be mistaken for a nested HTML <script> tag.
+        output += openingTag;
+        buffered = buffered.slice(openingEnd + 1);
+        mode = "pass-through-script";
+        scanOffset = 0;
+        closeTagStart = -1;
         continue;
       }
-      if (flush) {
-        if (tail) stream.push(tail);
-        tail = "";
-      } else {
-        const scriptStart = lastScriptStart(tail);
-        const safeEnd = tail.length - TAIL_SIZE;
-        if (safeEnd <= 0) return;
-        // Keep every possible script block intact. A block can be much longer
-        // than TAIL_SIZE (for example Solid's inline hydration payload), and
-        // flushing at safeEnd would make the second half impossible to parse.
-        if (scriptStart >= 0) {
-          stream.push(tail.slice(0, scriptStart));
-          tail = tail.slice(scriptStart);
-        } else {
-          const cut = safeTextCut(tail, safeEnd);
-          stream.push(tail.slice(0, cut));
-          tail = tail.slice(cut);
+
+      if (mode === "pass-through-script") {
+        if (closeTagStart === -1) {
+          const closeMatch = findScriptCloseStart(buffered, scanOffset);
+          if (closeMatch.kind === "none") {
+            output += buffered;
+            buffered = "";
+            scanOffset = 0;
+            break;
+          }
+          if (closeMatch.kind === "incomplete") {
+            if (final) {
+              output += buffered;
+              buffered = "";
+              mode = "text";
+              scanOffset = 0;
+            } else {
+              if (closeMatch.index > 0) {
+                output += buffered.slice(0, closeMatch.index);
+                buffered = buffered.slice(closeMatch.index);
+              }
+              scanOffset = 0;
+            }
+            break;
+          }
+          if (closeMatch.index > 0) {
+            output += buffered.slice(0, closeMatch.index);
+            buffered = buffered.slice(closeMatch.index);
+          }
+          closeTagStart = 0;
+          scanOffset = "</script".length;
+          tagQuote = "";
         }
+
+        const closeEnd = scanTagEnd(buffered, scanOffset, tagQuote);
+        tagQuote = closeEnd.quote;
+        if (closeEnd.index === -1) {
+          scanOffset = buffered.length;
+          if (final || buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+            output += buffered;
+            buffered = "";
+            mode = "text";
+            closeTagStart = -1;
+            scanOffset = 0;
+            tagQuote = "";
+          }
+          break;
+        }
+        output += buffered.slice(0, closeEnd.index + 1);
+        buffered = buffered.slice(closeEnd.index + 1);
+        mode = "text";
+        closeTagStart = -1;
+        scanOffset = 0;
+        tagQuote = "";
+        continue;
       }
-      return;
+
+      // mode === "gated-script"
+      if (closeTagStart === -1) {
+        const closeMatch = findScriptCloseStart(buffered, scanOffset);
+        if (closeMatch.kind === "found") {
+          closeTagStart = closeMatch.index;
+          scanOffset = closeMatch.index + "</script".length;
+          tagQuote = "";
+          continue;
+        }
+        if (final) {
+          output += buffered;
+          buffered = "";
+          mode = "text";
+          gatedOpeningEnd = -1;
+          gatedModuleSource = "";
+          scanOffset = 0;
+          break;
+        }
+        if (buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+          if (closeMatch.kind === "incomplete") {
+            output += buffered.slice(0, closeMatch.index);
+            buffered = buffered.slice(closeMatch.index);
+          } else {
+            output += buffered;
+            buffered = "";
+          }
+          mode = "pass-through-script";
+          gatedOpeningEnd = -1;
+          gatedModuleSource = "";
+          scanOffset = 0;
+          closeTagStart = -1;
+          break;
+        }
+        scanOffset = closeMatch.kind === "incomplete" ? closeMatch.index : buffered.length;
+        break;
+      }
+
+      const gatedCloseEnd = scanTagEnd(buffered, scanOffset, tagQuote);
+      tagQuote = gatedCloseEnd.quote;
+      if (gatedCloseEnd.index === -1) {
+        scanOffset = buffered.length;
+        if (final) {
+          output += buffered;
+          buffered = "";
+          mode = "text";
+          gatedOpeningEnd = -1;
+          gatedModuleSource = "";
+          closeTagStart = -1;
+          scanOffset = 0;
+          tagQuote = "";
+          break;
+        }
+        if (buffered.length > MAX_SCRIPT_BUFFER_LENGTH) {
+          if (buffered.length - closeTagStart > MAX_SCRIPT_BUFFER_LENGTH) {
+            output += buffered;
+            buffered = "";
+            mode = "text";
+            closeTagStart = -1;
+            scanOffset = 0;
+            tagQuote = "";
+          } else {
+            output += buffered.slice(0, closeTagStart);
+            buffered = buffered.slice(closeTagStart);
+            scanOffset -= closeTagStart;
+            closeTagStart = 0;
+            mode = "pass-through-script";
+          }
+          gatedOpeningEnd = -1;
+          gatedModuleSource = "";
+        }
+        break;
+      }
+
+      const gatedOpeningTag = buffered.slice(0, gatedOpeningEnd + 1);
+      const unsupportedAttributes = (
+        ["integrity", "crossorigin", "referrerpolicy"] as const
+      ).filter((attribute) => readTagAttribute(gatedOpeningTag, attribute) !== undefined);
+      if (unsupportedAttributes.length > 0) {
+        throw new Error(
+          `Cannot defer Solid entry ${gatedModuleSource} with unsupported fetch attributes: ${unsupportedAttributes.join(", ")}.`,
+        );
+      }
+      const source = escapeScriptData(JSON.stringify(gatedModuleSource));
+      const nonceValue = options.nonce ?? readTagAttribute(gatedOpeningTag, "nonce");
+      const nonce = nonceValue ? ` nonce="${escapeAttribute(nonceValue)}"` : "";
+      const importExpression = options.allowMissingPromise
+        ? `(globalThis[${CATALOG_READY_PROMISE}] ? globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source})) : import(${source}))`
+        : `globalThis[${CATALOG_READY_PROMISE}].then(() => import(${source}))`;
+      output += `<script type="module"${nonce}>${importExpression}.catch((error) => { if (globalThis[${CATALOG_READY}]) throw error; globalThis.dispatchEvent(new CustomEvent("palamedes:catalogError", { detail: error })); });</script>`;
+      buffered = buffered.slice(gatedCloseEnd.index + 1);
+      mode = "text";
+      gatedOpeningEnd = -1;
+      gatedModuleSource = "";
+      closeTagStart = -1;
+      scanOffset = 0;
+      tagQuote = "";
     }
+    return output;
   }
 }
 
@@ -261,19 +456,76 @@ function urlOrigin(value: string): string | undefined {
   }
 }
 
-function findTagEnd(value: string): number {
-  let quote: '"' | "'" | undefined;
-  for (let index = 0; index < value.length; index += 1) {
+function decodeChunk(decoder: StringDecoder, chunk: unknown): string {
+  if (Buffer.isBuffer(chunk)) return decoder.write(chunk);
+  if (chunk instanceof Uint8Array) {
+    return decoder.write(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+  }
+  return String(chunk);
+}
+
+function findScriptOpen(lower: string, from: number): number {
+  let index = lower.indexOf("<script", from);
+  while (index !== -1) {
+    const next = lower[index + "<script".length];
+    if (next === undefined || /[\s/>]/u.test(next)) return index;
+    index = lower.indexOf("<script", index + "<script".length);
+  }
+  return -1;
+}
+
+function findScriptCloseStart(
+  value: string,
+  from: number,
+): { kind: "found"; index: number } | { kind: "incomplete"; index: number } | { kind: "none" } {
+  const slice = value.slice(from).toLowerCase();
+  let cursor = 0;
+  while (cursor < slice.length) {
+    const match = slice.indexOf("</script", cursor);
+    if (match === -1) break;
+    const next = slice[match + "</script".length];
+    if (next === undefined) {
+      return { kind: "incomplete", index: from + match };
+    }
+    if (/[\s/>]/u.test(next)) {
+      return { kind: "found", index: from + match };
+    }
+    cursor = match + "</script".length;
+  }
+  const prefixStart = trailingPrefixStart(slice, "</script");
+  if (prefixStart < slice.length) {
+    return { kind: "incomplete", index: from + prefixStart };
+  }
+  return { kind: "none" };
+}
+
+function scanTagEnd(
+  value: string,
+  from: number,
+  initialQuote: "" | '"' | "'",
+): { index: number; quote: "" | '"' | "'" } {
+  let quote = initialQuote;
+  for (let index = from; index < value.length; index += 1) {
     const character = value[index];
     if (quote) {
-      if (character === quote) quote = undefined;
+      if (character === quote) quote = "";
     } else if (character === '"' || character === "'") {
       quote = character;
     } else if (character === ">") {
-      return index;
+      return { index, quote: "" };
     }
   }
-  return value.length - 1;
+  return { index: -1, quote };
+}
+
+function trailingPrefixStart(lower: string, prefix: string): number {
+  const max = Math.min(prefix.length - 1, lower.length);
+  for (let length = max; length > 0; length -= 1) {
+    if (lower.endsWith(prefix.slice(0, length))) {
+      return lower.length - length;
+    }
+  }
+  return lower.length;
 }
 
 function readTagAttribute(
@@ -314,36 +566,6 @@ function readTagAttribute(
     if (quote && tag[index] === quote) index += 1;
   }
   return undefined;
-}
-
-function readCspNonce(script: string): string | undefined {
-  return readTagAttribute(script.slice(0, findTagEnd(script) + 1), "nonce");
-}
-
-function lastScriptStart(value: string): number {
-  const matches = [...value.matchAll(/<script\b/giu)];
-  if (matches.length > 0) return matches.at(-1)?.index ?? -1;
-
-  // Retain a partial opener split over two byte chunks. The normal tail
-  // retention keeps this small suffix until the next chunk arrives.
-  const lower = value.toLowerCase();
-  const opener = "<script";
-  for (let size = opener.length - 1; size > 0; size -= 1) {
-    if (lower.endsWith(opener.slice(0, size))) return value.length - size;
-  }
-  return -1;
-}
-
-function safeTextCut(value: string, desired: number): number {
-  let cut = desired;
-  if (cut > 0 && cut < value.length) {
-    const previous = value.charCodeAt(cut - 1);
-    const next = value.charCodeAt(cut);
-    if (previous >= 0xd8_00 && previous <= 0xdb_ff && next >= 0xdc_00 && next <= 0xdf_ff) {
-      cut -= 1;
-    }
-  }
-  return cut;
 }
 
 function escapeAttribute(value: string): string {
