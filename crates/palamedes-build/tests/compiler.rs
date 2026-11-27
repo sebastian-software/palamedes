@@ -426,7 +426,7 @@ fn module_path_is_reconstructed_from_normalized_identifiers() {
     let output = tempfile::tempdir().unwrap();
     let compiled = CatalogBuilder::new(directory.path(), "en")
         .locales(&["en", "de"])
-        .module_path("crate :: i18n :: r#mod")
+        .module_path("crate :: i18n /* generated definitions */ :: r#mod")
         .compile_to(output.path())
         .unwrap();
     let generated = fs::read_to_string(compiled.rust_module).unwrap();
@@ -435,6 +435,7 @@ fn module_path_is_reconstructed_from_normalized_identifiers() {
         "{generated}"
     );
     assert!(!generated.contains(" :: "), "{generated}");
+    assert!(!generated.contains("generated definitions"), "{generated}");
 }
 
 #[cfg(unix)]

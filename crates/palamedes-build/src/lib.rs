@@ -254,11 +254,6 @@ fn validate_macro_name(name: &str) -> BuildResult<String> {
 }
 
 fn normalize_module_path(path: &str) -> BuildResult<String> {
-    if path.contains("//") || path.contains("/*") || path.contains("*/") {
-        return Err(Error::InvalidModulePath {
-            path: path.to_owned(),
-        });
-    }
     let parsed = syn::parse_str::<syn::Path>(path).map_err(|_| Error::InvalidModulePath {
         path: path.to_owned(),
     })?;
