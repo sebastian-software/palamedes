@@ -1314,6 +1314,28 @@ mod platform {
             let c_target = os_str_to_cstring(file_name)?;
 
             for _ in 0..8 {
+                // On Solaris, `fcntl(F_SETLKW)` locks are process-scoped and
+                // released when *any* descriptor for the same inode is closed.
+                // Acquire a process-local per-inode lock BEFORE calling `openat`
+                // and keep it declared before `file` so `file` drops (closing the
+                // fd and releasing `F_SETLKW`) before another thread in this
+                // process can open or lock the same inode.
+                #[cfg(target_os = "solaris")]
+                let mut _process_lock = match fstatat_nofollow(self.fd.as_raw_fd(), &c_target) {
+                    Ok(pre_open_stat) => {
+                        if (stat_mode(&pre_open_stat) & libc::S_IFMT) == libc::S_IFLNK {
+                            return Err(ContainedFsError::Containment(format!(
+                                "refusing to write through symlink \"{}\"",
+                                file_name.to_string_lossy()
+                            )));
+                        }
+                        Some(process_in_place_locks::acquire(stat_identity(
+                            &pre_open_stat,
+                        )))
+                    }
+                    Err(error) if error.raw_os_error() == Some(libc::ENOENT) => None,
+                    Err(error) => return Err(ContainedFsError::Io(error)),
+                };
                 // Open an existing target directly without creating any sibling
                 // lock file so compiling into an existing writable file inside
                 // a read-only or search-only directory succeeds.
@@ -1355,6 +1377,20 @@ mod platform {
                 // SAFETY: `raw` is a newly opened valid file descriptor.
                 let mut file = File::from(unsafe { OwnedFd::from_raw_fd(raw) });
                 let pre_stat = fstat_fd(file.as_raw_fd())?;
+                #[cfg(target_os = "solaris")]
+                {
+                    let opened_id = stat_identity(&pre_stat);
+                    if _process_lock
+                        .as_ref()
+                        .is_none_or(|guard| guard.identity() != opened_id)
+                    {
+                        // Drop any stale lock first so two threads chasing a
+                        // replaced inode never deadlock, then acquire the lock
+                        // for `opened_id` before `file` can be dropped.
+                        _process_lock = None;
+                        _process_lock = Some(process_in_place_locks::acquire(opened_id));
+                    }
+                }
                 if (stat_mode(&pre_stat) & libc::S_IFMT) != libc::S_IFREG {
                     return Err(ContainedFsError::Io(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -2611,8 +2647,39 @@ mod platform {
         flock_exclusive(fd)
     }
 
-    #[cfg(any(target_os = "solaris", target_os = "illumos"))]
+    #[cfg(target_os = "illumos")]
     fn lock_existing_in_place_fd(fd: std::os::fd::RawFd) -> io::Result<()> {
+        // illumos provides open-file-description locks (`F_OFD_SETLKW`), which
+        // serialize both cross-process and same-process writers per descriptor
+        // and are not released when another descriptor for the inode closes.
+        let lock = libc::flock {
+            l_type: libc::F_WRLCK as libc::c_short,
+            l_whence: libc::SEEK_SET as libc::c_short,
+            l_start: 0,
+            l_len: 0,
+            l_sysid: 0,
+            l_pid: 0,
+            l_pad: [0; 4],
+        };
+        loop {
+            // SAFETY: `fd` is an open writable descriptor and `lock` is initialized.
+            if unsafe { libc::fcntl(fd, libc::F_OFD_SETLKW, &lock) } == 0 {
+                return Ok(());
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            return Err(error);
+        }
+    }
+
+    #[cfg(target_os = "solaris")]
+    fn lock_existing_in_place_fd(fd: std::os::fd::RawFd) -> io::Result<()> {
+        // Solaris lacks `F_OFD_SETLKW`; `write_file_in_place` pairs this
+        // process-scoped record lock with `process_in_place_locks` keyed by
+        // `FileIdentity` so same-process threads serialize cleanly and never
+        // close an fd for a locked inode while another thread holds the lock.
         let lock = libc::flock {
             l_type: libc::F_WRLCK as libc::c_short,
             l_whence: libc::SEEK_SET as libc::c_short,
@@ -2632,6 +2699,66 @@ mod platform {
                 continue;
             }
             return Err(error);
+        }
+    }
+
+    #[cfg(any(target_os = "solaris", test))]
+    pub(super) mod process_in_place_locks {
+        use super::FileIdentity;
+        use std::collections::HashSet;
+        use std::sync::{Condvar, Mutex, OnceLock};
+
+        struct LockTable {
+            held: Mutex<HashSet<FileIdentity>>,
+            released: Condvar,
+        }
+
+        static TABLE: OnceLock<LockTable> = OnceLock::new();
+
+        fn table() -> &'static LockTable {
+            TABLE.get_or_init(|| LockTable {
+                held: Mutex::new(HashSet::new()),
+                released: Condvar::new(),
+            })
+        }
+
+        pub(crate) struct ProcessInPlaceLockGuard {
+            identity: FileIdentity,
+        }
+
+        impl ProcessInPlaceLockGuard {
+            #[cfg_attr(not(target_os = "solaris"), allow(dead_code))]
+            pub(super) const fn identity(&self) -> FileIdentity {
+                self.identity
+            }
+        }
+
+        impl Drop for ProcessInPlaceLockGuard {
+            fn drop(&mut self) {
+                let table = table();
+                let mut held = table.held.lock().unwrap_or_else(|err| err.into_inner());
+                held.remove(&self.identity);
+                table.released.notify_all();
+            }
+        }
+
+        pub(crate) fn acquire(identity: FileIdentity) -> ProcessInPlaceLockGuard {
+            let table = table();
+            let mut held = table.held.lock().unwrap_or_else(|err| err.into_inner());
+            while !held.insert(identity) {
+                held = table
+                    .released
+                    .wait(held)
+                    .unwrap_or_else(|err| err.into_inner());
+            }
+            ProcessInPlaceLockGuard { identity }
+        }
+
+        #[cfg(test)]
+        pub(crate) fn is_held(identity: FileIdentity) -> bool {
+            let table = table();
+            let held = table.held.lock().unwrap_or_else(|err| err.into_inner());
+            held.contains(&identity)
         }
     }
 
@@ -11196,5 +11323,55 @@ mod cross_platform_tests {
                 Some(DirFilenameEquivalence::CaseInsensitiveVfat)
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_in_place_locks_serialize_same_identity_and_prune_entries() {
+        use super::FileIdentity;
+        use super::platform::process_in_place_locks;
+        use std::sync::{
+            Arc, Barrier,
+            atomic::{AtomicUsize, Ordering},
+        };
+        use std::thread;
+        use std::time::Duration;
+
+        let id = FileIdentity {
+            dev: 0x1234,
+            ino: 0x5678,
+        };
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let barrier = Arc::new(Barrier::new(4));
+        let mut handles = Vec::new();
+        for _ in 0..4 {
+            let active = Arc::clone(&active);
+            let max_active = Arc::clone(&max_active);
+            let barrier = Arc::clone(&barrier);
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                for _ in 0..8 {
+                    let _guard = process_in_place_locks::acquire(id);
+                    assert!(process_in_place_locks::is_held(id));
+                    let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active.fetch_max(current, Ordering::SeqCst);
+                    thread::sleep(Duration::from_millis(1));
+                    active.fetch_sub(1, Ordering::SeqCst);
+                }
+            }));
+        }
+        for handle in handles {
+            handle.join().expect("lock worker thread");
+        }
+        assert_eq!(
+            max_active.load(Ordering::SeqCst),
+            1,
+            "same-identity writers must never overlap"
+        );
+        assert!(
+            !process_in_place_locks::is_held(id),
+            "released lock identity must be pruned from the table"
+        );
     }
 }

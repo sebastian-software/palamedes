@@ -96,6 +96,7 @@ impl Command for ConvertOptions {
                     input_parent: PathBuf,
                     input_file: std::ffi::OsString,
                     output: PathBuf,
+                    output_file: std::ffi::OsString,
                 }
 
                 let mut planned = Vec::new();
@@ -147,6 +148,17 @@ impl Command for ConvertOptions {
                         if input == output {
                             return Err(CliError::ConvertOutputIsInput);
                         }
+                        let (output_parent, output_file) =
+                            split_relative_catalog_path(&config.root_dir, &output).map_err(
+                                |error| CliError::Io {
+                                    path: output.clone(),
+                                    source: error.into_io_error(),
+                                },
+                            )?;
+                        debug_assert_eq!(
+                            output_parent, input_parent,
+                            "configured format conversion only changes the catalog filename extension"
+                        );
                         planned.push(PlannedConversion {
                             scope: catalog.path.as_str(),
                             locale: locale.as_str(),
@@ -154,6 +166,7 @@ impl Command for ConvertOptions {
                             input_parent,
                             input_file,
                             output,
+                            output_file,
                         });
                     }
                 }
@@ -204,84 +217,16 @@ impl Command for ConvertOptions {
                         skipped += 1;
                         continue;
                     }
-                    let (output_parent, output_file) =
-                        split_relative_catalog_path(&config.root_dir, &job.output).map_err(
-                            |error| CliError::Io {
+                    // Configured conversion changes only the storage extension on
+                    // the final filename, so input and output share `input_dir`
+                    // and its single directory-wide target lock.
+                    let _lock =
+                        input_dir
+                            .lock_target(&job.output_file)
+                            .map_err(|error| CliError::Io {
                                 path: job.output.clone(),
                                 source: error.into_io_error(),
-                            },
-                        )?;
-                    let (output_dir, _locks) = if job.input_parent == output_parent {
-                        let lock =
-                            input_dir
-                                .lock_target(&output_file)
-                                .map_err(|error| CliError::Io {
-                                    path: job.output.clone(),
-                                    source: error.into_io_error(),
-                                })?;
-                        (None, vec![lock])
-                    } else {
-                        let out_dir =
-                            ContainedDir::open_subpath(&config.root_dir, &output_parent, true)
-                                .map_err(|error| CliError::Io {
-                                    path: job.output.clone(),
-                                    source: error.into_io_error(),
-                                })?
-                                .expect("create_missing always opens destination directory");
-                        let in_key =
-                            input_dir
-                                .target_lock_key(&job.input_file)
-                                .map_err(|error| CliError::Io {
-                                    path: job.input.clone(),
-                                    source: error.into_io_error(),
-                                })?;
-                        let out_key = out_dir.target_lock_key(&output_file).map_err(|error| {
-                            CliError::Io {
-                                path: job.output.clone(),
-                                source: error.into_io_error(),
-                            }
-                        })?;
-                        let locks = if in_key == out_key {
-                            vec![out_dir.lock_target(&output_file).map_err(|error| {
-                                CliError::Io {
-                                    path: job.output.clone(),
-                                    source: error.into_io_error(),
-                                }
-                            })?]
-                        } else if in_key < out_key {
-                            vec![
-                                input_dir.lock_target(&job.input_file).map_err(|error| {
-                                    CliError::Io {
-                                        path: job.input.clone(),
-                                        source: error.into_io_error(),
-                                    }
-                                })?,
-                                out_dir.lock_target(&output_file).map_err(|error| {
-                                    CliError::Io {
-                                        path: job.output.clone(),
-                                        source: error.into_io_error(),
-                                    }
-                                })?,
-                            ]
-                        } else {
-                            vec![
-                                out_dir.lock_target(&output_file).map_err(|error| {
-                                    CliError::Io {
-                                        path: job.output.clone(),
-                                        source: error.into_io_error(),
-                                    }
-                                })?,
-                                input_dir.lock_target(&job.input_file).map_err(|error| {
-                                    CliError::Io {
-                                        path: job.input.clone(),
-                                        source: error.into_io_error(),
-                                    }
-                                })?,
-                            ]
-                        };
-                        (Some(out_dir), locks)
-                    };
-                    let output_dir_ref = output_dir.as_ref().unwrap_or(&input_dir);
+                            })?;
                     let Some(source) =
                         input_dir
                             .read_optional_file(&job.input_file)
@@ -301,12 +246,12 @@ impl Command for ConvertOptions {
                                 source: error.into_io_error(),
                             })?;
                     let output_identity =
-                        output_dir_ref
-                            .file_identity(&output_file)
-                            .map_err(|error| CliError::Io {
+                        input_dir.file_identity(&job.output_file).map_err(|error| {
+                            CliError::Io {
                                 path: job.output.clone(),
                                 source: error.into_io_error(),
-                            })?;
+                            }
+                        })?;
                     if input_identity.is_some() && input_identity == output_identity {
                         return Err(CliError::ConvertOutputIsInput);
                     }
@@ -317,9 +262,9 @@ impl Command for ConvertOptions {
                         &config.source_locale,
                         Some(job.locale),
                     )?;
-                    if let ContainedWriteOutcome::CommittedWithoutDirSync(source) = output_dir_ref
+                    if let ContainedWriteOutcome::CommittedWithoutDirSync(source) = input_dir
                         .write_file_atomically(
-                            &output_file,
+                            &job.output_file,
                             converted_content.as_bytes(),
                             ContainedNewFileMode::Private,
                             ContainedWriteDurability::Full,

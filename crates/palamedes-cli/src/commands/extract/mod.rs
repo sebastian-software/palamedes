@@ -12,7 +12,7 @@ impl ExtractOptions {
 mod test_support;
 mod watch;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -1380,12 +1380,13 @@ fn segment_pair_collides_on_dir(
         && r_str.is_ascii()
     {
         let ascii_equiv = match equivalence {
-            DirFilenameEquivalence::CaseInsensitiveVfat => l_str
-                .trim_end_matches('.')
-                .eq_ignore_ascii_case(r_str.trim_end_matches('.')),
             DirFilenameEquivalence::CaseInsensitiveNtfs => l_str
                 .trim_end_matches(['.', ' '])
                 .eq_ignore_ascii_case(r_str.trim_end_matches(['.', ' '])),
+            // VFAT and exFAT are always ASCII case-insensitive, but Linux exFAT
+            // supports the `keep_last_dots` mount option where trailing dots are
+            // distinct. Keep trailing-dot folding in the lookup bucket, and let
+            // collisions that rely on trimming dots fall through to probing.
             _ => l_str.eq_ignore_ascii_case(r_str),
         };
         if ascii_equiv {
@@ -1659,8 +1660,9 @@ struct TargetPrefixNode<'a> {
 impl<'a> TargetPrefixNode<'a> {
     fn matching_ntfs_short_name_children(&self, raw: &OsStr) -> Vec<usize> {
         let mut matches = Vec::new();
+        let mut seen = HashSet::new();
         let mut push_unique = |idx: usize| {
-            if !matches.contains(&idx) {
+            if seen.insert(idx) {
                 matches.push(idx);
             }
         };
@@ -1712,52 +1714,48 @@ impl<'a> TargetPrefixNode<'a> {
         matches
     }
 
+    /// Indexes a newly allocated `child_idx` in the NTFS 8.3 lookup tables.
+    ///
+    /// Because callers allocate a fresh index per distinct child node and each
+    /// loop iteration generates a unique key, appending directly is O(1) per
+    /// bucket without scanning earlier siblings.
     fn record_ntfs_short_name_child(&mut self, raw: &OsStr, child_idx: usize) {
         if let Some(short) = parse_ntfs_short_name(raw) {
-            let entries = self.ntfs_short_by_ext.entry(short.ext.clone()).or_default();
-            if !entries.iter().any(|(_, idx)| *idx == child_idx) {
-                entries.push((short, child_idx));
-            }
+            self.ntfs_short_by_ext
+                .entry(short.ext.clone())
+                .or_default()
+                .push((short, child_idx));
             return;
         }
         if let Some(long) = parse_ntfs_long_name(raw) {
-            if long.has_non_ascii
-                && long.ext.contains('_')
-                && !self.ntfs_any_non_ascii_ext_long.contains(&child_idx)
-            {
+            if long.has_non_ascii && long.ext.contains('_') {
                 self.ntfs_any_non_ascii_ext_long.push(child_idx);
             }
             if long.has_non_ascii {
-                let entries = self.ntfs_non_ascii_long_by_ext.entry(long.ext).or_default();
-                if !entries.contains(&child_idx) {
-                    entries.push(child_idx);
-                }
+                self.ntfs_non_ascii_long_by_ext
+                    .entry(long.ext)
+                    .or_default()
+                    .push(child_idx);
             } else {
                 for digits_len in 1..=6 {
                     let prefix_len = long.base.len().min(7 - digits_len);
                     if prefix_len > 0 {
-                        let entries = self
-                            .ntfs_long_prefixes
+                        self.ntfs_long_prefixes
                             .entry((
                                 long.ext.clone(),
                                 long.base[..prefix_len].to_owned(),
                                 digits_len,
                             ))
-                            .or_default();
-                        if !entries.contains(&child_idx) {
-                            entries.push(child_idx);
-                        }
+                            .or_default()
+                            .push(child_idx);
                     }
                 }
                 let max_hash = long.base.len().min(2);
                 for len in 1..=max_hash {
-                    let entries = self
-                        .ntfs_long_hash_prefixes
+                    self.ntfs_long_hash_prefixes
                         .entry((long.ext.clone(), long.base[..len].to_owned()))
-                        .or_default();
-                    if !entries.contains(&child_idx) {
-                        entries.push(child_idx);
-                    }
+                        .or_default()
+                        .push(child_idx);
                 }
             }
         }
@@ -3606,6 +3604,57 @@ catalogs:
             false,
         )
         .expect_err("file vs directory via 8.3 alias must collide");
+        assert!(matches!(
+            err,
+            CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
+        ));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reject_colliding_catalog_targets_probes_vfat_trailing_dot_equivalence() {
+        use palamedes::DirFilenameEquivalence;
+
+        let root = temp_dir("extract-vfat-keep-last-dots");
+        let vfat = Some((DirFilenameEquivalence::CaseInsensitiveVfat, true));
+
+        // On a filesystem where `locales` and `locales.` are distinct (such as
+        // Linux exFAT mounted with `keep_last_dots`, or APFS/ext4), probing
+        // under `allow_mutating_probe = true` disproves the trailing-dot alias
+        // instead of rejecting unconditionally.
+        let trailing_dot = [
+            ("locales/{locale}", root.join("locales/en.po")),
+            ("locales./{locale}", root.join("locales./en.po")),
+        ];
+        super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &trailing_dot,
+            &[],
+            true,
+            vfat,
+            false,
+        )
+        .expect(
+            "distinct trailing-dot directories must be allowed when live probe disproves aliasing",
+        );
+
+        // Pure ASCII case collisions under VFAT/exFAT must still be rejected
+        // immediately regardless of `keep_last_dots`.
+        let case_collision = [
+            ("Locales/{locale}", root.join("Locales/en.po")),
+            ("locales/{locale}", root.join("locales/en.po")),
+        ];
+        let err = super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &case_collision,
+            &[],
+            true,
+            vfat,
+            false,
+        )
+        .expect_err("case-aliased directories under VFAT/exFAT must collide");
         assert!(matches!(
             err,
             CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
