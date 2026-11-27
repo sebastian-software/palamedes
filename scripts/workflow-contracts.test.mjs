@@ -5511,9 +5511,11 @@ describe("workflow contracts", () => {
           "          docker plugin install --alias loki2 grafana/loki-docker-driver:latest --grant-all-permissions",
           `          docker plugin upgrade loki grafana/loki-docker-driver@${digest}`,
           "          docker plugin upgrade loki2 grafana/loki-docker-driver:2.9",
-          `          docker buildx imagetools create -t ghcr.io/org/app:v1 ghcr.io/org/app@${digest}`,
+          `          docker buildx imagetools create -t ghcr.io/org/app:v1 --metadata-file metadata.json ${digest}`,
           `          docker buildx --builder ci imagetools create -t ghcr.io/org/app:v2 ghcr.io/org/app@${digest} ghcr.io/org/app:arm64`,
           `          docker manifest create ghcr.io/org/app:v3 ghcr.io/org/app@${digest} ghcr.io/org/app:amd64`,
+          "          podman manifest add --artifact ghcr.io/org/app:v3 sbom.json",
+          "          podman manifest add ghcr.io/org/app:v3 ghcr.io/org/app:arm64",
           `          docker service create --memory-swap 1G --memory-swappiness 0 node:24@${digest}`,
           "          docker service create --memory-swap 1G --memory-swappiness 0 alpine:3.20",
           "",
@@ -5524,7 +5526,8 @@ describe("workflow contracts", () => {
       "<memory>:10: grafana/loki-docker-driver:2.9 is not pinned to a sha256 digest",
       "<memory>:12: ghcr.io/org/app:arm64 is not pinned to a sha256 digest",
       "<memory>:13: ghcr.io/org/app:amd64 is not pinned to a sha256 digest",
-      "<memory>:15: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:15: ghcr.io/org/app:arm64 is not pinned to a sha256 digest",
+      "<memory>:17: alpine:3.20 is not pinned to a sha256 digest",
     ]);
   });
 

@@ -424,6 +424,7 @@ const DOCKER_IMAGETOOLS_CREATE_VALUE_FLAGS = new Set([
   "--builder",
   "-f",
   "--file",
+  "--metadata-file",
   "--progress",
   "-t",
   "--tag",
@@ -13650,11 +13651,18 @@ function inspectShellText(
 
       for (const argList of argTokenVariants) {
         let usesPodmanRootfs = false;
+        let usesPodmanArtifact = false;
         let positionalCount = 0;
         const upgradePositionals = [];
+        const podmanManifestPositionals = [];
+        const isPodmanManifestAdd = normalizedCli === "podman" && subcommand === "manifest-create";
         const recordPositional = (posEntry) => {
           if (subcommand === "plugin-upgrade") {
             upgradePositionals.push(posEntry);
+            return false;
+          }
+          if (isPodmanManifestAdd) {
+            podmanManifestPositionals.push(posEntry);
             return false;
           }
           if (skipFirstPositional && positionalCount === 0) {
@@ -13737,6 +13745,16 @@ function inspectShellText(
             }
             continue;
           }
+          if (isPodmanManifestAdd) {
+            if (token === "--artifact" || token.toLowerCase() === "--artifact=true") {
+              usesPodmanArtifact = true;
+              continue;
+            }
+            if (token.toLowerCase() === "--artifact=false") {
+              usesPodmanArtifact = false;
+              continue;
+            }
+          }
           if (subcommand === "run" && normalizedCli === "podman") {
             if (token === "--rootfs" || token.toLowerCase() === "--rootfs=true") {
               usesPodmanRootfs = true;
@@ -13784,6 +13802,11 @@ function inspectShellText(
           pushImageEntry(
             upgradePositionals.length >= 2 ? upgradePositionals[1] : upgradePositionals[0],
           );
+        }
+        if (isPodmanManifestAdd && !usesPodmanArtifact && podmanManifestPositionals.length > 1) {
+          for (const manifestInput of podmanManifestPositionals.slice(1)) {
+            pushImageEntry(manifestInput);
+          }
         }
       }
 
@@ -13891,8 +13914,12 @@ function inspectShellText(
             ) {
               continue;
             }
+            const allowBareSha256Source =
+              subcommand === "imagetools-create" &&
+              /^sha256:[0-9a-f]{64}$/iu.test(candidate.text.trim());
             const isValid =
               isPinnedDigest(candidate.text) ||
+              allowBareSha256Source ||
               (allowLocalImageId && LOCAL_IMAGE_ID_PATTERN.test(candidate.text));
             if (!isValid) {
               const message = `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`;
