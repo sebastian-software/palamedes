@@ -67,24 +67,24 @@ host or edge proxy):
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
 
-type CspRequestState = { nonce: string; applied: boolean };
+type CspRequestState = { nonce: string; ssrHtml: boolean };
 const cspNonceStorage = new AsyncLocalStorage<CspRequestState>();
 
 export function runWithRequestNonce<T>(fn: () => T): T {
-  return cspNonceStorage.run({ nonce: randomBytes(16).toString("base64"), applied: false }, fn);
+  return cspNonceStorage.run({ nonce: randomBytes(16).toString("base64"), ssrHtml: false }, fn);
 }
 
 export function getRequestNonce(): string | undefined {
   return cspNonceStorage.getStore()?.nonce;
 }
 
-export function markRequestNonceApplied(): void {
+export function markSsrHtmlResponse(): void {
   const state = cspNonceStorage.getStore();
-  if (state) state.applied = true;
+  if (state) state.ssrHtml = true;
 }
 
-export function wasRequestNonceApplied(): boolean {
-  return cspNonceStorage.getStore()?.applied === true;
+export function isSsrHtmlResponse(): boolean {
+  return cspNonceStorage.getStore()?.ssrHtml === true;
 }
 ```
 
@@ -93,7 +93,7 @@ export function wasRequestNonceApplied(): boolean {
 import { fsRouter } from "waku";
 import adapter from "waku/adapters/default";
 import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
-import { getRequestNonce, runWithRequestNonce, wasRequestNonceApplied } from "./lib/csp.server";
+import { getRequestNonce, isSsrHtmlResponse, runWithRequestNonce } from "./lib/csp.server";
 import { resolveApplicationLocale } from "./lib/i18n.server";
 
 const modules = Object.fromEntries(
@@ -104,10 +104,11 @@ const modules = Object.fromEntries(
 );
 
 function buildAppCsp(nonce: string): string {
-  // Keep one CSP owner per response: put all of your application's directives
-  // (style-src, img-src, connect-src, etc.) here. If another middleware builds
-  // Content-Security-Policy, read getRequestNonce() there so the header and
-  // rendered scripts always share the exact same nonce.
+  // Nonce-enabled same-origin policy: `script-src 'self'` assumes all same-origin
+  // script URLs are trusted (do not host untrusted user-uploaded scripts on this
+  // origin). Keep one CSP owner per response and add any other directives
+  // (style-src, img-src, connect-src, etc.) here; if another middleware builds
+  // Content-Security-Policy, read getRequestNonce() there so header and scripts match.
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
@@ -117,18 +118,23 @@ function buildAppCsp(nonce: string): string {
   ].join("; ");
 }
 
+const catalogDelivery = createWakuCatalogDeliveryMiddleware({
+  resolveLocale: (request) => resolveApplicationLocale(request),
+  nonce: () => (!import.meta.env.DEV ? getRequestNonce() : undefined),
+});
+
 export default adapter(fsRouter(modules), {
   middlewareFns: [
     () => async (context, next) =>
       runWithRequestNonce(async () => {
         await next();
         const nonce = getRequestNonce();
-        // Apply this strict policy in production builds; Vite dev injects HMR
-        // scripts and inline styles that require a separate development policy.
+        // Apply this nonce-enabled same-origin policy in production builds;
+        // Vite dev injects HMR scripts and inline styles that need a separate dev policy.
         if (
           !import.meta.env.DEV &&
           nonce &&
-          wasRequestNonceApplied() &&
+          isSsrHtmlResponse() &&
           context.res.headers.get("content-type")?.startsWith("text/html")
         ) {
           context.header("content-security-policy", buildAppCsp(nonce));
@@ -136,12 +142,14 @@ export default adapter(fsRouter(modules), {
           context.header("cache-control", "private, no-store");
         }
       }),
-    () =>
-      createWakuCatalogDeliveryMiddleware({
-        resolveLocale: (request) => resolveApplicationLocale(request),
-        nonce: () =>
-          !import.meta.env.DEV && wasRequestNonceApplied() ? getRequestNonce() : undefined,
-      }),
+    () => async (context, next) => {
+      await next();
+      // Transform only Waku-rendered SSR HTML so raw HTML `_api` handlers keep
+      // their own response body and CSP without unnonced catalog tags injected.
+      if (isSsrHtmlResponse()) {
+        await catalogDelivery(context, async () => {});
+      }
+    },
   ],
 });
 ```
@@ -153,24 +161,23 @@ import {
   unstable_setNonce,
   type HandlerInterceptor,
 } from "waku/router/server";
-import { getRequestNonce, markRequestNonceApplied } from "../../lib/csp.server";
+import { getRequestNonce, markSsrHtmlResponse } from "../../lib/csp.server";
 
 const cspInterceptor: HandlerInterceptor = async (next) => {
   const nonce = getRequestNonce();
   if (!import.meta.env.DEV && nonce) unstable_setNonce(nonce);
   const result = await next();
   // This recipe covers SSR-enabled dynamic pages: Waku sets an RSC path for SSR
-  // pages, leaves it unset for `_api` handlers (so raw HTML handlers own their
-  // own CSP), and returns null for unmatched `/` before its unnonced root
-  // fallback shell runs. `unstable_disableSSR: true` routes are outside scope.
+  // pages, leaves it unset for `_api` handlers (so raw HTML handlers stay
+  // untouched under their own CSP), and returns null for unmatched `/` before
+  // its unnonced root fallback shell runs. `unstable_disableSSR: true` routes
+  // are outside scope.
   if (
-    !import.meta.env.DEV &&
-    nonce &&
     unstable_getRscPath() !== undefined &&
     result instanceof Response &&
     result.headers.get("content-type")?.startsWith("text/html")
   ) {
-    markRequestNonceApplied();
+    markSsrHtmlResponse();
   }
   return result;
 };
