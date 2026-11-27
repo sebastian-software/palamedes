@@ -1,5 +1,5 @@
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -626,9 +626,7 @@ where
     // write occurs.
     let mut seen_identities: HashMap<FileIdentity, Vec<usize>> = HashMap::new();
     let mut dir_eq_cache: HashMap<PathBuf, Option<DirFilenameEquivalence>> = HashMap::new();
-    let mut seen_unidentified_folded: HashMap<Vec<OsString>, Vec<usize>> = HashMap::new();
-    let mut seen_unidentified_targets: Vec<UnidentifiedPatchTarget> = Vec::new();
-    let mut any_unidentified_has_tilde = false;
+    let mut unidentified_trie = UnidentifiedPatchNode::default();
     let mut prepared_plans = Vec::new();
     for (batch, patch_indexes) in groups {
         let catalog = &request.config.catalogs[batch.catalog_index];
@@ -672,49 +670,30 @@ where
         } else {
             // When `file_identity` is unavailable (for example, on a Windows
             // volume that does not expose `FileIdInfo`), fall back to each
-            // containing directory's filename-equivalence rules so aliased
-            // scopes such as `Locales/{locale}` and `locales/{locale}` are
-            // rejected before Phase 2 commits any write.
-            let target = resolve_unidentified_patch_target(
+            // containing directory's filename-equivalence rules and indexed
+            // 8.3 short-name matching so aliased scopes such as
+            // `Locales/{locale}` and `locales/{locale}` or `σ/{locale}` and
+            // `ς/{locale}` are rejected before Phase 2 commits any write.
+            let segments = resolve_unidentified_patch_segments(
                 root_dir,
                 &relative_parent,
                 &loaded.parent_dir,
                 &loaded.file_name,
-                &patch_indexes,
                 &mut dir_eq_cache,
                 simulated_dir_equivalence,
             )?;
-            let folded_entry = seen_unidentified_folded
-                .entry(target.folded_key.clone())
-                .or_default();
-            if !folded_entry.is_empty() {
+            let mut colliding_priors = Vec::new();
+            unidentified_trie.collect_colliding_leaf_patches(&segments, &mut colliding_priors);
+            if !colliding_priors.is_empty() {
                 reject_ambiguous_catalog_patches(
-                    folded_entry,
+                    &colliding_priors,
                     &patch_indexes,
                     &request.patches,
                     &mut rejected,
                     &mut diagnostics,
                 );
             }
-            folded_entry.extend(patch_indexes.iter().copied());
-
-            if target.has_tilde || any_unidentified_has_tilde {
-                for prior in &seen_unidentified_targets {
-                    if (target.has_tilde || prior.has_tilde)
-                        && unidentified_targets_may_alias(prior, &target)
-                    {
-                        reject_ambiguous_catalog_patches(
-                            &prior.patch_indexes,
-                            &patch_indexes,
-                            &request.patches,
-                            &mut rejected,
-                            &mut diagnostics,
-                        );
-                    }
-                }
-            }
-            any_unidentified_has_tilde |= target.has_tilde;
-            seen_unidentified_targets.push(target);
+            unidentified_trie.insert(&segments, &patch_indexes);
         }
         for &patch_index in &patch_indexes {
             if rejected.contains(&patch_index) {
@@ -1088,11 +1067,104 @@ struct UnidentifiedPatchSegment {
     equivalence: Option<DirFilenameEquivalence>,
 }
 
-struct UnidentifiedPatchTarget {
-    segments: Vec<UnidentifiedPatchSegment>,
-    folded_key: Vec<OsString>,
-    patch_indexes: Vec<usize>,
-    has_tilde: bool,
+#[cfg(windows)]
+fn ntfs_casefold(text: &str) -> String {
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn RtlUpcaseUnicodeChar(source_character: u16) -> u16;
+    }
+
+    let upcased: Vec<u16> = text
+        .encode_utf16()
+        .map(|unit| {
+            // SAFETY: `RtlUpcaseUnicodeChar` is a pure code-unit table lookup.
+            unsafe { RtlUpcaseUnicodeChar(unit) }
+        })
+        .collect();
+    String::from_utf16_lossy(&upcased)
+}
+
+#[cfg(not(windows))]
+fn ntfs_casefold(text: &str) -> String {
+    // NTFS `$UpCase` is a 65,536-entry UTF-16 code-unit table: supplementary
+    // plane characters (> U+FFFF, encoded as surrogate pairs) are untouched,
+    // multi-character expansions such as `ß` -> `SS` stay distinct, `σ` and `ς`
+    // both map to `Σ`, and dotless `ı` (U+0131) does not fold to `I`.
+    let mut folded = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if (ch as u32) > 0xFFFF || ch == '\u{0131}' {
+            folded.push(ch);
+            continue;
+        }
+        let mut upper = ch.to_uppercase();
+        if let Some(first) = upper.next()
+            && upper.next().is_none()
+            && (first as u32) <= 0xFFFF
+        {
+            folded.push(first);
+        } else {
+            folded.push(ch);
+        }
+    }
+    folded
+}
+
+fn unicode_full_casefold(text: &str) -> String {
+    // Unicode CaseFolding (C + F) delta over `char::to_lowercase()`, matching
+    // extract's casefolding rules (so `σ`/`ς`/`Σ` all fold to `σ`, `ß`/`ẞ`
+    // fold to `ss`, `µ` folds to `μ`, and `ﬁ` folds to `fi`).
+    let mut folded = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '\u{13a0}'..='\u{13f5}' => folded.push(ch),
+            '\u{13f8}'..='\u{13fd}' => {
+                folded.push(char::from_u32((ch as u32) - 8).unwrap_or(ch));
+            }
+            '\u{ab70}'..='\u{abbf}' => {
+                folded.push(char::from_u32(0x13a0 + ((ch as u32) - 0xab70)).unwrap_or(ch));
+            }
+            '\u{00b5}' => folded.push('\u{03bc}'),
+            '\u{00df}' | '\u{1e9e}' => folded.push_str("ss"),
+            '\u{0149}' => folded.push_str("\u{02bc}n"),
+            '\u{017f}' => folded.push('s'),
+            '\u{0345}' => folded.push('\u{03b9}'),
+            '\u{03c2}' => folded.push('\u{03c3}'),
+            '\u{03d0}' => folded.push('\u{03b2}'),
+            '\u{03d1}' => folded.push('\u{03b8}'),
+            '\u{03d5}' => folded.push('\u{03c6}'),
+            '\u{03d6}' => folded.push('\u{03c0}'),
+            '\u{03f0}' => folded.push('\u{03ba}'),
+            '\u{03f1}' => folded.push('\u{03c1}'),
+            '\u{03f5}' => folded.push('\u{03b5}'),
+            '\u{0587}' => folded.push_str("\u{0565}\u{0582}"),
+            '\u{1c80}' => folded.push('\u{0432}'),
+            '\u{1c81}' => folded.push('\u{0434}'),
+            '\u{1c82}' => folded.push('\u{043e}'),
+            '\u{1c83}' => folded.push('\u{0441}'),
+            '\u{1c84}' | '\u{1c85}' => folded.push('\u{0442}'),
+            '\u{1c86}' => folded.push('\u{044a}'),
+            '\u{1c87}' => folded.push('\u{0463}'),
+            '\u{1c88}' => folded.push('\u{a64b}'),
+            '\u{1e9a}' => folded.push_str("a\u{02be}"),
+            '\u{fb00}' => folded.push_str("ff"),
+            '\u{fb01}' => folded.push_str("fi"),
+            '\u{fb02}' => folded.push_str("fl"),
+            '\u{fb03}' => folded.push_str("ffi"),
+            '\u{fb04}' => folded.push_str("ffl"),
+            '\u{fb05}' | '\u{fb06}' => folded.push_str("st"),
+            '\u{fb13}' => folded.push_str("\u{0574}\u{0576}"),
+            '\u{fb14}' => folded.push_str("\u{0574}\u{0565}"),
+            '\u{fb15}' => folded.push_str("\u{0574}\u{056b}"),
+            '\u{fb16}' => folded.push_str("\u{057e}\u{0576}"),
+            '\u{fb17}' => folded.push_str("\u{0574}\u{056d}"),
+            other => {
+                for lower in other.to_lowercase() {
+                    folded.push(lower);
+                }
+            }
+        }
+    }
+    folded
 }
 
 fn fold_patch_segment(segment: &OsStr, equivalence: Option<DirFilenameEquivalence>) -> OsString {
@@ -1102,13 +1174,13 @@ fn fold_patch_segment(segment: &OsStr, equivalence: Option<DirFilenameEquivalenc
             | DirFilenameEquivalence::UnicodeNfd
             | DirFilenameEquivalence::UnicodeHfsPlus,
         ) => segment.to_os_string(),
+        Some(DirFilenameEquivalence::CaseInsensitiveNtfs) => segment.to_str().map_or_else(
+            || segment.to_os_string(),
+            |text| OsString::from(ntfs_casefold(text.trim_end_matches(['.', ' ']))),
+        ),
         Some(DirFilenameEquivalence::CaseInsensitiveVfat) => segment.to_str().map_or_else(
             || segment.to_os_string(),
-            |text| OsString::from(text.trim_end_matches('.').to_lowercase()),
-        ),
-        Some(DirFilenameEquivalence::CaseInsensitiveNtfs) | None => segment.to_str().map_or_else(
-            || segment.to_os_string(),
-            |text| OsString::from(text.trim_end_matches(['.', ' ']).to_lowercase()),
+            |text| OsString::from(ntfs_casefold(text.trim_end_matches('.'))),
         ),
         Some(
             DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
@@ -1116,7 +1188,11 @@ fn fold_patch_segment(segment: &OsStr, equivalence: Option<DirFilenameEquivalenc
             | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
         ) => segment.to_str().map_or_else(
             || segment.to_os_string(),
-            |text| OsString::from(text.to_lowercase()),
+            |text| OsString::from(unicode_full_casefold(text)),
+        ),
+        None => segment.to_str().map_or_else(
+            || segment.to_os_string(),
+            |text| OsString::from(unicode_full_casefold(text.trim_end_matches(['.', ' ']))),
         ),
     }
 }
@@ -1153,25 +1229,19 @@ fn query_cached_dir_equivalence(
     Ok(eq)
 }
 
-fn resolve_unidentified_patch_target(
+fn resolve_unidentified_patch_segments(
     root_dir: &Path,
     relative_parent: &Path,
     parent_dir: &ContainedDir,
     file_name: &OsStr,
-    patch_indexes: &[usize],
     dir_eq_cache: &mut HashMap<PathBuf, Option<DirFilenameEquivalence>>,
     simulated_dir_equivalence: Option<Option<DirFilenameEquivalence>>,
-) -> PalamedesResult<UnidentifiedPatchTarget> {
+) -> PalamedesResult<Vec<UnidentifiedPatchSegment>> {
     let mut segments = Vec::new();
-    let mut folded_key = Vec::new();
-    let mut has_tilde = false;
     let mut current_rel = PathBuf::new();
 
     for component in relative_parent.components() {
         let raw = component.as_os_str().to_os_string();
-        if raw.to_string_lossy().contains('~') {
-            has_tilde = true;
-        }
         let eq = query_cached_dir_equivalence(
             root_dir,
             &current_rel,
@@ -1180,7 +1250,6 @@ fn resolve_unidentified_patch_target(
             simulated_dir_equivalence,
         )?;
         let folded = fold_patch_segment(&raw, eq);
-        folded_key.push(folded.clone());
         segments.push(UnidentifiedPatchSegment {
             raw,
             folded,
@@ -1197,23 +1266,14 @@ fn resolve_unidentified_patch_target(
         simulated_dir_equivalence,
     )?;
     let file_raw = file_name.to_os_string();
-    if file_raw.to_string_lossy().contains('~') {
-        has_tilde = true;
-    }
     let file_folded = fold_patch_segment(&file_raw, file_eq);
-    folded_key.push(file_folded.clone());
     segments.push(UnidentifiedPatchSegment {
         raw: file_raw,
         folded: file_folded,
         equivalence: file_eq,
     });
 
-    Ok(UnidentifiedPatchTarget {
-        segments,
-        folded_key,
-        patch_indexes: patch_indexes.to_vec(),
-        has_tilde,
-    })
+    Ok(segments)
 }
 
 const fn equivalence_allows_8dot3(equivalence: Option<DirFilenameEquivalence>) -> bool {
@@ -1263,7 +1323,20 @@ fn is_valid_8dot3_name(name: &str) -> bool {
     stem.chars().all(is_valid_8dot3_char) && ext.chars().all(is_valid_8dot3_char)
 }
 
-fn parse_8dot3_short_name(segment: &OsStr) -> Option<(String, Option<String>, usize, String)> {
+struct Short83Candidate {
+    prefix: String,
+    hash_prefix: Option<String>,
+    digits_len: usize,
+    ext: String,
+}
+
+struct Long83Derived {
+    base: String,
+    ext: String,
+    has_non_ascii: bool,
+}
+
+fn parse_8dot3_short_name(segment: &OsStr) -> Option<Short83Candidate> {
     let text = segment.to_str()?;
     if !is_valid_8dot3_name(text) {
         return None;
@@ -1288,26 +1361,24 @@ fn parse_8dot3_short_name(segment: &OsStr) -> Option<(String, Option<String>, us
     } else {
         None
     };
-    Some((
+    Some(Short83Candidate {
         prefix,
         hash_prefix,
-        digits.len(),
-        ext_raw.to_ascii_uppercase(),
-    ))
+        digits_len: digits.len(),
+        ext: ext_raw.to_ascii_uppercase(),
+    })
 }
 
-fn long_matches_8dot3_short(
-    long_segment: &OsStr,
-    short_prefix: &str,
-    short_hash_prefix: Option<&str>,
-    short_digits_len: usize,
-    short_ext: &str,
-) -> bool {
-    let Some(text) = long_segment.to_str() else {
-        return true;
+fn parse_8dot3_long_name(segment: &OsStr) -> Option<Long83Derived> {
+    let Some(text) = segment.to_str() else {
+        return Some(Long83Derived {
+            base: String::new(),
+            ext: "_".to_owned(),
+            has_non_ascii: true,
+        });
     };
     if is_valid_8dot3_name(text) {
-        return false;
+        return None;
     }
     let trimmed = text.trim_end_matches(['.', ' ']);
     let (raw_stem, raw_ext) = match trimmed.rsplit_once('.') {
@@ -1344,53 +1415,213 @@ fn long_matches_8dot3_short(
             ext.push('_');
         }
     }
-    if has_non_ascii {
-        return ext.contains('_') || ext == short_ext;
-    }
-    if ext != short_ext {
-        return false;
-    }
-    let max_prefix = 7usize.saturating_sub(short_digits_len);
-    let expected_len = base.len().min(max_prefix);
-    if expected_len > 0 && &base[..expected_len] == short_prefix {
-        return true;
-    }
-    if let Some(hash_prefix) = short_hash_prefix {
-        return base.starts_with(hash_prefix);
-    }
-    false
+    Some(Long83Derived {
+        base,
+        ext,
+        has_non_ascii,
+    })
 }
 
-fn segments_may_alias_8dot3(left: &OsStr, right: &OsStr) -> bool {
-    if let Some((prefix, hash_prefix, digits_len, ext)) = parse_8dot3_short_name(left)
-        && long_matches_8dot3_short(right, &prefix, hash_prefix.as_deref(), digits_len, &ext)
-    {
-        return true;
-    }
-    if let Some((prefix, hash_prefix, digits_len, ext)) = parse_8dot3_short_name(right)
-        && long_matches_8dot3_short(left, &prefix, hash_prefix.as_deref(), digits_len, &ext)
-    {
-        return true;
-    }
-    false
+#[derive(Default)]
+struct UnidentifiedPatchNode {
+    leaf_patch_indexes: Vec<usize>,
+    child_nodes: Vec<Self>,
+    by_folded: HashMap<OsString, usize>,
+    // Bidirectional O(1) indexes for NTFS/FAT 8.3 short/long aliases.
+    long_by_prefix: HashMap<(String, String, usize), Vec<usize>>,
+    long_by_hash_prefix: HashMap<(String, String), Vec<usize>>,
+    non_ascii_long_by_ext: HashMap<String, Vec<usize>>,
+    any_non_ascii_ext_long: Vec<usize>,
+    short_by_prefix: HashMap<(String, String, usize), Vec<usize>>,
+    short_by_hash_prefix: HashMap<(String, String), Vec<usize>>,
+    short_by_ext: HashMap<String, Vec<usize>>,
+    all_shorts: Vec<usize>,
 }
 
-fn unidentified_targets_may_alias(
-    left: &UnidentifiedPatchTarget,
-    right: &UnidentifiedPatchTarget,
-) -> bool {
-    if left.segments.len() != right.segments.len() {
-        return false;
+impl UnidentifiedPatchNode {
+    fn matching_8dot3_children(&self, raw: &OsStr) -> Vec<usize> {
+        let mut matches = Vec::new();
+        let mut seen = HashSet::new();
+        let mut push_unique = |idx: usize| {
+            if seen.insert(idx) {
+                matches.push(idx);
+            }
+        };
+
+        if let Some(short) = parse_8dot3_short_name(raw) {
+            if let Some(indices) = self.long_by_prefix.get(&(
+                short.ext.clone(),
+                short.prefix.clone(),
+                short.digits_len,
+            )) {
+                for &idx in indices {
+                    push_unique(idx);
+                }
+            }
+            if let Some(ref hash_prefix) = short.hash_prefix
+                && let Some(indices) = self
+                    .long_by_hash_prefix
+                    .get(&(short.ext.clone(), hash_prefix.clone()))
+            {
+                for &idx in indices {
+                    push_unique(idx);
+                }
+            }
+            if let Some(indices) = self.non_ascii_long_by_ext.get(&short.ext) {
+                for &idx in indices {
+                    push_unique(idx);
+                }
+            }
+            for &idx in &self.any_non_ascii_ext_long {
+                push_unique(idx);
+            }
+            return matches;
+        }
+
+        if self.all_shorts.is_empty() {
+            return matches;
+        }
+
+        if let Some(long) = parse_8dot3_long_name(raw) {
+            if long.has_non_ascii {
+                if long.ext.contains('_') {
+                    for &idx in &self.all_shorts {
+                        push_unique(idx);
+                    }
+                } else if let Some(indices) = self.short_by_ext.get(&long.ext) {
+                    for &idx in indices {
+                        push_unique(idx);
+                    }
+                }
+            } else {
+                for digits_len in 1..=6 {
+                    let prefix_len = long.base.len().min(7 - digits_len);
+                    if prefix_len > 0
+                        && let Some(indices) = self.short_by_prefix.get(&(
+                            long.ext.clone(),
+                            long.base[..prefix_len].to_owned(),
+                            digits_len,
+                        ))
+                    {
+                        for &idx in indices {
+                            push_unique(idx);
+                        }
+                    }
+                }
+                let max_hash = long.base.len().min(2);
+                for len in 1..=max_hash {
+                    if let Some(indices) = self
+                        .short_by_hash_prefix
+                        .get(&(long.ext.clone(), long.base[..len].to_owned()))
+                    {
+                        for &idx in indices {
+                            push_unique(idx);
+                        }
+                    }
+                }
+            }
+        }
+        matches
     }
-    left.segments
-        .iter()
-        .zip(right.segments.iter())
-        .all(|(l, r)| {
-            l.folded == r.folded
-                || ((equivalence_allows_8dot3(l.equivalence)
-                    || equivalence_allows_8dot3(r.equivalence))
-                    && segments_may_alias_8dot3(&l.raw, &r.raw))
-        })
+
+    fn record_8dot3_child(&mut self, raw: &OsStr, child_idx: usize) {
+        if let Some(short) = parse_8dot3_short_name(raw) {
+            self.all_shorts.push(child_idx);
+            self.short_by_ext
+                .entry(short.ext.clone())
+                .or_default()
+                .push(child_idx);
+            self.short_by_prefix
+                .entry((short.ext.clone(), short.prefix, short.digits_len))
+                .or_default()
+                .push(child_idx);
+            if let Some(hash_prefix) = short.hash_prefix {
+                self.short_by_hash_prefix
+                    .entry((short.ext, hash_prefix))
+                    .or_default()
+                    .push(child_idx);
+            }
+            return;
+        }
+        if let Some(long) = parse_8dot3_long_name(raw) {
+            if long.has_non_ascii && long.ext.contains('_') {
+                self.any_non_ascii_ext_long.push(child_idx);
+            }
+            if long.has_non_ascii {
+                self.non_ascii_long_by_ext
+                    .entry(long.ext)
+                    .or_default()
+                    .push(child_idx);
+            } else {
+                for digits_len in 1..=6 {
+                    let prefix_len = long.base.len().min(7 - digits_len);
+                    if prefix_len > 0 {
+                        self.long_by_prefix
+                            .entry((
+                                long.ext.clone(),
+                                long.base[..prefix_len].to_owned(),
+                                digits_len,
+                            ))
+                            .or_default()
+                            .push(child_idx);
+                    }
+                }
+                let max_hash = long.base.len().min(2);
+                for len in 1..=max_hash {
+                    self.long_by_hash_prefix
+                        .entry((long.ext.clone(), long.base[..len].to_owned()))
+                        .or_default()
+                        .push(child_idx);
+                }
+            }
+        }
+    }
+
+    fn collect_colliding_leaf_patches(
+        &self,
+        segments: &[UnidentifiedPatchSegment],
+        out: &mut Vec<usize>,
+    ) {
+        let Some((seg, rest)) = segments.split_first() else {
+            out.extend_from_slice(&self.leaf_patch_indexes);
+            return;
+        };
+
+        let mut matched_children = Vec::new();
+        if let Some(&child_idx) = self.by_folded.get(&seg.folded) {
+            matched_children.push(child_idx);
+        }
+        if equivalence_allows_8dot3(seg.equivalence) {
+            for child_idx in self.matching_8dot3_children(&seg.raw) {
+                if !matched_children.contains(&child_idx) {
+                    matched_children.push(child_idx);
+                }
+            }
+        }
+
+        for child_idx in matched_children {
+            self.child_nodes[child_idx].collect_colliding_leaf_patches(rest, out);
+        }
+    }
+
+    fn insert(&mut self, segments: &[UnidentifiedPatchSegment], patch_indexes: &[usize]) {
+        let mut node = self;
+        for seg in segments {
+            let child_idx = if let Some(&existing_idx) = node.by_folded.get(&seg.folded) {
+                existing_idx
+            } else {
+                let new_idx = node.child_nodes.len();
+                node.child_nodes.push(Self::default());
+                node.by_folded.insert(seg.folded.clone(), new_idx);
+                if equivalence_allows_8dot3(seg.equivalence) {
+                    node.record_8dot3_child(&seg.raw, new_idx);
+                }
+                new_idx
+            };
+            node = &mut node.child_nodes[child_idx];
+        }
+        node.leaf_patch_indexes.extend_from_slice(patch_indexes);
+    }
 }
 
 #[cfg(feature = "test-support")]
@@ -5100,5 +5331,100 @@ mod tests {
                 .iter()
                 .all(|diag| diag.code == "translation.ambiguous_catalog")
         );
+    }
+
+    #[test]
+    fn patch_batch_rejects_ntfs_sigma_alias_when_file_identity_is_unavailable() {
+        use super::{DirFilenameEquivalence, apply_translation_patches_with_options};
+
+        for simulated_eq in [Some(DirFilenameEquivalence::CaseInsensitiveNtfs), None] {
+            let fixture = tempfile::tempdir().expect("fixture directory");
+            let sigma_path = fixture.path().join("\u{03c3}/de.po");
+            let final_sigma_path = fixture.path().join("\u{03c2}/de.po");
+            write_po_fixture(&fixture.path().join("\u{03c3}/en.po"), "en");
+            write_po_fixture(&fixture.path().join("\u{03c2}/en.po"), "en");
+            write_po_fixture(&sigma_path, "de");
+            if !final_sigma_path.exists() {
+                write_po_fixture(&final_sigma_path, "de");
+            }
+            let before_sigma = fs::read_to_string(&sigma_path).expect("read sigma before");
+            let before_final_sigma =
+                fs::read_to_string(&final_sigma_path).expect("read final sigma before");
+
+            let make_config = || CatalogArtifactConfig {
+                root_dir: fixture.path().to_string_lossy().into_owned(),
+                locales: vec!["en".to_owned(), "de".to_owned()],
+                source_locale: "en".to_owned(),
+                fallback_locales: None,
+                pseudo_locale: None,
+                catalogs: vec![
+                    CatalogConfig {
+                        path: "\u{03c3}/{locale}".to_owned(),
+                        format: PalamedesCatalogFormat::Po,
+                    },
+                    CatalogConfig {
+                        path: "\u{03c2}/{locale}".to_owned(),
+                        format: PalamedesCatalogFormat::Po,
+                    },
+                ],
+            };
+            let listed = list_translation_candidates(&TranslationCandidateRequest {
+                config: make_config(),
+                locales: vec!["de".to_owned()],
+                targets: Vec::new(),
+                max_origins: 8,
+            })
+            .expect("list Greek sigma candidates");
+            let sigma_candidate = listed
+                .candidates
+                .iter()
+                .find(|c| c.id.catalog == "\u{03c3}/{locale}" && c.id.message == "Hello")
+                .expect("sigma Hello");
+            let final_sigma_candidate = listed
+                .candidates
+                .iter()
+                .find(|c| c.id.catalog == "\u{03c2}/{locale}" && c.id.message == "Hello")
+                .expect("final sigma Hello");
+
+            let mut writes = 0usize;
+            let result = apply_translation_patches_with_options(
+                TranslationPatchRequest {
+                    config: make_config(),
+                    po: None,
+                    patches: vec![
+                        singular_patch(sigma_candidate, "Hallo Sigma"),
+                        singular_patch(final_sigma_candidate, "Hallo Final Sigma"),
+                    ],
+                },
+                |catalog, source_locale, po| {
+                    writes += 1;
+                    atomic_replace_catalog(catalog, source_locale, po)
+                },
+                true,
+                Some(simulated_eq),
+            )
+            .expect("sigma/final-sigma alias returns structured rejection");
+
+            assert!(!result.updated);
+            assert_eq!(writes, 0, "Phase 2 must not commit any write");
+            assert_eq!(result.stats.applied, 0);
+            assert_eq!(result.diagnostics.len(), 2);
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .all(|diag| diag.code == "translation.ambiguous_catalog"),
+                "expected translation.ambiguous_catalog for σ/ς pair, got {:?}",
+                result.diagnostics
+            );
+            assert_eq!(
+                fs::read_to_string(&sigma_path).expect("read sigma after"),
+                before_sigma
+            );
+            assert_eq!(
+                fs::read_to_string(&final_sigma_path).expect("read final sigma after"),
+                before_final_sigma
+            );
+        }
     }
 }

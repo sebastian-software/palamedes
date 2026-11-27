@@ -3960,48 +3960,21 @@ mod platform {
     fn detect_unix_dir_filename_equivalence(dir: &ContainedDir) -> Option<DirFilenameEquivalence> {
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         {
-            // SAFETY: `dir.fd` is an open directory descriptor.
-            let mut value =
-                unsafe { libc::fpathconf(dir.fd.as_raw_fd(), libc::_PC_CASE_SENSITIVE) };
-            let mut readable_fd = None;
-            if value < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EBADF) {
-                readable_fd = open_readable_self(dir);
-                if let Some(ref readable) = readable_fd {
-                    // SAFETY: `readable` is an open directory descriptor.
-                    value =
-                        unsafe { libc::fpathconf(readable.as_raw_fd(), libc::_PC_CASE_SENSITIVE) };
-                }
-            }
-            let case_insensitive = if value > 0 {
-                Some(false)
-            } else if value == 0 {
-                Some(true)
-            } else {
-                let readable = readable_fd.as_ref().or(None);
-                if let Some(readable) = readable {
-                    probe_directory_case_insensitivity(dir, readable.as_raw_fd())
-                } else {
-                    open_readable_self(dir)
-                        .and_then(|r| probe_directory_case_insensitivity(dir, r.as_raw_fd()))
-                }
-            }?;
-
-            let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
-            // SAFETY: `dir.fd` is an open directory descriptor and `fs_stat` is writable.
-            let mut rc = unsafe { libc::fstatfs(dir.fd.as_raw_fd(), fs_stat.as_mut_ptr()) };
-            if rc != 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EBADF) {
-                if readable_fd.is_none() {
-                    readable_fd = open_readable_self(dir);
-                }
-                if let Some(ref readable) = readable_fd {
-                    // SAFETY: `readable` is an open directory descriptor and `fs_stat` is writable.
-                    rc = unsafe { libc::fstatfs(readable.as_raw_fd(), fs_stat.as_mut_ptr()) };
-                }
-            }
             enum AppleFsKind {
                 Apfs,
                 HfsPlus,
                 Other,
+            }
+            let mut readable_fd = None;
+            let mut fs_stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
+            // SAFETY: `dir.fd` is an open directory descriptor and `fs_stat` is writable.
+            let mut rc = unsafe { libc::fstatfs(dir.fd.as_raw_fd(), fs_stat.as_mut_ptr()) };
+            if rc != 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EBADF) {
+                readable_fd = open_readable_self(dir);
+                if let Some(ref readable) = readable_fd {
+                    // SAFETY: `readable` is an open directory descriptor and `fs_stat` is writable.
+                    rc = unsafe { libc::fstatfs(readable.as_raw_fd(), fs_stat.as_mut_ptr()) };
+                }
             }
             let fs_kind = if rc == 0 {
                 // SAFETY: `fstatfs` succeeded and initialized `fs_stat`.
@@ -4018,6 +3991,39 @@ mod platform {
             } else {
                 AppleFsKind::Other
             };
+            // Non-local / unrecognized macOS mounts (SMB, NFS, FUSE, etc.) can
+            // have server-defined normalization and case rules that
+            // `f_fstypename` does not capture. Return `None` before running
+            // `fpathconf` or enumerating entries so we avoid unnecessary
+            // network I/O whose result would be discarded anyway.
+            if matches!(fs_kind, AppleFsKind::Other) {
+                return None;
+            }
+
+            // SAFETY: `dir.fd` is an open directory descriptor.
+            let mut value =
+                unsafe { libc::fpathconf(dir.fd.as_raw_fd(), libc::_PC_CASE_SENSITIVE) };
+            if value < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EBADF) {
+                if readable_fd.is_none() {
+                    readable_fd = open_readable_self(dir);
+                }
+                if let Some(ref readable) = readable_fd {
+                    // SAFETY: `readable` is an open directory descriptor.
+                    value =
+                        unsafe { libc::fpathconf(readable.as_raw_fd(), libc::_PC_CASE_SENSITIVE) };
+                }
+            }
+            let case_insensitive = if value > 0 {
+                Some(false)
+            } else if value == 0 {
+                Some(true)
+            } else if let Some(ref readable) = readable_fd {
+                probe_directory_case_insensitivity(dir, readable.as_raw_fd())
+            } else {
+                open_readable_self(dir)
+                    .and_then(|r| probe_directory_case_insensitivity(dir, r.as_raw_fd()))
+            }?;
+
             match (case_insensitive, fs_kind) {
                 (true, AppleFsKind::Apfs) => {
                     Some(DirFilenameEquivalence::CaseInsensitiveUnicodeNfd)
@@ -4027,10 +4033,6 @@ mod platform {
                     Some(DirFilenameEquivalence::CaseInsensitiveHfsPlus)
                 }
                 (false, AppleFsKind::HfsPlus) => Some(DirFilenameEquivalence::UnicodeHfsPlus),
-                // Non-local / unrecognized macOS mounts (SMB, NFS, FUSE, etc.)
-                // can have server-defined normalization and case rules that
-                // `f_fstypename` does not capture; leave them unknown so
-                // callers probe the live mounted directory.
                 (_, AppleFsKind::Other) => None,
             }
         }
@@ -7300,14 +7302,13 @@ mod platform {
             }
         }
 
-        /// Probes whether two single-segment filenames resolve to the same
-        /// entry on this Windows directory's mounted filesystem.
+        /// Probes whether two single-segment filenames collide inside a fresh
+        /// empty temporary subdirectory of `self` using create-only semantics
+        /// (`FILE_CREATE`).
         ///
-        /// First compares actual on-disk file identities when either entry
-        /// already exists (working even on read-only directories). Otherwise
-        /// creates a temporary delete-on-close subdirectory inside `self` and
-        /// checks whether creating `left` makes `right` resolve to the same
-        /// file identity.
+        /// Creating `left` and then attempting to create `right` with
+        /// `FILE_CREATE` works even on Windows volumes or shares that do not
+        /// expose 128-bit `FileIdInfo`.
         #[must_use]
         fn probe_names_equivalent_in_fresh_dir(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
             if left == right {
@@ -7370,26 +7371,26 @@ mod platform {
                 std::ptr::null_mut(),
             )
             .ok()?;
-            let left_id = handle_file_identity(left_handle.as_raw_handle())
-                .ok()
-                .flatten()?;
             let result = match nt_create_relative(
                 probe_dir.handle.as_raw_handle(),
                 right,
-                FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-                FILE_ATTRIBUTE_NORMAL,
+                FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
+                FILE_ATTRIBUTE_TEMPORARY,
                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                FILE_OPEN,
-                FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                FILE_CREATE,
+                FILE_NON_DIRECTORY_FILE
+                    | FILE_OPEN_REPARSE_POINT
+                    | FILE_DELETE_ON_CLOSE
+                    | FILE_SYNCHRONOUS_IO_NONALERT,
                 std::ptr::null_mut(),
             ) {
                 Ok(right_handle) => {
-                    let right_id = handle_file_identity(right_handle.as_raw_handle())
-                        .ok()
-                        .flatten()?;
-                    Some(left_id == right_id)
+                    // Drop `right_handle` immediately so `FILE_DELETE_ON_CLOSE`
+                    // removes it before `probe_dir` is marked delete-on-close.
+                    drop(right_handle);
+                    Some(false)
                 }
-                Err(status) if is_not_found_status(status) => Some(false),
+                Err(STATUS_OBJECT_NAME_COLLISION) => Some(true),
                 Err(_) => None,
             };
             // Drop `left_handle` first so `FILE_DELETE_ON_CLOSE` empties
