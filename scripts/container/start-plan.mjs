@@ -17,17 +17,29 @@ export const CONTAINER_HOST = "0.0.0.0";
 
 // Build the `pnpm` arguments for an example's start script.
 //
-// TanStack and Vite MDX are special-cased: their `preview` scripts hardcode
-// `--host 127.0.0.1`, and appending a second `--host` would NOT reliably
-// override it — Vite's CLI parser (cac) collects repeated flags into an array,
-// which breaks `server.listen`. We run `vite preview` directly with a single
-// host/port instead, leaving the example package.json files untouched. Every
-// other framework runs its matrix start script unchanged and binds 0.0.0.0 via
-// the HOST env (see buildStartEnv); appending a CLI host flag is unsafe (e.g.
-// `next start` treats a trailing `-H` as a positional project directory).
+// TanStack, Vite MDX, Vue, and Svelte are special-cased: their `preview`
+// scripts hardcode `--host 127.0.0.1`, and appending a second `--host` would
+// NOT reliably override it — Vite's CLI parser (cac) collects repeated flags
+// into an array, which breaks `server.listen`. Passing `--configLoader native`
+// also lets Node 24 import `vite.config.ts` directly without writing a
+// temporary bundle into the read-only `/app` tree (`node_modules/.vite-temp`).
+// Every other framework runs its matrix start script unchanged and binds
+// 0.0.0.0 via the HOST env (see buildStartEnv); appending a CLI host flag is
+// unsafe (e.g. `next start` treats a trailing `-H` as a positional project
+// directory).
 export function buildStartArgs(example) {
   if (["tanstack", "vite", "vue", "svelte"].includes(example.framework)) {
-    return ["exec", "vite", "preview", "--host", CONTAINER_HOST, "--port", String(example.port)];
+    return [
+      "exec",
+      "vite",
+      "preview",
+      "--configLoader",
+      "native",
+      "--host",
+      CONTAINER_HOST,
+      "--port",
+      String(example.port),
+    ];
   }
   return [...example.start];
 }

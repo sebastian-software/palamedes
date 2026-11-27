@@ -51,7 +51,7 @@ runs:
       id: musl-toolchain
       shell: bash
       run: |
-        image=rust:1.96-alpine
+        image=rust:1.96-alpine@sha256:a41f7740f8b45d45795624eec13a8b42263cc700f19f7e4e86e04d3dda08a479
         docker pull "$image"
         image_id=$(docker image inspect --format='{{.Id}}' "$image")
         echo "image=$image_id" >> "$GITHUB_OUTPUT"
@@ -89,6 +89,11 @@ runs:
           -e PALAMEDES_RUST_PROFILE=release \
           "${{ steps.musl-toolchain.outputs.image }}" \
           sh -c "apk add --no-cache nodejs build-base &&
+          sysroot=\$(cd / && rustc --print sysroot) &&
+          export PATH=\"\$sysroot/bin:\$PATH\" &&
+          test \"\$(command -v cargo)\" = \"\$sysroot/bin/cargo\" &&
+          test \"\$(command -v rustc)\" = \"\$sysroot/bin/rustc\" &&
+          cargo --version &&
           node ../core-node/scripts/build-native.mjs"
 
     - name: Smoke-test musl native Node package
@@ -98,7 +103,7 @@ runs:
         docker run --rm
         -v "$PWD:/workspace"
         -w "/workspace/${{ inputs.package_dir }}"
-        node:24-alpine
+        node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
         node --input-type=module -e
         "import { createRequire } from 'node:module';
         const require = createRequire(import.meta.url);
@@ -113,7 +118,7 @@ runs:
         -e PALAMEDES_UPDATE_CHECK=0
         -v "$PWD:/workspace"
         -w "/workspace/${{ inputs.package_dir }}"
-        node:24-alpine
+        node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
         node --input-type=module -e
         "import { execFileSync } from 'node:child_process';
         const out = execFileSync('./bin/pmds', ['version'], { encoding: 'utf8' });
