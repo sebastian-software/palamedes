@@ -1403,22 +1403,45 @@ mod platform {
                 if raw < 0 {
                     let error = io::Error::last_os_error();
                     if error.raw_os_error() == Some(libc::ENOENT) {
-                        match self.write_file_atomically_inner(
-                            file_name,
-                            bytes,
-                            ContainedNewFileMode::RespectUmask,
-                            ContainedWriteDurability::Rename,
-                            super::WriteCondition::MustNotExist,
-                            &mut || {},
-                        ) {
-                            Ok(_) => return Ok(()),
-                            Err(ContainedFsError::Io(io_err))
-                                if io_err.kind() == io::ErrorKind::AlreadyExists =>
-                            {
+                        // Create the missing file directly handle-relatively
+                        // with `O_CREAT | O_EXCL | O_NOFOLLOW` so creating a
+                        // new file inside an existing group-writable (`0775`)
+                        // output directory does not require staging or a
+                        // directory lock file.
+                        // SAFETY: `self.fd` is an open directory descriptor and `c_target` is valid.
+                        let created_raw = unsafe {
+                            libc::openat(
+                                self.fd.as_raw_fd(),
+                                c_target.as_ptr(),
+                                libc::O_WRONLY
+                                    | libc::O_CREAT
+                                    | libc::O_EXCL
+                                    | libc::O_NOFOLLOW
+                                    | libc::O_CLOEXEC,
+                                0o666 as libc::c_uint,
+                            )
+                        };
+                        if created_raw < 0 {
+                            let create_err = io::Error::last_os_error();
+                            if create_err.raw_os_error() == Some(libc::EEXIST) {
                                 continue;
                             }
-                            Err(err) => return Err(err),
+                            return Err(ContainedFsError::Io(create_err));
                         }
+                        // SAFETY: `created_raw` is a newly opened valid file descriptor.
+                        let mut file = File::from(unsafe { OwnedFd::from_raw_fd(created_raw) });
+                        #[cfg(target_os = "solaris")]
+                        {
+                            let created_stat = fstat_fd(file.as_raw_fd())?;
+                            let created_id = stat_identity(&created_stat);
+                            _process_lock = None;
+                            _process_lock = Some(process_in_place_locks::acquire(created_id));
+                        }
+                        lock_existing_in_place_fd(file.as_raw_fd())
+                            .map_err(ContainedFsError::Io)?;
+                        file.write_all(bytes)?;
+                        file.flush()?;
+                        return Ok(());
                     }
                     if is_symlink_open_error(error.raw_os_error()) {
                         return Err(ContainedFsError::Containment(format!(
@@ -8463,12 +8486,16 @@ mod platform {
                         || security.dacl_sd.is_some()
                         || security.label_sd.is_some()
                 });
+                let has_unpreservable_ntfs_metadata =
+                    existing_security.as_ref().is_some_and(|security| {
+                        security.is_encrypted
+                            || security.has_named_streams
+                            || security.has_extended_attributes
+                            || (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) != 0
+                    });
                 let needs_transacted_update = existing_security.as_ref().is_some_and(|security| {
                     (has_security_descriptors && !security.sacl_accessible)
-                        || security.is_encrypted
-                        || security.has_named_streams
-                        || security.has_extended_attributes
-                        || (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) != 0
+                        || has_unpreservable_ntfs_metadata
                 });
                 if target_existed && needs_transacted_update {
                     match self.try_overwrite_existing_transacted(
@@ -8482,32 +8509,36 @@ mod platform {
                             return Ok(ContainedWriteOutcome::Committed);
                         }
                         TransactedOverwriteOutcome::Unsupported => {
-                            let reason = if existing_security
-                                .as_ref()
-                                .is_some_and(|security| security.is_encrypted)
-                            {
-                                "cannot safely preserve Windows EFS encryption recipients across atomic replacement"
-                            } else if existing_security
-                                .as_ref()
-                                .is_some_and(|security| security.has_named_streams)
-                            {
-                                "cannot safely preserve Windows NTFS named data streams across atomic replacement"
-                            } else if existing_security
-                                .as_ref()
-                                .is_some_and(|security| security.has_extended_attributes)
-                            {
-                                "cannot safely preserve Windows NTFS extended attributes across atomic replacement"
-                            } else if existing_security.as_ref().is_some_and(|security| {
-                                (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) != 0
-                            }) {
-                                "cannot safely preserve per-file Windows NTFS storage attributes across atomic replacement"
-                            } else {
-                                "cannot atomically replace existing Windows file without SeSecurityPrivilege or NTFS TxF because audit SACL preservation cannot be guaranteed"
-                            };
-                            return Err(ContainedFsError::Io(io::Error::new(
-                                io::ErrorKind::Unsupported,
-                                reason,
-                            )));
+                            if has_unpreservable_ntfs_metadata {
+                                let reason = if existing_security
+                                    .as_ref()
+                                    .is_some_and(|security| security.is_encrypted)
+                                {
+                                    "cannot safely preserve Windows EFS encryption recipients across atomic replacement"
+                                } else if existing_security
+                                    .as_ref()
+                                    .is_some_and(|security| security.has_named_streams)
+                                {
+                                    "cannot safely preserve Windows NTFS named data streams across atomic replacement"
+                                } else if existing_security
+                                    .as_ref()
+                                    .is_some_and(|security| security.has_extended_attributes)
+                                {
+                                    "cannot safely preserve Windows NTFS extended attributes across atomic replacement"
+                                } else {
+                                    "cannot safely preserve per-file Windows NTFS storage attributes across atomic replacement"
+                                };
+                                return Err(ContainedFsError::Io(io::Error::new(
+                                    io::ErrorKind::Unsupported,
+                                    reason,
+                                )));
+                            }
+                            // On non-TxF filesystems (such as SMB shares) where
+                            // a regular user lacks `SeSecurityPrivilege` to
+                            // inspect audit SACLs, fall through to the atomic
+                            // staged replacement path below, which still
+                            // restores owner, group, DACL, label, attributes,
+                            // and basic file flags.
                         }
                     }
                 }
@@ -12149,6 +12180,43 @@ mod cross_platform_tests {
                     if err.raw_os_error() == Some(libc::EACCES)
             ),
             "persistent unlink failure after linkat must report PublishedCleanupFailed"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_in_place_creates_new_file_in_group_writable_0775_directory() {
+        use super::ContainedDir;
+        use std::ffi::OsStr;
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let out_dir = root.path().join("compiled");
+        fs::create_dir(&out_dir).expect("create output dir");
+        fs::set_permissions(&out_dir, fs::Permissions::from_mode(0o775))
+            .expect("chmod 0775 output dir");
+
+        let dir = ContainedDir::open_subpath(root.path(), Path::new("compiled"), false)
+            .expect("open 0775 dir")
+            .expect("0775 dir exists");
+        dir.write_file_in_place(OsStr::new("en.mjs"), b"export const messages = {};\n")
+            .expect("write_file_in_place must create new files inside pre-existing 0775 dirs");
+        assert_eq!(
+            fs::read(out_dir.join("en.mjs")).expect("read created en.mjs"),
+            b"export const messages = {};\n"
+        );
+
+        // Updating the created file in place inside the 0775 dir must also work.
+        dir.write_file_in_place(
+            OsStr::new("en.mjs"),
+            b"export const messages = { ok: 1 };\n",
+        )
+        .expect("write_file_in_place must update existing files inside 0775 dirs");
+        assert_eq!(
+            fs::read(out_dir.join("en.mjs")).expect("read updated en.mjs"),
+            b"export const messages = { ok: 1 };\n"
         );
     }
 }

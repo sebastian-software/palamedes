@@ -2485,12 +2485,18 @@ mod unix_pinned_plugin {
         }
         let c_path = cstr_path(candidate.as_os_str(), specifier)?;
         // Follow symlinks for direct executable path specifiers (matching
-        // `candidate.is_file()`), opening read-only first and falling back to
-        // execute-only / path descriptors when read permission is absent
-        // (mode `0111`).
+        // `candidate.is_file()`), opening non-blocking read-only first so a
+        // FIFO swapped in after `is_file()` cannot block registry discovery,
+        // and falling back to execute-only / path descriptors when read
+        // permission is absent (mode `0111`).
         let mut readable = true;
         // SAFETY: `c_path` is NUL-terminated.
-        let mut raw = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
+        let mut raw = unsafe {
+            libc::open(
+                c_path.as_ptr(),
+                libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC,
+            )
+        };
         if raw < 0 && io::Error::last_os_error().kind() == io::ErrorKind::PermissionDenied {
             readable = false;
             #[cfg(target_os = "linux")]
@@ -2501,12 +2507,22 @@ mod unix_pinned_plugin {
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             {
                 // SAFETY: `c_path` is NUL-terminated.
-                raw = unsafe { libc::open(c_path.as_ptr(), DARWIN_O_EXEC | libc::O_CLOEXEC) };
+                raw = unsafe {
+                    libc::open(
+                        c_path.as_ptr(),
+                        DARWIN_O_EXEC | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                    )
+                };
             }
             #[cfg(target_os = "freebsd")]
             {
                 // SAFETY: `c_path` is NUL-terminated.
-                raw = unsafe { libc::open(c_path.as_ptr(), libc::O_EXEC | libc::O_CLOEXEC) };
+                raw = unsafe {
+                    libc::open(
+                        c_path.as_ptr(),
+                        libc::O_EXEC | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                    )
+                };
             }
         }
         if raw < 0 {
@@ -2548,6 +2564,14 @@ mod unix_pinned_plugin {
                     invocation_path.display()
                 ),
             ));
+        }
+        // Clear `O_NONBLOCK` now that `S_ISREG` is verified.
+        // SAFETY: `file_fd` is an open regular file descriptor.
+        let fl = unsafe { libc::fcntl(file_fd.as_raw_fd(), libc::F_GETFL) };
+        if fl >= 0 && (fl & libc::O_NONBLOCK) != 0 {
+            // SAFETY: `file_fd` is an open regular file descriptor.
+            let _ =
+                unsafe { libc::fcntl(file_fd.as_raw_fd(), libc::F_SETFL, fl & !libc::O_NONBLOCK) };
         }
         #[allow(clippy::unnecessary_cast)]
         let pinned = Arc::new(PinnedPluginBinary {
@@ -7122,6 +7146,22 @@ catalogs:
             .expect("execute-only direct executable must run after re-pin");
         assert_eq!(manifest.name, "directexec");
         let _ = fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn direct_executable_pinning_rejects_fifo_without_blocking() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = temp_dir("direct-fifo-nonblock");
+        let fifo_path = root.join("plugin-fifo");
+        let c_fifo = CString::new(fifo_path.as_os_str().as_bytes()).expect("cstr fifo");
+        // SAFETY: `c_fifo` is a valid NUL-terminated path.
+        assert_eq!(unsafe { libc::mkfifo(c_fifo.as_ptr(), 0o600) }, 0, "mkfifo");
+        let err = super::unix_pinned_plugin::pin_direct_executable("./plugin-fifo", &fifo_path)
+            .expect_err("FIFO must be rejected promptly without blocking");
+        assert_eq!(err.code, "PLUGIN_BINARY_MISSING");
     }
 
     #[cfg(windows)]
