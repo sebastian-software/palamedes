@@ -293,6 +293,8 @@ struct LoweredChildren {
     values: Vec<ValueBinding>,
 }
 
+const MAX_LOWERED_JSX_NESTING_DEPTH: usize = 64;
+
 impl LoweringState {
     fn lower_children(
         &mut self,
@@ -301,6 +303,18 @@ impl LoweringState {
         imports: &ImportCollector,
         macro_name: &str,
         location: &(impl DiagnosticLocation + ?Sized),
+    ) -> PalamedesResult<LoweredChildren> {
+        self.lower_children_with_depth(expression, source, imports, macro_name, location, 0)
+    }
+
+    fn lower_children_with_depth(
+        &mut self,
+        expression: &Expression<'_>,
+        source: &str,
+        imports: &ImportCollector,
+        macro_name: &str,
+        location: &(impl DiagnosticLocation + ?Sized),
+        depth: usize,
     ) -> PalamedesResult<LoweredChildren> {
         let mut parts = Vec::new();
         let mut values = Vec::new();
@@ -314,6 +328,7 @@ impl LoweringState {
             &mut parts,
             &mut values,
             &mut components,
+            depth,
         )?;
         let joined = join_jsx_message_parts(&parts);
         Ok(LoweredChildren {
@@ -334,7 +349,14 @@ impl LoweringState {
         parts: &mut Vec<JsxMessagePart>,
         values: &mut Vec<ValueBinding>,
         components: &mut Vec<ValueBinding>,
+        depth: usize,
     ) -> PalamedesResult<()> {
+        if depth > MAX_LOWERED_JSX_NESTING_DEPTH {
+            return Err(PalamedesError::NestingTooDeep {
+                context: "Lowered JSX message children",
+                max_depth: MAX_LOWERED_JSX_NESTING_DEPTH,
+            });
+        }
         let authored_expression = expression;
         match expression.without_parentheses() {
             Expression::StringLiteral(literal) => {
@@ -353,14 +375,29 @@ impl LoweringState {
                         ));
                     };
                     self.push_expression(
-                        expression, source, imports, macro_name, location, parts, values,
+                        expression,
+                        source,
+                        imports,
+                        macro_name,
+                        location,
+                        parts,
+                        values,
                         components,
+                        depth + 1,
                     )?;
                 }
             }
             Expression::CallExpression(call) if is_remix_jsx_call(call, imports) => {
                 self.push_element(
-                    call, source, imports, macro_name, location, parts, values, components,
+                    call,
+                    source,
+                    imports,
+                    macro_name,
+                    location,
+                    parts,
+                    values,
+                    components,
+                    depth + 1,
                 )?;
             }
             _ => {
@@ -398,7 +435,14 @@ impl LoweringState {
         parts: &mut Vec<JsxMessagePart>,
         values: &mut Vec<ValueBinding>,
         components: &mut Vec<ValueBinding>,
+        depth: usize,
     ) -> PalamedesResult<()> {
+        if depth > MAX_LOWERED_JSX_NESTING_DEPTH {
+            return Err(PalamedesError::NestingTooDeep {
+                context: "Lowered JSX message children",
+                max_depth: MAX_LOWERED_JSX_NESTING_DEPTH,
+            });
+        }
         let Some(element_type) = call.arguments.first().and_then(Argument::as_expression) else {
             return Err(unsupported_macro_syntax(
                 macro_name,
@@ -419,7 +463,15 @@ impl LoweringState {
         if is_remix_fragment(element_type, imports) {
             if let Some(children) = children {
                 self.push_expression(
-                    children, source, imports, macro_name, location, parts, values, components,
+                    children,
+                    source,
+                    imports,
+                    macro_name,
+                    location,
+                    parts,
+                    values,
+                    components,
+                    depth + 1,
                 )?;
             }
             return Ok(());
@@ -435,7 +487,14 @@ impl LoweringState {
         let component_name = self.next_component_index.to_string();
         self.next_component_index += 1;
         let inner = if let Some(children) = children {
-            self.lower_children(children, source, imports, macro_name, location)?
+            self.lower_children_with_depth(
+                children,
+                source,
+                imports,
+                macro_name,
+                location,
+                depth + 1,
+            )?
         } else {
             LoweredChildren::default()
         };
@@ -592,5 +651,31 @@ fn push_unique(values: &mut Vec<ValueBinding>, value: ValueBinding) {
 fn append_unique(values: &mut Vec<ValueBinding>, incoming: Vec<ValueBinding>) {
     for value in incoming {
         push_unique(values, value);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{PalamedesError, transform_macros};
+
+    #[test]
+    fn rejects_deeply_nested_lowered_jsx_children_without_stack_overflow() {
+        let depth = super::MAX_LOWERED_JSX_NESTING_DEPTH + 2;
+        let mut children = "\"Hello\"".to_owned();
+        for _ in 0..depth {
+            children = format!("jsx(\"span\", {{ children: {children} }})");
+        }
+        let source = format!(
+            "import {{ jsx }} from 'remix/component/jsx-runtime';\n\
+             import {{ Trans }} from '@palamedes/remix/macro';\n\
+             export function View() {{ return jsx(Trans, {{ children: {children} }}); }}\n"
+        );
+
+        let error = transform_macros(&source, "view.js", None)
+            .expect_err("deep lowered JSX children should fail with NestingTooDeep");
+        assert!(
+            matches!(error, PalamedesError::NestingTooDeep { .. }),
+            "expected NestingTooDeep, got: {error}"
+        );
     }
 }

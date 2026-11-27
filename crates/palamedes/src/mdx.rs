@@ -294,11 +294,11 @@ fn source_range(locator: &SourceLocator, range: Span) -> SourceRange {
     locator.range(range.start as usize, range.end as usize)
 }
 
-fn source_span(start: usize, end: usize) -> Span {
-    Span::new(
-        u32::try_from(start).expect("MDX source offsets fit in u32"),
-        u32::try_from(end).expect("MDX source offsets fit in u32"),
-    )
+fn source_span(start: usize, end: usize) -> Option<Span> {
+    Some(Span::new(
+        u32::try_from(start).ok()?,
+        u32::try_from(end).ok()?,
+    ))
 }
 
 fn mdx_source_comments(source: &str, document: &Document<'_>) -> Vec<SourceComment> {
@@ -427,13 +427,10 @@ fn append_mdx_expression_comments(
     {
         return;
     }
-    append_javascript_comments(
-        source,
-        source_span(start + 1, end - 1),
-        allocator,
-        locator,
-        comments,
-    );
+    let Some(inner_span) = source_span(start + 1, end - 1) else {
+        return;
+    };
+    append_javascript_comments(source, inner_span, allocator, locator, comments);
 }
 
 fn append_html_comments(
@@ -631,6 +628,26 @@ impl<'a> MdxCompiler<'a> {
         writer.append(" };\n}\n");
     }
 
+    fn record_diagnostic(&mut self, code: &str, message: impl Into<String>, span: Span) {
+        self.diagnostics.push(MdxDiagnosticRecord {
+            code: code.to_owned(),
+            message: message.into(),
+            primary: source_range(&self.locator, span),
+            related: None,
+        });
+    }
+
+    fn active_unit(&mut self, span: Span) -> Option<&mut RichUnit> {
+        if self.unit.is_none() {
+            self.record_diagnostic(
+                "InvalidInlineContext",
+                "inline MDX node appeared outside a translation unit",
+                span,
+            );
+        }
+        self.unit.as_mut()
+    }
+
     fn blocks(&mut self, nodes: &[Node<'_>]) {
         for node in nodes {
             self.block(node);
@@ -650,8 +667,11 @@ impl<'a> MdxCompiler<'a> {
                             && let Node::Text(text) = child
                         {
                             self.text_value(
-                                &text.value[callout.body.text_offset..],
+                                text.value
+                                    .get(callout.body.text_offset..)
+                                    .unwrap_or_default(),
                                 callout_body_offset(self.source, text.span, callout.marker_span),
+                                text.span,
                             );
                         } else {
                             self.inline(child);
@@ -772,10 +792,22 @@ impl<'a> MdxCompiler<'a> {
                 self.body.append("\n");
             }
             Node::MdxJsxFlowElement(element) => {
-                let opening = jsx_opening_span(self.source, element.span, &element.attributes);
+                let Some(opening) =
+                    jsx_opening_span(self.source, element.span, &element.attributes)
+                else {
+                    self.record_diagnostic(
+                        "InvalidOpeningTag",
+                        "JSX element opening tag could not be located in source",
+                        element.span,
+                    );
+                    return;
+                };
                 // Inline content on the opening line remains one rich unit.
                 // Multiple block children must retain their paragraph boundaries.
-                let after_open = &self.source[opening.end as usize..element.span.end as usize];
+                let after_open = self
+                    .source
+                    .get(opening.end as usize..element.span.end as usize)
+                    .unwrap_or_default();
                 let inline = !element.self_closing
                     && matches!(element.children.as_slice(), [Node::Paragraph(_)])
                     && !after_open
@@ -803,12 +835,19 @@ impl<'a> MdxCompiler<'a> {
                     self.blocks(&element.children);
                     if !element.self_closing {
                         let raw = range_text(self.source, element.span);
-                        let closing = raw.rfind("</").expect("paired JSX has a closing tag");
-                        self.body.append_at(
-                            raw[closing..].trim_end(),
-                            element.span.start as usize + closing,
-                        );
-                        self.body.append("\n");
+                        if let Some(closing) = raw.rfind("</") {
+                            self.body.append_at(
+                                raw[closing..].trim_end(),
+                                element.span.start as usize + closing,
+                            );
+                            self.body.append("\n");
+                        } else {
+                            self.record_diagnostic(
+                                "InvalidClosingTag",
+                                "paired JSX element is missing its closing tag in source",
+                                element.span,
+                            );
+                        }
                     }
                 }
             }
@@ -865,62 +904,73 @@ impl<'a> MdxCompiler<'a> {
     fn inline(&mut self, node: &Node<'_>) {
         match node {
             Node::Text(text) => self.text(text),
-            Node::Emphasis(value) => self.rich_children("<em>", "</em>", &value.children),
-            Node::Strong(value) => self.rich_children("<strong>", "</strong>", &value.children),
-            Node::Delete(value) => self.rich_children("<del>", "</del>", &value.children),
-            Node::Subscript(value) => self.rich_children("<sub>", "</sub>", &value.children),
-            Node::Superscript(value) => self.rich_children("<sup>", "</sup>", &value.children),
-            Node::Highlight(value) => self.rich_children("<mark>", "</mark>", &value.children),
+            Node::Emphasis(value) => {
+                self.rich_children("<em>", "</em>", &value.children, value.span)
+            }
+            Node::Strong(value) => {
+                self.rich_children("<strong>", "</strong>", &value.children, value.span)
+            }
+            Node::Delete(value) => {
+                self.rich_children("<del>", "</del>", &value.children, value.span)
+            }
+            Node::Subscript(value) => {
+                self.rich_children("<sub>", "</sub>", &value.children, value.span)
+            }
+            Node::Superscript(value) => {
+                self.rich_children("<sup>", "</sup>", &value.children, value.span)
+            }
+            Node::Highlight(value) => {
+                self.rich_children("<mark>", "</mark>", &value.children, value.span)
+            }
             Node::InlineCode(value) => self.fixed_code(value.value, value.span),
             Node::InlineMath(value) => self.fixed_code(value.value, value.span),
             Node::MathBlock(value) => self.fixed_code(value.value, value.span),
-            Node::Break(_) => self
-                .unit
-                .as_mut()
-                .expect("inline nodes belong to a unit")
-                .push(RichNode::fixed("<br />".to_owned(), 0)),
+            Node::Break(_) => {
+                if let Some(unit) = self.active_unit(node.span()) {
+                    unit.push(RichNode::fixed("<br />".to_owned(), 0));
+                }
+            }
             Node::Link(link) => {
                 let raw = range_text(self.source, link.span);
                 if !raw.trim_start().starts_with('[') {
                     self.mark_unit_start(link.span.start as usize);
-                    self.unit
-                        .as_mut()
-                        .expect("link belongs to a unit")
-                        .push(RichNode::fixed(
+                    if let Some(unit) = self.active_unit(link.span) {
+                        unit.push(RichNode::fixed(
                             format!("<a href={{{0}}}>{{{0}}}</a>", js_string(link.url)),
                             link.span.start as usize,
                         ));
+                    }
                     return;
                 }
                 self.mark_unit_start(link.span.start as usize);
-                self.open_markdown_component(
+                if self.open_markdown_component(
                     &format!("<a href={{{}}}>", js_string(link.url)),
                     "</a>",
-                );
-                self.inlines(&link.children);
-                self.close_component();
+                    link.span,
+                ) {
+                    self.inlines(&link.children);
+                    self.close_component(link.span);
+                }
             }
             Node::Image(image) => self.image(image),
             Node::Html(html) if is_html_comment(html.value) => {}
             Node::Html(html) => {
                 self.mark_unit_start(html.span.start as usize);
-                self.unit
-                    .as_mut()
-                    .expect("inline nodes belong to a unit")
-                    .push(RichNode::fixed(
+                if let Some(unit) = self.active_unit(html.span) {
+                    unit.push(RichNode::fixed(
                         format!("{{{}}}", js_string(html.value)),
                         html.span.start as usize,
                     ));
+                }
             }
             Node::MdxTextExpression(expression) => {
                 if !is_jsx_comment(range_text(self.source, expression.span))
                     && !expression.value.trim().is_empty()
                 {
                     self.mark_unit_start(expression.span.start as usize);
-                    self.unit
-                        .as_mut()
-                        .expect("inline nodes belong to a unit")
-                        .value(expression.value.trim(), expression.span.start as usize);
+                    if let Some(unit) = self.active_unit(expression.span) {
+                        unit.value(expression.value.trim(), expression.span.start as usize);
+                    }
                 }
             }
             Node::MdxJsxTextElement(element) => self.jsx_inline(
@@ -941,7 +991,13 @@ impl<'a> MdxCompiler<'a> {
             // These options are disabled; footnotes are rejected before lowering.
             Node::Definition(_) | Node::FootnoteReference(_) | Node::FootnoteDefinition(_) => {}
             // Formatting Node here would retain the full AST Debug implementation in binaries.
-            _ => unreachable!("block or disabled extension in inline MDX"),
+            other => {
+                self.record_diagnostic(
+                    "UnsupportedMdxNode",
+                    "unsupported MDX AST node cannot be lowered in inline context",
+                    other.span(),
+                );
+            }
         }
     }
 
@@ -949,35 +1005,34 @@ impl<'a> MdxCompiler<'a> {
         let raw = range_text(self.source, text.span);
         let offset =
             text.span.start as usize + raw.len() - raw.trim_start_matches([' ', '\t']).len();
-        self.text_value(text.value, offset);
+        self.text_value(text.value, offset, text.span);
     }
 
-    fn text_value(&mut self, value: &str, offset: usize) {
+    fn text_value(&mut self, value: &str, offset: usize, span: Span) {
         let value = normalize_mdx_whitespace(value);
         if !value.is_empty() {
             self.mark_unit_start(offset);
-            self.unit
-                .as_mut()
-                .expect("inline text belongs to a unit")
-                .push(RichNode::Text(value, Some(offset)));
+            if let Some(unit) = self.active_unit(span) {
+                unit.push(RichNode::Text(value, Some(offset)));
+            }
         }
     }
 
-    fn rich_children(&mut self, opening: &str, closing: &str, children: &[Node<'_>]) {
-        self.open_markdown_component(opening, closing);
-        self.inlines(children);
-        self.close_component();
+    fn rich_children(&mut self, opening: &str, closing: &str, children: &[Node<'_>], span: Span) {
+        if self.open_markdown_component(opening, closing, span) {
+            self.inlines(children);
+            self.close_component(span);
+        }
     }
 
     fn fixed_code(&mut self, value: &str, span: Span) {
         self.mark_unit_start(span.start as usize);
-        self.unit
-            .as_mut()
-            .expect("inline nodes belong to a unit")
-            .push(RichNode::fixed(
+        if let Some(unit) = self.active_unit(span) {
+            unit.push(RichNode::fixed(
                 format!("<code>{{{}}}</code>", js_string(value)),
                 span.start as usize,
             ));
+        }
     }
 
     fn jsx_inline(
@@ -988,10 +1043,19 @@ impl<'a> MdxCompiler<'a> {
         self_closing: bool,
         span: Span,
     ) {
-        let opening = jsx_opening_span(self.source, span, attributes);
+        let Some(opening) = jsx_opening_span(self.source, span, attributes) else {
+            self.record_diagnostic(
+                "InvalidOpeningTag",
+                "JSX element opening tag could not be located in source",
+                span,
+            );
+            return;
+        };
         self.mark_unit_start(opening.start as usize);
         let markup = self.rewrite_jsx_tag(opening, attributes);
-        let unit = self.unit.as_mut().expect("inline JSX belongs to a unit");
+        let Some(unit) = self.active_unit(span) else {
+            return;
+        };
         if self_closing {
             unit.push(RichNode::fixed(markup, opening.start as usize));
             return;
@@ -1002,19 +1066,21 @@ impl<'a> MdxCompiler<'a> {
             unit.open_transparent();
         }
         self.inlines(children);
-        self.close_component();
+        self.close_component(span);
     }
 
-    fn open_markdown_component(&mut self, opening: &str, closing: &str) {
-        self.unit.as_mut().expect("unit exists").open_component(
-            opening.to_owned(),
-            closing.to_owned(),
-            0,
-        );
+    fn open_markdown_component(&mut self, opening: &str, closing: &str, span: Span) -> bool {
+        let Some(unit) = self.active_unit(span) else {
+            return false;
+        };
+        unit.open_component(opening.to_owned(), closing.to_owned(), 0);
+        true
     }
 
-    fn close_component(&mut self) {
-        self.unit.as_mut().expect("unit exists").close_frame();
+    fn close_component(&mut self, span: Span) {
+        if let Some(unit) = self.active_unit(span) {
+            unit.close_frame();
+        }
     }
 
     fn image(&mut self, image: &ferromark::ast::Image<'_>) {
@@ -1032,9 +1098,7 @@ impl<'a> MdxCompiler<'a> {
         let alt_offset = image
             .alt_content
             .as_ref()
-            .expect("MDX parsing enables structured image alt content")
-            .span
-            .start as usize;
+            .map_or(source_offset, |alt_content| alt_content.span.start as usize);
         let reference = (!ignored && !alt.is_empty())
             .then(|| self.push_message(alt.clone(), BTreeMap::new(), alt_offset));
         let alt_expression = reference.as_ref().map_or_else(
@@ -1050,16 +1114,15 @@ impl<'a> MdxCompiler<'a> {
         let title = image.title.map_or_else(String::new, |title| {
             format!(" title={{{}}}", js_string(title))
         });
-        self.unit
-            .as_mut()
-            .expect("image belongs to a unit")
-            .push(RichNode::fixed(
+        if let Some(unit) = self.active_unit(image.span) {
+            unit.push(RichNode::fixed(
                 format!(
                     "<img src={{{}}} alt={{{alt_expression}}}{title} />",
                     js_string(image.url)
                 ),
                 source_offset,
             ));
+        }
     }
 
     fn finish_unit(&mut self) -> bool {
@@ -1232,9 +1295,22 @@ impl<'a> MdxCompiler<'a> {
             };
             let start = attribute.span.start as usize;
             let end = attribute.span.end as usize;
-            let name_start = start - range.start as usize;
+            let range_start = range.start as usize;
+            let range_end = range.end as usize;
+            if start < range_start || end > range_end || start > end {
+                self.record_diagnostic(
+                    "InvalidOpeningTag",
+                    "JSX attribute span lies outside its opening tag",
+                    attribute.span,
+                );
+                continue;
+            }
+            let name_start = start - range_start;
             let name_end = name_start + attribute.name.len();
-            if self.options.framework == MdxFramework::React && attribute.name == "class" {
+            if name_end <= source.len()
+                && self.options.framework == MdxFramework::React
+                && attribute.name == "class"
+            {
                 replacements.push((name_start, name_end, "className".to_owned()));
             }
             if ignored
@@ -1251,21 +1327,40 @@ impl<'a> MdxCompiler<'a> {
                 continue;
             };
             let after_name = start + attribute.name.len();
-            let raw = self.source[after_name..end]
-                .split_once('=')
-                .expect("literal JSX attribute has =")
-                .1
-                .trim_start();
-            let token_start = end - raw.len();
-            let value = decode_jsx_entities(&self.source[token_start + 1..end - 1]);
+            let Some(raw) = self
+                .source
+                .get(after_name..end)
+                .and_then(|slice| slice.split_once('='))
+                .map(|(_, value)| value.trim_start())
+            else {
+                self.record_diagnostic(
+                    "InvalidOpeningTag",
+                    "literal JSX attribute is missing `=` in source",
+                    attribute.span,
+                );
+                continue;
+            };
+            let token_start = end.saturating_sub(raw.len());
+            let Some(raw_value) = self
+                .source
+                .get(token_start.saturating_add(1)..end.saturating_sub(1))
+            else {
+                self.record_diagnostic(
+                    "InvalidOpeningTag",
+                    "literal JSX attribute value has an invalid source span",
+                    attribute.span,
+                );
+                continue;
+            };
+            let value = decode_jsx_entities(raw_value);
             if value.is_empty() {
                 continue;
             }
             let reference = self.push_message(value, BTreeMap::new(), token_start + 1);
             self.needs_i18n = true;
             replacements.push((
-                token_start - range.start as usize,
-                end - range.start as usize,
+                token_start - range_start,
+                end - range_start,
                 format!(
                     "{{__palamedesGetI18n()._({})}}",
                     runtime_lookup_arguments(&reference, self.options.include_source_metadata)
@@ -1573,8 +1668,11 @@ fn is_js_identifier(value: &str) -> bool {
 // Map the parser's trimmed body back through whitespace and container prefixes.
 // Marker recognition and decoded body boundaries come from BlockQuote::callout.
 fn callout_body_offset(source: &str, text: Span, marker: Span) -> usize {
-    let start = text.start.max(marker.end) as usize;
-    let mut remaining = &source[start..text.end as usize];
+    let text_end = (text.end as usize).min(source.len());
+    let start = (text.start.max(marker.end) as usize).min(text_end);
+    let Some(mut remaining) = source.get(start..text_end) else {
+        return text_end;
+    };
     loop {
         let trimmed = remaining.trim_start();
         let crossed_line = remaining[..remaining.len() - trimmed.len()].contains(['\r', '\n']);
@@ -1584,11 +1682,13 @@ fn callout_body_offset(source: &str, text: Span, marker: Span) -> usize {
         }
         remaining = remaining.trim_start_matches(['>', ' ', '\t']);
     }
-    text.end as usize - remaining.len()
+    text_end - remaining.len()
 }
 
 fn range_text(source: &str, range: Span) -> &str {
-    range.source_text(source)
+    source
+        .get(range.start as usize..range.end as usize)
+        .unwrap_or_default()
 }
 
 fn js_string(value: &str) -> String {
@@ -1727,24 +1827,22 @@ fn split_front_matter_scalar(line: &str) -> Option<(&str, &str, usize)> {
 
 // Attributes carry complete source spans, so a `>` or `}` inside a string,
 // regex, spread, or template never needs to be scanned again by Palamedes.
-fn jsx_opening_span(source: &str, span: Span, attributes: &[MdxJsxAttributeEntry<'_>]) -> Span {
+fn jsx_opening_span(
+    source: &str,
+    span: Span,
+    attributes: &[MdxJsxAttributeEntry<'_>],
+) -> Option<Span> {
     let start = span.start as usize;
-    let tag_start = start
-        + source[start..span.end as usize]
-            .find('<')
-            .expect("JSX element has an opener");
+    let end = span.end as usize;
+    let tag_start = start + source.get(start..end)?.find('<')?;
     let after_attributes = attributes
         .last()
         .map_or(tag_start, |attribute| match attribute {
             MdxJsxAttributeEntry::Attribute(attribute) => attribute.span.end as usize,
             MdxJsxAttributeEntry::Expression(expression) => expression.span.end as usize,
         });
-    let end = after_attributes
-        + source[after_attributes..span.end as usize]
-            .find('>')
-            .expect("JSX opener ends with >")
-        + 1;
-    source_span(tag_start, end)
+    let close_offset = source.get(after_attributes..end)?.find('>')?;
+    source_span(tag_start, after_attributes + close_offset + 1)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2991,5 +3089,83 @@ See ![Diagram label](./d.png) here.
         );
         assert!(!code.contains("\"__proto__\":"), "{code}");
         assert!(!code.contains("{ __proto__:"), "{code}");
+    }
+
+    #[test]
+    fn fallible_mdx_helpers_do_not_panic_on_malformed_spans_or_nodes() {
+        use ferromark::ast::{
+            MdxJsxAttribute, MdxJsxAttributeEntry, MdxJsxAttributeValue, MdxJsxFlowElement, Node,
+            Span, ThematicBreak,
+        };
+
+        // Clamped callout offset when marker.end exceeds text.end.
+        let offset = super::callout_body_offset("> [!NOTE]", Span::new(2, 5), Span::new(0, 9));
+        assert_eq!(offset, 5);
+
+        // Malformed JSX spans return None instead of panicking.
+        assert!(super::jsx_opening_span("no angle brackets", Span::new(0, 17), &[]).is_none());
+        assert!(super::jsx_opening_span("<unclosed", Span::new(0, 9), &[]).is_none());
+        if usize::BITS > 32 {
+            assert!(super::source_span(usize::MAX, usize::MAX).is_none());
+        }
+
+        // Unexpected block node routed into inline() records a diagnostic instead of unreachable!().
+        let mut compiler = super::MdxCompiler::new("---\n", "doc.mdx", MdxOptions::default());
+        compiler.prose(
+            "p",
+            &[Node::ThematicBreak(ThematicBreak {
+                span: Span::new(0, 3),
+            })],
+        );
+        assert!(
+            compiler
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "UnsupportedMdxNode"),
+            "expected UnsupportedMdxNode diagnostic, got: {:?}",
+            compiler.diagnostics
+        );
+
+        // Literal attribute lacking `=` in source records a diagnostic instead of panicking.
+        let source = "<img alt \"missing-equals\" />";
+        let mut compiler = super::MdxCompiler::new(source, "doc.mdx", MdxOptions::default());
+        let attrs = [MdxJsxAttributeEntry::Attribute(MdxJsxAttribute {
+            name: "alt",
+            value: Some(MdxJsxAttributeValue::Literal("missing-equals")),
+            span: Span::new(5, 25),
+        })];
+        let _ = compiler.rewrite_jsx_tag(Span::new(0, source.len() as u32), &attrs);
+        assert!(
+            compiler
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "InvalidOpeningTag"),
+            "expected InvalidOpeningTag diagnostic, got: {:?}",
+            compiler.diagnostics
+        );
+
+        // Non-self-closing JSX flow element without `</` in source records InvalidClosingTag.
+        let allocator = ferromark::Allocator::new();
+        let source = "<Box>hello";
+        let mut compiler = super::MdxCompiler::new(source, "doc.mdx", MdxOptions::default());
+        let element = Node::MdxJsxFlowElement(ferromark::allocator::Box::new_in(
+            MdxJsxFlowElement {
+                name: Some("Box"),
+                attributes: ferromark::allocator::Vec::new_in(&allocator),
+                children: ferromark::allocator::Vec::new_in(&allocator),
+                self_closing: false,
+                span: Span::new(0, source.len() as u32),
+            },
+            &allocator,
+        ));
+        compiler.block(&element);
+        assert!(
+            compiler
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "InvalidClosingTag"),
+            "expected InvalidClosingTag diagnostic, got: {:?}",
+            compiler.diagnostics
+        );
     }
 }

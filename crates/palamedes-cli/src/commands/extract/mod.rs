@@ -433,15 +433,40 @@ fn write_runtime_manifest(
             ),
         });
     }
-    if let Some(parent) = target.parent() {
+    let write_target = match fs::symlink_metadata(&target) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            let resolved = fs::canonicalize(&target).map_err(|source| CliError::Io {
+                path: target.clone(),
+                source,
+            })?;
+            let resolved_metadata = fs::metadata(&resolved).map_err(|source| CliError::Io {
+                path: resolved.clone(),
+                source,
+            })?;
+            if !resolved_metadata.is_file() {
+                return Err(CliError::Io {
+                    path: target,
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "runtime manifest symlink target must be a regular file",
+                    ),
+                });
+            }
+            resolved
+        }
+        _ => target.clone(),
+    };
+    if let Some(parent) = write_target.parent() {
         fs::create_dir_all(parent).map_err(|source| CliError::Io {
             path: parent.to_path_buf(),
             source,
         })?;
     }
-    fs::write(&target, contents).map_err(|source| CliError::Io {
-        path: target.clone(),
-        source,
+    palamedes::atomic_write_file(&write_target, contents.as_bytes()).map_err(|source| {
+        CliError::Io {
+            path: target.clone(),
+            source,
+        }
     })
 }
 
@@ -4012,6 +4037,109 @@ catalogs:
             err,
             CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
         ));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_runtime_manifest_preserves_existing_permissions_and_umask() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("runtime-manifest-perms");
+        fs::create_dir_all(root.join("src")).expect("create src");
+        fs::write(
+            root.join("palamedes.yaml"),
+            "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{locale}/messages\n    include: [src]\n",
+        )
+        .expect("write config");
+        let source_file = root.join("src/app.ts");
+        fs::write(
+            &source_file,
+            "import { t } from '@palamedes/core/macro';\nexport const msg = () => t`Hello`;\n",
+        )
+        .expect("write source");
+        let config = load_config(&root, None).expect("load config");
+
+        let baseline = root.join("baseline.txt");
+        fs::write(&baseline, "x").expect("write baseline");
+        let expected_umask_mode = fs::metadata(&baseline)
+            .expect("baseline meta")
+            .permissions()
+            .mode()
+            & 0o777;
+
+        let manifest_rel = std::path::Path::new(".palamedes/runtime-manifest.json");
+        let manifest_abs = root.join(manifest_rel);
+        super::write_runtime_manifest(&config, manifest_rel, &[source_file.as_path()], false)
+            .expect("initial manifest write");
+        assert_eq!(
+            fs::metadata(&manifest_abs)
+                .expect("manifest meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            expected_umask_mode
+        );
+
+        fs::set_permissions(&manifest_abs, fs::Permissions::from_mode(0o640))
+            .expect("chmod manifest");
+        fs::write(
+            &source_file,
+            "import { t } from '@palamedes/core/macro';\nexport const msg = () => t`Updated`;\n",
+        )
+        .expect("update source");
+        super::write_runtime_manifest(&config, manifest_rel, &[source_file.as_path()], false)
+            .expect("updated manifest write");
+        assert_eq!(
+            fs::metadata(&manifest_abs)
+                .expect("updated meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
+
+        // Existing symlink to a regular file must remain a symlink and update its target.
+        let shared_target = root.join("shared/runtime-manifest.json");
+        fs::create_dir_all(shared_target.parent().unwrap()).expect("create shared dir");
+        fs::write(&shared_target, "{}\n").expect("seed shared target");
+        let symlink_rel = std::path::Path::new(".palamedes/linked-manifest.json");
+        let symlink_abs = root.join(symlink_rel);
+        std::os::unix::fs::symlink(&shared_target, &symlink_abs).expect("create manifest symlink");
+
+        super::write_runtime_manifest(&config, symlink_rel, &[source_file.as_path()], false)
+            .expect("manifest update through symlink");
+        assert!(
+            fs::symlink_metadata(&symlink_abs)
+                .expect("symlink meta")
+                .file_type()
+                .is_symlink(),
+            "symlink must not be replaced by a regular file"
+        );
+        assert!(
+            fs::read_to_string(&shared_target)
+                .expect("read shared target")
+                .contains("Updated"),
+            "shared symlink target must receive the updated manifest"
+        );
+
+        // Dangling symlink must fail explicitly instead of silently replacing the link.
+        let dangling_rel = std::path::Path::new(".palamedes/dangling-manifest.json");
+        let dangling_abs = root.join(dangling_rel);
+        std::os::unix::fs::symlink(root.join("missing/target.json"), &dangling_abs)
+            .expect("create dangling symlink");
+        assert!(
+            super::write_runtime_manifest(&config, dangling_rel, &[source_file.as_path()], false)
+                .is_err(),
+            "dangling symlink must return an error"
+        );
+        assert!(
+            fs::symlink_metadata(&dangling_abs)
+                .expect("dangling symlink meta")
+                .file_type()
+                .is_symlink()
+        );
 
         let _ = fs::remove_dir_all(&root);
     }

@@ -633,6 +633,8 @@ pub(crate) fn lower_choice_options_from_jsx(
     })
 }
 
+const MAX_JSX_NESTING_DEPTH: usize = 64;
+
 pub(crate) fn lower_jsx_children(
     children: &[JSXChild<'_>],
     source: &str,
@@ -649,6 +651,7 @@ pub(crate) fn lower_jsx_children(
         &component_expression,
         &mut used_value_names,
         &mut next_component_index,
+        0,
     )
 }
 
@@ -659,10 +662,17 @@ fn lower_jsx_children_with_state<F>(
     component_expression: &F,
     used_value_names: &mut ValueNames,
     next_component_index: &mut usize,
+    depth: usize,
 ) -> PalamedesResult<LoweredJsxMessage>
 where
     F: Fn(&JSXOpeningElement<'_>) -> PalamedesResult<String>,
 {
+    if depth > MAX_JSX_NESTING_DEPTH {
+        return Err(PalamedesError::NestingTooDeep {
+            context: "JSX message children",
+            max_depth: MAX_JSX_NESTING_DEPTH,
+        });
+    }
     let mut parts = Vec::new();
     let mut values = Vec::new();
     let mut components = Vec::new();
@@ -710,6 +720,7 @@ where
                     component_expression,
                     used_value_names,
                     next_component_index,
+                    depth + 1,
                 )?;
                 let is_empty = inner.message.is_empty();
                 let value = if is_empty {
@@ -733,6 +744,7 @@ where
                     component_expression,
                     used_value_names,
                     next_component_index,
+                    depth + 1,
                 )?;
                 if !inner.message.is_empty() {
                     parts.push(JsxMessagePart::Message {
@@ -1516,6 +1528,30 @@ mod literal_text_tests {
             r##"plural(count, { one: "{x} item", other: "# items" })"##,
             "plural(",
             "references `{x}`, but the macro supplies no value named `x`",
+        );
+    }
+
+    #[test]
+    fn rejects_deeply_nested_jsx_children_without_stack_overflow() {
+        let depth = super::MAX_JSX_NESTING_DEPTH + 2;
+        let open = "<span>".repeat(depth);
+        let close = "</span>".repeat(depth);
+        let source = format!(
+            "import {{ Trans }} from '@palamedes/react/macro';\nexport function View() {{ return <Trans>{open}Hello{close}</Trans>; }}\n"
+        );
+
+        let extract_err =
+            extract_messages(&source, FILENAME).expect_err("deep JSX should fail extraction");
+        assert!(
+            matches!(extract_err, PalamedesError::NestingTooDeep { .. }),
+            "expected NestingTooDeep, got: {extract_err}"
+        );
+
+        let transform_err =
+            transform_macros(&source, FILENAME, None).expect_err("deep JSX should fail transform");
+        assert!(
+            matches!(transform_err, PalamedesError::NestingTooDeep { .. }),
+            "expected NestingTooDeep, got: {transform_err}"
         );
     }
 }

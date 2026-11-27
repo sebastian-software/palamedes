@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 
 use crate::error::{PalamedesError, PalamedesResult};
 use crate::runtime_message::{
-    RuntimeCompiledMessage, RuntimeMessageChoiceKind, RuntimeMessageFormat, RuntimeMessageNode,
-    compile_runtime_catalog_messages,
+    MAX_NESTING_DEPTH, RuntimeCompiledMessage, RuntimeMessageChoiceKind, RuntimeMessageFormat,
+    RuntimeMessageNode, compile_runtime_catalog_messages,
 };
 
 type Result<T> = PalamedesResult<T>;
@@ -82,7 +82,7 @@ impl RuntimeModuleRenderer {
         nodes: &[RuntimeMessageNode],
         context: &RuntimeModuleContext<'_>,
     ) -> Result<String> {
-        let expression = self.render_nodes(nodes, false, context)?;
+        let expression = self.render_nodes(nodes, false, 0, context)?;
         let name = self.message_name();
         self.declarations
             .push_str(&format!("const {name}=(v,r)=>{expression};"));
@@ -93,11 +93,18 @@ impl RuntimeModuleRenderer {
         &mut self,
         nodes: &[RuntimeMessageNode],
         in_branch: bool,
+        depth: usize,
         context: &RuntimeModuleContext<'_>,
     ) -> Result<String> {
+        if depth > MAX_NESTING_DEPTH {
+            return Err(render_error(format!(
+                "Failed to compile catalog message for locale {} at {}: message nesting exceeds the maximum depth of {MAX_NESTING_DEPTH}",
+                context.locale, context.resource_path
+            )));
+        }
         let mut parts = Vec::with_capacity(nodes.len());
         for node in nodes {
-            parts.extend(self.render_node(node, in_branch, context)?);
+            parts.extend(self.render_node(node, in_branch, depth, context)?);
         }
         if parts.len() == 1
             && nodes.len() == 1
@@ -112,6 +119,7 @@ impl RuntimeModuleRenderer {
         &mut self,
         node: &RuntimeMessageNode,
         in_branch: bool,
+        depth: usize,
         context: &RuntimeModuleContext<'_>,
     ) -> Result<Vec<String>> {
         let expression = match node {
@@ -159,12 +167,13 @@ impl RuntimeModuleRenderer {
                 offset.unwrap_or(0),
                 options,
                 in_branch,
+                depth + 1,
                 context,
             )?,
             RuntimeMessageNode::Tag { name, children } => format!(
                 "r.tag({},{})",
                 render_javascript_string(name, context.locale, context.resource_path)?,
-                self.render_nodes(children, in_branch, context)?
+                self.render_nodes(children, in_branch, depth + 1, context)?
             ),
             RuntimeMessageNode::Pound => {
                 if in_branch {
@@ -177,6 +186,7 @@ impl RuntimeModuleRenderer {
         Ok(vec![expression])
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_choice(
         &mut self,
         variable: &str,
@@ -184,6 +194,7 @@ impl RuntimeModuleRenderer {
         offset: u32,
         options: &BTreeMap<String, Vec<RuntimeMessageNode>>,
         in_branch: bool,
+        depth: usize,
         context: &RuntimeModuleContext<'_>,
     ) -> Result<String> {
         let choice_name = format!("__pc{}", self.next_choice);
@@ -191,7 +202,7 @@ impl RuntimeModuleRenderer {
         let mut option_entries = Vec::with_capacity(options.len());
 
         for (selector, nodes) in options {
-            let expression = self.render_nodes(nodes, true, context)?;
+            let expression = self.render_nodes(nodes, true, depth, context)?;
             let branch_name = format!("__pb{}", self.next_branch);
             self.next_branch += 1;
             self.declarations
@@ -242,29 +253,36 @@ fn render_javascript_string(value: &str, locale: &str, resource_path: &str) -> R
 }
 
 fn unsupported_runtime_formatter_style(nodes: &[RuntimeMessageNode]) -> Option<(String, String)> {
-    for node in nodes {
-        match node {
-            RuntimeMessageNode::Formatted { format, style, .. }
-                if !is_supported_runtime_formatter_style(format, style.as_deref()) =>
-            {
-                return Some((
-                    runtime_formatter_name(format).to_owned(),
-                    style.clone().unwrap_or_default(),
-                ));
-            }
-            RuntimeMessageNode::Choice { options, .. } => {
-                for branch in options.values() {
-                    if let Some(result) = unsupported_runtime_formatter_style(branch) {
-                        return Some(result);
+    let mut stack = vec![nodes];
+    while let Some(slice) = stack.pop() {
+        for (index, node) in slice.iter().enumerate() {
+            match node {
+                RuntimeMessageNode::Formatted { format, style, .. }
+                    if !is_supported_runtime_formatter_style(format, style.as_deref()) =>
+                {
+                    return Some((
+                        runtime_formatter_name(format).to_owned(),
+                        style.clone().unwrap_or_default(),
+                    ));
+                }
+                RuntimeMessageNode::Choice { options, .. } => {
+                    if index + 1 < slice.len() {
+                        stack.push(&slice[index + 1..]);
                     }
+                    for branch in options.values().rev() {
+                        stack.push(branch);
+                    }
+                    break;
                 }
-            }
-            RuntimeMessageNode::Tag { children, .. } => {
-                if let Some(result) = unsupported_runtime_formatter_style(children) {
-                    return Some(result);
+                RuntimeMessageNode::Tag { children, .. } => {
+                    if index + 1 < slice.len() {
+                        stack.push(&slice[index + 1..]);
+                    }
+                    stack.push(children);
+                    break;
                 }
+                _ => {}
             }
-            _ => {}
         }
     }
     None
@@ -359,5 +377,55 @@ mod tests {
             "rendered catalog module must be valid JS: {:?}\n{code}",
             parsed.diagnostics
         );
+    }
+
+    #[test]
+    fn rejects_excessively_nested_messages_without_stack_overflow() {
+        use crate::runtime_message::{
+            MAX_NESTING_DEPTH, RuntimeMessageChoiceKind, RuntimeMessageFormat, RuntimeMessageNode,
+        };
+
+        let mut deep_pattern = String::from("leaf");
+        for _ in 0..=MAX_NESTING_DEPTH {
+            deep_pattern = format!("{{kind, select, other {{{deep_pattern}}}}}");
+        }
+        let messages = BTreeMap::from([("deep".to_owned(), deep_pattern)]);
+        let error = render_catalog_module(&messages, "en", "en.po")
+            .expect_err("excessively nested ICU must be rejected");
+        assert!(matches!(
+            error,
+            crate::PalamedesError::RenderCatalogModule { .. }
+        ));
+
+        // Directly verify renderer and formatter-style scan on a deeply nested tree.
+        let mut nodes = vec![RuntimeMessageNode::Formatted {
+            variable: "value".to_owned(),
+            format: RuntimeMessageFormat::Number,
+            style: Some("bogus".to_owned()),
+        }];
+        for _ in 0..=(MAX_NESTING_DEPTH + 10) {
+            nodes = vec![RuntimeMessageNode::Choice {
+                variable: "kind".to_owned(),
+                kind: RuntimeMessageChoiceKind::Select,
+                offset: None,
+                options: BTreeMap::from([("other".to_owned(), nodes)]),
+            }];
+        }
+        assert_eq!(
+            super::unsupported_runtime_formatter_style(&nodes),
+            Some(("number".to_owned(), "bogus".to_owned()))
+        );
+        let mut renderer = super::RuntimeModuleRenderer::default();
+        let context = super::RuntimeModuleContext {
+            locale: "en",
+            resource_path: "en.po",
+        };
+        let error = renderer
+            .render_message(&nodes, &context)
+            .expect_err("renderer must reject excessively nested runtime nodes");
+        assert!(matches!(
+            error,
+            crate::PalamedesError::RenderCatalogModule { .. }
+        ));
     }
 }

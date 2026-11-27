@@ -89,6 +89,109 @@ pub enum RuntimeMessageChoiceKind {
     Selectordinal,
 }
 
+/// Maximum nesting depth for ICU choices and rich-text tags lowered to the
+/// parser-free runtime ABI.
+pub(crate) const MAX_NESTING_DEPTH: usize = 64;
+
+/// Linear, non-recursive pre-check that rejects patterns whose unquoted ICU
+/// brace/tag nesting exceeds `max_depth` before invoking `ferrocat_icu::parse_icu`,
+/// which parses nested choices and tags recursively.
+pub(crate) fn exceeds_icu_nesting_depth(pattern: &str, max_depth: usize) -> bool {
+    let bytes = pattern.as_bytes();
+    let mut index = 0;
+    let mut in_quote = false;
+    let mut brace_depth = 0usize;
+    let mut tag_depth = 0usize;
+
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if in_quote {
+            if byte == b'\'' {
+                if bytes.get(index + 1) == Some(&b'\'') {
+                    index += 2;
+                    continue;
+                }
+                in_quote = false;
+            }
+            index += 1;
+            continue;
+        }
+        match byte {
+            b'\'' => {
+                if bytes.get(index + 1) == Some(&b'\'') {
+                    index += 2;
+                    continue;
+                }
+                if matches!(bytes.get(index + 1), Some(b'{' | b'}' | b'<')) {
+                    in_quote = true;
+                }
+                index += 1;
+            }
+            b'{' => {
+                brace_depth += 1;
+                if (brace_depth / 2) + tag_depth > max_depth {
+                    return true;
+                }
+                index += 1;
+            }
+            b'}' => {
+                brace_depth = brace_depth.saturating_sub(1);
+                index += 1;
+            }
+            b'<' => {
+                if let Some((next_index, delta)) = scan_icu_tag(bytes, index) {
+                    match delta {
+                        1 => {
+                            tag_depth += 1;
+                            if (brace_depth / 2) + tag_depth > max_depth {
+                                return true;
+                            }
+                        }
+                        -1 => {
+                            tag_depth = tag_depth.saturating_sub(1);
+                        }
+                        _ => {}
+                    }
+                    index = next_index;
+                } else {
+                    index += 1;
+                }
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+    false
+}
+
+fn scan_icu_tag(bytes: &[u8], start: usize) -> Option<(usize, i8)> {
+    let mut cursor = start + 1;
+    let closing = bytes.get(cursor) == Some(&b'/');
+    if closing {
+        cursor += 1;
+    } else if !bytes.get(cursor).is_some_and(u8::is_ascii_alphanumeric) {
+        return None;
+    }
+    let name_start = cursor;
+    while bytes
+        .get(cursor)
+        .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+    {
+        cursor += 1;
+    }
+    if cursor == name_start {
+        return None;
+    }
+    if !closing && bytes.get(cursor) == Some(&b'/') && bytes.get(cursor + 1) == Some(&b'>') {
+        return Some((cursor + 2, 0));
+    }
+    if bytes.get(cursor) == Some(&b'>') {
+        return Some((cursor + 1, if closing { -1 } else { 1 }));
+    }
+    None
+}
+
 /// Parses compiled catalog strings into a host-neutral message program.
 ///
 /// This is a product-specific compilation step rather than a second ICU
@@ -101,9 +204,12 @@ pub fn compile_runtime_catalog_messages(
     messages
         .iter()
         .filter_map(|(id, pattern)| {
+            if exceeds_icu_nesting_depth(pattern, MAX_NESTING_DEPTH) {
+                return Some((id.clone(), RuntimeCompiledMessage::Lazy));
+            }
             let nodes = match parse_icu(pattern)
                 .ok()
-                .and_then(|parsed| convert_nodes(parsed.nodes, false))
+                .and_then(|parsed| convert_nodes(parsed.nodes, false, 0))
             {
                 Some(nodes) => nodes,
                 None => return Some((id.clone(), RuntimeCompiledMessage::Lazy)),
@@ -119,16 +225,23 @@ fn is_constant_text(pattern: &str, nodes: &[RuntimeMessageNode]) -> bool {
         || matches!(nodes, [RuntimeMessageNode::Text { value }] if value == pattern)
 }
 
-fn convert_nodes(nodes: Vec<IcuNode>, in_plural: bool) -> Option<Vec<RuntimeMessageNode>> {
+fn convert_nodes(
+    nodes: Vec<IcuNode>,
+    in_plural: bool,
+    depth: usize,
+) -> Option<Vec<RuntimeMessageNode>> {
+    if depth > MAX_NESTING_DEPTH {
+        return None;
+    }
     let mut converted = Vec::with_capacity(nodes.len());
     for node in nodes {
-        let node = convert_node(node, in_plural)?;
+        let node = convert_node(node, in_plural, depth)?;
         push_node(&mut converted, node);
     }
     Some(converted)
 }
 
-fn convert_node(node: IcuNode, in_plural: bool) -> Option<RuntimeMessageNode> {
+fn convert_node(node: IcuNode, in_plural: bool, depth: usize) -> Option<RuntimeMessageNode> {
     match node {
         IcuNode::Literal(value) if in_plural && value.contains('#') => {
             Some(RuntimeMessageNode::Literal { value })
@@ -154,7 +267,7 @@ fn convert_node(node: IcuNode, in_plural: bool) -> Option<RuntimeMessageNode> {
             variable: name,
             kind: RuntimeMessageChoiceKind::Select,
             offset: None,
-            options: convert_options(options, in_plural)?,
+            options: convert_options(options, in_plural, depth + 1)?,
         }),
         IcuNode::Plural {
             name,
@@ -168,12 +281,12 @@ fn convert_node(node: IcuNode, in_plural: bool) -> Option<RuntimeMessageNode> {
                 IcuPluralKind::Ordinal => RuntimeMessageChoiceKind::Selectordinal,
             },
             offset: (offset != 0).then_some(offset),
-            options: convert_options(options, true)?,
+            options: convert_options(options, true, depth + 1)?,
         }),
         IcuNode::Pound => Some(RuntimeMessageNode::Pound),
         IcuNode::Tag { name, children } => Some(RuntimeMessageNode::Tag {
             name,
-            children: convert_nodes(children, in_plural)?,
+            children: convert_nodes(children, in_plural, depth + 1)?,
         }),
         _ => None,
     }
@@ -182,10 +295,16 @@ fn convert_node(node: IcuNode, in_plural: bool) -> Option<RuntimeMessageNode> {
 fn convert_options(
     options: Vec<ferrocat_icu::IcuOption>,
     in_plural: bool,
+    depth: usize,
 ) -> Option<BTreeMap<String, Vec<RuntimeMessageNode>>> {
     options
         .into_iter()
-        .map(|option| Some((option.selector, convert_nodes(option.value, in_plural)?)))
+        .map(|option| {
+            Some((
+                option.selector,
+                convert_nodes(option.value, in_plural, depth)?,
+            ))
+        })
         .collect()
 }
 
@@ -317,6 +436,72 @@ mod tests {
         assert_eq!(
             compile_runtime_catalog_messages(&messages).get("message"),
             Some(&RuntimeCompiledMessage::Lazy)
+        );
+    }
+
+    #[test]
+    fn rejects_excessively_nested_icu_messages() {
+        fn build_nested_tags(depth: usize) -> Vec<ferrocat_icu::IcuNode> {
+            let mut nodes = vec![ferrocat_icu::IcuNode::Literal("leaf".to_owned())];
+            for level in 0..depth {
+                nodes = vec![ferrocat_icu::IcuNode::Tag {
+                    name: format!("t{level}"),
+                    children: nodes,
+                }];
+            }
+            nodes
+        }
+
+        assert!(
+            super::convert_nodes(build_nested_tags(super::MAX_NESTING_DEPTH), false, 0).is_some()
+        );
+        assert!(
+            super::convert_nodes(build_nested_tags(super::MAX_NESTING_DEPTH + 1), false, 0)
+                .is_none()
+        );
+
+        let mut deep_pattern = String::from("leaf");
+        for _ in 0..=super::MAX_NESTING_DEPTH {
+            deep_pattern = format!("{{kind, select, other {{{deep_pattern}}}}}");
+        }
+        assert_eq!(compile(&deep_pattern), Some(RuntimeCompiledMessage::Lazy));
+
+        // Very deep inputs (10,000 levels) must be rejected before recursive
+        // `ferrocat_icu::parse_icu` can overflow the call stack.
+        let huge_choices = format!(
+            "{}leaf{}",
+            "{kind, select, other {".repeat(10_000),
+            "}}".repeat(10_000)
+        );
+        assert_eq!(compile(&huge_choices), Some(RuntimeCompiledMessage::Lazy));
+
+        let prefixed_huge_choices = format!("'# {huge_choices}");
+        assert_eq!(
+            compile(&prefixed_huge_choices),
+            Some(RuntimeCompiledMessage::Lazy)
+        );
+
+        let huge_tags = format!("{}leaf{}", "<a>".repeat(10_000), "</a>".repeat(10_000));
+        assert_eq!(compile(&huge_tags), Some(RuntimeCompiledMessage::Lazy));
+
+        let huge_dotted_tags = format!(
+            "{}leaf{}",
+            "<ui.label>".repeat(10_000),
+            "</ui.label>".repeat(10_000)
+        );
+        assert_eq!(
+            compile(&huge_dotted_tags),
+            Some(RuntimeCompiledMessage::Lazy)
+        );
+
+        let apostrophe_ident_choices = format!(
+            "{}leaf{}",
+            "{a'b, select, other {".repeat(10_000),
+            "}}".repeat(10_000)
+        );
+        assert_eq!(
+            compile(&apostrophe_ident_choices),
+            Some(RuntimeCompiledMessage::Lazy)
         );
     }
 }

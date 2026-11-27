@@ -27,6 +27,9 @@ use crate::source::{SourceComment, SourceDiagnostic, SourceRuleOptions};
 /// in a way that makes previously stored entries wrong.
 const CACHE_SCHEMA: u32 = 9;
 
+/// Maximum bytes read from the advisory extraction cache file (64 MiB).
+const MAX_CACHE_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
 /*
  * A file modified in the same instant it was cached cannot be distinguished
  * from one modified immediately afterwards, so entries that young are never
@@ -201,8 +204,7 @@ impl ExtractCache {
             source_locale: options.source_locale.clone(),
         };
 
-        let entries = std::fs::read(path)
-            .ok()
+        let entries = read_bounded_cache(path, MAX_CACHE_FILE_BYTES)
             .and_then(|raw| serde_json::from_slice::<CachePayload>(&raw).ok())
             .filter(|payload| payload.stamp == stamp)
             .map(|payload| payload.entries)
@@ -485,6 +487,26 @@ impl ExtractCache {
 #[must_use]
 pub fn default_cache_path(root_dir: &Path) -> PathBuf {
     root_dir.join(".palamedes").join("extract-cache.json")
+}
+
+fn read_bounded_cache(path: &Path, max_bytes: u64) -> Option<Vec<u8>> {
+    use std::io::Read;
+
+    let file = std::fs::File::open(path).ok()?;
+    if file
+        .metadata()
+        .ok()
+        .is_some_and(|metadata| metadata.len() > max_bytes)
+    {
+        return None;
+    }
+    let mut buffer = Vec::new();
+    let mut limited = file.take(max_bytes.saturating_add(1));
+    limited.read_to_end(&mut buffer).ok()?;
+    if buffer.len() as u64 > max_bytes {
+        return None;
+    }
+    Some(buffer)
 }
 
 #[cfg(test)]
@@ -921,6 +943,22 @@ mod tests {
         );
         assert!(cache.get(&key).is_none());
         assert!(!cache.is_dirty());
+
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn oversized_cache_file_degrades_to_empty_cache() {
+        let root = temp_root("oversized");
+        std::fs::create_dir_all(&root).expect("root");
+        let cache_path = root.join("cache.json");
+        std::fs::write(&cache_path, vec![b' '; 128]).expect("write");
+
+        assert!(super::read_bounded_cache(&cache_path, 64).is_none());
+        assert_eq!(
+            super::read_bounded_cache(&cache_path, 128).map(|v| v.len()),
+            Some(128)
+        );
 
         std::fs::remove_dir_all(root).expect("cleanup");
     }

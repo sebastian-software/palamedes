@@ -399,6 +399,7 @@ fn comment_directive_source<'a>(
     source: &'a str,
     comment: &SourceComment,
 ) -> Option<(usize, &'a str)> {
+    source.get(comment.range.start..comment.range.end)?;
     let (opening_width, closing_width) = match comment.kind {
         SourceCommentKind::Line => (2, 0),
         SourceCommentKind::Block => (2, 2),
@@ -413,13 +414,20 @@ fn comment_directive_source<'a>(
 }
 
 fn source_range(source: &str, start: usize, length: usize) -> SourceRange {
-    let prefix = &source[..start];
+    let prefix = source.get(..start).unwrap_or_else(|| {
+        let mut clamped = start.min(source.len());
+        while clamped > 0 && !source.is_char_boundary(clamped) {
+            clamped -= 1;
+        }
+        &source[..clamped]
+    });
     let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
+    let line_prefix = prefix.get(line_start..).unwrap_or_default();
     SourceRange {
         start,
-        end: start + length,
+        end: start.saturating_add(length),
         line: prefix.bytes().filter(|byte| *byte == b'\n').count() + 1,
-        column: source[line_start..start].chars().count() + 1,
+        column: line_prefix.chars().count() + 1,
     }
 }
 
@@ -437,7 +445,9 @@ fn suppression_line(
         return directive_line + 1;
     }
     directive_line
-        + source[directive_start..comment.range.end]
+        + source
+            .get(directive_start..comment.range.end)
+            .unwrap_or_default()
             .bytes()
             .filter(|byte| *byte == b'\n')
             .count()
@@ -956,5 +966,56 @@ function View({ status }) { return <p>{t`${status}`}</p>; }
         };
 
         assert!(options.verdict(&result).is_err());
+    }
+
+    #[test]
+    fn corrupt_cached_comment_ranges_do_not_panic() {
+        use palamedes::{SourceComment, SourceCommentKind, SourceRange};
+
+        let source = "/* palamedes-lint-disable-next-line pmds/no-pseudo-plural */ café\n";
+        let cafe_mid_char = source.find('é').expect("multibyte char") + 1;
+        let corrupt_comments = vec![
+            // End beyond source length
+            SourceComment {
+                kind: SourceCommentKind::Block,
+                range: SourceRange {
+                    start: 0,
+                    end: source.len() + 10,
+                    line: 1,
+                    column: 1,
+                },
+            },
+            // End lands inside a multibyte UTF-8 character while end - 2 is valid
+            SourceComment {
+                kind: SourceCommentKind::Block,
+                range: SourceRange {
+                    start: 0,
+                    end: cafe_mid_char,
+                    line: 1,
+                    column: 1,
+                },
+            },
+            // Reversed start > end
+            SourceComment {
+                kind: SourceCommentKind::Line,
+                range: SourceRange {
+                    start: 20,
+                    end: 5,
+                    line: 1,
+                    column: 1,
+                },
+            },
+        ];
+
+        let (suppressions, diagnostics) =
+            super::parse_suppressions_from_comments(source, "app.ts", &corrupt_comments);
+        assert!(suppressions.is_empty());
+        assert!(diagnostics.is_empty());
+
+        // Direct helpers also remain panic-free on invalid offsets.
+        let range = super::source_range(source, cafe_mid_char, 4);
+        assert_eq!(range.line, 1);
+        let line = super::suppression_line(source, &corrupt_comments[0], 3, 1, 1);
+        assert_eq!(line, 2);
     }
 }

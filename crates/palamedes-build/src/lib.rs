@@ -60,13 +60,26 @@ pub struct SourceMessage {
     pub line: usize,
 }
 
+const MAX_TOKEN_NESTING_DEPTH: usize = 128;
+const MAX_MESSAGE_NESTING_DEPTH: usize = 64;
+
 /// Extract literal messages from Rust token trees, including attribute tokens.
 ///
 /// Comments and ordinary strings are not scanned as source. This supports
 /// `tr!("message", ...)` and `translate!(catalog, "message", ...)`. A dynamic
 /// source message fails extraction rather than silently disappearing.
 pub fn extract_messages(source: &str, macro_name: &str) -> BuildResult<Vec<SourceMessage>> {
-    fn walk(stream: TokenStream, name: &str, output: &mut Vec<SourceMessage>) -> BuildResult<()> {
+    fn walk(
+        stream: TokenStream,
+        name: &str,
+        depth: usize,
+        output: &mut Vec<SourceMessage>,
+    ) -> BuildResult<()> {
+        if depth > MAX_TOKEN_NESTING_DEPTH {
+            return Err(Error::NestingTooDeep {
+                max_depth: MAX_TOKEN_NESTING_DEPTH,
+            });
+        }
         let tokens: Vec<_> = stream.into_iter().collect();
         for (index, token) in tokens.iter().enumerate() {
             if let TokenTree::Ident(ident) = token
@@ -85,7 +98,7 @@ pub fn extract_messages(source: &str, macro_name: &str) -> BuildResult<Vec<Sourc
                 });
             }
             if let TokenTree::Group(group) = token {
-                walk(group.stream(), name, output)?;
+                walk(group.stream(), name, depth + 1, output)?;
             }
         }
         Ok(())
@@ -94,7 +107,7 @@ pub fn extract_messages(source: &str, macro_name: &str) -> BuildResult<Vec<Sourc
         source: Box::new(source),
     })?;
     let mut messages = Vec::new();
-    walk(tokens, macro_name, &mut messages)?;
+    walk(tokens, macro_name, 0, &mut messages)?;
     Ok(messages)
 }
 
@@ -192,10 +205,10 @@ impl CatalogBuilder {
         prepared.write_catalogs(&catalog_directory)?;
         prepared.remove_stale_catalogs(&catalog_directory)?;
         let rust_module = output.join("messages.rs");
-        fs::write(&rust_module, generated).map_err(Error::io(&rust_module))?;
+        catalogs::atomic_write_file(&rust_module, generated.as_bytes())?;
         let schema_file = output.join("schema.pmd.json");
         let schema = serde_json::to_vec(&prepared.contract).map_err(Error::serialize)?;
-        fs::write(&schema_file, schema).map_err(Error::io(&schema_file))?;
+        catalogs::atomic_write_file(&schema_file, &schema)?;
         Ok(CompiledCatalogs {
             rust_module,
             schema_file,
@@ -341,6 +354,19 @@ fn lower(
     nodes: &[RuntimeMessageNode],
     arguments: &mut BTreeSet<String>,
 ) -> Result<Vec<Instruction>, String> {
+    lower_with_depth(nodes, arguments, 0)
+}
+
+fn lower_with_depth(
+    nodes: &[RuntimeMessageNode],
+    arguments: &mut BTreeSet<String>,
+    depth: usize,
+) -> Result<Vec<Instruction>, String> {
+    if depth > MAX_MESSAGE_NESTING_DEPTH {
+        return Err(format!(
+            "message nesting exceeds the maximum depth of {MAX_MESSAGE_NESTING_DEPTH}"
+        ));
+    }
     let mut program = Vec::with_capacity(nodes.len());
     for node in nodes {
         let instruction = match node {
@@ -364,7 +390,12 @@ fn lower(
                 arguments.insert(variable.clone());
                 let options = options
                     .iter()
-                    .map(|(selector, branch)| Ok((selector.clone(), lower(branch, arguments)?)))
+                    .map(|(selector, branch)| {
+                        Ok((
+                            selector.clone(),
+                            lower_with_depth(branch, arguments, depth + 1)?,
+                        ))
+                    })
                     .collect::<Result<_, String>>()?;
                 match kind {
                     RuntimeMessageChoiceKind::Select => Instruction::Select {
@@ -416,9 +447,175 @@ impl CompiledCatalogs {
             let path = entry.path();
             if entry.file_type().map_err(Error::io(&path))?.is_file() {
                 let target = directory.join(entry.file_name());
-                fs::copy(&path, &target).map_err(Error::io(&target))?;
+                let source_mode = {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        Some(
+                            fs::metadata(&path)
+                                .map_err(Error::io(&path))?
+                                .permissions()
+                                .mode()
+                                & 0o777,
+                        )
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        None
+                    }
+                };
+                let bytes = fs::read(&path).map_err(Error::io(&path))?;
+                catalogs::atomic_write_file_with_new_mode(&target, &bytes, source_mode)?;
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use palamedes::sdk::{RuntimeMessageChoiceKind, RuntimeMessageNode};
+
+    use super::{
+        CatalogBuilder, Error, MAX_MESSAGE_NESTING_DEPTH, MAX_TOKEN_NESTING_DEPTH,
+        extract_messages, lower,
+    };
+
+    #[test]
+    fn extract_messages_rejects_excessively_nested_tokens() {
+        let depth = MAX_TOKEN_NESTING_DEPTH + 2;
+        let source = format!("{}tr!(\"Hello\"){}", "{".repeat(depth), "}".repeat(depth));
+        let error = extract_messages(&source, "tr").expect_err("deep token nesting must error");
+        assert!(
+            matches!(error, Error::NestingTooDeep { max_depth } if max_depth == MAX_TOKEN_NESTING_DEPTH),
+            "expected NestingTooDeep, got: {error}"
+        );
+    }
+
+    #[test]
+    fn lower_rejects_excessively_nested_choices() {
+        let mut nodes = vec![RuntimeMessageNode::Text {
+            value: "leaf".to_owned(),
+        }];
+        for _ in 0..=MAX_MESSAGE_NESTING_DEPTH {
+            nodes = vec![RuntimeMessageNode::Choice {
+                variable: "kind".to_owned(),
+                kind: RuntimeMessageChoiceKind::Select,
+                offset: None,
+                options: BTreeMap::from([("other".to_owned(), nodes)]),
+            }];
+        }
+        let mut arguments = BTreeSet::new();
+        let error = lower(&nodes, &mut arguments).expect_err("deep message nesting must error");
+        assert!(error.contains("maximum depth"), "unexpected error: {error}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_to_and_install_to_preserve_existing_permissions_and_umask() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let po_dir = dir.path().join("locales");
+        let out_dir = dir.path().join("out");
+        let install_dir = dir.path().join("installed");
+        std::fs::create_dir_all(&po_dir).expect("create po dir");
+        std::fs::create_dir_all(&out_dir).expect("create out dir");
+        std::fs::write(
+            po_dir.join("en.po"),
+            "msgid \"\"\nmsgstr \"\"\n\"Language: en\\n\"\n\nmsgid \"Hello\"\nmsgstr \"Hello\"\n",
+        )
+        .expect("write en.po");
+
+        let baseline = out_dir.join("baseline.txt");
+        std::fs::write(&baseline, "x").expect("write baseline");
+        let expected_umask_mode = std::fs::metadata(&baseline)
+            .expect("baseline meta")
+            .permissions()
+            .mode()
+            & 0o777;
+
+        let compiled = CatalogBuilder::new(&po_dir, "en")
+            .locales(&["en"])
+            .compile_to(&out_dir)
+            .expect("compile_to succeeds");
+        for path in [&compiled.rust_module, &compiled.schema_file] {
+            let mode = std::fs::metadata(path).expect("meta").permissions().mode() & 0o777;
+            assert_eq!(mode, expected_umask_mode, "{}", path.display());
+        }
+
+        // Preserve custom existing permissions on recompile.
+        std::fs::set_permissions(
+            &compiled.rust_module,
+            std::fs::Permissions::from_mode(0o640),
+        )
+        .expect("chmod messages.rs");
+        std::fs::set_permissions(
+            &compiled.schema_file,
+            std::fs::Permissions::from_mode(0o600),
+        )
+        .expect("chmod schema.pmd.json");
+        let recompiled = CatalogBuilder::new(&po_dir, "en")
+            .locales(&["en"])
+            .compile_to(&out_dir)
+            .expect("recompile succeeds");
+        assert_eq!(
+            std::fs::metadata(&recompiled.rust_module)
+                .expect("meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
+        assert_eq!(
+            std::fs::metadata(&recompiled.schema_file)
+                .expect("meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+
+        // install_to respects umask on new files and preserves existing target permissions.
+        recompiled.install_to(&install_dir).expect("install_to");
+        let installed = install_dir.join("en.pmd.json");
+        assert_eq!(
+            std::fs::metadata(&installed)
+                .expect("meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            expected_umask_mode
+        );
+        std::fs::set_permissions(&installed, std::fs::Permissions::from_mode(0o640))
+            .expect("chmod installed");
+        recompiled.install_to(&install_dir).expect("reinstall_to");
+        assert_eq!(
+            std::fs::metadata(&installed)
+                .expect("meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
+
+        // Private source catalogs must not be widened when installed to a fresh target.
+        let private_source = recompiled.catalog_directory.join("en.pmd.json");
+        std::fs::set_permissions(&private_source, std::fs::Permissions::from_mode(0o600))
+            .expect("chmod private source");
+        let fresh_install_dir = dir.path().join("private-installed");
+        recompiled
+            .install_to(&fresh_install_dir)
+            .expect("install private catalog");
+        assert_eq!(
+            std::fs::metadata(fresh_install_dir.join("en.pmd.json"))
+                .expect("private installed meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
     }
 }
