@@ -145,11 +145,18 @@ import { getRequestNonce, markRequestNonceApplied } from "../../lib/csp.server";
 
 const cspInterceptor: HandlerInterceptor = async (next) => {
   const nonce = getRequestNonce();
-  if (nonce) {
-    unstable_setNonce(nonce);
+  if (nonce) unstable_setNonce(nonce);
+  const result = await next();
+  // Mark the nonce as applied only when the router actually returned an HTML
+  // Response (not null / "fallback", which triggers Waku's unnonced root fallback shell).
+  if (
+    nonce &&
+    result instanceof Response &&
+    result.headers.get("content-type")?.startsWith("text/html")
+  ) {
     markRequestNonceApplied();
   }
-  return await next();
+  return result;
 };
 
 export default cspInterceptor;
