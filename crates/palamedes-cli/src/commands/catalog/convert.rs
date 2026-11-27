@@ -163,6 +163,7 @@ impl Command for ConvertOptions {
                 crate::commands::extract::reject_colliding_catalog_targets(
                     &config.root_dir,
                     &planned_outputs,
+                    true,
                 )?;
 
                 for job in planned {

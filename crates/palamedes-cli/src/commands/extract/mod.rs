@@ -540,7 +540,8 @@ fn process_catalogs(
     options: &ExtractOptions,
     operation: CatalogOperation,
 ) -> Result<Vec<CatalogDrift>, CliError> {
-    reject_colliding_extract_targets(write_jobs, config)?;
+    let allow_mutating_probe = matches!(operation, CatalogOperation::Write);
+    reject_colliding_extract_targets(write_jobs, config, allow_mutating_probe)?;
 
     let worker_count = write_jobs.len().min(
         std::thread::available_parallelism()
@@ -1332,6 +1333,7 @@ fn resolve_directory_equivalence(
     identity: Option<FileIdentity>,
     parent: Option<(Option<FileIdentity>, DirFilenameEquivalence, bool)>,
     cache: &mut HashMap<FileIdentity, (DirFilenameEquivalence, bool)>,
+    allow_mutating_probe: bool,
 ) -> (DirFilenameEquivalence, bool) {
     if let Some(id) = identity
         && let Some(&cached) = cache.get(&id)
@@ -1348,7 +1350,11 @@ fn resolve_directory_equivalence(
     };
     let resolved = dir
         .filename_equivalence()
-        .or_else(|| probe_unknown_dir_equivalence(dir))
+        .or_else(|| {
+            allow_mutating_probe
+                .then(|| probe_unknown_dir_equivalence(dir))
+                .flatten()
+        })
         .map(|eq| (eq, true))
         .or(same_vol_parent)
         .unwrap_or_else(|| (default_platform_equivalence(), false));
@@ -1358,15 +1364,16 @@ fn resolve_directory_equivalence(
     resolved
 }
 
-fn segment_lists_collide_on_dir(
+fn segment_pair_collides_on_dir(
     anchor_dir: &ContainedDir,
     equivalence: DirFilenameEquivalence,
     equivalence_confirmed: bool,
-    left_segments: &[OsString],
-    right_segments: &[OsString],
+    allow_mutating_probe: bool,
+    left: &OsStr,
+    right: &OsStr,
 ) -> bool {
-    if left_segments.len() != right_segments.len() {
-        return false;
+    if left == right {
+        return true;
     }
     let is_ascii_ci = matches!(
         equivalence,
@@ -1375,28 +1382,25 @@ fn segment_lists_collide_on_dir(
             | DirFilenameEquivalence::CaseInsensitiveHfsPlus
             | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf
     );
-    for (left, right) in left_segments.iter().zip(right_segments.iter()) {
-        if left == right {
-            continue;
-        }
-        if equivalence_confirmed
-            && is_ascii_ci
-            && let (Some(l_str), Some(r_str)) = (left.to_str(), right.to_str())
-            && l_str.is_ascii()
-            && r_str.is_ascii()
-            && l_str.eq_ignore_ascii_case(r_str)
-        {
-            continue;
-        }
-        // When equivalence is unconfirmed (for example, a read-only share where
-        // filesystem metadata queries are unsupported) or names are non-ASCII,
-        // consult actual entry identities / the mounted filesystem before
-        // reporting a collision.
-        if anchor_dir.probe_names_equivalent(left, right) == Some(false) {
-            return false;
-        }
+    if equivalence_confirmed
+        && is_ascii_ci
+        && let (Some(l_str), Some(r_str)) = (left.to_str(), right.to_str())
+        && l_str.is_ascii()
+        && r_str.is_ascii()
+        && l_str.eq_ignore_ascii_case(r_str)
+    {
+        return true;
     }
-    true
+    // When equivalence is unconfirmed (for example, a read-only share where
+    // filesystem metadata queries are unsupported) or names are non-ASCII,
+    // consult actual entry identities (and, for write operations, a live
+    // directory probe) before reporting a collision.
+    let probed = if allow_mutating_probe {
+        anchor_dir.probe_names_equivalent(left, right)
+    } else {
+        anchor_dir.probe_existing_names_equivalent(left, right)
+    };
+    probed != Some(false)
 }
 
 #[cfg(test)]
@@ -1422,18 +1426,32 @@ fn segments_collide_on_dir(
         .cloned()
         .chain(std::iter::once(right_file.to_os_string()))
         .collect();
-    segment_lists_collide_on_dir(
-        anchor_dir,
-        equivalence,
-        equivalence_confirmed,
-        &left_full,
-        &right_full,
-    )
+    left_full
+        .iter()
+        .zip(right_full.iter())
+        .all(|(left, right)| {
+            segment_pair_collides_on_dir(
+                anchor_dir,
+                equivalence,
+                equivalence_confirmed,
+                true,
+                left,
+                right,
+            )
+        })
+}
+
+#[derive(Default)]
+struct TargetPrefixNode<'a> {
+    file_scope: Option<&'a str>,
+    dir_scope: Option<&'a str>,
+    children: HashMap<OsString, Vec<(OsString, Self)>>,
 }
 
 fn reject_colliding_extract_targets(
     write_jobs: &[(&ConfigCatalog, &Vec<CatalogUpdateMessage>, &str)],
     config: &LoadedConfig,
+    allow_mutating_probe: bool,
 ) -> Result<(), CliError> {
     let mut targets = Vec::with_capacity(write_jobs.len());
     for (catalog, _, locale) in write_jobs {
@@ -1441,20 +1459,16 @@ fn reject_colliding_extract_targets(
             config.resolve_contained_catalog_path(&catalog.path, locale, catalog.format)?;
         targets.push((catalog.path.as_str(), catalog_path));
     }
-    reject_colliding_catalog_targets(&config.root_dir, &targets)
+    reject_colliding_catalog_targets(&config.root_dir, &targets, allow_mutating_probe)
 }
 
 pub(crate) fn reject_colliding_catalog_targets(
     root_dir: &Path,
     targets: &[(&str, PathBuf)],
+    allow_mutating_probe: bool,
 ) -> Result<(), CliError> {
-    type SegmentBucket<'a> = Vec<(&'a str, Vec<OsString>)>;
-
     let mut dir_eq_cache: HashMap<FileIdentity, (DirFilenameEquivalence, bool)> = HashMap::new();
-    let mut seen_files: HashMap<(ExtractTargetAnchor, Vec<OsString>), SegmentBucket<'_>> =
-        HashMap::new();
-    let mut seen_dir_prefixes: HashMap<(ExtractTargetAnchor, Vec<OsString>), SegmentBucket<'_>> =
-        HashMap::new();
+    let mut anchor_tries: HashMap<ExtractTargetAnchor, TargetPrefixNode<'_>> = HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
     let mut needed_existing_dirs: HashMap<FileIdentity, &str> = HashMap::new();
 
@@ -1473,11 +1487,16 @@ pub(crate) fn reject_colliding_catalog_targets(
             path: root_dir.to_path_buf(),
             source: error.into_io_error(),
         })?;
-        let (mut current_eq, mut current_eq_confirmed) =
-            resolve_directory_equivalence(&current, current_id, None, &mut dir_eq_cache);
+        let (mut current_eq, mut current_eq_confirmed) = resolve_directory_equivalence(
+            &current,
+            current_id,
+            None,
+            &mut dir_eq_cache,
+            allow_mutating_probe,
+        );
         let mut existing_prefix = PathBuf::new();
-        let mut remaining_segments: Vec<OsString> = Vec::new();
-        let mut raw_remaining_segments: Vec<OsString> = Vec::new();
+        let mut folded_segments: Vec<OsString> = Vec::new();
+        let mut raw_segments: Vec<OsString> = Vec::new();
         let mut hit_missing = false;
 
         for component in relative_parent.components() {
@@ -1485,8 +1504,8 @@ pub(crate) fn reject_colliding_catalog_targets(
                 continue;
             };
             if hit_missing {
-                raw_remaining_segments.push(segment.to_os_string());
-                remaining_segments.push(fold_os_segment(segment, current_eq));
+                raw_segments.push(segment.to_os_string());
+                folded_segments.push(fold_os_segment(segment, current_eq));
                 continue;
             }
             match current
@@ -1519,6 +1538,7 @@ pub(crate) fn reject_colliding_catalog_targets(
                         child_id,
                         Some((current_id, current_eq, current_eq_confirmed)),
                         &mut dir_eq_cache,
+                        allow_mutating_probe,
                     );
                     current = child;
                     current_id = child_id;
@@ -1528,8 +1548,8 @@ pub(crate) fn reject_colliding_catalog_targets(
                 }
                 None => {
                     hit_missing = true;
-                    raw_remaining_segments.push(segment.to_os_string());
-                    remaining_segments.push(fold_os_segment(segment, current_eq));
+                    raw_segments.push(segment.to_os_string());
+                    folded_segments.push(fold_os_segment(segment, current_eq));
                 }
             }
         }
@@ -1538,88 +1558,74 @@ pub(crate) fn reject_colliding_catalog_targets(
             || ExtractTargetAnchor::Path(existing_prefix),
             ExtractTargetAnchor::Identity,
         );
-        let mut folded_full = remaining_segments;
-        folded_full.push(fold_os_segment(&file_name, current_eq));
-        let mut raw_full = raw_remaining_segments;
-        raw_full.push(file_name.clone());
+        folded_segments.push(fold_os_segment(&file_name, current_eq));
+        raw_segments.push(file_name.clone());
 
-        if let Some(bucket) = seen_files.get(&(anchor.clone(), folded_full.clone()))
-            && let Some((first_scope, _)) = bucket.iter().find(|(_, prev_raw)| {
-                segment_lists_collide_on_dir(
-                    &current,
-                    current_eq,
-                    current_eq_confirmed,
-                    prev_raw,
-                    &raw_full,
-                )
-            })
-        {
-            return Err(CliError::Io {
-                path: catalog_path.clone(),
-                source: std::io::Error::new(
-                    std::io::ErrorKind::AlreadyExists,
-                    format!(
-                        "multiple catalog scopes ({first_scope:?} and {scope:?}) resolve to the same target file",
-                    ),
-                ),
-            });
-        }
-        if let Some(dir_bucket) = seen_dir_prefixes.get(&(anchor.clone(), folded_full.clone()))
-            && let Some((dir_scope, _)) = dir_bucket.iter().find(|(_, prev_raw_prefix)| {
-                segment_lists_collide_on_dir(
-                    &current,
-                    current_eq,
-                    current_eq_confirmed,
-                    prev_raw_prefix,
-                    &raw_full,
-                )
-            })
-        {
-            return Err(CliError::Io {
-                path: catalog_path.clone(),
-                source: std::io::Error::new(
-                    std::io::ErrorKind::AlreadyExists,
-                    format!(
-                        "catalog scope {scope:?} writes a file where {dir_scope:?} requires a parent directory",
-                    ),
-                ),
-            });
-        }
-
-        for prefix_len in 1..folded_full.len() {
-            let folded_prefix = folded_full[..prefix_len].to_vec();
-            let raw_prefix = raw_full[..prefix_len].to_vec();
-            if let Some(file_bucket) = seen_files.get(&(anchor.clone(), folded_prefix.clone()))
-                && let Some((file_scope, _)) = file_bucket.iter().find(|(_, prev_raw_file)| {
-                    segment_lists_collide_on_dir(
+        // Walk/insert this target's anchor-relative segments into a shared
+        // prefix trie so memory and time stay linear in total segment count.
+        let mut node = anchor_tries.entry(anchor).or_default();
+        let total_segments = raw_segments.len();
+        for idx in 0..total_segments {
+            let is_leaf = idx + 1 == total_segments;
+            let folded = &folded_segments[idx];
+            let raw = &raw_segments[idx];
+            let bucket = node.children.entry(folded.clone()).or_default();
+            let next_idx = if let Some(existing_idx) =
+                bucket.iter().position(|(existing_raw, _)| {
+                    segment_pair_collides_on_dir(
                         &current,
                         current_eq,
                         current_eq_confirmed,
-                        prev_raw_file,
-                        &raw_prefix,
+                        allow_mutating_probe,
+                        existing_raw,
+                        raw,
                     )
-                })
-            {
-                return Err(CliError::Io {
-                    path: catalog_path.clone(),
-                    source: std::io::Error::new(
-                        std::io::ErrorKind::AlreadyExists,
-                        format!(
-                            "catalog scope {scope:?} requires a parent directory where {file_scope:?} writes a catalog file",
+                }) {
+                existing_idx
+            } else {
+                bucket.push((raw.clone(), TargetPrefixNode::default()));
+                bucket.len() - 1
+            };
+            node = &mut bucket[next_idx].1;
+            if is_leaf {
+                if let Some(first_scope) = node.file_scope {
+                    return Err(CliError::Io {
+                        path: catalog_path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::AlreadyExists,
+                            format!(
+                                "multiple catalog scopes ({first_scope:?} and {scope:?}) resolve to the same target file",
+                            ),
                         ),
-                    ),
-                });
+                    });
+                }
+                if let Some(dir_scope) = node.dir_scope {
+                    return Err(CliError::Io {
+                        path: catalog_path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::AlreadyExists,
+                            format!(
+                                "catalog scope {scope:?} writes a file where {dir_scope:?} requires a parent directory",
+                            ),
+                        ),
+                    });
+                }
+                node.file_scope = Some(*scope);
+            } else {
+                if let Some(file_scope) = node.file_scope {
+                    return Err(CliError::Io {
+                        path: catalog_path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::AlreadyExists,
+                            format!(
+                                "catalog scope {scope:?} requires a parent directory where {file_scope:?} writes a catalog file",
+                            ),
+                        ),
+                    });
+                }
+                node.dir_scope.get_or_insert(*scope);
             }
-            seen_dir_prefixes
-                .entry((anchor.clone(), folded_prefix))
-                .or_default()
-                .push((*scope, raw_prefix));
         }
-
-        seen_files
-            .entry((anchor, folded_full))
-            .or_default()
-            .push((*scope, raw_full));
 
         if !hit_missing
             && let Some(identity) =

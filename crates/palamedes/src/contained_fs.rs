@@ -374,7 +374,9 @@ fn validate_relative_dir_segments(relative_dir: &Path) -> Result<Vec<OsString>, 
 #[cfg(unix)]
 mod platform {
     use std::cell::RefCell;
-    use std::collections::{HashMap, HashSet, hash_map::RandomState};
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    use std::collections::HashSet;
+    use std::collections::{HashMap, hash_map::RandomState};
     use std::ffi::{CString, OsStr, OsString};
     use std::fs::File;
     use std::hash::{BuildHasher, Hasher};
@@ -446,11 +448,6 @@ mod platform {
     }
 
     static TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
-
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-    static PROBED_DIR_EQUIVALENCE_CACHE: std::sync::LazyLock<
-        std::sync::Mutex<HashMap<FileIdentity, DirFilenameEquivalence>>,
-    > = std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
 
     #[cfg(target_os = "linux")]
     const DIR_TRAVERSAL_FLAGS: libc::c_int = libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC;
@@ -875,9 +872,28 @@ mod platform {
             detect_unix_dir_filename_equivalence(self)
         }
 
+        /// Read-only filename equivalence check that inspects only already-existing
+        /// entries in `self` without mutating the directory.
+        #[must_use]
+        pub fn probe_existing_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if left == right {
+                return Some(true);
+            }
+            if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
+            {
+                return None;
+            }
+            match (self.file_identity(left), self.file_identity(right)) {
+                (Ok(Some(left_id)), Ok(Some(right_id))) => Some(left_id == right_id),
+                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => Some(false),
+                _ => None,
+            }
+        }
+
         /// Probes whether two single-segment filenames resolve to the same
-        /// entry on this directory's mounted filesystem by creating a verified
-        /// private `0700` temporary subdirectory inside `self` (using the same
+        /// entry on this directory's mounted filesystem by checking existing
+        /// entries first and, when neither exists, creating a verified private
+        /// `0700` temporary subdirectory inside `self` (using the same
         /// safe-parent and identity checks as `create_staging_dir`, inheriting
         /// volume encoding and Linux `FS_CASEFOLD_FL`) and testing
         /// `O_CREAT | O_EXCL` for `left` then `right`.
@@ -888,17 +904,12 @@ mod platform {
         /// cannot be probed safely.
         #[must_use]
         pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
-            if left == right {
-                return Some(true);
+            if let Some(result) = self.probe_existing_names_equivalent(left, right) {
+                return Some(result);
             }
             if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
             {
                 return None;
-            }
-            match (self.file_identity(left), self.file_identity(right)) {
-                (Ok(Some(left_id)), Ok(Some(right_id))) => return Some(left_id == right_id),
-                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => return Some(false),
-                _ => {}
             }
             let c_left = CString::new(left.as_bytes()).ok()?;
             let c_right = CString::new(right.as_bytes()).ok()?;
@@ -2167,6 +2178,7 @@ mod platform {
         result
     }
 
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn probe_directory_case_insensitivity(
         dir: &ContainedDir,
         readable_fd: std::os::fd::RawFd,
@@ -3682,62 +3694,17 @@ mod platform {
                     return Some(DirFilenameEquivalence::Exact);
                 }
             }
-            if let Ok(Some(dir_id)) = dir.self_identity()
-                && let Ok(cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
-                && let Some(&cached) = cache.get(&dir_id)
-            {
-                return Some(cached);
-            }
-            let case_insensitive = probe_directory_case_insensitivity(dir, readable.as_raw_fd())
-                .or_else(|| dir.probe_names_equivalent(OsStr::new("a"), OsStr::new("A")))?;
-            let unicode_normalizing = dir
-                .probe_names_equivalent(OsStr::new("caf\u{00e9}"), OsStr::new("cafe\u{0301}"))
-                .unwrap_or(false);
-            let equivalence = match (case_insensitive, unicode_normalizing) {
-                (false, false) => DirFilenameEquivalence::Exact,
-                (false, true) => DirFilenameEquivalence::UnicodeNfd,
-                (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
-                (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
-            };
-            if let Ok(Some(dir_id)) = dir.self_identity()
-                && let Ok(mut cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
-            {
-                if cache.len() >= 1024 {
-                    cache.clear();
-                }
-                cache.insert(dir_id, equivalence);
-            }
-            Some(equivalence)
+            // Keep `filename_equivalence` strictly read-only: return `None`
+            // for unrecognized or configurable mounts (OverlayFS, SMB, FUSE,
+            // NFS, XFS, etc.) so callers that are permitted to write can opt
+            // into explicit live probing while read-only previews never mutate
+            // directory timestamps or emit filesystem events.
+            None
         }
         #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
         {
-            let readable = open_readable_self(dir)?;
-            if let Ok(Some(dir_id)) = dir.self_identity()
-                && let Ok(cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
-                && let Some(&cached) = cache.get(&dir_id)
-            {
-                return Some(cached);
-            }
-            let case_insensitive = probe_directory_case_insensitivity(dir, readable.as_raw_fd())
-                .or_else(|| dir.probe_names_equivalent(OsStr::new("a"), OsStr::new("A")))?;
-            let unicode_normalizing = dir
-                .probe_names_equivalent(OsStr::new("caf\u{00e9}"), OsStr::new("cafe\u{0301}"))
-                .unwrap_or(false);
-            let equivalence = match (case_insensitive, unicode_normalizing) {
-                (false, false) => DirFilenameEquivalence::Exact,
-                (false, true) => DirFilenameEquivalence::UnicodeNfd,
-                (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
-                (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
-            };
-            if let Ok(Some(dir_id)) = dir.self_identity()
-                && let Ok(mut cache) = PROBED_DIR_EQUIVALENCE_CACHE.lock()
-            {
-                if cache.len() >= 1024 {
-                    cache.clear();
-                }
-                cache.insert(dir_id, equivalence);
-            }
-            Some(equivalence)
+            let _ = dir;
+            None
         }
     }
 
@@ -5370,7 +5337,91 @@ mod platform {
     }
 
     #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+    fn check_bsd_system_extattrs(fd: std::os::fd::RawFd) -> io::Result<()> {
+        let mut names_buf = Vec::new();
+        let mut listed = false;
+        for _ in 0..4 {
+            // SAFETY: querying system-namespace extattr list size with null buffer.
+            let size = unsafe {
+                libc::extattr_list_fd(fd, libc::EXTATTR_NAMESPACE_SYSTEM, std::ptr::null_mut(), 0)
+            };
+            if size < 0 {
+                let error = io::Error::last_os_error();
+                let raw = error.raw_os_error();
+                if raw == Some(libc::EOPNOTSUPP)
+                    || raw == Some(libc::ENOTSUP)
+                    || raw == Some(libc::ENOSYS)
+                    || raw == Some(libc::EPERM)
+                    || raw == Some(libc::EACCES)
+                {
+                    return Ok(());
+                }
+                return Err(error);
+            }
+            if size == 0 {
+                return Ok(());
+            }
+            names_buf.resize(usize::try_from(size).unwrap_or(0), 0u8);
+            // SAFETY: `names_buf` has `names_buf.len()` writable bytes.
+            let read = unsafe {
+                libc::extattr_list_fd(
+                    fd,
+                    libc::EXTATTR_NAMESPACE_SYSTEM,
+                    names_buf.as_mut_ptr().cast::<libc::c_void>(),
+                    names_buf.len(),
+                )
+            };
+            if read >= 0 {
+                names_buf.truncate(usize::try_from(read).unwrap_or(0));
+                listed = true;
+                break;
+            }
+            let error = io::Error::last_os_error();
+            let raw = error.raw_os_error();
+            if raw == Some(libc::ERANGE) {
+                continue;
+            }
+            if raw == Some(libc::EOPNOTSUPP)
+                || raw == Some(libc::ENOTSUP)
+                || raw == Some(libc::ENOSYS)
+                || raw == Some(libc::EPERM)
+                || raw == Some(libc::EACCES)
+            {
+                return Ok(());
+            }
+            return Err(error);
+        }
+        if !listed {
+            return Err(io::Error::other(
+                "system extended attribute list changed concurrently during destination snapshot",
+            ));
+        }
+        let mut offset = 0usize;
+        while offset < names_buf.len() {
+            let name_len = usize::from(names_buf[offset]);
+            offset += 1;
+            if offset + name_len > names_buf.len() {
+                break;
+            }
+            let raw_name = &names_buf[offset..offset + name_len];
+            offset += name_len;
+            if raw_name.is_empty() || super::is_bsd_acl_system_extattr(raw_name) {
+                continue;
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                format!(
+                    "cannot safely preserve BSD system extended attribute {} across atomic replacement",
+                    String::from_utf8_lossy(raw_name)
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
     fn read_existing_user_xattrs(fd: std::os::fd::RawFd) -> io::Result<Vec<(CString, Vec<u8>)>> {
+        check_bsd_system_extattrs(fd)?;
         let mut names_buf = Vec::new();
         let mut listed = false;
         for _ in 0..4 {
@@ -5632,7 +5683,27 @@ mod platform {
         }
         #[cfg(target_os = "linux")]
         apply_linux_post_write_inode_flags(temp_fd, existing)?;
-        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "openbsd"))]
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            // Replacement writes a normal uncompressed data fork (matching
+            // `fs::write` on an existing compressed file and skipping
+            // `com.apple.decmpfs`), so mask off `UF_COMPRESSED` rather than
+            // attempting to apply it to an uncompressed inode.
+            let target_flags = existing.entry.flags & !libc::UF_COMPRESSED;
+            if target_flags != temp_stat.st_flags {
+                // SAFETY: `temp_fd` is an open file descriptor we just staged.
+                if unsafe { libc::fchflags(temp_fd, target_flags) } != 0 {
+                    let error = io::Error::last_os_error();
+                    return Err(io::Error::new(
+                        error.kind(),
+                        format!(
+                            "cannot safely preserve original BSD file flags on replacement: {error}"
+                        ),
+                    ));
+                }
+            }
+        }
+        #[cfg(target_os = "openbsd")]
         if existing.entry.flags != temp_stat.st_flags {
             // SAFETY: `temp_fd` is an open file descriptor we just staged.
             if unsafe { libc::fchflags(temp_fd, existing.entry.flags) } != 0 {
@@ -5709,6 +5780,14 @@ enum LinuxSecurityXattrKind {
     UnpreservableIntegrityOrUnknown,
 }
 
+#[cfg(any(target_os = "freebsd", target_os = "netbsd", test))]
+fn is_bsd_acl_system_extattr(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"posix1e.acl_access" | b"posix1e.acl_default" | b"nfs4.acl"
+    )
+}
+
 #[cfg(any(target_os = "linux", test))]
 fn classify_linux_security_xattr(name: &[u8]) -> LinuxSecurityXattrKind {
     match name {
@@ -5717,8 +5796,7 @@ fn classify_linux_security_xattr(name: &[u8]) -> LinuxSecurityXattrKind {
         | b"security.SMACK64EXEC"
         | b"security.SMACK64MMAP"
         | b"security.SMACK64TRANSMUTE"
-        | b"security.apparmor"
-        | b"security.capability" => LinuxSecurityXattrKind::CopyableAccessLabel,
+        | b"security.apparmor" => LinuxSecurityXattrKind::CopyableAccessLabel,
         _ => LinuxSecurityXattrKind::UnpreservableIntegrityOrUnknown,
     }
 }
@@ -6443,6 +6521,24 @@ mod platform {
             }
         }
 
+        /// Read-only filename equivalence check that inspects only already-existing
+        /// entries in `self` without mutating the directory.
+        #[must_use]
+        pub fn probe_existing_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if left == right {
+                return Some(true);
+            }
+            if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
+            {
+                return None;
+            }
+            match (self.file_identity(left), self.file_identity(right)) {
+                (Ok(Some(left_id)), Ok(Some(right_id))) => Some(left_id == right_id),
+                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => Some(false),
+                _ => None,
+            }
+        }
+
         /// Probes whether two single-segment filenames resolve to the same
         /// entry on this Windows directory's mounted filesystem.
         ///
@@ -6453,17 +6549,12 @@ mod platform {
         /// file identity.
         #[must_use]
         pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
-            if left == right {
-                return Some(true);
+            if let Some(result) = self.probe_existing_names_equivalent(left, right) {
+                return Some(result);
             }
             if validate_single_file_name(left).is_err() || validate_single_file_name(right).is_err()
             {
                 return None;
-            }
-            match (self.file_identity(left), self.file_identity(right)) {
-                (Ok(Some(left_id)), Ok(Some(right_id))) => return Some(left_id == right_id),
-                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => return Some(false),
-                _ => {}
             }
             let pid = std::process::id();
             let probe_dir_handle = {
@@ -8610,6 +8701,15 @@ mod platform {
             None
         }
 
+        /// Read-only filename-equivalence probe fallback.
+        #[must_use]
+        pub fn probe_existing_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
+            if left == right {
+                return Some(true);
+            }
+            None
+        }
+
         /// Unsupported directory filename-equivalence probe fallback.
         #[must_use]
         pub fn probe_names_equivalent(&self, left: &OsStr, right: &OsStr) -> Option<bool> {
@@ -10223,7 +10323,6 @@ mod cross_platform_tests {
             b"security.SMACK64MMAP".as_slice(),
             b"security.SMACK64TRANSMUTE".as_slice(),
             b"security.apparmor".as_slice(),
-            b"security.capability".as_slice(),
         ] {
             assert_eq!(
                 classify_linux_security_xattr(label),
@@ -10233,6 +10332,7 @@ mod cross_platform_tests {
             );
         }
         for unpreservable in [
+            b"security.capability".as_slice(),
             b"security.ima".as_slice(),
             b"security.evm".as_slice(),
             b"security.custom_unknown".as_slice(),
@@ -10244,6 +10344,17 @@ mod cross_platform_tests {
                 String::from_utf8_lossy(unpreservable)
             );
         }
+    }
+
+    #[test]
+    fn bsd_system_extattr_filter_recognizes_acl_attributes_only() {
+        use super::is_bsd_acl_system_extattr;
+
+        assert!(is_bsd_acl_system_extattr(b"posix1e.acl_access"));
+        assert!(is_bsd_acl_system_extattr(b"posix1e.acl_default"));
+        assert!(is_bsd_acl_system_extattr(b"nfs4.acl"));
+        assert!(!is_bsd_acl_system_extattr(b"mac_biba"));
+        assert!(!is_bsd_acl_system_extattr(b"custom.admin"));
     }
 
     #[test]
