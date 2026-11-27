@@ -668,7 +668,10 @@ function normalizeShellMode(shellValue) {
   if (/^cmd(?:\.exe)?(?:\s|$)/iu.test(trimmed)) {
     return "cmd";
   }
-  return "posix";
+  if (/^(?:(?:\/[\w./-]*\/)?(?:bash|sh|zsh|dash|ksh|ash))(?:\.exe)?(?:\s|$)/iu.test(trimmed)) {
+    return "posix";
+  }
+  return "unsupported";
 }
 
 function isWindowsRunnerLabel(label) {
@@ -5686,6 +5689,30 @@ function formatPrintfLines(format, args) {
   return chunks.join("").split(/\r?\n/u);
 }
 
+function varMapsEqual(a, b) {
+  if (a.size !== b.size) {
+    return false;
+  }
+  for (const [key, aEntries] of a) {
+    const bEntries = b.get(key);
+    if (!bEntries || aEntries.length !== bEntries.length) {
+      return false;
+    }
+    for (let i = 0; i < aEntries.length; i += 1) {
+      const ae = aEntries[i];
+      const be = bEntries[i];
+      if (
+        ae.value !== be.value ||
+        Boolean(ae.unset) !== Boolean(be.unset) ||
+        Boolean(ae.truncated) !== Boolean(be.truncated)
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function extractRedirectedWriteLines(
   tokens,
   startIndex,
@@ -5693,8 +5720,10 @@ function extractRedirectedWriteLines(
   tokenQuoted = null,
   tokenOffsets = null,
   defaultTargetsFile = false,
+  shellMode = "posix",
 ) {
   const stripped = [];
+  const strippedQuoted = [];
   let targetsFile = false;
   let hasStdoutRedirect = false;
   for (let index = startIndex; index < tokens.length; index += 1) {
@@ -5718,7 +5747,7 @@ function extractRedirectedWriteLines(
         hasStdoutRedirect = true;
       }
       if (
-        (token === "1" || op === ">" || op === ">>" || op === ">|") &&
+        token === "1" &&
         (op === ">" || op === ">>" || op === ">|") &&
         targetPredicate(tokens[index + 2])
       ) {
@@ -5728,14 +5757,69 @@ function extractRedirectedWriteLines(
       continue;
     }
     stripped.push(token);
+    strippedQuoted.push(Boolean(tokenQuoted?.[index]));
   }
 
-  if ((!targetsFile && !(defaultTargetsFile && !hasStdoutRedirect)) || stripped.length === 0) {
+  if (stripped.length === 0) {
+    return null;
+  }
+
+  if (shellMode === "pwsh") {
+    const pwshCmd = path.basename(stripped[0]).toLowerCase();
+    if (
+      pwshCmd === "add-content" ||
+      pwshCmd === "ac" ||
+      pwshCmd === "set-content" ||
+      pwshCmd === "sc" ||
+      pwshCmd === "out-file"
+    ) {
+      let pathArg = null;
+      const valueArgs = [];
+      const positional = [];
+      for (let i = 1; i < stripped.length; i += 1) {
+        const arg = stripped[i];
+        const lowerArg = arg.toLowerCase();
+        if (lowerArg === "-path" || lowerArg === "-literalpath" || lowerArg === "-filepath") {
+          if (stripped[i + 1] !== undefined) {
+            pathArg = stripped[i + 1];
+          }
+          i += 1;
+          continue;
+        }
+        if (lowerArg === "-value" || lowerArg === "-inputobject") {
+          if (stripped[i + 1] !== undefined) {
+            valueArgs.push(stripped[i + 1]);
+          }
+          i += 1;
+          continue;
+        }
+        if (lowerArg.startsWith("-")) {
+          if (lowerArg === "-encoding" || lowerArg === "-width") {
+            i += 1;
+          }
+          continue;
+        }
+        positional.push(arg);
+      }
+      if (pathArg === null && positional.length > 0) {
+        pathArg = positional.shift();
+      }
+      if (valueArgs.length === 0 && positional.length > 0) {
+        valueArgs.push(...positional);
+      }
+      if (pathArg && targetPredicate(pathArg) && valueArgs.length > 0) {
+        return valueArgs.flatMap((v) => v.split(/\r?\n/u));
+      }
+    }
+  }
+
+  if (!targetsFile && !(defaultTargetsFile && !hasStdoutRedirect)) {
     return null;
   }
 
   const cmd = path.basename(stripped[0]);
-  if (cmd === "echo") {
+  const lowerCmd = cmd.toLowerCase();
+  if (lowerCmd === "echo") {
     let argIndex = 1;
     while (argIndex < stripped.length && /^-[neE]+$/u.test(stripped[argIndex])) {
       argIndex += 1;
@@ -5743,8 +5827,28 @@ function extractRedirectedWriteLines(
     return stripped.slice(argIndex).join(" ").split(/\r?\n/u);
   }
 
+  if (shellMode === "pwsh" && lowerCmd === "write-output") {
+    const outLines = [];
+    for (let argIndex = 1; argIndex < stripped.length; argIndex += 1) {
+      const arg = stripped[argIndex];
+      if (arg.toLowerCase() === "-inputobject" || arg.toLowerCase() === "-noenumerate") {
+        continue;
+      }
+      outLines.push(...arg.split(/\r?\n/u));
+    }
+    return outLines.length > 0 ? outLines : null;
+  }
+
   if (cmd === "printf" && stripped.length >= 2) {
     return formatPrintfLines(stripped[1], stripped.slice(2));
+  }
+
+  if (
+    shellMode === "pwsh" &&
+    stripped.length === 1 &&
+    (strippedQuoted[0] || stripped[0].includes("=") || stripped[0].includes("<<"))
+  ) {
+    return stripped[0].split(/\r?\n/u);
   }
 
   return null;
@@ -5758,6 +5862,7 @@ function peelControlKeywords(
   shellMode,
   tokenQuoted = null,
   tokenSingleQuoted = null,
+  loopControl = null,
 ) {
   let start = 0;
   while (start < tokens.length) {
@@ -5916,11 +6021,13 @@ function peelControlKeywords(
               : candidateEntries;
           entries = mergeVarEntries(entries, nextEntries);
         }
-        frame.branches.push({
-          kind: "loop",
-          entryVars,
-          mustExecute: guaranteedNonEmpty,
-        });
+        const operandCount = tokens.length - (start + 3);
+        const mayRepeat =
+          operandCount !== 1 ||
+          Boolean(
+            !tokenSingleQuoted?.[start + 3] &&
+            (tokens[start + 3].includes("$") || tokens[start + 3].includes("${{")),
+          );
         if (entries.length > 0) {
           frame.vars.set(varName, entries);
           frame.arrays?.delete(varName);
@@ -5931,21 +6038,42 @@ function peelControlKeywords(
             }
           }
         }
+        frame.branches.push({
+          kind: "loop",
+          entryVars,
+          iterStartVars: cloneVarMap(frame.vars),
+          mustExecute: guaranteedNonEmpty,
+          mayRepeat,
+          bodyStartIdx: loopControl ? loopControl.eventIdx + 1 : null,
+          passCount: 0,
+          problemStartCount: loopControl ? loopControl.problems.length : null,
+        });
         return [];
       }
       frame.branches.push({
         kind: "loop",
         entryVars,
+        iterStartVars: cloneVarMap(frame.vars),
         mustExecute: false,
+        mayRepeat: true,
+        bodyStartIdx: loopControl ? loopControl.eventIdx + 1 : null,
+        passCount: 0,
+        problemStartCount: loopControl ? loopControl.problems.length : null,
       });
       start += 1;
       continue;
     }
     if (keyword === "while" || keyword === "until") {
+      const entryVars = cloneVarMap(frame.vars);
       frame.branches.push({
         kind: "loop",
-        entryVars: cloneVarMap(frame.vars),
+        entryVars,
+        iterStartVars: cloneVarMap(entryVars),
         mustExecute: false,
+        mayRepeat: true,
+        bodyStartIdx: loopControl ? loopControl.eventIdx + 1 : null,
+        passCount: 0,
+        problemStartCount: loopControl ? loopControl.problems.length : null,
       });
       start += 1;
       continue;
@@ -5953,6 +6081,37 @@ function peelControlKeywords(
     if (keyword === "done") {
       const top = frame.branches.at(-1);
       if (top?.kind === "loop") {
+        if (loopControl && top.mayRepeat && top.bodyStartIdx !== null && top.passCount < 2) {
+          const mergedIterStart = joinVarMaps([top.iterStartVars, frame.vars]);
+          if (!varMapsEqual(top.iterStartVars, mergedIterStart)) {
+            top.iterStartVars = mergedIterStart;
+            top.passCount += 1;
+            frame.vars = cloneVarMap(mergedIterStart);
+            loopControl.rewindTo = top.bodyStartIdx;
+            return [];
+          }
+        }
+        if (
+          loopControl &&
+          top.passCount > 0 &&
+          top.problemStartCount !== null &&
+          loopControl.problems.length > top.problemStartCount + 1
+        ) {
+          const seenInLoop = new Set();
+          const deduped = [];
+          for (let pIdx = top.problemStartCount; pIdx < loopControl.problems.length; pIdx += 1) {
+            const msg = loopControl.problems[pIdx];
+            if (!seenInLoop.has(msg)) {
+              seenInLoop.add(msg);
+              deduped.push(msg);
+            }
+          }
+          loopControl.problems.splice(
+            top.problemStartCount,
+            loopControl.problems.length - top.problemStartCount,
+            ...deduped,
+          );
+        }
         frame.branches.pop();
         if (!top.mustExecute) {
           frame.vars = joinVarMaps([top.entryVars, frame.vars]);
@@ -6877,6 +7036,18 @@ function inspectShellText(
     return;
   }
 
+  if (shellMode === "unsupported") {
+    if (
+      /\b(?:docker|podman|buildah|docker-compose|podman-compose)\b/iu.test(scriptText) ||
+      /\b(?:GITHUB_ENV|GITHUB_OUTPUT)\b/u.test(scriptText)
+    ) {
+      problems.push(
+        `${filePath}:${startLine}: container or environment operations in non-shell run step cannot be verified statically`,
+      );
+    }
+    return;
+  }
+
   const cloneRowCwds = (rowCwds) => {
     const copy = new Map();
     for (const [key, dirs] of rowCwds) {
@@ -6946,6 +7117,113 @@ function inspectShellText(
   const calledFnDefs = new Set();
   const stdoutRedirectStack = [];
   let groupConditionalDepth = 0;
+  const pendingGithubEnvHeredoc = { current: null };
+  const pendingGithubOutputHeredoc = { current: null };
+  const feedGithubFileLines = (
+    rawLines,
+    kind,
+    cmdLine,
+    isConditional,
+    frameVars,
+    pendingState,
+    recordFn,
+  ) => {
+    const heredocStartPattern =
+      kind === "env"
+        ? /^(?<name>[A-Za-z_][A-Za-z0-9_]*)<<(?<delim>.+)$/u
+        : /^(?<name>[^\s=<]+)<<(?<delim>.+)$/u;
+    const singleLinePattern =
+      kind === "env" ? ENV_PREFIX_ASSIGNMENT_PATTERN : /^(?<name>[^\s=]+)=(?<value>[\s\S]*)$/u;
+
+    for (let idx = 0; idx < rawLines.length; idx += 1) {
+      const rawLine = rawLines[idx];
+      if (pendingState.current) {
+        const active = pendingState.current;
+        if (rawLine === active.delimiter) {
+          const finalEntries = active.variants.map((v) => ({ value: v.text, line: v.line }));
+          if (active.truncated) {
+            finalEntries.push({ value: "", line: active.line, truncated: true });
+          }
+          recordFn(active.name, finalEntries, active.conditional || isConditional);
+          pendingState.current = null;
+          continue;
+        }
+        const resolvedLine = resolveImageTokenCandidates(
+          rawLine,
+          stepEnv,
+          frameVars,
+          cmdLine,
+          shellMode,
+        );
+        if (resolvedLine.truncated) {
+          active.truncated = true;
+        }
+        const nextVariants = [];
+        const seen = new Set();
+        for (const base of active.variants) {
+          for (const cand of resolvedLine.candidates) {
+            const combined = active.lineCount === 0 ? cand.text : `${base.text}\n${cand.text}`;
+            const candLine = active.lineCount === 0 ? cand.line : base.line;
+            const key = `${candLine}:${combined}`;
+            if (seen.has(key)) {
+              continue;
+            }
+            if (nextVariants.length >= MAX_VAR_VALUES) {
+              active.truncated = true;
+              break;
+            }
+            seen.add(key);
+            nextVariants.push({ text: combined, line: candLine });
+          }
+        }
+        if (nextVariants.length > 0) {
+          active.variants = nextVariants;
+        }
+        active.lineCount += 1;
+        if (isConditional) {
+          active.conditional = true;
+        }
+        continue;
+      }
+
+      const heredocMatch = heredocStartPattern.exec(rawLine);
+      if (heredocMatch) {
+        const delimExpanded = resolveImageTokenCandidates(
+          heredocMatch.groups.delim,
+          stepEnv,
+          frameVars,
+          cmdLine,
+          shellMode,
+        );
+        const delimiter =
+          !delimExpanded.truncated && delimExpanded.candidates.length === 1
+            ? delimExpanded.candidates[0].text
+            : heredocMatch.groups.delim;
+        pendingState.current = {
+          name: heredocMatch.groups.name,
+          delimiter,
+          variants: [{ text: "", line: cmdLine }],
+          lineCount: 0,
+          truncated: false,
+          line: cmdLine,
+          conditional: isConditional,
+        };
+        continue;
+      }
+
+      const assignMatch = singleLinePattern.exec(rawLine);
+      if (assignMatch) {
+        const resolved = resolveImageTokenCandidates(
+          assignMatch.groups.value,
+          stepEnv,
+          frameVars,
+          cmdLine,
+          shellMode,
+        );
+        recordFn(assignMatch.groups.name, candidatesToVarEntries(resolved, cmdLine), isConditional);
+      }
+    }
+  };
   const currentStdoutRedirectTarget = () => {
     for (let idx = stdoutRedirectStack.length - 1; idx >= 0; idx -= 1) {
       if (stdoutRedirectStack[idx].target !== null) {
@@ -7467,6 +7745,7 @@ function inspectShellText(
         continue;
       }
 
+      const loopControl = { eventIdx, rewindTo: null, problems };
       let tokens = peelControlKeywords(
         event.tokens,
         frame,
@@ -7475,7 +7754,12 @@ function inspectShellText(
         shellMode,
         event.tokenQuoted,
         event.tokenSingleQuoted,
+        loopControl,
       );
+      if (loopControl.rewindTo !== null) {
+        eventIdx = loopControl.rewindTo - 1;
+        continue;
+      }
       const peeledCount = event.tokens.length - tokens.length;
       let peeledTokenOffsets = event.tokenOffsets ? event.tokenOffsets.slice(peeledCount) : [];
       let peeledSingleQuoted = event.tokenSingleQuoted
@@ -8313,7 +8597,10 @@ function inspectShellText(
           continue;
         }
         const token = tokens[cursor];
-        const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+        const prefixAssign =
+          shellMode === "posix" && !peeledQuoted[cursor]
+            ? ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token)
+            : null;
         if (prefixAssign) {
           const resolved = candidatesToVarEntries(
             resolveImageTokenCandidates(
@@ -8742,6 +9029,7 @@ function inspectShellText(
         peeledQuoted,
         peeledTokenOffsets,
         activeStdoutTarget === "github-env",
+        shellMode,
       );
       if (githubEnvLines) {
         if (!suppressSideEffects) {
@@ -8750,21 +9038,15 @@ function inspectShellText(
             frame.branches.length > 0 ||
             conditional ||
             groupConditionalDepth > 0;
-          for (const assignment of parseGithubEnvPayload(githubEnvLines, lineNumber)) {
-            const resolved = resolveImageTokenCandidates(
-              assignment.value,
-              stepEnv,
-              frame.vars,
-              lineNumber,
-              shellMode,
-            );
-            recordGithubEnvWrite(
-              emittedGithubEnv,
-              assignment.name,
-              candidatesToVarEntries(resolved, lineNumber),
-              isConditional,
-            );
-          }
+          feedGithubFileLines(
+            githubEnvLines,
+            "env",
+            lineNumber,
+            isConditional,
+            frame.vars,
+            pendingGithubEnvHeredoc,
+            (name, entries, cond) => recordGithubEnvWrite(emittedGithubEnv, name, entries, cond),
+          );
         }
         continue;
       }
@@ -8776,6 +9058,7 @@ function inspectShellText(
         peeledQuoted,
         peeledTokenOffsets,
         activeStdoutTarget === "github-output",
+        shellMode,
       );
       if (githubOutputLines) {
         if (!suppressSideEffects) {
@@ -8784,22 +9067,20 @@ function inspectShellText(
             frame.branches.length > 0 ||
             conditional ||
             groupConditionalDepth > 0;
-          for (const assignment of parseGithubOutputPayload(githubOutputLines, lineNumber)) {
-            const resolved = resolveImageTokenCandidates(
-              assignment.value,
-              stepEnv,
-              frame.vars,
-              lineNumber,
-              shellMode,
-            );
-            const sanitized = sanitizeGithubOutputEntries(
-              candidatesToVarEntries(resolved, lineNumber),
-              shellMode,
-            );
-            if (sanitized.length > 0) {
-              recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
-            }
-          }
+          feedGithubFileLines(
+            githubOutputLines,
+            "output",
+            lineNumber,
+            isConditional,
+            frame.vars,
+            pendingGithubOutputHeredoc,
+            (name, entries, cond) => {
+              const sanitized = sanitizeGithubOutputEntries(entries, shellMode);
+              if (sanitized.length > 0) {
+                recordGithubEnvWrite(emittedGithubOutput, name, sanitized, cond);
+              }
+            },
+          );
         }
         continue;
       }

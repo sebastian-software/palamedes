@@ -4734,6 +4734,68 @@ describe("workflow contracts", () => {
         ].join("\n"),
       ),
     ).toEqual(["<memory>:20: alpine:3.20 is not pinned to a sha256 digest"]);
+    // Non-shell `shell: python` steps fail closed when invoking container CLIs
+    // (while benign Python steps pass), loop-carried mutations across
+    // iterations are caught, multiline `GITHUB_ENV`/`GITHUB_OUTPUT` writes
+    // split across commands are assembled, PowerShell bare-string and
+    // `Write-Output` writes are decoded, and `2>>"$GITHUB_ENV"` stderr
+    // redirections do not pollute tracked environment variables.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r65-posix:",
+          "    runs-on: ubuntu-latest",
+          "    env:",
+          `      KEEP: node:24@${digest}`,
+          "    steps:",
+          "      - shell: python",
+          '        run: print("hello")',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["docker", "pull", "node:24"], check=True)',
+          "      - run: |",
+          `          image=node:24@${digest}`,
+          "          for arch in amd64 arm64; do",
+          '            docker pull --platform="linux/$arch" "$image"',
+          "            image=busybox:1.36",
+          "          done",
+          '          echo "KEEP=debian:12" 2>>"$GITHUB_ENV"',
+          "      - id: multi",
+          "        run: |",
+          "          {",
+          '            echo "ML_ENV<<EOF"',
+          '            echo "ubuntu:24.04"',
+          '            echo "EOF"',
+          '          } >> "$GITHUB_ENV"',
+          "          {",
+          '            echo "ml_out<<END"',
+          '            echo "nginx:1.27"',
+          '            echo "END"',
+          '          } >> "$GITHUB_OUTPUT"',
+          '      - run: docker pull "$KEEP"',
+          '      - run: docker pull "$ML_ENV"',
+          '      - run: docker pull "${{ steps.multi.outputs.ml_out }}"',
+          "  r65-win:",
+          "    runs-on: windows-2025",
+          "    steps:",
+          "      - run: '\"PS_BARE=alpine:3.20\" >> $env:GITHUB_ENV'",
+          "      - run: 'Write-Output \"PS_WRITE=fedora:41\" >> $env:GITHUB_ENV'",
+          '      - run: docker pull "$env:PS_BARE"',
+          '      - run: docker pull "$env:PS_WRITE"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:12: container or environment operations in non-shell run step cannot be verified statically",
+      "<memory>:18: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:25: ubuntu:24.04 is not pinned to a sha256 digest",
+      "<memory>:35: nginx:1.27 is not pinned to a sha256 digest",
+      "<memory>:39: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:40: fedora:41 is not pinned to a sha256 digest",
+    ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
