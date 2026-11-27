@@ -1794,25 +1794,25 @@ function extractTurbopackFactoryTableFromArrayNode(
   depth = 0,
 ): boolean {
   if (depth > 2 || !Array.isArray(arrayNode.elements)) return false;
-  // Turbopack registers one or more consecutive module IDs followed by their
-  // shared factory function (`[3042, 77420, (a, b) => ...]`). Next 16.4.1 can
-  // also place strict-mode factories inside a leading nested table (`[[id, fn],
-  // id2, fn2]` or `[(() => { "use strict"; return [id, fn]; })(), id2, fn2]`).
+  // Turbopack's `installCompressedModuleFactories` walks a flat array of one or
+  // more consecutive module IDs followed by their shared factory function
+  // (`[3042, 77420, (a, b) => ...]`). Only actual spread elements (`...[...]`
+  // or `...(() => { "use strict"; return [...]; })()`) flatten into that array;
+  // an unspread nested array is a single non-factory element and must fail closed.
   let pendingIds: string[] = [];
   for (const elem of arrayNode.elements as Array<JsAstNode | null>) {
     if (!elem) return false;
-    if (pendingIds.length === 0) {
-      const nestedCandidate =
-        elem.type === "SpreadElement" && isAstNode(elem.argument) ? elem.argument : elem;
-      const nestedArray = unwrapTurbopackArrayNode(nestedCandidate);
-      if (nestedArray) {
-        if (!extractTurbopackFactoryTableFromArrayNode(nestedArray, source, groups, depth + 1)) {
-          return false;
-        }
-        continue;
+    if (elem.type === "SpreadElement") {
+      if (pendingIds.length !== 0 || !isAstNode(elem.argument)) return false;
+      const nestedArray = unwrapTurbopackArrayNode(elem.argument);
+      if (
+        !nestedArray ||
+        !extractTurbopackFactoryTableFromArrayNode(nestedArray, source, groups, depth + 1)
+      ) {
+        return false;
       }
+      continue;
     }
-    if (elem.type === "SpreadElement") return false;
     const numericId = getNumberLiteralValue(elem);
     if (numericId !== undefined && numericId >= 0) {
       pendingIds.push(`n:${numericId}`);
@@ -1836,8 +1836,7 @@ function extractTurbopackModulesFromSource(
 ): TurbopackExtractedChunk | null {
   const program = parseJsProgram(source, options.resolveFromDir);
   if (!program || !Array.isArray(program.body)) return null;
-  const groups: TurbopackFactoryGroup[] = [];
-  let foundFactoryTable = false;
+  let liveGroups: TurbopackFactoryGroup[] | null = null;
   let invalid = false;
 
   const topLevelTables = new Set<JsAstNode>();
@@ -1857,13 +1856,17 @@ function extractTurbopackModulesFromSource(
       ) {
         const arrayNode = unwrapTurbopackArrayNode(expr.right);
         if (arrayNode) {
-          if (!extractTurbopackFactoryTableFromArrayNode(arrayNode, source, groups)) {
+          const nextGroups: TurbopackFactoryGroup[] = [];
+          if (!extractTurbopackFactoryTableFromArrayNode(arrayNode, source, nextGroups)) {
             return null;
           }
+          // CommonJS `require()` returns only the final unconditional
+          // `module.exports` value, so replace any earlier overwritten table.
+          liveGroups = nextGroups;
           topLevelTables.add(expr);
-          foundFactoryTable = true;
         } else if (options.requireTable) {
-          return null;
+          liveGroups = null;
+          topLevelTables.add(expr);
         }
       }
     }
@@ -1871,7 +1874,7 @@ function extractTurbopackModulesFromSource(
 
   if (options.requireTable) {
     // Reject chunks that also assign `module.exports` inside nested blocks or
-    // control flow outside the extracted factory table.
+    // control flow outside top-level unconditional assignments.
     walkJsAst(program, undefined, (node) => {
       if (invalid || topLevelTables.has(node)) return false;
       if (
@@ -1884,10 +1887,10 @@ function extractTurbopackModulesFromSource(
       }
       return;
     });
-    if (invalid || !foundFactoryTable) return null;
+    if (invalid || liveGroups === null) return null;
   }
 
-  return { groups };
+  return { groups: liveGroups ?? [] };
 }
 
 function buildResolvedTurbopackModuleMap(
@@ -2790,8 +2793,9 @@ function collectLexicalStatementBindings(statements: readonly unknown[], names: 
   }
 }
 
-function collectHoistedFunctionBodyBindings(node: JsAstNode, names: Set<string>): void {
+function collectHoistedVarBindings(node: JsAstNode, names: Set<string>): void {
   if (
+    node.type === "FunctionDeclaration" ||
     node.type === "FunctionExpression" ||
     node.type === "ArrowFunctionExpression" ||
     node.type === "ObjectMethod" ||
@@ -2799,12 +2803,6 @@ function collectHoistedFunctionBodyBindings(node: JsAstNode, names: Set<string>)
     node.type === "ClassPrivateMethod" ||
     node.type === "StaticBlock"
   ) {
-    return;
-  }
-  if (node.type === "FunctionDeclaration") {
-    if (isAstNode(node.id) && node.id.type === "Identifier" && typeof node.id.name === "string") {
-      names.add(node.id.name);
-    }
     return;
   }
   if (node.type === "VariableDeclaration" && node.kind === "var") {
@@ -2821,10 +2819,10 @@ function collectHoistedFunctionBodyBindings(node: JsAstNode, names: Set<string>)
     if (AST_METADATA_KEYS.has(key)) continue;
     if (Array.isArray(value)) {
       for (const item of value) {
-        if (isAstNode(item)) collectHoistedFunctionBodyBindings(item, names);
+        if (isAstNode(item)) collectHoistedVarBindings(item, names);
       }
     } else if (isAstNode(value)) {
-      collectHoistedFunctionBodyBindings(value, names);
+      collectHoistedVarBindings(value, names);
     }
   }
 }
@@ -2886,6 +2884,49 @@ function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): b
     }
   };
 
+  // Visit executable expressions embedded inside binding patterns (default
+  // initializers and computed property keys) without treating ordinary binding
+  // identifiers as assignments.
+  const visitPatternExpressions = (pattern: JsAstNode, depth: number): void => {
+    if (foundWrite) return;
+    switch (pattern.type) {
+      case "Identifier":
+        return;
+      case "RestElement":
+      case "SpreadElement":
+        if (isAstNode(pattern.argument)) visitPatternExpressions(pattern.argument, depth);
+        return;
+      case "AssignmentPattern":
+        if (isAstNode(pattern.right)) visit(pattern.right, depth);
+        if (!foundWrite && isAstNode(pattern.left)) visitPatternExpressions(pattern.left, depth);
+        return;
+      case "ArrayPattern":
+        if (Array.isArray(pattern.elements)) {
+          for (const elem of pattern.elements) {
+            if (foundWrite) return;
+            if (isAstNode(elem)) visitPatternExpressions(elem, depth);
+          }
+        }
+        return;
+      case "ObjectPattern":
+        if (Array.isArray(pattern.properties)) {
+          for (const prop of pattern.properties) {
+            if (foundWrite) return;
+            if (!isAstNode(prop)) continue;
+            if (prop.type === "RestElement" && isAstNode(prop.argument)) {
+              visitPatternExpressions(prop.argument, depth);
+            } else if (prop.type === "ObjectProperty") {
+              if (prop.computed && isAstNode(prop.key)) visit(prop.key, depth);
+              if (!foundWrite && isAstNode(prop.value)) visitPatternExpressions(prop.value, depth);
+            }
+          }
+        }
+        return;
+      default:
+        visit(pattern, depth);
+    }
+  };
+
   const visit = (node: JsAstNode, depth: number): void => {
     if (foundWrite) return;
 
@@ -2934,12 +2975,12 @@ function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): b
       if (paramNames.has(ident)) return;
       if (Array.isArray(node.params)) {
         for (const param of node.params) {
-          if (isAstNode(param)) visit(param, depth + 1);
+          if (isAstNode(param)) visitPatternExpressions(param, depth + 1);
         }
       }
       if (foundWrite || !isAstNode(node.body)) return;
       const hoistedNames = new Set<string>();
-      collectHoistedFunctionBodyBindings(node.body, hoistedNames);
+      collectHoistedVarBindings(node.body, hoistedNames);
       if (hoistedNames.has(ident)) return;
       visit(node.body, depth + 1);
       return;
@@ -3009,8 +3050,10 @@ function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): b
         const catchNames = new Set<string>();
         collectPatternBindingNames(node.param, catchNames);
         if (catchNames.has(ident)) return;
+        visitPatternExpressions(node.param, depth + 1);
+        if (foundWrite) return;
       }
-      visitChildren(node, depth + 1);
+      if (isAstNode(node.body)) visit(node.body, depth + 1);
       return;
     }
 
@@ -3053,6 +3096,8 @@ function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): b
               foundWrite = true;
               return;
             }
+            visitPatternExpressions(decl.id, depth);
+            if (foundWrite) return;
           }
           if (isAstNode(decl.init)) visit(decl.init, depth);
           if (foundWrite) return;
@@ -4845,6 +4890,8 @@ export function compiledLoaderTreeHasOptionalRootLocale(
   return walkCompiledLoaderTree(treeExpr, 0, false);
 }
 
+const TURBOPACK_JS_CHUNK_URL_PATTERN = /\.js(?:\?[^#]*)?(?:#.*)?$/u;
+
 type ParsedTurbopackPageEntry = {
   runtimeVar?: string;
   expectedModuleId?: string;
@@ -5024,6 +5071,11 @@ function parseTurbopackPageEntry(
     ) {
       invalid = true;
       return false;
+    }
+    // Match Turbopack's Node `loadRuntimeChunkPath`: non-JS chunks (such as CSS
+    // chunks emitted via `R.c("static/chunks/...css")`) are no-ops at runtime.
+    if (!TURBOPACK_JS_CHUNK_URL_PATTERN.test(chunkRel)) {
+      return;
     }
     loadedChunks.push(resolvedChunk);
     return;
