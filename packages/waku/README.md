@@ -209,7 +209,7 @@ applications using split catalogs (or serve a custom fallback with full HTML
 catalog delivery and its own CSP). Do not derive a CSP nonce from an arbitrary
 client-supplied request header such as `x-csp-nonce`: an attacker could supply a
 predictable value and bypass the script policy. See the
-[deployment security guide](../../docs/security.md#csp-nonces-and-script-delivery).
+[deployment security guide](https://palamedes.dev/docs/security/#csp-nonces-and-script-delivery).
 
 The middleware transforms HTML document streams after Waku renders them. RSC
 and action responses pass through unchanged. If an active fragment cannot be
