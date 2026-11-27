@@ -3051,7 +3051,7 @@ function inspectNonShellScript(
   const CONTAINER_SHELL_CMD_PATTERN =
     /(?:^|[;&|(\s`'"])(?:(?:[A-Za-z]:)?(?:[\\/][\w.@-]+)*[\\/])?(?:docker|podman|buildah|docker-compose|podman-compose)(?:\.exe)?(?=$|[\s;&|)'"`])/iu;
   const allowPythonSyntax = language === "python" || language === "unknown";
-  const allowJsSyntax = language === "js" || language === "unknown";
+  const allowJsSyntax = language === "js" || language === "github-script" || language === "unknown";
 
   const extractBalancedSlice = (src, openIndex, openChar, closeChar) => {
     let depth = 0;
@@ -3620,31 +3620,13 @@ function inspectNonShellScript(
           continue;
         }
         const norm = normalizeExecutableName(tok);
-        if (norm === "command") {
-          let cmdIdx = cur + 1;
-          let isLookup = false;
-          while (cmdIdx < evTokens.length && evTokens[cmdIdx].startsWith("-")) {
-            if (evTokens[cmdIdx] === "--") {
-              cmdIdx += 1;
-              break;
-            }
-            if (evTokens[cmdIdx].includes("v") || evTokens[cmdIdx].includes("V")) {
-              isLookup = true;
-            }
-            cmdIdx += 1;
-          }
-          if (isLookup) {
+        if (SHELL_COMMAND_PREFIXES.has(norm)) {
+          const nextCur = advanceWrapperPrefix(evTokens, cur);
+          if (nextCur === null) {
             cur = evTokens.length;
             break;
           }
-          cur = cmdIdx;
-          continue;
-        }
-        if (SHELL_COMMAND_PREFIXES.has(norm)) {
-          cur += 1;
-          while (cur < evTokens.length && evTokens[cur].startsWith("-")) {
-            cur += 1;
-          }
+          cur = nextCur;
           continue;
         }
         if (CONTAINER_CLI_BASENAMES.has(norm)) {
@@ -3709,6 +3691,10 @@ function inspectNonShellScript(
     if (elements.length === 0) {
       return false;
     }
+    const DYNAMIC_ARGV_PLACEHOLDER = "__DYNAMIC_ARGV__";
+    const wrapperTokens = elements.map(
+      (elem) => unquoteSimpleLiteral(elem) ?? DYNAMIC_ARGV_PLACEHOLDER,
+    );
     let idx = 0;
     while (idx < elements.length) {
       const lit = unquoteSimpleLiteral(elements[idx]);
@@ -3716,29 +3702,15 @@ function inspectNonShellScript(
         return referencesContainerVar(elements[idx], containerVarNames);
       }
       const base = normalizeExecutableName(lit.trim());
-      if (base === "command") {
-        idx += 1;
-        let isLookup = false;
-        while (idx < elements.length) {
-          const flagLit = unquoteSimpleLiteral(elements[idx]);
-          if (flagLit === null || !flagLit.startsWith("-")) {
-            break;
-          }
-          if (flagLit === "--") {
-            idx += 1;
-            break;
-          }
-          if (flagLit.includes("v") || flagLit.includes("V")) {
-            isLookup = true;
-          }
-          idx += 1;
-        }
-        if (isLookup) {
+      if (SHELL_COMMAND_PREFIXES.has(base)) {
+        const nextIdx = advanceWrapperPrefix(wrapperTokens, idx);
+        if (nextIdx === null) {
           return false;
         }
+        idx = nextIdx;
         continue;
       }
-      if (SHELL_COMMAND_PREFIXES.has(base) || ENV_PREFIX_ASSIGNMENT_PATTERN.test(lit)) {
+      if (ENV_PREFIX_ASSIGNMENT_PATTERN.test(lit)) {
         idx += 1;
         continue;
       }
@@ -3839,24 +3811,66 @@ function inspectNonShellScript(
     "passthru",
   ]);
 
+  const extractKeywordArg = (argList, kwName) => {
+    const kwPattern = new RegExp(`^${kwName}\\s*=(?!=)(?<val>[\\s\\S]*)$`, "u");
+    for (const part of argList) {
+      const match = kwPattern.exec(part.trim());
+      if (match) {
+        return match.groups.val.trim();
+      }
+    }
+    return null;
+  };
+
   const callInvokesContainerCli = (callee, argText) => {
     const rawArgs = splitTopLevelComma(argText);
     if (rawArgs.length === 0) {
       return false;
     }
     const args = callee.startsWith("os.spawn") && rawArgs.length >= 2 ? rawArgs.slice(1) : rawArgs;
+    let primaryArg = args[0].trim();
+    if (callee.startsWith("subprocess.")) {
+      const kwName =
+        callee === "subprocess.getoutput" || callee === "subprocess.getstatusoutput"
+          ? "cmd"
+          : "args";
+      const kwVal = extractKeywordArg(args, kwName);
+      if (kwVal !== null) {
+        primaryArg = kwVal;
+      }
+      const execOverride = extractKeywordArg(args, "executable");
+      if (execOverride !== null) {
+        const execLit = unquoteSimpleLiteral(execOverride);
+        if (
+          (execLit !== null && isContainerExecutableName(execLit)) ||
+          (execLit === null && referencesContainerVar(execOverride, containerVarNames))
+        ) {
+          return true;
+        }
+      }
+    } else if (callee === "os.system" || callee === "os.popen") {
+      const kwVal = extractKeywordArg(args, callee === "os.system" ? "command" : "cmd");
+      if (kwVal !== null) {
+        primaryArg = kwVal;
+      }
+    }
+    if (callee === "actions_exec.exec" || callee === "actions_exec.getExecOutput") {
+      if (args.length === 1 || (args[1].trim().startsWith("{") && args[1].trim().endsWith("}"))) {
+        return shellStringInvokesContainer(primaryArg);
+      }
+    }
     const usesShellMode =
       SHELL_STRING_CALLEES.has(callee) ||
       /\bshell\s*(?:=|:)\s*(?:True|true|['"])/u.test(argText) ||
       ((callee === "system" || callee === "popen") && args.length === 1);
     if (usesShellMode) {
-      return shellStringInvokesContainer(args[0]);
+      return shellStringInvokesContainer(primaryArg);
     }
 
     // Argument-vector execution API: inspect the executable (first arg or
     // element 0 of the argv list) and check whether the invocation is a known
     // image-free diagnostic subcommand (e.g. `docker version`, `docker info`).
-    const firstArg = args[0].trim();
+    const firstArg = primaryArg;
     if (firstArg.startsWith("[") && firstArg.endsWith("]")) {
       return argvListInvokesContainer(splitTopLevelComma(firstArg.slice(1, -1)), containerVarNames);
     }
@@ -3922,13 +3936,27 @@ function inspectNonShellScript(
       }
       if (SHELL_COMMAND_PREFIXES.has(normalizeExecutableName(firstLit)) && args.length > 1) {
         const secondArg = args[1].trim();
-        if (secondArg.startsWith("[") && secondArg.endsWith("]")) {
+        if (
+          (secondArg.startsWith("[") && secondArg.endsWith("]")) ||
+          (secondArg.startsWith("(") && secondArg.endsWith(")"))
+        ) {
           return argvListInvokesContainer(
-            splitTopLevelComma(secondArg.slice(1, -1)),
+            [firstArg, ...splitTopLevelComma(secondArg.slice(1, -1))],
             containerVarNames,
           );
         }
-        return argvListInvokesContainer(args.slice(1), containerVarNames);
+        if (secondArg.startsWith("{") && secondArg.endsWith("}")) {
+          const argsPropMatch = /\bargs\s*:\s*\[/u.exec(secondArg);
+          if (argsPropMatch) {
+            const bracketIdx = argsPropMatch.index + argsPropMatch[0].length - 1;
+            const inner = extractBalancedSlice(secondArg, bracketIdx, "[", "]");
+            return argvListInvokesContainer(
+              [firstArg, ...splitTopLevelComma(inner)],
+              containerVarNames,
+            );
+          }
+        }
+        return argvListInvokesContainer([firstArg, ...args.slice(1)], containerVarNames);
       }
       return false;
     }
@@ -4334,14 +4362,22 @@ function inspectNonShellScript(
   }
   if (!invokesContainerTool) {
     const execCallPattern =
-      /(?:(?<receiver>[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*)?(?<callee>subprocess\.(?:run|Popen|call|check_call|check_output|getoutput|getstatusoutput)|os\.(?:system|popen|spawn\w*|exec\w*)|pty\.spawn|asyncio\.create_subprocess\w*|Bun\.spawn\w*|Deno\.(?:Command|run)|Open3\.\w+|execSync|execFileSync|spawnSync|execFile|spawn|exec|system|popen|shell_exec|proc_open|passthru)\s*\(/gu;
+      /(?:(?<receiver>[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*)?(?<callee>subprocess\.(?:run|Popen|call|check_call|check_output|getoutput|getstatusoutput)|os\.(?:system|popen|spawn\w*|exec\w*)|pty\.spawn|asyncio\.create_subprocess\w*|Bun\.spawn\w*|Deno\.(?:Command|run)|Open3\.\w+|getExecOutput|execSync|execFileSync|spawnSync|execFile|spawn|exec|system|popen|shell_exec|proc_open|passthru)\s*\(/gu;
     for (const match of codeWithoutStrings.matchAll(execCallPattern)) {
       const receiver = match.groups.receiver ?? null;
       const callee = match.groups.callee;
       const prevNonSpaceIdx = findPrevNonSpaceIndex(codeWithoutStrings, match.index - 1);
       const hasDotBeforeMatch = prevNonSpaceIdx >= 0 && codeWithoutStrings[prevNonSpaceIdx] === ".";
       let effectiveCallee = callee;
-      if (NODE_CP_METHODS.has(callee)) {
+      if (
+        language === "github-script" &&
+        receiver === "exec" &&
+        (callee === "exec" || callee === "getExecOutput")
+      ) {
+        effectiveCallee = `actions_exec.${callee}`;
+      } else if (callee === "getExecOutput") {
+        continue;
+      } else if (NODE_CP_METHODS.has(callee)) {
         if (receiver) {
           if (!childProcessAliases.has(receiver)) {
             continue;
@@ -4458,10 +4494,19 @@ function inspectNonShellScript(
     );
   }
   const opaqueEntries = [{ value: OPAQUE_UNVERIFIED_SENTINEL, line: startLine }];
-  if (emittedGithubOutput && /\bGITHUB_OUTPUT\b/u.test(codeOnly)) {
+  if (
+    emittedGithubOutput &&
+    (/\bGITHUB_OUTPUT\b/u.test(codeOnly) ||
+      (language === "github-script" && /\bcore\s*\.\s*setOutput\s*\(/u.test(codeWithoutStrings)))
+  ) {
     recordGithubEnvWrite(emittedGithubOutput, "*", opaqueEntries, false);
   }
-  if (emittedGithubEnv && /\bGITHUB_ENV\b/u.test(codeOnly)) {
+  if (
+    emittedGithubEnv &&
+    (/\bGITHUB_ENV\b/u.test(codeOnly) ||
+      (language === "github-script" &&
+        /\bcore\s*\.\s*exportVariable\s*\(/u.test(codeWithoutStrings)))
+  ) {
     recordGithubEnvWrite(emittedGithubEnv, OPAQUE_ENV_KEY, opaqueEntries, false);
   }
 }
@@ -4909,10 +4954,10 @@ function advanceWrapperPrefix(
   wrapperEnvChanges = null,
 ) {
   const token = tokens[cursor];
-  if (!SHELL_COMMAND_PREFIXES.has(token)) {
+  const normalized = normalizeExecutableName(token);
+  if (!SHELL_COMMAND_PREFIXES.has(normalized)) {
     return null;
   }
-  const normalized = token.toLowerCase();
   let next = cursor + 1;
 
   if (normalized === "command") {
@@ -14788,6 +14833,70 @@ function checkStepsList(
           const existingRowWrites = perRowEmittedEnv.get(row) ?? [];
           existingRowWrites.push(...rowActionEmits);
           perRowEmittedEnv.set(row, existingRowWrites);
+        }
+      }
+    } else if (
+      usesNode?.kind === "scalar" &&
+      String(usesNode.value).trim().split("@")[0].toLowerCase() === "actions/github-script"
+    ) {
+      const withNode = getMapField(stepNode, "with");
+      const scriptNode = withNode?.kind === "map" ? getMapField(withNode, "script") : null;
+      if (scriptNode?.kind === "scalar") {
+        const rawScript = String(scriptNode.value);
+        const scriptRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
+        const seenScriptTexts = new Set();
+        const seenScriptProblems = new Set();
+        for (const row of scriptRows) {
+          const rowStepEnv = getRowStepEnv(row);
+          const rowList = row ? [row] : [];
+          const expanded = resolveEnvExpressionCandidates(rawScript, rowStepEnv, scriptNode.line);
+          if (expanded.truncated) {
+            const msg = `${filePath}:${scriptNode.line}: actions/github-script script expression exceeds expansion limit and cannot be verified exhaustively`;
+            if (!seenScriptProblems.has(msg)) {
+              seenScriptProblems.add(msg);
+              problems.push(msg);
+            }
+          }
+          const rowEmitted = new Map();
+          const rowEmittedOut = stepIdLower ? new Map() : null;
+          for (const envCandidate of expanded.candidates) {
+            for (const candidate of expandMatrixReferences(
+              envCandidate.text,
+              rowList,
+              envCandidate.line,
+            )) {
+              if (seenScriptTexts.has(candidate.text)) {
+                continue;
+              }
+              seenScriptTexts.add(candidate.text);
+              const scriptProblems = [];
+              inspectNonShellScript(
+                candidate.text,
+                candidate.line,
+                filePath,
+                scriptProblems,
+                rowEmitted,
+                rowEmittedOut,
+                "github-script",
+              );
+              for (const msg of scriptProblems) {
+                if (!seenScriptProblems.has(msg)) {
+                  seenScriptProblems.add(msg);
+                  problems.push(msg);
+                }
+              }
+            }
+          }
+          if (rowEmitted.size > 0) {
+            const existingRowWrites = perRowEmittedEnv.get(row) ?? [];
+            existingRowWrites.push(rowEmitted);
+            perRowEmittedEnv.set(row, existingRowWrites);
+          }
+          if (rowEmittedOut && rowEmittedOut.size > 0) {
+            const existingRowOutputs = perRowEmittedOutput.get(row) ?? [];
+            existingRowOutputs.push(rowEmittedOut);
+            perRowEmittedOutput.set(row, existingRowOutputs);
+          }
         }
       }
     }

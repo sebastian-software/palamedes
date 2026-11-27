@@ -5264,6 +5264,69 @@ describe("workflow contracts", () => {
     ]);
   });
 
+  it("inspects actions/github-script, wrapper arguments, and Python subprocess keyword args", () => {
+    const sha = "a".repeat(40);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r75:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          `      - uses: actions/github-script@${sha}`,
+          "        with:",
+          "          script: |",
+          '            await exec.exec("docker", ["version"]);',
+          '            core.info("checked version");',
+          `      - uses: actions/github-script@${sha}`,
+          "        with:",
+          "          script: |",
+          '            const { execFileSync } = require("node:child_process");',
+          '            execFileSync("docker", ["pull", "alpine:3.20"]);',
+          `      - uses: actions/github-script@${sha}`,
+          "        with:",
+          "          script: |",
+          '            await exec.exec("docker", ["pull", "debian:12"]);',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["timeout", "30s", "docker", "version"], check=True)',
+          '          subprocess.run(check=True, args=["docker", "version"])',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["timeout", "30s", "docker", "pull", "node:24"], check=True)',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(["env", "-u", "DOCKER_HOST", "docker", "pull", "alpine:3.20"])',
+          "      - shell: node {0}",
+          "        run: |",
+          '          import { execFileSync } from "node:child_process";',
+          '          execFileSync("timeout", ["30s", "docker", "pull", "busybox:1.36"]);',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.run(check=True, args=["docker", "pull", "redis:7"])',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          subprocess.Popen(stdout=subprocess.PIPE, args=["docker", "pull", "nginx:1.27"])',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:14: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:19: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:27: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:31: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:35: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:39: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:43: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
+  });
+
   it("enforces case-insensitive schema keys, PowerShell continuations, and matrix expansion limits", () => {
     const digest = `sha256:${"a".repeat(64)}`;
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
