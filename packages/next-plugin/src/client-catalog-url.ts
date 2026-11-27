@@ -10,7 +10,7 @@ import type { NextConfig } from "next";
 export function clientCatalogPublicPrefix(
   config: Pick<NextConfig, "assetPrefix" | "basePath">,
 ): string {
-  const assetPrefix = config.assetPrefix ?? "";
+  const assetPrefix = (config.assetPrefix ?? "").trim();
   if (assetPrefix !== "") {
     const trimmed = assetPrefix.endsWith("/") ? assetPrefix.slice(0, -1) : assetPrefix;
     if (trimmed === "" || trimmed.startsWith("/") || /^[a-z][\d+.a-z-]*:\/\//iu.test(trimmed)) {
@@ -21,7 +21,7 @@ export function clientCatalogPublicPrefix(
     // URL on nested pages without relying on the document's `<base href>`.
     return `/${trimmed}`;
   }
-  const basePath = config.basePath ?? "";
+  const basePath = (config.basePath ?? "").trim();
   if (basePath === "" || basePath.startsWith("/")) return basePath;
   return `/${basePath}`;
 }

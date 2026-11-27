@@ -34,6 +34,8 @@ describe("clientCatalogPublicPrefix", () => {
     [{ assetPrefix: "", basePath: "/shop" }, "/shop"],
     [{ assetPrefix: "https://cdn.example.com" }, "https://cdn.example.com"],
     [{ assetPrefix: "https://cdn.example.com/" }, "https://cdn.example.com"],
+    [{ assetPrefix: " https://cdn.example.com/ " }, "https://cdn.example.com"],
+    [{ assetPrefix: " //cdn.example.com/ " }, "//cdn.example.com"],
     [
       { assetPrefix: "https://cdn.example.com/app/", basePath: "/app" },
       "https://cdn.example.com/app",
