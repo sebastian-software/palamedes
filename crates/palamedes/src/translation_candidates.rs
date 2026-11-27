@@ -13,6 +13,7 @@ use ferrocat::{
 use ferrocat_icu::{IcuMessage, IcuNode, IcuOption, IcuPluralKind, stringify_icu};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use unicode_normalization::UnicodeNormalization;
 
 mod references;
 
@@ -1109,12 +1110,40 @@ fn ntfs_casefold(text: &str) -> String {
     folded
 }
 
-fn unicode_full_casefold(text: &str) -> String {
-    // Unicode CaseFolding (C + F) delta over `char::to_lowercase()`, matching
-    // extract's casefolding rules (so `σ`/`ς`/`Σ` all fold to `σ`, `ß`/`ẞ`
-    // fold to `ss`, `µ` folds to `μ`, and `ﬁ` folds to `fi`).
+const fn is_default_ignorable_code_point(ch: char) -> bool {
+    let cp = ch as u32;
+    matches!(
+        cp,
+        0x00ad
+            | 0x034f
+            | 0x061c
+            | 0x115f..=0x1160
+            | 0x17b4..=0x17b5
+            | 0x180b..=0x180f
+            | 0x200b..=0x200f
+            | 0x202a..=0x202e
+            | 0x2060..=0x206f
+            | 0x3164
+            | 0xfe00..=0xfe0f
+            | 0xfeff
+            | 0xffa0
+            | 0xfff0..=0xfff8
+            | 0x1bca0..=0x1bca3
+            | 0x1d173..=0x1d17a
+            | 0xe0000..=0xe0fff
+    )
+}
+
+fn unicode_full_casefold_nfd(text: &str, strip_default_ignorables: bool) -> String {
+    // Unicode CaseFolding (C + F) over NFD, matching extract's conservative
+    // normalization/casefolding rules (so `café` and `cafe\u{0301}` match,
+    // `σ`/`ς`/`Σ` all fold to `σ`, `ß`/`ẞ` fold to `ss`, `µ` folds to `μ`,
+    // and `ﬁ` folds to `fi`).
     let mut folded = String::with_capacity(text.len());
-    for ch in text.chars() {
+    for ch in text.nfd() {
+        if strip_default_ignorables && is_default_ignorable_code_point(ch) {
+            continue;
+        }
         match ch {
             '\u{13a0}'..='\u{13f5}' => folded.push(ch),
             '\u{13f8}'..='\u{13fd}' => {
@@ -1164,16 +1193,18 @@ fn unicode_full_casefold(text: &str) -> String {
             }
         }
     }
-    folded
+    folded.nfd().collect()
 }
 
 fn fold_patch_segment(segment: &OsStr, equivalence: Option<DirFilenameEquivalence>) -> OsString {
     match equivalence {
-        Some(
-            DirFilenameEquivalence::Exact
-            | DirFilenameEquivalence::UnicodeNfd
-            | DirFilenameEquivalence::UnicodeHfsPlus,
-        ) => segment.to_os_string(),
+        Some(DirFilenameEquivalence::Exact) => segment.to_os_string(),
+        Some(DirFilenameEquivalence::UnicodeNfd | DirFilenameEquivalence::UnicodeHfsPlus) => {
+            segment.to_str().map_or_else(
+                || segment.to_os_string(),
+                |text| OsString::from(text.nfd().collect::<String>()),
+            )
+        }
         Some(DirFilenameEquivalence::CaseInsensitiveNtfs) => segment.to_str().map_or_else(
             || segment.to_os_string(),
             |text| OsString::from(ntfs_casefold(text.trim_end_matches(['.', ' ']))),
@@ -1184,15 +1215,23 @@ fn fold_patch_segment(segment: &OsStr, equivalence: Option<DirFilenameEquivalenc
         ),
         Some(
             DirFilenameEquivalence::CaseInsensitiveUnicodeNfd
-            | DirFilenameEquivalence::CaseInsensitiveHfsPlus
-            | DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
+            | DirFilenameEquivalence::CaseInsensitiveHfsPlus,
         ) => segment.to_str().map_or_else(
             || segment.to_os_string(),
-            |text| OsString::from(unicode_full_casefold(text)),
+            |text| OsString::from(unicode_full_casefold_nfd(text, false)),
+        ),
+        Some(DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf) => segment.to_str().map_or_else(
+            || segment.to_os_string(),
+            |text| OsString::from(unicode_full_casefold_nfd(text, true)),
         ),
         None => segment.to_str().map_or_else(
             || segment.to_os_string(),
-            |text| OsString::from(unicode_full_casefold(text.trim_end_matches(['.', ' ']))),
+            |text| {
+                OsString::from(unicode_full_casefold_nfd(
+                    text.trim_end_matches(['.', ' ']),
+                    true,
+                ))
+            },
         ),
     }
 }
@@ -5426,5 +5465,99 @@ mod tests {
                 before_final_sigma
             );
         }
+    }
+
+    #[test]
+    fn patch_batch_rejects_nfc_nfd_aliased_catalogs_when_file_identity_is_unavailable() {
+        use super::apply_translation_patches_with_options;
+
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let nfc_scope = "caf\u{00e9}/{locale}";
+        let nfd_scope = "cafe\u{0301}/{locale}";
+        let nfc_path = fixture.path().join("caf\u{00e9}/de.po");
+        let nfd_path = fixture.path().join("cafe\u{0301}/de.po");
+        write_po_fixture(&fixture.path().join("caf\u{00e9}/en.po"), "en");
+        write_po_fixture(&fixture.path().join("cafe\u{0301}/en.po"), "en");
+        write_po_fixture(&nfc_path, "de");
+        if !nfd_path.exists() {
+            write_po_fixture(&nfd_path, "de");
+        }
+        let before_nfc = fs::read_to_string(&nfc_path).expect("read nfc before");
+        let before_nfd = fs::read_to_string(&nfd_path).expect("read nfd before");
+
+        let make_config = || CatalogArtifactConfig {
+            root_dir: fixture.path().to_string_lossy().into_owned(),
+            locales: vec!["en".to_owned(), "de".to_owned()],
+            source_locale: "en".to_owned(),
+            fallback_locales: None,
+            pseudo_locale: None,
+            catalogs: vec![
+                CatalogConfig {
+                    path: nfc_scope.to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+                CatalogConfig {
+                    path: nfd_scope.to_owned(),
+                    format: PalamedesCatalogFormat::Po,
+                },
+            ],
+        };
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: make_config(),
+            locales: vec!["de".to_owned()],
+            targets: Vec::new(),
+            max_origins: 8,
+        })
+        .expect("list NFC/NFD candidates");
+        let nfc_candidate = listed
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == nfc_scope && c.id.message == "Hello")
+            .expect("nfc Hello");
+        let nfd_candidate = listed
+            .candidates
+            .iter()
+            .find(|c| c.id.catalog == nfd_scope && c.id.message == "Hello")
+            .expect("nfd Hello");
+
+        let mut writes = 0usize;
+        let result = apply_translation_patches_with_options(
+            TranslationPatchRequest {
+                config: make_config(),
+                po: None,
+                patches: vec![
+                    singular_patch(nfc_candidate, "Hallo NFC"),
+                    singular_patch(nfd_candidate, "Hallo NFD"),
+                ],
+            },
+            |catalog, source_locale, po| {
+                writes += 1;
+                atomic_replace_catalog(catalog, source_locale, po)
+            },
+            true,
+            Some(None),
+        )
+        .expect("NFC/NFD alias returns structured rejection");
+
+        assert!(!result.updated);
+        assert_eq!(writes, 0, "Phase 2 must not commit any write");
+        assert_eq!(result.stats.applied, 0);
+        assert_eq!(result.diagnostics.len(), 2);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diag| diag.code == "translation.ambiguous_catalog"),
+            "expected translation.ambiguous_catalog for NFC/NFD pair, got {:?}",
+            result.diagnostics
+        );
+        assert_eq!(
+            fs::read_to_string(&nfc_path).expect("read nfc after"),
+            before_nfc
+        );
+        assert_eq!(
+            fs::read_to_string(&nfd_path).expect("read nfd after"),
+            before_nfd
+        );
     }
 }

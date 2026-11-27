@@ -1357,6 +1357,7 @@ dependencies = [
  "string_wizard",
  "tempfile",
  "thiserror",
+ "unicode-normalization",
 ]
 
 [[package]]

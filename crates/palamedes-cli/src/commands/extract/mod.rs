@@ -1555,6 +1555,15 @@ fn sanitize_8dot3_component(input: &str, max_len: usize) -> (String, bool) {
     (out, has_non_ascii)
 }
 
+fn parse_vfat_tailless_short_name(segment: &OsStr) -> Option<(String, String)> {
+    let text = segment.to_str()?;
+    if !is_valid_8dot3_name(text) {
+        return None;
+    }
+    let (stem_raw, ext_raw) = text.split_once('.').unwrap_or((text, ""));
+    Some((stem_raw.to_ascii_uppercase(), ext_raw.to_ascii_uppercase()))
+}
+
 fn parse_ntfs_long_name(segment: &OsStr) -> Option<NtfsLongNameDerived> {
     let Some(text) = segment.to_str() else {
         return Some(NtfsLongNameDerived {
@@ -1568,7 +1577,11 @@ fn parse_ntfs_long_name(segment: &OsStr) -> Option<NtfsLongNameDerived> {
     }
     let trimmed = text.trim_start_matches(['.', ' ']);
     let (stem_raw, ext_raw) = trimmed.rsplit_once('.').unwrap_or((trimmed, ""));
-    let (base, base_non_ascii) = sanitize_8dot3_component(stem_raw, 6);
+    // Keep up to 8 sanitized stem characters: standard tilde aliases use up to
+    // 6 (`&base[..base.len().min(7 - digits_len)]`), while Linux VFAT mounted
+    // with `nonumtail` uses up to 8 characters without `~1` (for example
+    // `messages-long.po` -> `MESSAGES.PO`).
+    let (base, base_non_ascii) = sanitize_8dot3_component(stem_raw, 8);
     let (ext, ext_non_ascii) = sanitize_8dot3_component(ext_raw, 3);
     Some(NtfsLongNameDerived {
         base,
@@ -1607,6 +1620,16 @@ const fn can_have_ntfs_short_names(
     ) || !equivalence_confirmed
 }
 
+const fn can_have_vfat_tailless_short_names(
+    equivalence: DirFilenameEquivalence,
+    equivalence_confirmed: bool,
+) -> bool {
+    // Only VFAT (`nonumtail`) or an unrecognized mount can synthesize tail-less
+    // 8.3 aliases like `MESSAGES.PO` for `messages-long.po`; NTFS always uses a
+    // `~N` numeric tail.
+    matches!(equivalence, DirFilenameEquivalence::CaseInsensitiveVfat) || !equivalence_confirmed
+}
+
 fn dir_generates_ntfs_short_names(
     dir: &ContainedDir,
     identity: Option<FileIdentity>,
@@ -1633,6 +1656,32 @@ fn dir_generates_ntfs_short_names(
     generates
 }
 
+fn dir_generates_vfat_tailless_short_names(
+    dir: &ContainedDir,
+    identity: Option<FileIdentity>,
+    allow_mutating_probe: bool,
+    cache: &mut HashMap<FileIdentity, bool>,
+) -> bool {
+    if let Some(id) = identity
+        && let Some(&cached) = cache.get(&id)
+    {
+        return cached;
+    }
+    let generates = if allow_mutating_probe {
+        // Probe whether this volume synthesizes tail-less 8.3 aliases (Linux
+        // VFAT `nonumtail`: `palamedes-83-probe.txt` -> `PALAMEDE.TXT`).
+        // `Some(false)` proves `nonumtail` is not active; `Some(true)` or
+        // `None` fails closed.
+        dir.probe_8dot3_tailless_short_names_enabled() != Some(false)
+    } else {
+        true
+    };
+    if let Some(id) = identity {
+        cache.insert(id, generates);
+    }
+    generates
+}
+
 struct TargetSegment {
     raw: OsString,
     folded: OsString,
@@ -1649,12 +1698,16 @@ struct TargetPrefixNode<'a> {
     dir_scope: Option<&'a str>,
     child_nodes: Vec<(OsString, Self)>,
     by_folded: HashMap<OsString, Vec<usize>>,
-    // Linear-time indexes mapping NTFS 8.3 short/long patterns to child_nodes indices.
+    // Linear-time indexes mapping NTFS/VFAT 8.3 short/long patterns to child_nodes indices.
     ntfs_long_prefixes: HashMap<(String, String, usize), Vec<usize>>,
     ntfs_long_hash_prefixes: HashMap<(String, String), Vec<usize>>,
     ntfs_non_ascii_long_by_ext: HashMap<String, Vec<usize>>,
     ntfs_any_non_ascii_ext_long: Vec<usize>,
     ntfs_short_by_ext: HashMap<String, Vec<(NtfsShortNameCandidate, usize)>>,
+    // Linear-time indexes for VFAT `nonumtail` tail-less 8.3 aliases (e.g. `messages-long.po` <-> `MESSAGES.PO`).
+    vfat_long_tailless: HashMap<(String, String), Vec<usize>>,
+    vfat_tailless_short: HashMap<(String, String), Vec<usize>>,
+    vfat_tailless_short_by_ext: HashMap<String, Vec<usize>>,
 }
 
 impl<'a> TargetPrefixNode<'a> {
@@ -1714,17 +1767,76 @@ impl<'a> TargetPrefixNode<'a> {
         matches
     }
 
-    /// Indexes a newly allocated `child_idx` in the NTFS 8.3 lookup tables.
+    fn matching_vfat_tailless_short_name_children(&self, raw: &OsStr) -> Vec<usize> {
+        let mut matches = Vec::new();
+        let mut seen = HashSet::new();
+        let mut push_unique = |idx: usize| {
+            if seen.insert(idx) {
+                matches.push(idx);
+            }
+        };
+        if let Some((stem, ext)) = parse_vfat_tailless_short_name(raw) {
+            if let Some(indices) = self.vfat_long_tailless.get(&(ext.clone(), stem)) {
+                for &idx in indices {
+                    push_unique(idx);
+                }
+            }
+            if let Some(indices) = self.ntfs_non_ascii_long_by_ext.get(&ext) {
+                for &idx in indices {
+                    push_unique(idx);
+                }
+            }
+            for &idx in &self.ntfs_any_non_ascii_ext_long {
+                push_unique(idx);
+            }
+            return matches;
+        }
+
+        if let Some(long) = parse_ntfs_long_name(raw) {
+            if long.has_non_ascii {
+                if long.ext.contains('_') {
+                    for indices in self.vfat_tailless_short_by_ext.values() {
+                        for &idx in indices {
+                            push_unique(idx);
+                        }
+                    }
+                } else if let Some(indices) = self.vfat_tailless_short_by_ext.get(&long.ext) {
+                    for &idx in indices {
+                        push_unique(idx);
+                    }
+                }
+            } else if !long.base.is_empty()
+                && let Some(indices) = self.vfat_tailless_short.get(&(long.ext, long.base))
+            {
+                for &idx in indices {
+                    push_unique(idx);
+                }
+            }
+        }
+        matches
+    }
+
+    /// Indexes a newly allocated `child_idx` in the NTFS/VFAT 8.3 lookup tables.
     ///
     /// Because callers allocate a fresh index per distinct child node and each
     /// loop iteration generates a unique key, appending directly is O(1) per
     /// bucket without scanning earlier siblings.
     fn record_ntfs_short_name_child(&mut self, raw: &OsStr, child_idx: usize) {
-        if let Some(short) = parse_ntfs_short_name(raw) {
-            self.ntfs_short_by_ext
-                .entry(short.ext.clone())
+        if let Some((stem, ext)) = parse_vfat_tailless_short_name(raw) {
+            self.vfat_tailless_short
+                .entry((ext.clone(), stem))
                 .or_default()
-                .push((short, child_idx));
+                .push(child_idx);
+            self.vfat_tailless_short_by_ext
+                .entry(ext)
+                .or_default()
+                .push(child_idx);
+            if let Some(short) = parse_ntfs_short_name(raw) {
+                self.ntfs_short_by_ext
+                    .entry(short.ext.clone())
+                    .or_default()
+                    .push((short, child_idx));
+            }
             return;
         }
         if let Some(long) = parse_ntfs_long_name(raw) {
@@ -1737,6 +1849,12 @@ impl<'a> TargetPrefixNode<'a> {
                     .or_default()
                     .push(child_idx);
             } else {
+                if !long.base.is_empty() {
+                    self.vfat_long_tailless
+                        .entry((long.ext.clone(), long.base.clone()))
+                        .or_default()
+                        .push(child_idx);
+                }
                 for digits_len in 1..=6 {
                     let prefix_len = long.base.len().min(7 - digits_len);
                     if prefix_len > 0 {
@@ -1761,6 +1879,7 @@ impl<'a> TargetPrefixNode<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn check_path_conflicts_readonly(
         &self,
         segments: &[TargetSegment],
@@ -1769,6 +1888,7 @@ impl<'a> TargetPrefixNode<'a> {
         catalog_path: &Path,
         allow_mutating_probe: bool,
         short_name_cache: &mut HashMap<FileIdentity, bool>,
+        tailless_short_name_cache: &mut HashMap<FileIdentity, bool>,
     ) -> Result<(), CliError> {
         let Some((seg, rest)) = segments.split_first() else {
             return Ok(());
@@ -1800,6 +1920,25 @@ impl<'a> TargetPrefixNode<'a> {
                     seg.parent_id,
                     allow_mutating_probe,
                     short_name_cache,
+                )
+            {
+                for child_idx in alias_indices {
+                    if !matched_children.contains(&child_idx) {
+                        matched_children.push(child_idx);
+                    }
+                }
+            }
+        }
+
+        if !seg.settled_by_identity && can_have_vfat_tailless_short_names(seg.eq, seg.eq_confirmed)
+        {
+            let alias_indices = self.matching_vfat_tailless_short_name_children(&seg.raw);
+            if !alias_indices.is_empty()
+                && dir_generates_vfat_tailless_short_names(
+                    parent_dir,
+                    seg.parent_id,
+                    allow_mutating_probe,
+                    tailless_short_name_cache,
                 )
             {
                 for child_idx in alias_indices {
@@ -1854,6 +1993,7 @@ impl<'a> TargetPrefixNode<'a> {
                     catalog_path,
                     allow_mutating_probe,
                     short_name_cache,
+                    tailless_short_name_cache,
                 )?;
             }
         }
@@ -1972,6 +2112,7 @@ fn reject_colliding_catalog_targets_with_options(
     }
     let mut dir_eq_cache: HashMap<FileIdentity, (DirFilenameEquivalence, bool)> = HashMap::new();
     let mut short_name_cache: HashMap<FileIdentity, bool> = HashMap::new();
+    let mut tailless_short_name_cache: HashMap<FileIdentity, bool> = HashMap::new();
     let mut anchor_tries: HashMap<ExtractTargetAnchor, TargetPrefixNode<'_>> = HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
     let mut needed_existing_dirs: HashMap<FileIdentity, &str> = HashMap::new();
@@ -2149,6 +2290,7 @@ fn reject_colliding_catalog_targets_with_options(
                 catalog_path,
                 allow_mutating_probe,
                 &mut short_name_cache,
+                &mut tailless_short_name_cache,
             )?;
         }
         if is_write {
@@ -3659,6 +3801,96 @@ catalogs:
             err,
             CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
         ));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn vfat_tailless_short_name_matching_catches_nonumtail_aliases() {
+        use palamedes::DirFilenameEquivalence;
+        use std::ffi::OsStr;
+
+        for (long, short) in [
+            ("messages-long.po", "MESSAGES.PO"),
+            ("messages-long.po", "messages.po"),
+            ("my file.po", "MYFILE.PO"),
+            ("foo.bar.po", "FOOBAR.PO"),
+            ("longdirectory", "LONGDIRE"),
+        ] {
+            let mut node = super::TargetPrefixNode::default();
+            node.record_ntfs_short_name_child(OsStr::new(long), 0);
+            assert_eq!(
+                node.matching_vfat_tailless_short_name_children(OsStr::new(short)),
+                vec![0],
+                "expected long {long:?} to match VFAT nonumtail short alias {short:?}"
+            );
+
+            let mut rev_node = super::TargetPrefixNode::default();
+            rev_node.record_ntfs_short_name_child(OsStr::new(short), 0);
+            assert_eq!(
+                rev_node.matching_vfat_tailless_short_name_children(OsStr::new(long)),
+                vec![0],
+                "expected VFAT nonumtail short alias {short:?} to match long {long:?}"
+            );
+        }
+
+        // Two distinct long names with the same 8-char prefix must not match as tail-less aliases.
+        let mut node = super::TargetPrefixNode::default();
+        node.record_ntfs_short_name_child(OsStr::new("messages-en.po"), 0);
+        assert!(
+            node.matching_vfat_tailless_short_name_children(OsStr::new("messages-fr.po"))
+                .is_empty(),
+            "two long names must not collide via tail-less 8.3 index"
+        );
+
+        let root = temp_dir("extract-vfat-nonumtail");
+        let vfat = Some((DirFilenameEquivalence::CaseInsensitiveVfat, true));
+        let ntfs = Some((DirFilenameEquivalence::CaseInsensitiveNtfs, true));
+        let targets = [
+            ("messages-long", root.join("messages-long.po")),
+            ("messages", root.join("MESSAGES.PO")),
+        ];
+
+        // On VFAT when probing is disallowed (cannot disprove `nonumtail`), fail closed.
+        let err = super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &targets,
+            &[],
+            false,
+            vfat,
+            false,
+        )
+        .expect_err("VFAT nonumtail alias must be rejected when probing is disallowed");
+        assert!(matches!(
+            err,
+            CliError::Io { ref source, .. } if source.kind() == std::io::ErrorKind::AlreadyExists
+        ));
+
+        // On NTFS, tail-less 8.3 aliases are never generated, so `messages-long.po` and `MESSAGES.PO` coexist.
+        super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &targets,
+            &[],
+            false,
+            ntfs,
+            false,
+        )
+        .expect("NTFS does not generate tail-less 8.3 aliases");
+
+        // On a filesystem whose live probe disproves `PALAMEDE.TXT` (e.g. APFS/ext4 or VFAT without `nonumtail`),
+        // `allow_mutating_probe = true` allows both distinct targets.
+        #[cfg(unix)]
+        super::reject_colliding_catalog_targets_with_options(
+            &root,
+            &targets,
+            &[],
+            true,
+            vfat,
+            false,
+        )
+        .expect(
+            "live probe disproving nonumtail must allow distinct messages-long.po and MESSAGES.PO",
+        );
 
         let _ = fs::remove_dir_all(&root);
     }

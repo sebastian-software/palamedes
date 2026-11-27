@@ -1026,12 +1026,27 @@ mod platform {
 
         /// Probes whether this volume synthesizes 8.3 short-name aliases inside
         /// a fresh empty private subdirectory (unaffected by any pre-existing
-        /// entries in `self`).
+        /// entries in `self`), including Linux VFAT `nonumtail` tail-less aliases.
         #[must_use]
         pub fn probe_8dot3_short_names_enabled(&self) -> Option<bool> {
-            self.probe_names_equivalent_in_fresh_dir(
+            match self.probe_names_equivalent_in_fresh_dir(
                 OsStr::new("palamedes-83-probe.txt"),
                 OsStr::new("PALAME~1.TXT"),
+            ) {
+                Some(true) => Some(true),
+                Some(false) => self.probe_8dot3_tailless_short_names_enabled(),
+                None => None,
+            }
+        }
+
+        /// Probes whether this volume synthesizes tail-less 8.3 short-name
+        /// aliases (such as Linux VFAT mounted with `nonumtail`, where
+        /// `palamedes-83-probe.txt` aliases `PALAMEDE.TXT` in a fresh directory).
+        #[must_use]
+        pub fn probe_8dot3_tailless_short_names_enabled(&self) -> Option<bool> {
+            self.probe_names_equivalent_in_fresh_dir(
+                OsStr::new("palamedes-83-probe.txt"),
+                OsStr::new("PALAMEDE.TXT"),
             )
         }
 
@@ -7410,12 +7425,27 @@ mod platform {
 
         /// Probes whether this volume synthesizes 8.3 short-name aliases inside
         /// a fresh empty private subdirectory (unaffected by any pre-existing
-        /// entries in `self`).
+        /// entries in `self`), including Linux VFAT `nonumtail` tail-less aliases.
         #[must_use]
         pub fn probe_8dot3_short_names_enabled(&self) -> Option<bool> {
-            self.probe_names_equivalent_in_fresh_dir(
+            match self.probe_names_equivalent_in_fresh_dir(
                 OsStr::new("palamedes-83-probe.txt"),
                 OsStr::new("PALAME~1.TXT"),
+            ) {
+                Some(true) => Some(true),
+                Some(false) => self.probe_8dot3_tailless_short_names_enabled(),
+                None => None,
+            }
+        }
+
+        /// Probes whether this volume synthesizes tail-less 8.3 short-name
+        /// aliases (such as Linux VFAT mounted with `nonumtail`, where
+        /// `palamedes-83-probe.txt` aliases `PALAMEDE.TXT` in a fresh directory).
+        #[must_use]
+        pub fn probe_8dot3_tailless_short_names_enabled(&self) -> Option<bool> {
+            self.probe_names_equivalent_in_fresh_dir(
+                OsStr::new("palamedes-83-probe.txt"),
+                OsStr::new("PALAMEDE.TXT"),
             )
         }
 
@@ -9446,6 +9476,12 @@ mod platform {
         /// Unsupported 8.3 short-name capability probe stub.
         #[must_use]
         pub fn probe_8dot3_short_names_enabled(&self) -> Option<bool> {
+            None
+        }
+
+        /// Unsupported tail-less 8.3 short-name capability probe stub.
+        #[must_use]
+        pub fn probe_8dot3_tailless_short_names_enabled(&self) -> Option<bool> {
             None
         }
 

@@ -14,8 +14,8 @@ use std::path::{Component, Path, PathBuf};
 use clap::{Args, ValueEnum};
 use palamedes::{
     CatalogArtifactDiagnosticSeverity, CatalogArtifactRequest, CatalogArtifactSourceKey,
-    ContainedDir, FallbackLocales, compile_catalog_artifact_with_source_keys, is_valid_locale,
-    render_catalog_module,
+    ContainedDir, FallbackLocales, compile_catalog_artifact,
+    compile_catalog_artifact_with_source_keys, is_valid_locale, render_catalog_module,
 };
 use palamedes_build::{CatalogBuilder, CatalogContract, CatalogUpdate, MissingTranslation};
 use serde::Serialize;
@@ -480,28 +480,37 @@ fn compile_js(
                 artifact_config.fallback_locales =
                     Some(FallbackLocales::Shared(fallback_locales.to_vec()));
             }
-            let (artifact, source_keys) =
-                match compile_catalog_artifact_with_source_keys(&CatalogArtifactRequest {
-                    config: artifact_config,
-                    resource_path: resource_path.clone(),
-                }) {
-                    Ok(compiled) => compiled,
-                    // A catalog that does not parse or normalize, such as one with
-                    // a duplicate msgid, is a diagnostic so `--json` reports it.
-                    Err(error) => {
-                        diagnostics.push(CompileDiagnostic {
-                            severity: CatalogArtifactDiagnosticSeverity::Error,
-                            code: INVALID_CATALOG.to_owned(),
-                            message: error.to_string(),
-                            catalog_path: Some(resource_path.clone()),
-                            locale: Some(locale.clone()),
-                            requested_locale: Some(locale.clone()),
-                            source_key: None,
-                            conflicting_catalog_path: None,
-                        });
-                        continue;
-                    }
-                };
+            let request = CatalogArtifactRequest {
+                config: artifact_config,
+                resource_path: resource_path.clone(),
+            };
+            // Only collect per-message source keys when earlier catalogs have
+            // already populated `messages` so cross-catalog conflicts can
+            // report provenance; single-catalog builds and the first catalog
+            // skip the extra provenance pass.
+            let compiled = if messages.is_empty() {
+                compile_catalog_artifact(&request).map(|artifact| (artifact, BTreeMap::new()))
+            } else {
+                compile_catalog_artifact_with_source_keys(&request)
+            };
+            let (artifact, source_keys) = match compiled {
+                Ok(compiled) => compiled,
+                // A catalog that does not parse or normalize, such as one with
+                // a duplicate msgid, is a diagnostic so `--json` reports it.
+                Err(error) => {
+                    diagnostics.push(CompileDiagnostic {
+                        severity: CatalogArtifactDiagnosticSeverity::Error,
+                        code: INVALID_CATALOG.to_owned(),
+                        message: error.to_string(),
+                        catalog_path: Some(resource_path.clone()),
+                        locale: Some(locale.clone()),
+                        requested_locale: Some(locale.clone()),
+                        source_key: None,
+                        conflicting_catalog_path: None,
+                    });
+                    continue;
+                }
+            };
 
             let errors_before = diagnostics.len();
             for diagnostic in &artifact.diagnostics {
