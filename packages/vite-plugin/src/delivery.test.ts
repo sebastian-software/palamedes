@@ -517,16 +517,19 @@ describe("Vite catalog delivery", () => {
     expect(allChunks.join("")).toBe(`<html><body>${block.repeat(18)}</body></html>`);
   });
 
-  it("preserves exact </head> offsets with Turkish İ text and ignores </HEAD> inside scripts or comments", async () => {
+  it("preserves exact </head> offsets with Turkish İ text and ignores </HEAD> inside scripts, attributes, or comments", async () => {
     const clientDirectory = await createFixture();
     const delivery = createViteCatalogDelivery({ clientDirectory });
     const html =
-      '<!DOCTYPE html><html><head><title>İstanbul İZMİR</title><!-- </HEAD> --><script type="application/json">{"tag":"</HEAD>"}</script><style>/* </head> */</style></HEAD><body>app</body></html>';
+      '<!DOCTYPE html><html><head><meta name="description" content="The <style> element and </head> tag"><title>İstanbul İZMİR</title><!-- </HEAD> --><script type="application/json">{"tag":"</HEAD>"}</script><style>/* </head> */</style></HEAD><body>app</body></html>';
     const output = await collect(
       delivery.createDocumentTransform(delivery.getLocaleBinding("de")),
       html,
     );
 
+    expect(output).toContain(
+      '<meta name="description" content="The <style> element and </head> tag">',
+    );
     expect(output).toContain("<title>İstanbul İZMİR</title>");
     expect(output).toContain(
       '<!-- </HEAD> --><script type="application/json">{"tag":"</HEAD>"}</script><style>/* </head> */</style>',
@@ -538,6 +541,15 @@ describe("Vite catalog delivery", () => {
     expect(output.indexOf("palamedes.document-catalogs-ready-promise")).toBeLessThan(
       output.lastIndexOf("</HEAD>"),
     );
+  });
+
+  it("fails closed when an opened <head> exceeds the buffer limit before </head>", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const transform = delivery.createDocumentTransform(delivery.getLocaleBinding("de"));
+    const hugeHead = `<html><head><style>${"a".repeat(1024 * 1024 + 128)}</style></head><body>app</body></html>`;
+
+    await expect(collect(transform, hugeHead)).rejects.toThrow(/<head> buffer limit/u);
   });
 });
 

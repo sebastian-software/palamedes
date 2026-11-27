@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   existsSync,
@@ -706,24 +706,25 @@ type CachedServerModuleEntry = {
   filename: string;
   urlPromise: Promise<string>;
   inFlight: number;
-  evicted: boolean;
 };
 
 const activeServerModuleRegistries = new Set<symbol>();
 const serverModuleWrites = new Map<string, CachedServerModuleEntry>();
 let sharedServerModuleDirectoryPromise: Promise<string> | undefined;
 let sharedServerModuleDirectory: string | undefined;
+let sharedServerModuleEpoch = 0;
 let serverModuleCleanupRegistered = false;
 
 function removeDirectoryBestEffort(directory: string): void {
   try {
     rmSync(directory, { recursive: true, force: true });
   } catch {
-    // Best-effort cleanup on close or process termination.
+    // Best-effort cleanup on close or process exit.
   }
 }
 
 function cleanupSharedServerModuleDirectory(): void {
+  sharedServerModuleEpoch += 1;
   serverModuleWrites.clear();
   const directory = sharedServerModuleDirectory;
   sharedServerModuleDirectory = undefined;
@@ -737,8 +738,6 @@ function unregisterServerModuleCleanup(): void {
   if (!serverModuleCleanupRegistered) return;
   serverModuleCleanupRegistered = false;
   process.off("exit", onServerModuleProcessExit);
-  process.off("SIGTERM", onServerModuleSigterm);
-  process.off("SIGINT", onServerModuleSigint);
 }
 
 function onServerModuleProcessExit(): void {
@@ -746,35 +745,34 @@ function onServerModuleProcessExit(): void {
   unregisterServerModuleCleanup();
 }
 
-function handleServerModuleTerminationSignal(signal: "SIGTERM" | "SIGINT"): void {
-  // Only intercept termination when the host has no signal handler of its own;
-  // hosts with graceful-shutdown handlers drain requests and clean up on `exit`.
-  if (process.listenerCount(signal) > 0) {
-    return;
-  }
-  cleanupSharedServerModuleDirectory();
-  unregisterServerModuleCleanup();
-  try {
-    process.kill(process.pid, signal);
-  } catch {
-    process.exit(signal === "SIGINT" ? 130 : 143);
-  }
-}
-
-function onServerModuleSigterm(): void {
-  handleServerModuleTerminationSignal("SIGTERM");
-}
-
-function onServerModuleSigint(): void {
-  handleServerModuleTerminationSignal("SIGINT");
-}
-
 function registerServerModuleCleanup(): void {
   if (serverModuleCleanupRegistered) return;
   serverModuleCleanupRegistered = true;
   process.once("exit", onServerModuleProcessExit);
-  process.once("SIGTERM", onServerModuleSigterm);
-  process.once("SIGINT", onServerModuleSigint);
+}
+
+function evictIdleServerModuleWrites(): void {
+  if (serverModuleWrites.size < MAX_SERVER_MODULE_WRITES) {
+    return;
+  }
+  for (const [digest, candidate] of serverModuleWrites) {
+    // Never evict an entry whose write/import is still in flight; synchronous
+    // unlink once idle prevents concurrent write/unlink races on the same path.
+    if (candidate.inFlight > 0) {
+      continue;
+    }
+    serverModuleWrites.delete(digest);
+    if (candidate.filename) {
+      try {
+        rmSync(candidate.filename, { force: true });
+      } catch {
+        // Best-effort file cleanup on cache eviction.
+      }
+    }
+    if (serverModuleWrites.size < MAX_SERVER_MODULE_WRITES) {
+      break;
+    }
+  }
 }
 
 function createServerCatalogModuleLoader(): {
@@ -803,32 +801,37 @@ function createServerCatalogModuleLoader(): {
         serverModuleWrites.delete(digest);
         serverModuleWrites.set(digest, entry);
       } else {
-        sharedServerModuleDirectoryPromise ??= mkdtemp(
-          path.join(tmpdir(), "palamedes-remix-modules-"),
-        )
-          .then((directory) => {
-            if (activeServerModuleRegistries.size === 0) {
-              removeDirectoryBestEffort(directory);
-              sharedServerModuleDirectoryPromise = undefined;
-              throw new Error("Palamedes Remix catalog registry has been closed.");
-            }
-            sharedServerModuleDirectory = directory;
-            return directory;
-          })
-          .catch((error: unknown) => {
-            sharedServerModuleDirectoryPromise = undefined;
-            throw error;
-          });
+        if (!sharedServerModuleDirectoryPromise) {
+          const epoch = sharedServerModuleEpoch;
+          sharedServerModuleDirectoryPromise = mkdtemp(
+            path.join(tmpdir(), "palamedes-remix-modules-"),
+          )
+            .then((directory) => {
+              if (epoch !== sharedServerModuleEpoch || activeServerModuleRegistries.size === 0) {
+                removeDirectoryBestEffort(directory);
+                throw new Error("Palamedes Remix catalog registry has been closed.");
+              }
+              sharedServerModuleDirectory = directory;
+              return directory;
+            })
+            .catch((error: unknown) => {
+              if (epoch === sharedServerModuleEpoch) {
+                sharedServerModuleDirectoryPromise = undefined;
+              }
+              throw error;
+            });
+        }
+        const currentEpoch = sharedServerModuleEpoch;
         const currentDirPromise = sharedServerModuleDirectoryPromise;
         const created: CachedServerModuleEntry = {
           filename: "",
           inFlight: 0,
-          evicted: false,
           urlPromise: currentDirPromise.then(async (directory) => {
+            // Check only shared epoch/ref-count so closing one registry cannot
+            // abort a concurrent load shared with another active registry.
             if (
-              loaderClosed ||
-              activeServerModuleRegistries.size === 0 ||
-              sharedServerModuleDirectoryPromise !== currentDirPromise
+              currentEpoch !== sharedServerModuleEpoch ||
+              activeServerModuleRegistries.size === 0
             ) {
               throw new Error("Palamedes Remix catalog registry has been closed.");
             }
@@ -838,19 +841,7 @@ function createServerCatalogModuleLoader(): {
             return pathToFileURL(filename).href;
           }),
         };
-        if (serverModuleWrites.size >= MAX_SERVER_MODULE_WRITES) {
-          const oldestDigest = serverModuleWrites.keys().next().value;
-          if (oldestDigest !== undefined) {
-            const evicted = serverModuleWrites.get(oldestDigest);
-            serverModuleWrites.delete(oldestDigest);
-            if (evicted) {
-              evicted.evicted = true;
-              if (evicted.inFlight === 0 && evicted.filename) {
-                void rm(evicted.filename, { force: true }).catch(() => {});
-              }
-            }
-          }
-        }
+        evictIdleServerModuleWrites();
         serverModuleWrites.set(digest, created);
         void created.urlPromise.catch(() => {
           if (serverModuleWrites.get(digest) === created) {
@@ -871,8 +862,8 @@ function createServerCatalogModuleLoader(): {
         return messages;
       } finally {
         entry.inFlight -= 1;
-        if (entry.evicted && entry.inFlight === 0 && entry.filename) {
-          void rm(entry.filename, { force: true }).catch(() => {});
+        if (entry.inFlight === 0 && serverModuleWrites.size > MAX_SERVER_MODULE_WRITES) {
+          evictIdleServerModuleWrites();
         }
       }
     },

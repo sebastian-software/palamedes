@@ -254,8 +254,15 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
               buffered = "";
             } else if (
               headEnd > MAX_HEAD_BUFFER_LENGTH ||
-              buffered.length > MAX_HEAD_BUFFER_LENGTH
+              (buffered.length > MAX_HEAD_BUFFER_LENGTH &&
+                !headScanner.hasPendingHeadCloseAtOrBefore(MAX_HEAD_BUFFER_LENGTH))
             ) {
+              if (headScanner.sawHeadOpen()) {
+                buffered = "";
+                throw new Error(
+                  `Palamedes Vite catalog delivery exceeded the ${MAX_HEAD_BUFFER_LENGTH}-character <head> buffer limit before </head>.`,
+                );
+              }
               output = buffered;
               passthrough = true;
               buffered = "";
@@ -356,14 +363,29 @@ function decodeChunk(decoder: StringDecoder, chunk: unknown): string {
   return String(chunk);
 }
 
-function createHeadCloseScanner(): { scan(value: string): number } {
-  let state: "normal" | "comment" | "raw-open" | "raw-body" = "normal";
+function createHeadCloseScanner(): {
+  scan(value: string): number;
+  sawHeadOpen(): boolean;
+  hasPendingHeadCloseAtOrBefore(limit: number): boolean;
+} {
+  let state: "normal" | "comment" | "tag-attrs" | "raw-open" | "raw-body" = "normal";
   let rawTag = "";
-  let rawQuote: "" | '"' | "'" = "";
+  let quote: "" | '"' | "'" = "";
   let scanOffset = 0;
+  let headOpened = false;
+  let pendingHeadCloseStart = -1;
 
   return {
+    sawHeadOpen(): boolean {
+      return headOpened;
+    },
+
+    hasPendingHeadCloseAtOrBefore(limit: number): boolean {
+      return pendingHeadCloseStart !== -1 && pendingHeadCloseStart <= limit;
+    },
+
     scan(value: string): number {
+      pendingHeadCloseStart = -1;
       let cursor = scanOffset;
       while (cursor < value.length) {
         if (state === "normal") {
@@ -374,8 +396,15 @@ function createHeadCloseScanner(): { scan(value: string): number } {
           }
           cursor = lt;
           const remaining = value.length - cursor;
+          if (remaining === 1) {
+            // A lone `<` at chunk end could begin `</head>`, `<head>`, `<!--`, etc.
+            scanOffset = cursor;
+            pendingHeadCloseStart = cursor;
+            return -1;
+          }
 
-          if (value.charCodeAt(cursor + 1) === 33 /* ! */) {
+          const nextCode = value.charCodeAt(cursor + 1);
+          if (nextCode === 33 /* ! */) {
             if (remaining < 4) {
               if ("<!--".startsWith(value.slice(cursor))) {
                 scanOffset = cursor;
@@ -393,10 +422,11 @@ function createHeadCloseScanner(): { scan(value: string): number } {
             continue;
           }
 
-          if (value.charCodeAt(cursor + 1) === 47 /* / */) {
+          if (nextCode === 47 /* / */) {
             if (remaining < "</head".length) {
               if (asciiPrefixIgnoreCase("</head", value, cursor)) {
                 scanOffset = cursor;
+                pendingHeadCloseStart = cursor;
                 return -1;
               }
               cursor += 1;
@@ -408,6 +438,10 @@ function createHeadCloseScanner(): { scan(value: string): number } {
                 after += 1;
               }
               if (after >= value.length) {
+                // Only treat as pending </head> while whitespace stays bounded.
+                if (after - cursor <= 64) {
+                  pendingHeadCloseStart = cursor;
+                }
                 scanOffset = cursor;
                 return -1;
               }
@@ -419,6 +453,28 @@ function createHeadCloseScanner(): { scan(value: string): number } {
               continue;
             }
             cursor += 1;
+            continue;
+          }
+
+          if (!isAsciiAlpha(nextCode)) {
+            cursor += 1;
+            continue;
+          }
+
+          // Check for `<head` opener so cap overflow on real <head> fails closed.
+          if (remaining <= "<head".length) {
+            if (asciiPrefixIgnoreCase("<head", value, cursor)) {
+              scanOffset = cursor;
+              return -1;
+            }
+          } else if (
+            asciiEqualsIgnoreCase(value, cursor, "<head") &&
+            isHtmlTagBoundary(value.charCodeAt(cursor + "<head".length))
+          ) {
+            headOpened = true;
+            state = "tag-attrs";
+            quote = "";
+            cursor += "<head".length;
             continue;
           }
 
@@ -446,12 +502,16 @@ function createHeadCloseScanner(): { scan(value: string): number } {
           if (matchedRaw) {
             state = "raw-open";
             rawTag = matchedRaw;
-            rawQuote = "";
+            quote = "";
             cursor += 1 + matchedRaw.length;
             continue;
           }
 
-          cursor += 1;
+          // Skip attributes of any regular start tag (e.g. `<meta content="The <style> element">`)
+          // so quoted `<style>` / `<script>` / `</head>` text never enters raw mode or closes head.
+          state = "tag-attrs";
+          quote = "";
+          cursor += 2;
           continue;
         }
 
@@ -466,14 +526,14 @@ function createHeadCloseScanner(): { scan(value: string): number } {
           continue;
         }
 
-        if (state === "raw-open") {
+        if (state === "tag-attrs" || state === "raw-open") {
           let foundEnd = -1;
           for (let index = cursor; index < value.length; index += 1) {
             const character = value[index];
-            if (rawQuote) {
-              if (character === rawQuote) rawQuote = "";
+            if (quote) {
+              if (character === quote) quote = "";
             } else if (character === '"' || character === "'") {
-              rawQuote = character;
+              quote = character;
             } else if (character === ">") {
               foundEnd = index;
               break;
@@ -484,8 +544,8 @@ function createHeadCloseScanner(): { scan(value: string): number } {
             return -1;
           }
           cursor = foundEnd + 1;
-          rawQuote = "";
-          state = "raw-body";
+          quote = "";
+          state = state === "raw-open" ? "raw-body" : "normal";
           continue;
         }
 
@@ -526,6 +586,10 @@ function createHeadCloseScanner(): { scan(value: string): number } {
       return -1;
     },
   };
+}
+
+function isAsciiAlpha(code: number): boolean {
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
 function asciiEqualsIgnoreCase(value: string, offset: number, lowerTarget: string): boolean {

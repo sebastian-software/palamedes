@@ -1173,8 +1173,6 @@ describe("createPalamedesRemixAssetLoader", () => {
       readdirSync(tmpdir()).filter((name) => name.startsWith("palamedes-remix-modules-")),
     );
     const exitListenersBefore = process.listenerCount("exit");
-    const sigtermListenersBefore = process.listenerCount("SIGTERM");
-    const sigintListenersBefore = process.listenerCount("SIGINT");
 
     const first = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir, watch: false });
     const second = createPalamedesRemixCatalogAssetRegistry({ projectRoot: rootDir, watch: false });
@@ -1189,21 +1187,17 @@ describe("createPalamedesRemixAssetLoader", () => {
       expect(createdDirs).toHaveLength(1);
       // Identical compiled catalogs across active registries share one module file & URL.
       expect(readdirSync(createdDirs[0]!)).toHaveLength(1);
-      // Only one shared set of cleanup listeners is registered regardless of registry count.
+      // Only one shared exit listener is registered regardless of registry count.
       expect(process.listenerCount("exit")).toBe(exitListenersBefore + 1);
-      expect(process.listenerCount("SIGTERM")).toBe(sigtermListenersBefore + 1);
-      expect(process.listenerCount("SIGINT")).toBe(sigintListenersBefore + 1);
 
       // Closing the first registry keeps the shared directory alive for the second.
       first.close?.();
       expect(createdDirs.filter((directory) => existsSync(directory))).toHaveLength(1);
 
-      // Closing the last active registry removes the shared directory and all cleanup listeners.
+      // Closing the last active registry removes the shared directory and exit listener.
       second.close?.();
       expect(createdDirs.filter((directory) => existsSync(directory))).toHaveLength(0);
       expect(process.listenerCount("exit")).toBe(exitListenersBefore);
-      expect(process.listenerCount("SIGTERM")).toBe(sigtermListenersBefore);
-      expect(process.listenerCount("SIGINT")).toBe(sigintListenersBefore);
 
       // Loading after close fails cleanly without creating an orphaned temp directory.
       await expect(first.load?.("en")).rejects.toThrow("closed");
