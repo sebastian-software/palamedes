@@ -1475,6 +1475,43 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
     return { known: false, values: [], mayBeEmpty: true };
   }
 
+  // Handle nested parenthesized `||` sub-expressions (e.g. `(false || 0) && ...`).
+  const orParts = splitTopLevelLogicalOp(branch, "||");
+  if (orParts && orParts.length >= 2) {
+    const values = [];
+    let allKnown = true;
+    let mayBeEmpty = true;
+    let falsyValue;
+    let truncated = false;
+    for (const part of orParts) {
+      const res = evaluateActionsFallbackBranch(part, stepEnv);
+      if (res.truncated) {
+        truncated = true;
+      }
+      for (const val of res.values) {
+        if (val.length > 0 && !values.includes(val)) {
+          values.push(val);
+        }
+      }
+      if (!res.known) {
+        allKnown = false;
+      }
+      if (res.known && !res.mayBeEmpty) {
+        mayBeEmpty = false;
+        falsyValue = undefined;
+        break;
+      }
+      falsyValue = res.falsyValue ?? (res.values.includes("") ? "" : undefined);
+    }
+    return {
+      known: allKnown || !mayBeEmpty,
+      values,
+      ...(mayBeEmpty && falsyValue !== undefined ? { falsyValue } : {}),
+      mayBeEmpty,
+      truncated,
+    };
+  }
+
   // Logical AND (`&&`) has lower precedence than unary negation (`!`), so split
   // top-level `&&` before checking for a leading `!` (e.g. `!inputs.alt && 'img'`).
   const andParts = splitTopLevelLogicalOp(branch, "&&");
@@ -2198,7 +2235,12 @@ function convertYamlNode(node, doc, lineCounter, rawLines, state) {
       const val = convertYamlNode(pair.value, doc, lineCounter, rawLines, state);
       map.set(
         key,
-        val ?? { kind: "scalar", value: "", line: nodeStartLine(pair.key, lineCounter) },
+        val ?? {
+          kind: "scalar",
+          value: "",
+          scalarType: "null",
+          line: nodeStartLine(pair.key, lineCounter),
+        },
       );
     }
     for (const sourceMap of deferredMerges) {
@@ -2223,10 +2265,19 @@ function convertYamlNode(node, doc, lineCounter, rawLines, state) {
     converted = { kind: "seq", value: items, line: nodeStartLine(node, lineCounter) };
   } else if (isScalar(node)) {
     const startLine = nodeStartLine(node, lineCounter);
-    const value = node.value === null || node.value === undefined ? "" : String(node.value);
+    const scalarType =
+      node.value === null || node.value === undefined
+        ? "null"
+        : typeof node.value === "boolean"
+          ? "boolean"
+          : typeof node.value === "number"
+            ? "number"
+            : "string";
+    const value = scalarType === "null" ? "" : String(node.value);
     const scalar = {
       kind: "scalar",
       value,
+      scalarType,
       line: startLine,
       comment: node.comment ?? null,
     };
@@ -3252,8 +3303,10 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   let commandHasStdinHeredoc = false;
   let nextConditional = false;
   let inPipeline = false;
-  let pendingFunctionBody = false;
+  let pendingFunctionName = null;
+  let pendingFunctionConditional = false;
   const functionBraceStack = [];
+  const parenKindStack = [];
   let commandStartEventIndex = 0;
 
   const wrapLastStageInSubshell = () => {
@@ -3848,9 +3901,15 @@ function lexShellScript(text, startLine, shellMode = "posix") {
     }
 
     if (!isPwsh && ch === "{" && tokens.length === 0 && !tokenStarted) {
-      if (pendingFunctionBody) {
-        pendingFunctionBody = false;
-        events.push({ kind: "enter-subshell" });
+      if (pendingFunctionName !== null) {
+        events.push({
+          kind: "enter-function",
+          name: pendingFunctionName,
+          conditional: pendingFunctionConditional,
+          subshellBody: false,
+        });
+        pendingFunctionName = null;
+        pendingFunctionConditional = false;
         functionBraceStack.push("fn");
         commandStartEventIndex = events.length;
         continue;
@@ -3874,7 +3933,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       }
       const kind = functionBraceStack.pop();
       if (kind === "fn") {
-        events.push({ kind: "exit-subshell" });
+        events.push({ kind: "exit-function" });
         commandStartEventIndex = events.length;
       }
       continue;
@@ -3896,17 +3955,21 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         continue;
       }
       if (!isPwsh && text[index + 1] === ")") {
-        const candidateName = tokenStarted ? current : tokens.length === 1 ? tokens[0] : null;
-        const isFunctionHeader =
-          (tokens.length === 0 &&
-            tokenStarted &&
-            /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(candidateName ?? "")) ||
-          (tokens.length === 1 &&
-            !tokenStarted &&
-            /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(candidateName ?? "")) ||
-          (tokens[0] === "function" &&
-            (tokens.length === 2 || (tokens.length === 1 && tokenStarted)));
-        if (isFunctionHeader) {
+        let fnName = null;
+        if (tokens.length === 0 && tokenStarted) {
+          fnName = current;
+        } else if (tokens.length === 1 && !tokenStarted) {
+          fnName = tokens[0];
+        } else if (tokens[0] === "function") {
+          fnName =
+            tokens.length === 2 && !tokenStarted
+              ? tokens[1]
+              : tokens.length === 1 && tokenStarted
+                ? current
+                : null;
+        }
+        if (fnName && /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(fnName)) {
+          const fnCond = commandConditional || nextConditional;
           tokens = [];
           tokenSingleQuoted = [];
           tokenQuoted = [];
@@ -3917,20 +3980,36 @@ function lexShellScript(text, startLine, shellMode = "posix") {
           currentHasUnquotedOrDoubleQuoted = false;
           currentSawSingleQuote = false;
           currentSawAnyQuote = false;
-          pendingFunctionBody = true;
+          commandConditional = false;
+          nextConditional = false;
+          pendingFunctionName = fnName;
+          pendingFunctionConditional = fnCond;
           index += 1;
           continue;
         }
       }
-      if (pendingFunctionBody) {
-        pendingFunctionBody = false;
+      if (pendingFunctionName !== null && tokens.length === 0 && !tokenStarted) {
+        events.push({
+          kind: "enter-function",
+          name: pendingFunctionName,
+          conditional: pendingFunctionConditional,
+          subshellBody: true,
+        });
+        pendingFunctionName = null;
+        pendingFunctionConditional = false;
+        parenKindStack.push("fn-paren");
+        commandStartEventIndex = events.length;
+        continue;
       }
+      pendingFunctionName = null;
+      pendingFunctionConditional = false;
       flushCommand();
       if (inPipeline) {
         wrapLastStageInSubshell();
         inPipeline = false;
       }
       nextConditional = false;
+      parenKindStack.push("subshell");
       events.push({ kind: "enter-subshell" });
       commandStartEventIndex = events.length;
       continue;
@@ -3950,7 +4029,8 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         inPipeline = false;
       }
       nextConditional = false;
-      events.push({ kind: "exit-subshell" });
+      const parenKind = parenKindStack.pop();
+      events.push({ kind: parenKind === "fn-paren" ? "exit-function" : "exit-subshell" });
       commandStartEventIndex = events.length;
       continue;
     }
@@ -4017,20 +4097,27 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(tokens[1])
       ) {
         let lookahead = index + 1;
-        while (lookahead < text.length && /[ \t\r]/u.test(text[lookahead])) {
+        while (lookahead < text.length && /[ \t\r\n]/u.test(text[lookahead])) {
           lookahead += 1;
         }
-        if (text[lookahead] === "{") {
+        if (text[lookahead] === "{" || text[lookahead] === "(") {
+          const fnName = tokens[1];
+          const fnCond = commandConditional || nextConditional;
           tokens = [];
           tokenSingleQuoted = [];
           tokenQuoted = [];
           tokenEscapedDollarOffsets = [];
-          pendingFunctionBody = true;
+          commandConditional = false;
+          nextConditional = false;
+          pendingFunctionName = fnName;
+          pendingFunctionConditional = fnCond;
         }
       }
       continue;
     }
 
+    pendingFunctionName = null;
+    pendingFunctionConditional = false;
     markTokenStart();
     current += ch;
   }
@@ -4078,7 +4165,11 @@ function resolveMatrixPath(rowMap, segments) {
     current = found.value;
   }
   if (current?.kind === "scalar") {
-    return { value: String(current.value), line: current.line };
+    return {
+      value: String(current.value),
+      line: current.line,
+      scalarType: current.scalarType ?? "string",
+    };
   }
   return null;
 }
@@ -4141,10 +4232,19 @@ function jsonToYamlAstNode(value, line) {
     }
     return { kind: "map", line, value: map };
   }
+  const scalarType =
+    value === null || value === undefined
+      ? "null"
+      : typeof value === "boolean"
+        ? "boolean"
+        : typeof value === "number"
+          ? "number"
+          : "string";
   return {
     kind: "scalar",
     line,
-    value: value === null || value === undefined ? "" : String(value),
+    scalarType,
+    value: scalarType === "null" ? "" : String(value),
   };
 }
 
@@ -4316,7 +4416,7 @@ function serializeMatrixNode(node) {
     return null;
   }
   if (node.kind === "scalar") {
-    return ["s", String(node.value)];
+    return ["s", node.scalarType ?? "string", String(node.value)];
   }
   if (node.kind === "seq") {
     return ["q", node.value.map((item) => serializeMatrixNode(item))];
@@ -4439,7 +4539,25 @@ function extractJobMatrixRows(jobNode, filePath, problems, envMap = null) {
 
 function substituteMatrixInsideExpression(expr, row) {
   const quoteActionsString = (value) => `'${String(value).replaceAll("'", "''")}'`;
-  const missingReplacement = row.hasUnknownProperties ? null : "";
+  const formatMatrixScalarLiteral = (resolved) => {
+    if (resolved.scalarType === "null") {
+      return "null";
+    }
+    if (resolved.scalarType === "boolean") {
+      const lower = String(resolved.value).trim().toLowerCase();
+      if (lower === "true" || lower === "false") {
+        return lower;
+      }
+    }
+    if (resolved.scalarType === "number") {
+      const trimmed = String(resolved.value).trim();
+      if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(trimmed)) {
+        return trimmed;
+      }
+    }
+    return quoteActionsString(resolved.value);
+  };
+  const missingReplacement = row.hasUnknownProperties ? null : "null";
   let out = "";
   let i = 0;
   let matchedAny = false;
@@ -4470,10 +4588,10 @@ function substituteMatrixInsideExpression(expr, row) {
       if (resolved) {
         matchedAny = true;
         resolvedLine = resolved.line;
-        out += quoteActionsString(resolved.value);
+        out += formatMatrixScalarLiteral(resolved);
       } else if (missingReplacement !== null) {
         matchedAny = true;
-        out += quoteActionsString(missingReplacement);
+        out += missingReplacement;
       } else {
         out += mMatch[0];
       }
@@ -4666,6 +4784,39 @@ function parseGithubEnvPayload(lines, startLine) {
       continue;
     }
     const assignMatch = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(line);
+    if (assignMatch) {
+      assignments.push({
+        name: assignMatch.groups.name,
+        value: assignMatch.groups.value,
+        line: lineNumber,
+      });
+    }
+  }
+  return assignments;
+}
+
+function parseGithubOutputPayload(lines, startLine) {
+  const assignments = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const lineNumber = startLine + index;
+    const heredocMatch = /^(?<name>[^\s=<]+)<<(?<delim>.+)$/u.exec(line);
+    if (heredocMatch) {
+      const valueLines = [];
+      let cursor = index + 1;
+      while (cursor < lines.length && lines[cursor] !== heredocMatch.groups.delim) {
+        valueLines.push(lines[cursor]);
+        cursor += 1;
+      }
+      assignments.push({
+        name: heredocMatch.groups.name,
+        value: valueLines.join("\n"),
+        line: lineNumber,
+      });
+      index = cursor;
+      continue;
+    }
+    const assignMatch = /^(?<name>[^\s=]+)=(?<value>[\s\S]*)$/u.exec(line);
     if (assignMatch) {
       assignments.push({
         name: assignMatch.groups.name,
@@ -5742,7 +5893,12 @@ function applyAssignDefaultParamExpansions(
 function sanitizeGithubOutputEntries(entries, shellMode) {
   const sanitized = [];
   const seen = new Set();
+  let truncatedLine = null;
   for (const entry of entries) {
+    if (entry.truncated) {
+      truncatedLine ??= entry.line;
+      continue;
+    }
     if (entry.unset) {
       continue;
     }
@@ -5764,6 +5920,9 @@ function sanitizeGithubOutputEntries(entries, shellMode) {
       seen.add(value);
       sanitized.push({ value, line: entry.line });
     }
+  }
+  if (truncatedLine !== null) {
+    sanitized.push({ value: "", line: truncatedLine, truncated: true });
   }
   return sanitized;
 }
@@ -5846,6 +6005,7 @@ function inspectShellText(
       vars: cloneVarMap(shellVars),
       arrays: new Map(),
       exportedVars: initialExportedVars,
+      functions: new Map(),
       branches: [],
       rowCwds: initialRowCwds,
       rowDirStacks: initialRowDirStacks,
@@ -5855,303 +6015,364 @@ function inspectShellText(
     },
   ];
   const isWindowsShell = shellMode === "pwsh" || shellMode === "cmd";
+  const calledFnDefs = new Set();
 
-  for (const event of lexShellScript(scriptText, startLine, shellMode)) {
-    if (event.kind === "enter-subshell") {
-      const parent = scopeStack.at(-1);
+  const inspectUncalledFunctions = (targetFrame) => {
+    for (const fnDef of targetFrame.functions.values()) {
+      if (calledFnDefs.has(fnDef)) {
+        continue;
+      }
+      calledFnDefs.add(fnDef);
       scopeStack.push({
-        vars: cloneVarMap(parent.vars),
-        arrays: cloneArrayMap(parent.arrays),
-        exportedVars: new Set(parent.exportedVars),
+        vars: cloneVarMap(targetFrame.vars),
+        arrays: cloneArrayMap(targetFrame.arrays),
+        exportedVars: new Set(targetFrame.exportedVars),
+        functions: new Map(targetFrame.functions),
         branches: [],
-        rowCwds: cloneRowCwds(parent.rowCwds),
-        rowDirStacks: cloneRowDirStacks(parent.rowDirStacks),
-        rowOldPwds: cloneRowCwds(parent.rowOldPwds),
-        rowCwdsTruncated: new Set(parent.rowCwdsTruncated),
+        rowCwds: cloneRowCwds(targetFrame.rowCwds),
+        rowDirStacks: cloneRowDirStacks(targetFrame.rowDirStacks),
+        rowOldPwds: cloneRowCwds(targetFrame.rowOldPwds),
+        rowCwdsTruncated: new Set(targetFrame.rowCwdsTruncated),
         pendingStdinBuilds: [],
       });
-      continue;
+      processEvents(fnDef.bodyEvents, {
+        localVars: new Map(),
+        activeFunctions: new Set([fnDef.name]),
+        fnDepth: 1,
+      });
+      scopeStack.pop();
     }
-    if (event.kind === "exit-subshell") {
-      if (scopeStack.length > 1) {
-        scopeStack.pop();
+  };
+
+  const processEvents = (eventsList, fnContext = null) => {
+    const recordLocalBinding = (varName, targetFrame) => {
+      if (!fnContext || fnContext.localVars.has(varName)) {
+        return;
       }
-      continue;
-    }
+      const arrayEntry = targetFrame.arrays.get(varName);
+      fnContext.localVars.set(varName, {
+        hadVar: targetFrame.vars.has(varName),
+        entries: targetFrame.vars.has(varName) ? [...targetFrame.vars.get(varName)] : null,
+        hadArray: Boolean(arrayEntry),
+        arrayEntry: arrayEntry
+          ? {
+              variants: arrayEntry.variants.map((v) => v.map((item) => ({ ...item }))),
+              truncated: arrayEntry.truncated,
+            }
+          : null,
+        wasExported: targetFrame.exportedVars.has(varName),
+      });
+    };
 
-    const frame = scopeStack.at(-1);
-
-    if (event.kind === "case-end") {
-      const top = frame.branches.at(-1);
-      if (top?.kind === "case") {
-        top.branchEndVars.push(cloneVarMap(frame.vars));
-        frame.vars = cloneVarMap(top.entryVars);
-      }
-      continue;
-    }
-
-    if (event.kind === "stdin-containerfile-heredoc") {
-      const stdinBuild = frame.pendingStdinBuilds.shift() ?? null;
-      const rawBody = event.lines.join("\n");
-      const seenStdinProblems = new Set();
-      const invocationList =
-        stdinBuild?.invocations && stdinBuild.invocations.length > 0
-          ? stdinBuild.invocations
-          : [{ buildArgs: null, namedContexts: null, platforms: [], rowList: matrixRows }];
-
-      for (const inv of invocationList) {
-        const expandedBodies = event.quoted
-          ? resolveEnvExpressionCandidates(rawBody, stepEnv, event.startLine)
-          : resolveImageTokenCandidates(rawBody, stepEnv, frame.vars, event.startLine, shellMode);
-        if (expandedBodies.truncated) {
-          const limitMessage = `${filePath}:${event.startLine}: inline containerfile exceeds expansion limit and cannot be verified exhaustively`;
-          if (!seenStdinProblems.has(limitMessage)) {
-            seenStdinProblems.add(limitMessage);
-            problems.push(limitMessage);
+    for (let eventIdx = 0; eventIdx < eventsList.length; eventIdx += 1) {
+      const event = eventsList[eventIdx];
+      if (event.kind === "enter-function") {
+        const bodyEvents = [];
+        let fnNest = 1;
+        while (eventIdx + 1 < eventsList.length && fnNest > 0) {
+          eventIdx += 1;
+          const nextEv = eventsList[eventIdx];
+          if (nextEv.kind === "enter-function") {
+            fnNest += 1;
+            bodyEvents.push(nextEv);
+          } else if (nextEv.kind === "exit-function") {
+            fnNest -= 1;
+            if (fnNest > 0) {
+              bodyEvents.push(nextEv);
+            }
+          } else {
+            bodyEvents.push(nextEv);
           }
         }
-        const seenBodies = new Set();
-        for (const bodyVarCandidate of expandedBodies.candidates) {
-          for (const bodyCandidate of expandMatrixReferences(
-            bodyVarCandidate.text,
-            inv.rowList,
-            event.startLine,
-          )) {
-            if (seenBodies.has(bodyCandidate.text)) {
-              continue;
+        const curFrame = scopeStack.at(-1);
+        curFrame.functions.set(event.name, {
+          name: event.name,
+          bodyEvents,
+          subshellBody: Boolean(event.subshellBody),
+          conditional: Boolean(event.conditional) || curFrame.branches.length > 0,
+        });
+        continue;
+      }
+      if (event.kind === "exit-function") {
+        continue;
+      }
+      if (event.kind === "enter-subshell") {
+        const parent = scopeStack.at(-1);
+        scopeStack.push({
+          vars: cloneVarMap(parent.vars),
+          arrays: cloneArrayMap(parent.arrays),
+          exportedVars: new Set(parent.exportedVars),
+          functions: new Map(parent.functions),
+          branches: [],
+          rowCwds: cloneRowCwds(parent.rowCwds),
+          rowDirStacks: cloneRowDirStacks(parent.rowDirStacks),
+          rowOldPwds: cloneRowCwds(parent.rowOldPwds),
+          rowCwdsTruncated: new Set(parent.rowCwdsTruncated),
+          pendingStdinBuilds: [],
+        });
+        continue;
+      }
+      if (event.kind === "exit-subshell") {
+        if (scopeStack.length > 1) {
+          inspectUncalledFunctions(scopeStack.at(-1));
+          scopeStack.pop();
+        }
+        continue;
+      }
+
+      const frame = scopeStack.at(-1);
+
+      if (event.kind === "case-end") {
+        const top = frame.branches.at(-1);
+        if (top?.kind === "case") {
+          top.branchEndVars.push(cloneVarMap(frame.vars));
+          frame.vars = cloneVarMap(top.entryVars);
+        }
+        continue;
+      }
+
+      if (event.kind === "stdin-containerfile-heredoc") {
+        const stdinBuild = frame.pendingStdinBuilds.shift() ?? null;
+        const rawBody = event.lines.join("\n");
+        const seenStdinProblems = new Set();
+        const invocationList =
+          stdinBuild?.invocations && stdinBuild.invocations.length > 0
+            ? stdinBuild.invocations
+            : [{ buildArgs: null, namedContexts: null, platforms: [], rowList: matrixRows }];
+
+        for (const inv of invocationList) {
+          const expandedBodies = event.quoted
+            ? resolveEnvExpressionCandidates(rawBody, stepEnv, event.startLine)
+            : resolveImageTokenCandidates(rawBody, stepEnv, frame.vars, event.startLine, shellMode);
+          if (expandedBodies.truncated) {
+            const limitMessage = `${filePath}:${event.startLine}: inline containerfile exceeds expansion limit and cannot be verified exhaustively`;
+            if (!seenStdinProblems.has(limitMessage)) {
+              seenStdinProblems.add(limitMessage);
+              problems.push(limitMessage);
             }
-            seenBodies.add(bodyCandidate.text);
-            for (const message of unpinnedContainerfileReferences(bodyCandidate.text, filePath, {
-              argOverrides: inv.buildArgs,
-              namedContexts: inv.namedContexts,
-              platforms: inv.platforms,
-              sourceFile: filePath,
-              sourceLine: stdinBuild?.lineNumber ?? event.startLine,
-              startLineOffset: event.startLine - 1,
-            })) {
-              if (!seenStdinProblems.has(message)) {
-                seenStdinProblems.add(message);
-                problems.push(message);
+          }
+          const seenBodies = new Set();
+          for (const bodyVarCandidate of expandedBodies.candidates) {
+            for (const bodyCandidate of expandMatrixReferences(
+              bodyVarCandidate.text,
+              inv.rowList,
+              event.startLine,
+            )) {
+              if (seenBodies.has(bodyCandidate.text)) {
+                continue;
+              }
+              seenBodies.add(bodyCandidate.text);
+              for (const message of unpinnedContainerfileReferences(bodyCandidate.text, filePath, {
+                argOverrides: inv.buildArgs,
+                namedContexts: inv.namedContexts,
+                platforms: inv.platforms,
+                sourceFile: filePath,
+                sourceLine: stdinBuild?.lineNumber ?? event.startLine,
+                startLineOffset: event.startLine - 1,
+              })) {
+                if (!seenStdinProblems.has(message)) {
+                  seenStdinProblems.add(message);
+                  problems.push(message);
+                }
               }
             }
           }
         }
+        continue;
       }
-      continue;
-    }
 
-    if (event.kind === "github-env-heredoc") {
-      const isConditional = frame.branches.length > 0 || event.conditional;
-      for (const assignment of parseGithubEnvPayload(event.lines, event.startLine)) {
-        const resolved = event.quoted
-          ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
-          : resolveImageTokenCandidates(
-              assignment.value,
-              stepEnv,
-              frame.vars,
-              assignment.line,
-              shellMode,
-            );
-        recordGithubEnvWrite(
-          emittedGithubEnv,
-          assignment.name,
-          candidatesToVarEntries(resolved, assignment.line),
-          isConditional,
-        );
-      }
-      continue;
-    }
-
-    if (event.kind === "github-output-heredoc") {
-      const isConditional = frame.branches.length > 0 || event.conditional;
-      for (const assignment of parseGithubEnvPayload(event.lines, event.startLine)) {
-        const resolved = event.quoted
-          ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
-          : resolveImageTokenCandidates(
-              assignment.value,
-              stepEnv,
-              frame.vars,
-              assignment.line,
-              shellMode,
-            );
-        const sanitized = sanitizeGithubOutputEntries(
-          candidatesToVarEntries(resolved, assignment.line),
-          shellMode,
-        );
-        if (sanitized.length > 0) {
-          recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
-        }
-      }
-      continue;
-    }
-
-    const { lineNumber, conditional, substitutions } = event;
-
-    for (const nested of substitutions) {
-      inspectShellText(
-        nested.text,
-        nested.lineNumber,
-        sourceLines,
-        stepEnv,
-        frame.vars,
-        matrixRows,
-        filePath,
-        problems,
-        emittedGithubEnv,
-        shellMode,
-        depth + 1,
-        buildFileContext
-          ? {
-              ...buildFileContext,
-              rowCwds: cloneRowCwds(frame.rowCwds),
-              rowDirStacks: cloneRowDirStacks(frame.rowDirStacks),
-              rowOldPwds: cloneRowCwds(frame.rowOldPwds),
-              rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
-            }
-          : null,
-        emittedGithubOutput,
-      );
-    }
-
-    if (event.tokens.length === 0 || event.tokens[0].startsWith("#")) {
-      continue;
-    }
-
-    const tokens = peelControlKeywords(event.tokens, frame, lineNumber, stepEnv, shellMode);
-    const peeledCount = event.tokens.length - tokens.length;
-    const peeledSingleQuoted = event.tokenSingleQuoted
-      ? event.tokenSingleQuoted.slice(peeledCount)
-      : [];
-    const peeledQuoted = event.tokenQuoted ? event.tokenQuoted.slice(peeledCount) : [];
-    const peeledEscapedDollarOffsets = event.tokenEscapedDollarOffsets
-      ? event.tokenEscapedDollarOffsets.slice(peeledCount)
-      : [];
-    if (tokens.length === 0 || tokens[0].startsWith("#")) {
-      continue;
-    }
-
-    applyAssignDefaultParamExpansions(
-      tokens,
-      peeledSingleQuoted,
-      frame,
-      stepEnv,
-      lineNumber,
-      conditional,
-      shellMode,
-    );
-
-    // `unset VAR ...` clears tracked shell variables (or marks them possibly unset
-    // when executed conditionally).
-    if (tokens[0] === "unset" && tokens.length > 1) {
-      let unsetFunctions = false;
-      const unsetNames = [];
-      for (const token of tokens.slice(1)) {
-        if (token === "-f") {
-          unsetFunctions = true;
-          break;
-        }
-        if (token === "-v" || token === "--") {
-          continue;
-        }
-        if (/^[A-Za-z_][A-Za-z0-9_]*$/u.test(token)) {
-          unsetNames.push(token);
-        }
-      }
-      if (!unsetFunctions) {
-        for (const name of unsetNames) {
-          if (conditional) {
-            const existing = frame.vars.has(name)
-              ? frame.vars.get(name)
-              : [{ value: "", line: 0, unset: true }];
-            frame.vars.set(name, mergeVarEntries(existing, [{ value: "", line: 0, unset: true }]));
-          } else {
-            frame.vars.set(name, [{ value: "", line: 0, unset: true }]);
-            frame.exportedVars.delete(name);
-            frame.arrays.delete(name);
-          }
-        }
-      }
-      continue;
-    }
-
-    // PowerShell variable assignment (`$image = "node:24"`, `$env:IMAGE = ...`).
-    // Keep `$env:NAME` in a separate namespace from local `$name`.
-    if (shellMode === "pwsh") {
-      let pwshKey = null;
-      let pwshRawValue = null;
-      if (tokens.length >= 3 && tokens[1] === "=") {
-        const lhsMatch = PWSH_ASSIGN_LHS_PATTERN.exec(tokens[0]);
-        if (lhsMatch) {
-          const baseName = lhsMatch.groups.braced ?? lhsMatch.groups.bare;
-          const isEnvVar = Boolean(lhsMatch.groups.envPrefix ?? lhsMatch.groups.envPrefixBraced);
-          pwshKey = isEnvVar ? `env:${baseName}` : baseName;
-          pwshRawValue = tokens.slice(2).join(" ");
-        }
-      } else if (tokens.length === 1) {
-        const inlineMatch = PWSH_INLINE_ASSIGN_PATTERN.exec(tokens[0]);
-        if (inlineMatch) {
-          const baseName = inlineMatch.groups.braced ?? inlineMatch.groups.bare;
-          const isEnvVar = Boolean(
-            inlineMatch.groups.envPrefix ?? inlineMatch.groups.envPrefixBraced,
+      if (event.kind === "github-env-heredoc") {
+        const isConditional = frame.branches.length > 0 || event.conditional;
+        for (const assignment of parseGithubEnvPayload(event.lines, event.startLine)) {
+          const resolved = event.quoted
+            ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
+            : resolveImageTokenCandidates(
+                assignment.value,
+                stepEnv,
+                frame.vars,
+                assignment.line,
+                shellMode,
+              );
+          recordGithubEnvWrite(
+            emittedGithubEnv,
+            assignment.name,
+            candidatesToVarEntries(resolved, assignment.line),
+            isConditional,
           );
-          pwshKey = isEnvVar ? `env:${baseName}` : baseName;
-          pwshRawValue = inlineMatch.groups.value;
-        }
-      }
-      if (pwshKey !== null) {
-        const resolved = candidatesToVarEntries(
-          resolveImageTokenCandidates(pwshRawValue, stepEnv, frame.vars, lineNumber, shellMode),
-          lineNumber,
-        );
-        setVarEntries(frame.vars, pwshKey, resolved, {
-          caseInsensitive: true,
-          merge: conditional,
-        });
-        if (pwshKey.startsWith("env:")) {
-          frame.exportedVars.add(pwshKey);
         }
         continue;
       }
-    }
 
-    // Windows cmd variable assignment (`set IMAGE=node:24` or `set "IMAGE=node:24"`).
-    if (shellMode === "cmd" && tokens[0].toLowerCase() === "set" && tokens.length >= 2) {
-      if (!/^\/[ap]$/iu.test(tokens[1])) {
-        const assignText = tokens.slice(1).join(" ");
-        const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(assignText);
-        if (match) {
+      if (event.kind === "github-output-heredoc") {
+        const isConditional = frame.branches.length > 0 || event.conditional;
+        for (const assignment of parseGithubOutputPayload(event.lines, event.startLine)) {
+          const resolved = event.quoted
+            ? resolveEnvExpressionCandidates(assignment.value, stepEnv, assignment.line)
+            : resolveImageTokenCandidates(
+                assignment.value,
+                stepEnv,
+                frame.vars,
+                assignment.line,
+                shellMode,
+              );
+          const sanitized = sanitizeGithubOutputEntries(
+            candidatesToVarEntries(resolved, assignment.line),
+            shellMode,
+          );
+          if (sanitized.length > 0) {
+            recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
+          }
+        }
+        continue;
+      }
+
+      const { lineNumber, conditional, substitutions } = event;
+
+      for (const nested of substitutions) {
+        inspectShellText(
+          nested.text,
+          nested.lineNumber,
+          sourceLines,
+          stepEnv,
+          frame.vars,
+          matrixRows,
+          filePath,
+          problems,
+          emittedGithubEnv,
+          shellMode,
+          depth + 1,
+          buildFileContext
+            ? {
+                ...buildFileContext,
+                rowCwds: cloneRowCwds(frame.rowCwds),
+                rowDirStacks: cloneRowDirStacks(frame.rowDirStacks),
+                rowOldPwds: cloneRowCwds(frame.rowOldPwds),
+                rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
+              }
+            : null,
+          emittedGithubOutput,
+        );
+      }
+
+      if (event.tokens.length === 0 || event.tokens[0].startsWith("#")) {
+        continue;
+      }
+
+      const tokens = peelControlKeywords(event.tokens, frame, lineNumber, stepEnv, shellMode);
+      const peeledCount = event.tokens.length - tokens.length;
+      const peeledSingleQuoted = event.tokenSingleQuoted
+        ? event.tokenSingleQuoted.slice(peeledCount)
+        : [];
+      const peeledQuoted = event.tokenQuoted ? event.tokenQuoted.slice(peeledCount) : [];
+      const peeledEscapedDollarOffsets = event.tokenEscapedDollarOffsets
+        ? event.tokenEscapedDollarOffsets.slice(peeledCount)
+        : [];
+      if (tokens.length === 0 || tokens[0].startsWith("#")) {
+        continue;
+      }
+
+      applyAssignDefaultParamExpansions(
+        tokens,
+        peeledSingleQuoted,
+        frame,
+        stepEnv,
+        lineNumber,
+        conditional,
+        shellMode,
+      );
+
+      // `unset VAR ...` clears tracked shell variables (or marks them possibly unset
+      // when executed conditionally).
+      if (tokens[0] === "unset" && tokens.length > 1) {
+        let unsetFunctions = false;
+        const unsetNames = [];
+        for (const token of tokens.slice(1)) {
+          if (token === "-f") {
+            unsetFunctions = true;
+            continue;
+          }
+          if (token === "-v" || token === "--") {
+            continue;
+          }
+          if (
+            unsetFunctions
+              ? /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(token)
+              : /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token)
+          ) {
+            unsetNames.push(token);
+          }
+        }
+        if (unsetFunctions) {
+          if (!conditional && frame.branches.length === 0) {
+            for (const name of unsetNames) {
+              frame.functions.delete(name);
+            }
+          }
+        } else {
+          for (const name of unsetNames) {
+            if (conditional) {
+              const existing = frame.vars.has(name)
+                ? frame.vars.get(name)
+                : [{ value: "", line: 0, unset: true }];
+              frame.vars.set(
+                name,
+                mergeVarEntries(existing, [{ value: "", line: 0, unset: true }]),
+              );
+            } else {
+              frame.vars.set(name, [{ value: "", line: 0, unset: true }]);
+              frame.exportedVars.delete(name);
+              frame.arrays.delete(name);
+            }
+          }
+        }
+        continue;
+      }
+
+      // PowerShell variable assignment (`$image = "node:24"`, `$env:IMAGE = ...`).
+      // Keep `$env:NAME` in a separate namespace from local `$name`.
+      if (shellMode === "pwsh") {
+        let pwshKey = null;
+        let pwshRawValue = null;
+        if (tokens.length >= 3 && tokens[1] === "=") {
+          const lhsMatch = PWSH_ASSIGN_LHS_PATTERN.exec(tokens[0]);
+          if (lhsMatch) {
+            const baseName = lhsMatch.groups.braced ?? lhsMatch.groups.bare;
+            const isEnvVar = Boolean(lhsMatch.groups.envPrefix ?? lhsMatch.groups.envPrefixBraced);
+            pwshKey = isEnvVar ? `env:${baseName}` : baseName;
+            pwshRawValue = tokens.slice(2).join(" ");
+          }
+        } else if (tokens.length === 1) {
+          const inlineMatch = PWSH_INLINE_ASSIGN_PATTERN.exec(tokens[0]);
+          if (inlineMatch) {
+            const baseName = inlineMatch.groups.braced ?? inlineMatch.groups.bare;
+            const isEnvVar = Boolean(
+              inlineMatch.groups.envPrefix ?? inlineMatch.groups.envPrefixBraced,
+            );
+            pwshKey = isEnvVar ? `env:${baseName}` : baseName;
+            pwshRawValue = inlineMatch.groups.value;
+          }
+        }
+        if (pwshKey !== null) {
           const resolved = candidatesToVarEntries(
-            resolveImageTokenCandidates(
-              match.groups.value,
-              stepEnv,
-              frame.vars,
-              lineNumber,
-              shellMode,
-            ),
+            resolveImageTokenCandidates(pwshRawValue, stepEnv, frame.vars, lineNumber, shellMode),
             lineNumber,
           );
-          setVarEntries(frame.vars, match.groups.name, resolved, {
+          setVarEntries(frame.vars, pwshKey, resolved, {
             caseInsensitive: true,
             merge: conditional,
           });
-          frame.exportedVars.add(match.groups.name);
+          if (pwshKey.startsWith("env:")) {
+            frame.exportedVars.add(pwshKey);
+          }
           continue;
         }
       }
-    }
 
-    // `export VAR` / `export VAR=value` marks variables as exported to child processes.
-    if (tokens[0] === "export" && tokens.length > 1) {
-      const exportOperands = tokens.slice(1).filter((token) => !token.startsWith("-"));
-      if (
-        exportOperands.length > 0 &&
-        exportOperands.every(
-          (token) =>
-            ENV_PREFIX_ASSIGNMENT_PATTERN.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
-        )
-      ) {
-        for (const token of exportOperands) {
-          const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+      // Windows cmd variable assignment (`set IMAGE=node:24` or `set "IMAGE=node:24"`).
+      if (shellMode === "cmd" && tokens[0].toLowerCase() === "set" && tokens.length >= 2) {
+        if (!/^\/[ap]$/iu.test(tokens[1])) {
+          const assignText = tokens.slice(1).join(" ");
+          const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(assignText);
           if (match) {
             const resolved = candidatesToVarEntries(
               resolveImageTokenCandidates(
@@ -6163,170 +6384,272 @@ function inspectShellText(
               ),
               lineNumber,
             );
+            setVarEntries(frame.vars, match.groups.name, resolved, {
+              caseInsensitive: true,
+              merge: conditional,
+            });
             frame.exportedVars.add(match.groups.name);
-            if (conditional) {
-              const existing = frame.vars.has(match.groups.name)
-                ? frame.vars.get(match.groups.name)
-                : [{ value: "", line: 0, unset: true }];
-              frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
+            continue;
+          }
+        }
+      }
+
+      // `export VAR` / `export VAR=value` marks variables as exported to child processes.
+      if (tokens[0] === "export" && tokens.length > 1) {
+        const exportOperands = tokens.slice(1).filter((token) => !token.startsWith("-"));
+        if (
+          exportOperands.length > 0 &&
+          exportOperands.every(
+            (token) =>
+              ENV_PREFIX_ASSIGNMENT_PATTERN.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
+          )
+        ) {
+          for (const token of exportOperands) {
+            const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+            if (match) {
+              const resolved = candidatesToVarEntries(
+                resolveImageTokenCandidates(
+                  match.groups.value,
+                  stepEnv,
+                  frame.vars,
+                  lineNumber,
+                  shellMode,
+                ),
+                lineNumber,
+              );
+              frame.exportedVars.add(match.groups.name);
+              if (conditional) {
+                const existing = frame.vars.has(match.groups.name)
+                  ? frame.vars.get(match.groups.name)
+                  : [{ value: "", line: 0, unset: true }];
+                frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
+              } else {
+                frame.vars.set(match.groups.name, resolved);
+              }
             } else {
-              frame.vars.set(match.groups.name, resolved);
+              frame.exportedVars.add(token);
             }
+          }
+          continue;
+        }
+      }
+
+      // Bash array assignment (`args=(--rm alpine:3.20)`, `args+=(...)`,
+      // `declare -a args=(...)`, `local args=(...)`).
+      const BASH_ARRAY_ASSIGN_PATTERN =
+        /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?<op>\+?=)\((?<body>[\s\S]*)\)$/u;
+      const arrayAssignStart =
+        tokens[0] === "declare" || tokens[0] === "local" || tokens[0] === "typeset"
+          ? tokens.findIndex((tok, idx) => idx > 0 && !tok.startsWith("-"))
+          : 0;
+      if (
+        shellMode === "posix" &&
+        arrayAssignStart !== -1 &&
+        arrayAssignStart < tokens.length &&
+        tokens.slice(arrayAssignStart).every((token) => BASH_ARRAY_ASSIGN_PATTERN.test(token))
+      ) {
+        const arrayIsLocal =
+          tokens[0] === "local" ||
+          (fnContext !== null &&
+            (tokens[0] === "declare" || tokens[0] === "typeset") &&
+            !tokens
+              .slice(1, arrayAssignStart)
+              .some((flag) => flag.startsWith("-") && flag.includes("g")));
+        for (const token of tokens.slice(arrayAssignStart)) {
+          const arrayMatch = BASH_ARRAY_ASSIGN_PATTERN.exec(token);
+          if (!arrayMatch) {
+            continue;
+          }
+          const { name, op, body } = arrayMatch.groups;
+          if (arrayIsLocal) {
+            recordLocalBinding(name, frame);
+          }
+          const bodyEvents = lexShellScript(body, lineNumber, "posix");
+          const rawElements = [];
+          for (const bodyEvent of bodyEvents) {
+            if (bodyEvent.kind !== "command") {
+              continue;
+            }
+            for (let elemIdx = 0; elemIdx < bodyEvent.tokens.length; elemIdx += 1) {
+              rawElements.push({
+                text: bodyEvent.tokens[elemIdx],
+                singleQuoted: Boolean(bodyEvent.tokenSingleQuoted?.[elemIdx]),
+                line: bodyEvent.lineNumber,
+              });
+            }
+          }
+          let arrayTruncated = false;
+          let expandedVariants = [[]];
+          for (const elem of rawElements) {
+            const elemExpanded = elem.singleQuoted
+              ? { candidates: [{ text: elem.text, line: elem.line }], truncated: false }
+              : resolveImageTokenCandidates(elem.text, stepEnv, frame.vars, elem.line, shellMode);
+            if (elemExpanded.truncated) {
+              arrayTruncated = true;
+            }
+            const nextVariants = [];
+            for (const variant of expandedVariants) {
+              for (const candidate of elemExpanded.candidates) {
+                if (nextVariants.length >= MAX_VAR_VALUES) {
+                  arrayTruncated = true;
+                  break;
+                }
+                nextVariants.push([
+                  ...variant,
+                  { text: candidate.text, line: candidate.line, preExpanded: true },
+                ]);
+              }
+            }
+            expandedVariants = nextVariants;
+          }
+          const existingEntry = frame.arrays.get(name);
+          const existingVariants =
+            op === "+="
+              ? (existingEntry?.variants ?? [[]])
+              : conditional || frame.branches.length > 0
+                ? (existingEntry?.variants ?? [[]])
+                : [];
+          if (
+            existingEntry?.truncated &&
+            (op === "+=" || conditional || frame.branches.length > 0)
+          ) {
+            arrayTruncated = true;
+          }
+          if (op === "+=") {
+            const combined = [];
+            for (const base of existingVariants) {
+              for (const added of expandedVariants) {
+                if (combined.length >= MAX_VAR_VALUES) {
+                  arrayTruncated = true;
+                  break;
+                }
+                combined.push([...base, ...added]);
+              }
+            }
+            const merged =
+              conditional || frame.branches.length > 0
+                ? [...existingVariants, ...combined]
+                : combined;
+            if (merged.length > MAX_VAR_VALUES) {
+              arrayTruncated = true;
+            }
+            frame.arrays.set(name, {
+              variants: merged.slice(0, MAX_VAR_VALUES),
+              truncated: arrayTruncated,
+            });
           } else {
-            frame.exportedVars.add(token);
+            const merged =
+              conditional || frame.branches.length > 0
+                ? [...existingVariants, ...expandedVariants]
+                : expandedVariants;
+            if (merged.length > MAX_VAR_VALUES) {
+              arrayTruncated = true;
+            }
+            frame.arrays.set(name, {
+              variants: merged.slice(0, MAX_VAR_VALUES),
+              truncated: arrayTruncated,
+            });
           }
         }
         continue;
       }
-    }
 
-    // Bash array assignment (`args=(--rm alpine:3.20)`, `args+=(...)`,
-    // `declare -a args=(...)`, `local args=(...)`).
-    const BASH_ARRAY_ASSIGN_PATTERN =
-      /^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?<op>\+?=)\((?<body>[\s\S]*)\)$/u;
-    const arrayAssignStart =
-      tokens[0] === "declare" || tokens[0] === "local" || tokens[0] === "typeset"
-        ? tokens.findIndex((tok, idx) => idx > 0 && !tok.startsWith("-"))
-        : 0;
-    if (
-      shellMode === "posix" &&
-      arrayAssignStart !== -1 &&
-      arrayAssignStart < tokens.length &&
-      tokens.slice(arrayAssignStart).every((token) => BASH_ARRAY_ASSIGN_PATTERN.test(token))
-    ) {
-      for (const token of tokens.slice(arrayAssignStart)) {
-        const arrayMatch = BASH_ARRAY_ASSIGN_PATTERN.exec(token);
-        if (!arrayMatch) {
-          continue;
-        }
-        const { name, op, body } = arrayMatch.groups;
-        const bodyEvents = lexShellScript(body, lineNumber, "posix");
-        const rawElements = [];
-        for (const bodyEvent of bodyEvents) {
-          if (bodyEvent.kind !== "command") {
+      // Scalar variable declaration builtins (`readonly IMAGE=...`,
+      // `declare -r IMAGE=...`, `declare -x IMAGE=...`, `local IMAGE=...`).
+      if (
+        shellMode === "posix" &&
+        (tokens[0] === "readonly" ||
+          tokens[0] === "declare" ||
+          tokens[0] === "local" ||
+          tokens[0] === "typeset") &&
+        tokens.length > 1
+      ) {
+        let skipDeclaration = false;
+        let marksExported = false;
+        let marksGlobal = false;
+        const declOperands = [];
+        let afterDoubleDash = false;
+        for (const token of tokens.slice(1)) {
+          if (!afterDoubleDash && token === "--") {
+            afterDoubleDash = true;
             continue;
           }
-          for (let elemIdx = 0; elemIdx < bodyEvent.tokens.length; elemIdx += 1) {
-            rawElements.push({
-              text: bodyEvent.tokens[elemIdx],
-              singleQuoted: Boolean(bodyEvent.tokenSingleQuoted?.[elemIdx]),
-              line: bodyEvent.lineNumber,
-            });
+          if (!afterDoubleDash && token.startsWith("-")) {
+            if (token.includes("f") || token.includes("F") || token.includes("p")) {
+              skipDeclaration = true;
+              break;
+            }
+            if (token.includes("x")) {
+              marksExported = true;
+            }
+            if (token.includes("g")) {
+              marksGlobal = true;
+            }
+            continue;
           }
+          declOperands.push(token);
         }
-        let arrayTruncated = false;
-        let expandedVariants = [[]];
-        for (const elem of rawElements) {
-          const elemExpanded = elem.singleQuoted
-            ? { candidates: [{ text: elem.text, line: elem.line }], truncated: false }
-            : resolveImageTokenCandidates(elem.text, stepEnv, frame.vars, elem.line, shellMode);
-          if (elemExpanded.truncated) {
-            arrayTruncated = true;
-          }
-          const nextVariants = [];
-          for (const variant of expandedVariants) {
-            for (const candidate of elemExpanded.candidates) {
-              if (nextVariants.length >= MAX_VAR_VALUES) {
-                arrayTruncated = true;
-                break;
+        const declIsLocal =
+          tokens[0] === "local" ||
+          (fnContext !== null &&
+            !marksGlobal &&
+            (tokens[0] === "declare" || tokens[0] === "typeset"));
+        if (
+          !skipDeclaration &&
+          declOperands.length > 0 &&
+          declOperands.every(
+            (token) =>
+              ENV_PREFIX_ASSIGNMENT_PATTERN.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
+          )
+        ) {
+          for (const token of declOperands) {
+            const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+            if (match) {
+              if (declIsLocal) {
+                recordLocalBinding(match.groups.name, frame);
               }
-              nextVariants.push([
-                ...variant,
-                { text: candidate.text, line: candidate.line, preExpanded: true },
-              ]);
+              const resolved = candidatesToVarEntries(
+                resolveImageTokenCandidates(
+                  match.groups.value,
+                  stepEnv,
+                  frame.vars,
+                  lineNumber,
+                  shellMode,
+                ),
+                lineNumber,
+              );
+              if (marksExported) {
+                frame.exportedVars.add(match.groups.name);
+              }
+              if (conditional) {
+                const existing = frame.vars.has(match.groups.name)
+                  ? frame.vars.get(match.groups.name)
+                  : [{ value: "", line: 0, unset: true }];
+                frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
+              } else {
+                frame.vars.set(match.groups.name, resolved);
+                frame.arrays.delete(match.groups.name);
+              }
+            } else {
+              if (declIsLocal) {
+                recordLocalBinding(token, frame);
+                if (!conditional) {
+                  frame.vars.set(token, [{ value: "", line: 0, unset: true }]);
+                  frame.arrays.delete(token);
+                }
+              }
+              if (marksExported) {
+                frame.exportedVars.add(token);
+              }
             }
           }
-          expandedVariants = nextVariants;
-        }
-        const existingEntry = frame.arrays.get(name);
-        const existingVariants =
-          op === "+="
-            ? (existingEntry?.variants ?? [[]])
-            : conditional || frame.branches.length > 0
-              ? (existingEntry?.variants ?? [[]])
-              : [];
-        if (existingEntry?.truncated && (op === "+=" || conditional || frame.branches.length > 0)) {
-          arrayTruncated = true;
-        }
-        if (op === "+=") {
-          const combined = [];
-          for (const base of existingVariants) {
-            for (const added of expandedVariants) {
-              if (combined.length >= MAX_VAR_VALUES) {
-                arrayTruncated = true;
-                break;
-              }
-              combined.push([...base, ...added]);
-            }
-          }
-          const merged =
-            conditional || frame.branches.length > 0
-              ? [...existingVariants, ...combined]
-              : combined;
-          if (merged.length > MAX_VAR_VALUES) {
-            arrayTruncated = true;
-          }
-          frame.arrays.set(name, {
-            variants: merged.slice(0, MAX_VAR_VALUES),
-            truncated: arrayTruncated,
-          });
-        } else {
-          const merged =
-            conditional || frame.branches.length > 0
-              ? [...existingVariants, ...expandedVariants]
-              : expandedVariants;
-          if (merged.length > MAX_VAR_VALUES) {
-            arrayTruncated = true;
-          }
-          frame.arrays.set(name, {
-            variants: merged.slice(0, MAX_VAR_VALUES),
-            truncated: arrayTruncated,
-          });
+          continue;
         }
       }
-      continue;
-    }
 
-    // Scalar variable declaration builtins (`readonly IMAGE=...`,
-    // `declare -r IMAGE=...`, `declare -x IMAGE=...`, `local IMAGE=...`).
-    if (
-      shellMode === "posix" &&
-      (tokens[0] === "readonly" ||
-        tokens[0] === "declare" ||
-        tokens[0] === "local" ||
-        tokens[0] === "typeset") &&
-      tokens.length > 1
-    ) {
-      let skipDeclaration = false;
-      let marksExported = false;
-      const declOperands = [];
-      let afterDoubleDash = false;
-      for (const token of tokens.slice(1)) {
-        if (!afterDoubleDash && token === "--") {
-          afterDoubleDash = true;
-          continue;
-        }
-        if (!afterDoubleDash && token.startsWith("-")) {
-          if (token.includes("f") || token.includes("F") || token.includes("p")) {
-            skipDeclaration = true;
-            break;
-          }
-          if (token.includes("x")) {
-            marksExported = true;
-          }
-          continue;
-        }
-        declOperands.push(token);
-      }
-      if (
-        !skipDeclaration &&
-        declOperands.length > 0 &&
-        declOperands.every(
-          (token) =>
-            ENV_PREFIX_ASSIGNMENT_PATTERN.test(token) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(token),
-        )
-      ) {
-        for (const token of declOperands) {
+      // Pure shell-local variable assignment (`image=rust:1.96-alpine`).
+      if (tokens.every((token) => ENV_PREFIX_ASSIGNMENT_PATTERN.test(token))) {
+        for (const token of tokens) {
           const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
           if (match) {
             const resolved = candidatesToVarEntries(
@@ -6339,9 +6662,6 @@ function inspectShellText(
               ),
               lineNumber,
             );
-            if (marksExported) {
-              frame.exportedVars.add(match.groups.name);
-            }
             if (conditional) {
               const existing = frame.vars.has(match.groups.name)
                 ? frame.vars.get(match.groups.name)
@@ -6351,22 +6671,67 @@ function inspectShellText(
               frame.vars.set(match.groups.name, resolved);
               frame.arrays.delete(match.groups.name);
             }
-          } else if (marksExported) {
-            frame.exportedVars.add(token);
           }
         }
         continue;
       }
-    }
 
-    // Pure shell-local variable assignment (`image=rust:1.96-alpine`).
-    if (tokens.every((token) => ENV_PREFIX_ASSIGNMENT_PATTERN.test(token))) {
-      for (const token of tokens) {
-        const match = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
-        if (match) {
+      // Keep argument-expansion scope (`frame.vars`) separate from the child
+      // process environment (`exportedCommandVars`): prefix assignments like
+      // `IMAGE=new docker pull "$IMAGE"` only change the child environment, while
+      // shell-local unexported assignments stay out of `exportedCommandVars`.
+      const commandVars = cloneVarMap(frame.vars);
+      const exportedCommandVars = new Map();
+      for (const [key, entries] of frame.vars) {
+        if (frame.exportedVars.has(key)) {
+          exportedCommandVars.set(key, [...entries]);
+        }
+      }
+      let childStepEnv = stepEnv;
+      const stdinRedirectTargets = [];
+      const wrapperChdirs = [];
+      const prefixAssignEntries = [];
+      let cursor = 0;
+      while (cursor < tokens.length) {
+        const redirConsumed = consumeShellRedirection(tokens, cursor, stdinRedirectTargets);
+        if (redirConsumed > 0) {
+          cursor += redirConsumed;
+          continue;
+        }
+        const wrapperEnvChanges = { clear: false, unset: new Set() };
+        const afterWrapper = advanceWrapperPrefix(
+          tokens,
+          cursor,
+          stdinRedirectTargets,
+          wrapperChdirs,
+          wrapperEnvChanges,
+        );
+        if (afterWrapper !== null) {
+          if (wrapperEnvChanges.clear) {
+            for (const key of exportedCommandVars.keys()) {
+              exportedCommandVars.set(key, [{ value: "", line: 0, unset: true }]);
+            }
+            for (const key of stepEnv.keys()) {
+              exportedCommandVars.set(key, [{ value: "", line: 0, unset: true }]);
+            }
+            childStepEnv = new Map();
+          }
+          for (const unsetKey of wrapperEnvChanges.unset) {
+            exportedCommandVars.set(unsetKey, [{ value: "", line: 0, unset: true }]);
+            if (childStepEnv === stepEnv) {
+              childStepEnv = cloneVarMap(stepEnv);
+            }
+            childStepEnv.delete(unsetKey);
+          }
+          cursor = afterWrapper;
+          continue;
+        }
+        const token = tokens[cursor];
+        const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
+        if (prefixAssign) {
           const resolved = candidatesToVarEntries(
             resolveImageTokenCandidates(
-              match.groups.value,
+              prefixAssign.groups.value,
               stepEnv,
               frame.vars,
               lineNumber,
@@ -6374,207 +6739,180 @@ function inspectShellText(
             ),
             lineNumber,
           );
-          if (conditional) {
-            const existing = frame.vars.has(match.groups.name)
-              ? frame.vars.get(match.groups.name)
-              : [{ value: "", line: 0, unset: true }];
-            frame.vars.set(match.groups.name, mergeVarEntries(existing, resolved));
-          } else {
-            frame.vars.set(match.groups.name, resolved);
-            frame.arrays.delete(match.groups.name);
-          }
+          prefixAssignEntries.push([prefixAssign.groups.name, resolved]);
+          commandVars.set(prefixAssign.groups.name, resolved);
+          exportedCommandVars.set(prefixAssign.groups.name, resolved);
+          cursor += 1;
+          continue;
         }
+        break;
       }
-      continue;
-    }
 
-    // Keep argument-expansion scope (`frame.vars`) separate from the child
-    // process environment (`exportedCommandVars`): prefix assignments like
-    // `IMAGE=new docker pull "$IMAGE"` only change the child environment, while
-    // shell-local unexported assignments stay out of `exportedCommandVars`.
-    const commandVars = cloneVarMap(frame.vars);
-    const exportedCommandVars = new Map();
-    for (const [key, entries] of frame.vars) {
-      if (frame.exportedVars.has(key)) {
-        exportedCommandVars.set(key, [...entries]);
-      }
-    }
-    let childStepEnv = stepEnv;
-    const stdinRedirectTargets = [];
-    const wrapperChdirs = [];
-    let cursor = 0;
-    while (cursor < tokens.length) {
-      const redirConsumed = consumeShellRedirection(tokens, cursor, stdinRedirectTargets);
-      if (redirConsumed > 0) {
-        cursor += redirConsumed;
+      const cli = tokens[cursor];
+      if (!cli) {
         continue;
       }
-      const wrapperEnvChanges = { clear: false, unset: new Set() };
-      const afterWrapper = advanceWrapperPrefix(
-        tokens,
-        cursor,
-        stdinRedirectTargets,
-        wrapperChdirs,
-        wrapperEnvChanges,
-      );
-      if (afterWrapper !== null) {
-        if (wrapperEnvChanges.clear) {
-          for (const key of exportedCommandVars.keys()) {
-            exportedCommandVars.set(key, [{ value: "", line: 0, unset: true }]);
+
+      if (shellMode === "posix" && frame.functions.has(cli)) {
+        const fnDef = frame.functions.get(cli);
+        calledFnDefs.add(fnDef);
+        const activeFns = fnContext?.activeFunctions ?? new Set();
+        const curFnDepth = fnContext?.fnDepth ?? 0;
+        if (!activeFns.has(cli) && curFnDepth < 8) {
+          const nextActive = new Set(activeFns);
+          nextActive.add(cli);
+          const isCallConditional = conditional || frame.branches.length > 0 || fnDef.conditional;
+          if (fnDef.subshellBody) {
+            const subVars = cloneVarMap(frame.vars);
+            const subExported = new Set(frame.exportedVars);
+            for (const [pName, pEntries] of prefixAssignEntries) {
+              subVars.set(pName, pEntries);
+              subExported.add(pName);
+            }
+            scopeStack.push({
+              vars: subVars,
+              arrays: cloneArrayMap(frame.arrays),
+              exportedVars: subExported,
+              functions: new Map(frame.functions),
+              branches: [],
+              rowCwds: cloneRowCwds(frame.rowCwds),
+              rowDirStacks: cloneRowDirStacks(frame.rowDirStacks),
+              rowOldPwds: cloneRowCwds(frame.rowOldPwds),
+              rowCwdsTruncated: new Set(frame.rowCwdsTruncated),
+              pendingStdinBuilds: [],
+            });
+            processEvents(fnDef.bodyEvents, {
+              localVars: new Map(),
+              activeFunctions: nextActive,
+              fnDepth: curFnDepth + 1,
+            });
+            inspectUncalledFunctions(scopeStack.at(-1));
+            scopeStack.pop();
+          } else {
+            const beforeVars = isCallConditional ? cloneVarMap(frame.vars) : null;
+            const beforeArrays = isCallConditional ? cloneArrayMap(frame.arrays) : null;
+            const callLocalVars = new Map();
+            for (const [pName, pEntries] of prefixAssignEntries) {
+              if (!callLocalVars.has(pName)) {
+                const arrayEntry = frame.arrays.get(pName);
+                callLocalVars.set(pName, {
+                  hadVar: frame.vars.has(pName),
+                  entries: frame.vars.has(pName) ? [...frame.vars.get(pName)] : null,
+                  hadArray: Boolean(arrayEntry),
+                  arrayEntry: arrayEntry
+                    ? {
+                        variants: arrayEntry.variants.map((v) => v.map((item) => ({ ...item }))),
+                        truncated: arrayEntry.truncated,
+                      }
+                    : null,
+                  wasExported: frame.exportedVars.has(pName),
+                });
+              }
+              frame.vars.set(pName, pEntries);
+              frame.exportedVars.add(pName);
+            }
+            processEvents(fnDef.bodyEvents, {
+              localVars: callLocalVars,
+              activeFunctions: nextActive,
+              fnDepth: curFnDepth + 1,
+            });
+            for (const [vName, saved] of callLocalVars) {
+              if (saved.hadVar) {
+                frame.vars.set(vName, saved.entries);
+              } else {
+                frame.vars.delete(vName);
+              }
+              if (saved.hadArray) {
+                frame.arrays.set(vName, saved.arrayEntry);
+              } else {
+                frame.arrays.delete(vName);
+              }
+              if (saved.wasExported) {
+                frame.exportedVars.add(vName);
+              } else {
+                frame.exportedVars.delete(vName);
+              }
+            }
+            if (isCallConditional && beforeVars) {
+              const allVarKeys = new Set([...beforeVars.keys(), ...frame.vars.keys()]);
+              for (const vKey of allVarKeys) {
+                const pre = beforeVars.has(vKey)
+                  ? beforeVars.get(vKey)
+                  : [{ value: "", line: 0, unset: true }];
+                const post = frame.vars.has(vKey)
+                  ? frame.vars.get(vKey)
+                  : [{ value: "", line: 0, unset: true }];
+                frame.vars.set(vKey, mergeVarEntries(pre, post));
+              }
+              if (beforeArrays) {
+                const allArrKeys = new Set([...beforeArrays.keys(), ...frame.arrays.keys()]);
+                for (const aKey of allArrKeys) {
+                  const preArr = beforeArrays.get(aKey) ?? { variants: [[]], truncated: false };
+                  const postArr = frame.arrays.get(aKey) ?? { variants: [[]], truncated: false };
+                  const combined = [...preArr.variants, ...postArr.variants];
+                  frame.arrays.set(aKey, {
+                    variants: combined.slice(0, MAX_VAR_VALUES),
+                    truncated:
+                      preArr.truncated || postArr.truncated || combined.length > MAX_VAR_VALUES,
+                  });
+                }
+              }
+            }
           }
-          for (const key of stepEnv.keys()) {
-            exportedCommandVars.set(key, [{ value: "", line: 0, unset: true }]);
-          }
-          childStepEnv = new Map();
         }
-        for (const unsetKey of wrapperEnvChanges.unset) {
-          exportedCommandVars.set(unsetKey, [{ value: "", line: 0, unset: true }]);
-          if (childStepEnv === stepEnv) {
-            childStepEnv = cloneVarMap(stepEnv);
-          }
-          childStepEnv.delete(unsetKey);
-        }
-        cursor = afterWrapper;
         continue;
       }
-      const token = tokens[cursor];
-      const prefixAssign = ENV_PREFIX_ASSIGNMENT_PATTERN.exec(token);
-      if (prefixAssign) {
-        const resolved = candidatesToVarEntries(
-          resolveImageTokenCandidates(
-            prefixAssign.groups.value,
+
+      const githubEnvLines = extractRedirectedWriteLines(tokens, cursor, isGithubEnvTarget);
+      if (githubEnvLines) {
+        const isConditional = frame.branches.length > 0 || conditional;
+        for (const assignment of parseGithubEnvPayload(githubEnvLines, lineNumber)) {
+          const resolved = resolveImageTokenCandidates(
+            assignment.value,
             stepEnv,
             frame.vars,
             lineNumber,
             shellMode,
-          ),
-          lineNumber,
-        );
-        commandVars.set(prefixAssign.groups.name, resolved);
-        exportedCommandVars.set(prefixAssign.groups.name, resolved);
-        cursor += 1;
+          );
+          recordGithubEnvWrite(
+            emittedGithubEnv,
+            assignment.name,
+            candidatesToVarEntries(resolved, lineNumber),
+            isConditional,
+          );
+        }
         continue;
       }
-      break;
-    }
 
-    const cli = tokens[cursor];
-    if (!cli) {
-      continue;
-    }
-
-    const githubEnvLines = extractRedirectedWriteLines(tokens, cursor, isGithubEnvTarget);
-    if (githubEnvLines) {
-      const isConditional = frame.branches.length > 0 || conditional;
-      for (const assignment of parseGithubEnvPayload(githubEnvLines, lineNumber)) {
-        const resolved = resolveImageTokenCandidates(
-          assignment.value,
-          stepEnv,
-          frame.vars,
-          lineNumber,
-          shellMode,
-        );
-        recordGithubEnvWrite(
-          emittedGithubEnv,
-          assignment.name,
-          candidatesToVarEntries(resolved, lineNumber),
-          isConditional,
-        );
-      }
-      continue;
-    }
-
-    const githubOutputLines = extractRedirectedWriteLines(tokens, cursor, isGithubOutputTarget);
-    if (githubOutputLines) {
-      const isConditional = frame.branches.length > 0 || conditional;
-      for (const assignment of parseGithubEnvPayload(githubOutputLines, lineNumber)) {
-        const resolved = resolveImageTokenCandidates(
-          assignment.value,
-          stepEnv,
-          frame.vars,
-          lineNumber,
-          shellMode,
-        );
-        const sanitized = sanitizeGithubOutputEntries(
-          candidatesToVarEntries(resolved, lineNumber),
-          shellMode,
-        );
-        if (sanitized.length > 0) {
-          recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
-        }
-      }
-      continue;
-    }
-
-    const normalizedCli = normalizeExecutableName(cli);
-    if (
-      buildFileContext &&
-      (normalizedCli === "popd" || (shellMode === "pwsh" && normalizedCli === "pop-location"))
-    ) {
-      const rowsForCd = matrixRows.length > 0 ? matrixRows : [null];
-      const preserveExisting = conditional || frame.branches.length > 0;
-      for (const row of rowsForCd) {
-        const stack = frame.rowDirStacks.get(row);
-        if (!stack || stack.length === 0) {
-          continue;
-        }
-        const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
-        if (preserveExisting) {
-          const topDirs = stack.at(-1);
-          const mergedDirs = [...currentDirs];
-          const seenDirs = new Set(mergedDirs);
-          for (const dir of topDirs) {
-            if (seenDirs.has(dir)) {
-              continue;
-            }
-            if (mergedDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
-              frame.rowCwdsTruncated.add(row);
-              continue;
-            }
-            seenDirs.add(dir);
-            mergedDirs.push(dir);
+      const githubOutputLines = extractRedirectedWriteLines(tokens, cursor, isGithubOutputTarget);
+      if (githubOutputLines) {
+        const isConditional = frame.branches.length > 0 || conditional;
+        for (const assignment of parseGithubOutputPayload(githubOutputLines, lineNumber)) {
+          const resolved = resolveImageTokenCandidates(
+            assignment.value,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          const sanitized = sanitizeGithubOutputEntries(
+            candidatesToVarEntries(resolved, lineNumber),
+            shellMode,
+          );
+          if (sanitized.length > 0) {
+            recordGithubEnvWrite(emittedGithubOutput, assignment.name, sanitized, isConditional);
           }
-          frame.rowCwds.set(row, mergedDirs);
-        } else {
-          frame.rowOldPwds.set(row, [...currentDirs]);
-          frame.rowCwds.set(row, stack.pop());
         }
+        continue;
       }
-      continue;
-    }
 
-    if (
-      buildFileContext &&
-      (normalizedCli === "cd" ||
-        normalizedCli === "pushd" ||
-        (shellMode === "pwsh" &&
-          (normalizedCli === "set-location" ||
-            normalizedCli === "sl" ||
-            normalizedCli === "chdir" ||
-            normalizedCli === "push-location")))
-    ) {
-      const isPushd =
-        normalizedCli === "pushd" || (shellMode === "pwsh" && normalizedCli === "push-location");
-      let dirArg = null;
-      for (let index = cursor + 1; index < tokens.length; index += 1) {
-        const token = tokens[index];
-        if (token === "--") {
-          dirArg = tokens[index + 1] ?? null;
-          break;
-        }
-        if (token.startsWith("-") && token !== "-") {
-          if (shellMode === "pwsh" && /^-(?:path|literalpath)$/iu.test(token)) {
-            dirArg = tokens[index + 1] ?? null;
-            break;
-          }
-          continue;
-        }
-        dirArg = token;
-        break;
-      }
-      const rowsForCd = matrixRows.length > 0 ? matrixRows : [null];
-      const preserveExisting = conditional || frame.branches.length > 0;
-      if (isPushd && !dirArg) {
+      const normalizedCli = normalizeExecutableName(cli);
+      if (
+        buildFileContext &&
+        (normalizedCli === "popd" || (shellMode === "pwsh" && normalizedCli === "pop-location"))
+      ) {
+        const rowsForCd = matrixRows.length > 0 ? matrixRows : [null];
+        const preserveExisting = conditional || frame.branches.length > 0;
         for (const row of rowsForCd) {
           const stack = frame.rowDirStacks.get(row);
           if (!stack || stack.length === 0) {
@@ -6586,58 +6924,190 @@ function inspectShellText(
             const mergedDirs = [...currentDirs];
             const seenDirs = new Set(mergedDirs);
             for (const dir of topDirs) {
-              if (!seenDirs.has(dir) && mergedDirs.length < MAX_WORKING_DIRS_PER_ROW) {
-                seenDirs.add(dir);
-                mergedDirs.push(dir);
+              if (seenDirs.has(dir)) {
+                continue;
               }
+              if (mergedDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
+                frame.rowCwdsTruncated.add(row);
+                continue;
+              }
+              seenDirs.add(dir);
+              mergedDirs.push(dir);
             }
             frame.rowCwds.set(row, mergedDirs);
           } else {
-            const topDirs = stack.pop();
-            stack.push([...currentDirs]);
             frame.rowOldPwds.set(row, [...currentDirs]);
-            frame.rowCwds.set(row, topDirs);
+            frame.rowCwds.set(row, stack.pop());
           }
         }
         continue;
       }
-      if (!isPushd && dirArg === "-") {
-        for (const row of rowsForCd) {
-          const oldDirs = frame.rowOldPwds.get(row);
-          if (!oldDirs || oldDirs.length === 0) {
+
+      if (
+        buildFileContext &&
+        (normalizedCli === "cd" ||
+          normalizedCli === "pushd" ||
+          (shellMode === "pwsh" &&
+            (normalizedCli === "set-location" ||
+              normalizedCli === "sl" ||
+              normalizedCli === "chdir" ||
+              normalizedCli === "push-location")))
+      ) {
+        const isPushd =
+          normalizedCli === "pushd" || (shellMode === "pwsh" && normalizedCli === "push-location");
+        let dirArg = null;
+        for (let index = cursor + 1; index < tokens.length; index += 1) {
+          const token = tokens[index];
+          if (token === "--") {
+            dirArg = tokens[index + 1] ?? null;
+            break;
+          }
+          if (token.startsWith("-") && token !== "-") {
+            if (shellMode === "pwsh" && /^-(?:path|literalpath)$/iu.test(token)) {
+              dirArg = tokens[index + 1] ?? null;
+              break;
+            }
             continue;
           }
-          const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
-          if (preserveExisting) {
-            const mergedDirs = [...currentDirs];
-            const seenDirs = new Set(mergedDirs);
-            for (const dir of oldDirs) {
-              if (!seenDirs.has(dir) && mergedDirs.length < MAX_WORKING_DIRS_PER_ROW) {
-                seenDirs.add(dir);
-                mergedDirs.push(dir);
+          dirArg = token;
+          break;
+        }
+        const rowsForCd = matrixRows.length > 0 ? matrixRows : [null];
+        const preserveExisting = conditional || frame.branches.length > 0;
+        if (isPushd && !dirArg) {
+          for (const row of rowsForCd) {
+            const stack = frame.rowDirStacks.get(row);
+            if (!stack || stack.length === 0) {
+              continue;
+            }
+            const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
+            if (preserveExisting) {
+              const topDirs = stack.at(-1);
+              const mergedDirs = [...currentDirs];
+              const seenDirs = new Set(mergedDirs);
+              for (const dir of topDirs) {
+                if (!seenDirs.has(dir) && mergedDirs.length < MAX_WORKING_DIRS_PER_ROW) {
+                  seenDirs.add(dir);
+                  mergedDirs.push(dir);
+                }
+              }
+              frame.rowCwds.set(row, mergedDirs);
+            } else {
+              const topDirs = stack.pop();
+              stack.push([...currentDirs]);
+              frame.rowOldPwds.set(row, [...currentDirs]);
+              frame.rowCwds.set(row, topDirs);
+            }
+          }
+          continue;
+        }
+        if (!isPushd && dirArg === "-") {
+          for (const row of rowsForCd) {
+            const oldDirs = frame.rowOldPwds.get(row);
+            if (!oldDirs || oldDirs.length === 0) {
+              continue;
+            }
+            const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
+            if (preserveExisting) {
+              const mergedDirs = [...currentDirs];
+              const seenDirs = new Set(mergedDirs);
+              for (const dir of oldDirs) {
+                if (!seenDirs.has(dir) && mergedDirs.length < MAX_WORKING_DIRS_PER_ROW) {
+                  seenDirs.add(dir);
+                  mergedDirs.push(dir);
+                }
+              }
+              frame.rowCwds.set(row, mergedDirs);
+            } else {
+              frame.rowOldPwds.set(row, [...currentDirs]);
+              frame.rowCwds.set(row, [...oldDirs]);
+            }
+          }
+          continue;
+        }
+        if (dirArg && dirArg !== "-") {
+          const expandedDir = resolveImageTokenCandidates(
+            dirArg,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          for (const row of rowsForCd) {
+            const rowList = row ? [row] : [];
+            const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
+            const nextDirs = preserveExisting ? [...currentDirs] : [];
+            const seenDirs = new Set(nextDirs);
+            for (const baseDir of currentDirs) {
+              for (const varCandidate of expandedDir.candidates) {
+                for (const candidate of expandMatrixReferences(
+                  varCandidate.text,
+                  rowList,
+                  varCandidate.line,
+                )) {
+                  const resolved = resolveWorkspaceRelativePath(candidate.text, baseDir, {
+                    windowsPath: isWindowsShell,
+                    actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                  });
+                  const targetDir =
+                    resolved !== null
+                      ? resolved
+                      : buildFileContext.deferUnresolvedInputs &&
+                          referencesUnresolvedInput(candidate.text)
+                        ? null
+                        : UNKNOWN_WORKING_DIR;
+                  if (targetDir === null || seenDirs.has(targetDir)) {
+                    continue;
+                  }
+                  if (nextDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
+                    frame.rowCwdsTruncated.add(row);
+                    continue;
+                  }
+                  seenDirs.add(targetDir);
+                  nextDirs.push(targetDir);
+                }
               }
             }
-            frame.rowCwds.set(row, mergedDirs);
-          } else {
-            frame.rowOldPwds.set(row, [...currentDirs]);
-            frame.rowCwds.set(row, [...oldDirs]);
+            if (nextDirs.length > 0) {
+              if (isPushd) {
+                const stack = frame.rowDirStacks.get(row) ?? [];
+                if (stack.length < 64) {
+                  stack.push([...currentDirs]);
+                }
+                frame.rowDirStacks.set(row, stack);
+              }
+              frame.rowOldPwds.set(row, [...currentDirs]);
+              frame.rowCwds.set(row, nextDirs);
+            }
           }
         }
         continue;
       }
-      if (dirArg && dirArg !== "-") {
-        const expandedDir = resolveImageTokenCandidates(
-          dirArg,
-          stepEnv,
-          frame.vars,
-          lineNumber,
-          shellMode,
-        );
-        for (const row of rowsForCd) {
-          const rowList = row ? [row] : [];
-          const currentDirs = frame.rowCwds.get(row) ?? [buildFileContext.workingDir];
-          const nextDirs = preserveExisting ? [...currentDirs] : [];
-          const seenDirs = new Set(nextDirs);
+
+      const resolveCommandWorkingDirs = (row) => {
+        const baseDirs =
+          frame.rowCwds.get(row) ??
+          (buildFileContext &&
+          buildFileContext.workingDir !== undefined &&
+          buildFileContext.workingDir !== null
+            ? [buildFileContext.workingDir]
+            : []);
+        if (wrapperChdirs.length === 0 || !buildFileContext || baseDirs.length === 0) {
+          return { dirs: baseDirs, truncated: frame.rowCwdsTruncated.has(row) };
+        }
+        const rowList = row ? [row] : [];
+        let currentDirs = [...baseDirs];
+        let truncated = frame.rowCwdsTruncated.has(row);
+        for (const rawChdir of wrapperChdirs) {
+          const expandedDir = resolveImageTokenCandidates(
+            rawChdir,
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          const nextDirs = [];
+          const seenDirs = new Set();
           for (const baseDir of currentDirs) {
             for (const varCandidate of expandedDir.candidates) {
               for (const candidate of expandMatrixReferences(
@@ -6660,7 +7130,7 @@ function inspectShellText(
                   continue;
                 }
                 if (nextDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
-                  frame.rowCwdsTruncated.add(row);
+                  truncated = true;
                   continue;
                 }
                 seenDirs.add(targetDir);
@@ -6669,701 +7139,589 @@ function inspectShellText(
             }
           }
           if (nextDirs.length > 0) {
-            if (isPushd) {
-              const stack = frame.rowDirStacks.get(row) ?? [];
-              if (stack.length < 64) {
-                stack.push([...currentDirs]);
-              }
-              frame.rowDirStacks.set(row, stack);
-            }
-            frame.rowOldPwds.set(row, [...currentDirs]);
-            frame.rowCwds.set(row, nextDirs);
+            currentDirs = nextDirs;
           }
         }
-      }
-      continue;
-    }
-
-    const resolveCommandWorkingDirs = (row) => {
-      const baseDirs =
-        frame.rowCwds.get(row) ??
-        (buildFileContext &&
-        buildFileContext.workingDir !== undefined &&
-        buildFileContext.workingDir !== null
-          ? [buildFileContext.workingDir]
-          : []);
-      if (wrapperChdirs.length === 0 || !buildFileContext || baseDirs.length === 0) {
-        return { dirs: baseDirs, truncated: frame.rowCwdsTruncated.has(row) };
-      }
-      const rowList = row ? [row] : [];
-      let currentDirs = [...baseDirs];
-      let truncated = frame.rowCwdsTruncated.has(row);
-      for (const rawChdir of wrapperChdirs) {
-        const expandedDir = resolveImageTokenCandidates(
-          rawChdir,
-          stepEnv,
-          frame.vars,
-          lineNumber,
-          shellMode,
-        );
-        const nextDirs = [];
-        const seenDirs = new Set();
-        for (const baseDir of currentDirs) {
-          for (const varCandidate of expandedDir.candidates) {
-            for (const candidate of expandMatrixReferences(
-              varCandidate.text,
-              rowList,
-              varCandidate.line,
-            )) {
-              const resolved = resolveWorkspaceRelativePath(candidate.text, baseDir, {
-                windowsPath: isWindowsShell,
-                actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
-              });
-              const targetDir =
-                resolved !== null
-                  ? resolved
-                  : buildFileContext.deferUnresolvedInputs &&
-                      referencesUnresolvedInput(candidate.text)
-                    ? null
-                    : UNKNOWN_WORKING_DIR;
-              if (targetDir === null || seenDirs.has(targetDir)) {
-                continue;
-              }
-              if (nextDirs.length >= MAX_WORKING_DIRS_PER_ROW) {
-                truncated = true;
-                continue;
-              }
-              seenDirs.add(targetDir);
-              nextDirs.push(targetDir);
-            }
-          }
-        }
-        if (nextDirs.length > 0) {
-          currentDirs = nextDirs;
-        }
-      }
-      return { dirs: currentDirs, truncated };
-    };
-
-    if (SHELL_INTERPRETERS.has(normalizedCli)) {
-      const dashCInfo = extractShellDashCScriptInfo(
-        tokens,
-        peeledSingleQuoted,
-        peeledEscapedDollarOffsets,
-        cursor,
-      );
-      if (dashCInfo) {
-        let childRowCwds = cloneRowCwds(frame.rowCwds);
-        let childRowCwdsTruncated = new Set(frame.rowCwdsTruncated);
-        if (wrapperChdirs.length > 0 && buildFileContext) {
-          const rowsForChild = matrixRows.length > 0 ? matrixRows : [null];
-          childRowCwds = new Map();
-          childRowCwdsTruncated = new Set();
-          for (const row of rowsForChild) {
-            const resolved = resolveCommandWorkingDirs(row);
-            childRowCwds.set(row, resolved.dirs);
-            if (resolved.truncated) {
-              childRowCwdsTruncated.add(row);
-            }
-          }
-        }
-        const childBuildContext = buildFileContext
-          ? {
-              ...buildFileContext,
-              rowCwds: childRowCwds,
-              rowCwdsTruncated: childRowCwdsTruncated,
-            }
-          : null;
-        // Single-quoted `sh -c '...'` is passed verbatim to the child shell,
-        // which sees only exported/prefixed variables. Double-quoted/unquoted
-        // `sh -c "..."` is expanded first in the parent shell's environment
-        // (before command-local prefix assignments take effect), then the
-        // resulting script executes in the child shell's exported environment.
-        let childScripts = [dashCInfo.script];
-        if (!dashCInfo.singleQuoted) {
-          const parentExpanded = expandParentDoubleQuotedScript(
-            dashCInfo.script,
-            dashCInfo.escapedDollarOffsets,
-            stepEnv,
-            frame.vars,
-            lineNumber,
-            shellMode,
-          );
-          if (parentExpanded.truncated) {
-            problems.push(
-              `${filePath}:${lineNumber}: ${dashCInfo.script} exceeds expansion limit and cannot be verified exhaustively`,
-            );
-          }
-          childScripts = [...new Set(parentExpanded.candidates.map((candidate) => candidate.text))];
-        }
-        const seenChildProblems = new Set();
-        for (const childScript of childScripts) {
-          const scriptProblems = [];
-          inspectShellText(
-            childScript,
-            lineNumber,
-            sourceLines,
-            childStepEnv,
-            exportedCommandVars,
-            matrixRows,
-            filePath,
-            scriptProblems,
-            emittedGithubEnv,
-            "posix",
-            depth + 1,
-            childBuildContext,
-            emittedGithubOutput,
-          );
-          for (const message of scriptProblems) {
-            if (!seenChildProblems.has(message)) {
-              seenChildProblems.add(message);
-              problems.push(message);
-            }
-          }
-        }
-      }
-      continue;
-    }
-
-    if (
-      normalizedCli !== "docker" &&
-      normalizedCli !== "podman" &&
-      normalizedCli !== "buildah" &&
-      normalizedCli !== "docker-compose" &&
-      normalizedCli !== "podman-compose"
-    ) {
-      continue;
-    }
-
-    let argIndex = cursor + 1;
-    if (normalizedCli === "docker" || normalizedCli === "podman" || normalizedCli === "buildah") {
-      const globalValueFlags =
-        normalizedCli === "buildah"
-          ? BUILDAH_GLOBAL_VALUE_FLAGS
-          : normalizedCli === "podman"
-            ? PODMAN_GLOBAL_VALUE_FLAGS
-            : DOCKER_GLOBAL_VALUE_FLAGS;
-      while (argIndex < tokens.length) {
-        const redirConsumed = consumeShellRedirection(tokens, argIndex, stdinRedirectTargets);
-        if (redirConsumed > 0) {
-          argIndex += redirConsumed;
-          continue;
-        }
-        const flag = tokens[argIndex];
-        if (!flag.startsWith("-")) {
-          break;
-        }
-        argIndex += flagConsumesNextArg(flag, globalValueFlags) ? 2 : 1;
-      }
-    }
-
-    const composeCommand = parseComposeCommand(
-      tokens,
-      normalizedCli,
-      argIndex,
-      stdinRedirectTargets,
-    );
-    if (composeCommand?.kind === "compose-noop") {
-      continue;
-    }
-    if (composeCommand?.kind === "compose") {
-      problems.push(
-        `${filePath}:${lineNumber}: ${composeCommand.displayCli} ${composeCommand.subcommand} target definitions cannot be verified statically for container image digests`,
-      );
-      continue;
-    }
-
-    const buildCommand = resolveContainerBuildCommand(
-      tokens,
-      normalizedCli,
-      argIndex,
-      stdinRedirectTargets,
-    );
-    if (buildCommand?.kind === "bake") {
-      const bakeValueFlags = new Set([
-        "-f",
-        "--file",
-        "--set",
-        "--allow",
-        "--builder",
-        "--call",
-        "--metadata-file",
-        "--progress",
-        "--provenance",
-        "--sbom",
-        "--list",
-      ]);
-      let isPrintOnly = false;
-      let isListOrHelpOnly = false;
-      for (let index = buildCommand.argStart; index < tokens.length; index += 1) {
-        const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
-        if (redirConsumed > 0) {
-          index += redirConsumed - 1;
-          continue;
-        }
-        const token = tokens[index];
-        if (token === "--") {
-          break;
-        }
-        if (token === "--print" || /^--print=(?:true|1)$/iu.test(token)) {
-          isPrintOnly = true;
-          continue;
-        }
-        if (/^--print=(?:false|0)$/iu.test(token)) {
-          isPrintOnly = false;
-          continue;
-        }
-        if (token === "--list" || token.startsWith("--list=")) {
-          isListOrHelpOnly = true;
-          if (token === "--list") {
-            index += 1;
-          }
-          continue;
-        }
-        if (token === "--help" || token === "-h") {
-          isListOrHelpOnly = true;
-          continue;
-        }
-        if (token.startsWith("-") && flagConsumesNextArg(token, bakeValueFlags)) {
-          index += 1;
-        }
-      }
-      if (!isPrintOnly && !isListOrHelpOnly) {
-        problems.push(
-          `${filePath}:${lineNumber}: ${normalizedCli} buildx bake target definitions cannot be verified statically for container image digests`,
-        );
-      }
-      continue;
-    }
-    if (buildCommand?.kind === "buildx-create") {
-      let rawDriver = null;
-      const rawDriverOpts = [];
-      for (let index = buildCommand.argStart; index < tokens.length; index += 1) {
-        const redirConsumed = consumeShellRedirection(tokens, index);
-        if (redirConsumed > 0) {
-          index += redirConsumed - 1;
-          continue;
-        }
-        const token = tokens[index];
-        if (token === "--") {
-          break;
-        }
-        if (token === "--driver") {
-          if (tokens[index + 1] !== undefined) {
-            rawDriver = tokens[index + 1];
-          }
-          index += 1;
-          continue;
-        }
-        if (token.startsWith("--driver=")) {
-          rawDriver = token.slice("--driver=".length);
-          continue;
-        }
-        if (token === "--driver-opt") {
-          if (tokens[index + 1] !== undefined) {
-            rawDriverOpts.push(tokens[index + 1]);
-          }
-          index += 1;
-          continue;
-        }
-        if (token.startsWith("--driver-opt=")) {
-          rawDriverOpts.push(token.slice("--driver-opt=".length));
-          continue;
-        }
-        if (token.startsWith("-") && flagConsumesNextArg(token, DOCKER_BUILDX_CREATE_VALUE_FLAGS)) {
-          index += 1;
-        }
-      }
-
-      const createRows = matrixRows.length > 0 ? matrixRows : [null];
-      const seenCreateProblems = new Set();
-      const pushCreateProblem = (message) => {
-        if (!seenCreateProblems.has(message)) {
-          seenCreateProblems.add(message);
-          problems.push(message);
-        }
+        return { dirs: currentDirs, truncated };
       };
 
-      for (const row of createRows) {
-        const rowList = row ? [row] : [];
-        const driverCandidates = rawDriver
-          ? resolveImageTokenCandidates(
-              rawDriver,
+      if (SHELL_INTERPRETERS.has(normalizedCli)) {
+        const dashCInfo = extractShellDashCScriptInfo(
+          tokens,
+          peeledSingleQuoted,
+          peeledEscapedDollarOffsets,
+          cursor,
+        );
+        if (dashCInfo) {
+          let childRowCwds = cloneRowCwds(frame.rowCwds);
+          let childRowCwdsTruncated = new Set(frame.rowCwdsTruncated);
+          if (wrapperChdirs.length > 0 && buildFileContext) {
+            const rowsForChild = matrixRows.length > 0 ? matrixRows : [null];
+            childRowCwds = new Map();
+            childRowCwdsTruncated = new Set();
+            for (const row of rowsForChild) {
+              const resolved = resolveCommandWorkingDirs(row);
+              childRowCwds.set(row, resolved.dirs);
+              if (resolved.truncated) {
+                childRowCwdsTruncated.add(row);
+              }
+            }
+          }
+          const childBuildContext = buildFileContext
+            ? {
+                ...buildFileContext,
+                rowCwds: childRowCwds,
+                rowCwdsTruncated: childRowCwdsTruncated,
+              }
+            : null;
+          // Single-quoted `sh -c '...'` is passed verbatim to the child shell,
+          // which sees only exported/prefixed variables. Double-quoted/unquoted
+          // `sh -c "..."` is expanded first in the parent shell's environment
+          // (before command-local prefix assignments take effect), then the
+          // resulting script executes in the child shell's exported environment.
+          let childScripts = [dashCInfo.script];
+          if (!dashCInfo.singleQuoted) {
+            const parentExpanded = expandParentDoubleQuotedScript(
+              dashCInfo.script,
+              dashCInfo.escapedDollarOffsets,
               stepEnv,
               frame.vars,
               lineNumber,
               shellMode,
-            ).candidates.flatMap((varCandidate) =>
-              expandMatrixReferences(varCandidate.text, rowList, varCandidate.line),
-            )
-          : [{ text: "docker-container", line: lineNumber }];
-
-        const usesContainerDriver = driverCandidates.some((candidate) => {
-          const normalizedDriver = candidate.text.trim().toLowerCase();
-          return (
-            normalizedDriver === "" ||
-            normalizedDriver === "docker-container" ||
-            normalizedDriver === "kubernetes"
-          );
-        });
-        if (!usesContainerDriver) {
-          continue;
-        }
-
-        let effectiveImageCandidates = [];
-        for (const rawOpt of rawDriverOpts) {
-          const expandedOpt = resolveImageTokenCandidates(
-            rawOpt,
-            stepEnv,
-            frame.vars,
-            lineNumber,
-            shellMode,
-          );
-          if (expandedOpt.truncated) {
-            pushCreateProblem(
-              `${filePath}:${lineNumber}: ${rawOpt} exceeds expansion limit and cannot be verified exhaustively`,
             );
+            if (parentExpanded.truncated) {
+              problems.push(
+                `${filePath}:${lineNumber}: ${dashCInfo.script} exceeds expansion limit and cannot be verified exhaustively`,
+              );
+            }
+            childScripts = [
+              ...new Set(parentExpanded.candidates.map((candidate) => candidate.text)),
+            ];
           }
-          const flagImages = [];
-          for (const varCandidate of expandedOpt.candidates) {
-            for (const candidate of expandMatrixReferences(
-              varCandidate.text,
-              rowList,
-              varCandidate.line,
-            )) {
-              for (const imageRef of extractDriverOptImages(candidate.text)) {
-                flagImages.push({
-                  text: imageRef,
-                  line: candidate.line,
-                });
+          const seenChildProblems = new Set();
+          for (const childScript of childScripts) {
+            const scriptProblems = [];
+            inspectShellText(
+              childScript,
+              lineNumber,
+              sourceLines,
+              childStepEnv,
+              exportedCommandVars,
+              matrixRows,
+              filePath,
+              scriptProblems,
+              emittedGithubEnv,
+              "posix",
+              depth + 1,
+              childBuildContext,
+              emittedGithubOutput,
+            );
+            for (const message of scriptProblems) {
+              if (!seenChildProblems.has(message)) {
+                seenChildProblems.add(message);
+                problems.push(message);
               }
             }
           }
-          if (flagImages.length > 0) {
-            effectiveImageCandidates = flagImages;
+        }
+        continue;
+      }
+
+      if (
+        normalizedCli !== "docker" &&
+        normalizedCli !== "podman" &&
+        normalizedCli !== "buildah" &&
+        normalizedCli !== "docker-compose" &&
+        normalizedCli !== "podman-compose"
+      ) {
+        continue;
+      }
+
+      let argIndex = cursor + 1;
+      if (normalizedCli === "docker" || normalizedCli === "podman" || normalizedCli === "buildah") {
+        const globalValueFlags =
+          normalizedCli === "buildah"
+            ? BUILDAH_GLOBAL_VALUE_FLAGS
+            : normalizedCli === "podman"
+              ? PODMAN_GLOBAL_VALUE_FLAGS
+              : DOCKER_GLOBAL_VALUE_FLAGS;
+        while (argIndex < tokens.length) {
+          const redirConsumed = consumeShellRedirection(tokens, argIndex, stdinRedirectTargets);
+          if (redirConsumed > 0) {
+            argIndex += redirConsumed;
+            continue;
+          }
+          const flag = tokens[argIndex];
+          if (!flag.startsWith("-")) {
+            break;
+          }
+          argIndex += flagConsumesNextArg(flag, globalValueFlags) ? 2 : 1;
+        }
+      }
+
+      const composeCommand = parseComposeCommand(
+        tokens,
+        normalizedCli,
+        argIndex,
+        stdinRedirectTargets,
+      );
+      if (composeCommand?.kind === "compose-noop") {
+        continue;
+      }
+      if (composeCommand?.kind === "compose") {
+        problems.push(
+          `${filePath}:${lineNumber}: ${composeCommand.displayCli} ${composeCommand.subcommand} target definitions cannot be verified statically for container image digests`,
+        );
+        continue;
+      }
+
+      const buildCommand = resolveContainerBuildCommand(
+        tokens,
+        normalizedCli,
+        argIndex,
+        stdinRedirectTargets,
+      );
+      if (buildCommand?.kind === "bake") {
+        const bakeValueFlags = new Set([
+          "-f",
+          "--file",
+          "--set",
+          "--allow",
+          "--builder",
+          "--call",
+          "--metadata-file",
+          "--progress",
+          "--provenance",
+          "--sbom",
+          "--list",
+        ]);
+        let isPrintOnly = false;
+        let isListOrHelpOnly = false;
+        for (let index = buildCommand.argStart; index < tokens.length; index += 1) {
+          const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
+          if (redirConsumed > 0) {
+            index += redirConsumed - 1;
+            continue;
+          }
+          const token = tokens[index];
+          if (token === "--") {
+            break;
+          }
+          if (token === "--print" || /^--print=(?:true|1)$/iu.test(token)) {
+            isPrintOnly = true;
+            continue;
+          }
+          if (/^--print=(?:false|0)$/iu.test(token)) {
+            isPrintOnly = false;
+            continue;
+          }
+          if (token === "--list" || token.startsWith("--list=")) {
+            isListOrHelpOnly = true;
+            if (token === "--list") {
+              index += 1;
+            }
+            continue;
+          }
+          if (token === "--help" || token === "-h") {
+            isListOrHelpOnly = true;
+            continue;
+          }
+          if (token.startsWith("-") && flagConsumesNextArg(token, bakeValueFlags)) {
+            index += 1;
+          }
+        }
+        if (!isPrintOnly && !isListOrHelpOnly) {
+          problems.push(
+            `${filePath}:${lineNumber}: ${normalizedCli} buildx bake target definitions cannot be verified statically for container image digests`,
+          );
+        }
+        continue;
+      }
+      if (buildCommand?.kind === "buildx-create") {
+        let rawDriver = null;
+        const rawDriverOpts = [];
+        for (let index = buildCommand.argStart; index < tokens.length; index += 1) {
+          const redirConsumed = consumeShellRedirection(tokens, index);
+          if (redirConsumed > 0) {
+            index += redirConsumed - 1;
+            continue;
+          }
+          const token = tokens[index];
+          if (token === "--") {
+            break;
+          }
+          if (token === "--driver") {
+            if (tokens[index + 1] !== undefined) {
+              rawDriver = tokens[index + 1];
+            }
+            index += 1;
+            continue;
+          }
+          if (token.startsWith("--driver=")) {
+            rawDriver = token.slice("--driver=".length);
+            continue;
+          }
+          if (token === "--driver-opt") {
+            if (tokens[index + 1] !== undefined) {
+              rawDriverOpts.push(tokens[index + 1]);
+            }
+            index += 1;
+            continue;
+          }
+          if (token.startsWith("--driver-opt=")) {
+            rawDriverOpts.push(token.slice("--driver-opt=".length));
+            continue;
+          }
+          if (
+            token.startsWith("-") &&
+            flagConsumesNextArg(token, DOCKER_BUILDX_CREATE_VALUE_FLAGS)
+          ) {
+            index += 1;
           }
         }
 
-        if (effectiveImageCandidates.length === 0) {
-          pushCreateProblem(
-            `${filePath}:${lineNumber}: ${normalizedCli} buildx create uses unpinned default BuildKit image (pass --driver-opt image=...@sha256:...)`,
-          );
-          continue;
-        }
+        const createRows = matrixRows.length > 0 ? matrixRows : [null];
+        const seenCreateProblems = new Set();
+        const pushCreateProblem = (message) => {
+          if (!seenCreateProblems.has(message)) {
+            seenCreateProblems.add(message);
+            problems.push(message);
+          }
+        };
 
-        for (const imageCandidate of effectiveImageCandidates) {
-          const imageRef = imageCandidate.text.trim();
-          if (!imageRef) {
+        for (const row of createRows) {
+          const rowList = row ? [row] : [];
+          const driverCandidates = rawDriver
+            ? resolveImageTokenCandidates(
+                rawDriver,
+                stepEnv,
+                frame.vars,
+                lineNumber,
+                shellMode,
+              ).candidates.flatMap((varCandidate) =>
+                expandMatrixReferences(varCandidate.text, rowList, varCandidate.line),
+              )
+            : [{ text: "docker-container", line: lineNumber }];
+
+          const usesContainerDriver = driverCandidates.some((candidate) => {
+            const normalizedDriver = candidate.text.trim().toLowerCase();
+            return (
+              normalizedDriver === "" ||
+              normalizedDriver === "docker-container" ||
+              normalizedDriver === "kubernetes"
+            );
+          });
+          if (!usesContainerDriver) {
+            continue;
+          }
+
+          let effectiveImageCandidates = [];
+          for (const rawOpt of rawDriverOpts) {
+            const expandedOpt = resolveImageTokenCandidates(
+              rawOpt,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            if (expandedOpt.truncated) {
+              pushCreateProblem(
+                `${filePath}:${lineNumber}: ${rawOpt} exceeds expansion limit and cannot be verified exhaustively`,
+              );
+            }
+            const flagImages = [];
+            for (const varCandidate of expandedOpt.candidates) {
+              for (const candidate of expandMatrixReferences(
+                varCandidate.text,
+                rowList,
+                varCandidate.line,
+              )) {
+                for (const imageRef of extractDriverOptImages(candidate.text)) {
+                  flagImages.push({
+                    text: imageRef,
+                    line: candidate.line,
+                  });
+                }
+              }
+            }
+            if (flagImages.length > 0) {
+              effectiveImageCandidates = flagImages;
+            }
+          }
+
+          if (effectiveImageCandidates.length === 0) {
             pushCreateProblem(
               `${filePath}:${lineNumber}: ${normalizedCli} buildx create uses unpinned default BuildKit image (pass --driver-opt image=...@sha256:...)`,
             );
             continue;
           }
-          if (
-            (!isDynamicReference(imageRef, shellMode) ||
-              hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode)) &&
-            !isPinnedDigest(imageRef)
-          ) {
-            pushCreateProblem(
-              `${filePath}:${imageCandidate.line}: ${imageRef} is not pinned to a sha256 digest`,
-            );
-          }
-        }
-      }
-      continue;
-    }
-    if (buildCommand?.kind === "build") {
-      const buildArgStart = buildCommand.argStart;
-      const rawFiles = [];
-      const rawBuildContexts = [];
-      const rawBuildArgs = [];
-      const rawPlatforms = [];
-      const rawBuildImageOverrides = [];
-      const rawAttestSpecs = [];
-      const rawPodmanSbomPresets = [];
-      let hasPodmanSbomScanner = false;
-      let contextArg = null;
-      for (let index = buildArgStart; index < tokens.length; index += 1) {
-        const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
-        if (redirConsumed > 0) {
-          index += redirConsumed - 1;
-          continue;
-        }
-        const token = tokens[index];
-        if (token === "--") {
-          for (let restIndex = index + 1; restIndex < tokens.length; restIndex += 1) {
-            const restRedir = consumeShellRedirection(tokens, restIndex, stdinRedirectTargets);
-            if (restRedir > 0) {
-              restIndex += restRedir - 1;
+
+          for (const imageCandidate of effectiveImageCandidates) {
+            const imageRef = imageCandidate.text.trim();
+            if (!imageRef) {
+              pushCreateProblem(
+                `${filePath}:${lineNumber}: ${normalizedCli} buildx create uses unpinned default BuildKit image (pass --driver-opt image=...@sha256:...)`,
+              );
               continue;
             }
-            if (contextArg === null) {
-              contextArg = tokens[restIndex];
+            if (
+              (!isDynamicReference(imageRef, shellMode) ||
+                hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode)) &&
+              !isPinnedDigest(imageRef)
+            ) {
+              pushCreateProblem(
+                `${filePath}:${imageCandidate.line}: ${imageRef} is not pinned to a sha256 digest`,
+              );
             }
           }
-          break;
         }
-        if (token === "-f" || token === "--file") {
-          if (tokens[index + 1]) {
-            rawFiles.push(tokens[index + 1]);
+        continue;
+      }
+      if (buildCommand?.kind === "build") {
+        const buildArgStart = buildCommand.argStart;
+        const rawFiles = [];
+        const rawBuildContexts = [];
+        const rawBuildArgs = [];
+        const rawPlatforms = [];
+        const rawBuildImageOverrides = [];
+        const rawAttestSpecs = [];
+        const rawPodmanSbomPresets = [];
+        let hasPodmanSbomScanner = false;
+        let contextArg = null;
+        for (let index = buildArgStart; index < tokens.length; index += 1) {
+          const redirConsumed = consumeShellRedirection(tokens, index, stdinRedirectTargets);
+          if (redirConsumed > 0) {
+            index += redirConsumed - 1;
+            continue;
           }
-          index += 1;
-          continue;
-        }
-        if (token.startsWith("--file=")) {
-          rawFiles.push(token.slice("--file=".length));
-          continue;
-        }
-        const shortBundle = parseShortBuildFlagBundle(token, tokens[index + 1]);
-        if (shortBundle) {
-          if (shortBundle.file) {
-            rawFiles.push(shortBundle.file);
+          const token = tokens[index];
+          if (token === "--") {
+            for (let restIndex = index + 1; restIndex < tokens.length; restIndex += 1) {
+              const restRedir = consumeShellRedirection(tokens, restIndex, stdinRedirectTargets);
+              if (restRedir > 0) {
+                restIndex += restRedir - 1;
+                continue;
+              }
+              if (contextArg === null) {
+                contextArg = tokens[restIndex];
+              }
+            }
+            break;
           }
-          if (shortBundle.consumedNext) {
+          if (token === "-f" || token === "--file") {
+            if (tokens[index + 1]) {
+              rawFiles.push(tokens[index + 1]);
+            }
             index += 1;
+            continue;
           }
-          continue;
-        }
-        if (token === "--build-context") {
-          if (tokens[index + 1] !== undefined) {
-            rawBuildContexts.push(tokens[index + 1]);
+          if (token.startsWith("--file=")) {
+            rawFiles.push(token.slice("--file=".length));
+            continue;
           }
-          index += 1;
-          continue;
-        }
-        if (token.startsWith("--build-context=")) {
-          rawBuildContexts.push(token.slice("--build-context=".length));
-          continue;
-        }
-        if (token === "--build-arg") {
-          if (tokens[index + 1] !== undefined) {
-            rawBuildArgs.push(tokens[index + 1]);
-          }
-          index += 1;
-          continue;
-        }
-        if (token.startsWith("--build-arg=")) {
-          rawBuildArgs.push(token.slice("--build-arg=".length));
-          continue;
-        }
-        if (token === "--platform") {
-          if (tokens[index + 1] !== undefined) {
-            rawPlatforms.push(tokens[index + 1]);
-          }
-          index += 1;
-          continue;
-        }
-        if (token.startsWith("--platform=")) {
-          rawPlatforms.push(token.slice("--platform=".length));
-          continue;
-        }
-        if (token === "--sbom") {
-          if (tokens[index + 1] !== undefined) {
-            if (normalizedCli === "podman" || normalizedCli === "buildah") {
-              rawPodmanSbomPresets.push(tokens[index + 1]);
-            } else {
-              rawAttestSpecs.push({ requireSbomType: false, rawValue: tokens[index + 1] });
+          const shortBundle = parseShortBuildFlagBundle(token, tokens[index + 1]);
+          if (shortBundle) {
+            if (shortBundle.file) {
+              rawFiles.push(shortBundle.file);
             }
-          }
-          index += 1;
-          continue;
-        }
-        if (token.startsWith("--sbom=")) {
-          const sbomVal = token.slice("--sbom=".length);
-          if (normalizedCli === "podman" || normalizedCli === "buildah") {
-            rawPodmanSbomPresets.push(sbomVal);
-          } else {
-            rawAttestSpecs.push({ requireSbomType: false, rawValue: sbomVal });
-          }
-          continue;
-        }
-        if (token === "--attest") {
-          if (tokens[index + 1] !== undefined) {
-            rawAttestSpecs.push({ requireSbomType: true, rawValue: tokens[index + 1] });
-          }
-          index += 1;
-          continue;
-        }
-        if (token.startsWith("--attest=")) {
-          rawAttestSpecs.push({ requireSbomType: true, rawValue: token.slice("--attest=".length) });
-          continue;
-        }
-        if (normalizedCli === "podman" || normalizedCli === "buildah") {
-          if (token === "--from" || token === "--sbom-scanner-image") {
-            if (token === "--sbom-scanner-image") {
-              hasPodmanSbomScanner = true;
+            if (shortBundle.consumedNext) {
+              index += 1;
             }
+            continue;
+          }
+          if (token === "--build-context") {
             if (tokens[index + 1] !== undefined) {
-              rawBuildImageOverrides.push({ flag: token, rawValue: tokens[index + 1] });
+              rawBuildContexts.push(tokens[index + 1]);
             }
             index += 1;
             continue;
           }
-          if (token.startsWith("--from=")) {
-            rawBuildImageOverrides.push({
-              flag: "--from",
-              rawValue: token.slice("--from=".length),
-            });
+          if (token.startsWith("--build-context=")) {
+            rawBuildContexts.push(token.slice("--build-context=".length));
             continue;
           }
-          if (token.startsWith("--sbom-scanner-image=")) {
-            hasPodmanSbomScanner = true;
-            rawBuildImageOverrides.push({
-              flag: "--sbom-scanner-image",
-              rawValue: token.slice("--sbom-scanner-image=".length),
-            });
-            continue;
-          }
-        }
-        if (token.startsWith("-") && token !== "-") {
-          const buildValueFlags =
-            normalizedCli === "podman" || normalizedCli === "buildah"
-              ? PODMAN_BUILD_VALUE_FLAGS
-              : DOCKER_BUILD_VALUE_FLAGS;
-          if (flagConsumesNextArg(token, buildValueFlags)) {
+          if (token === "--build-arg") {
+            if (tokens[index + 1] !== undefined) {
+              rawBuildArgs.push(tokens[index + 1]);
+            }
             index += 1;
+            continue;
           }
-          continue;
+          if (token.startsWith("--build-arg=")) {
+            rawBuildArgs.push(token.slice("--build-arg=".length));
+            continue;
+          }
+          if (token === "--platform") {
+            if (tokens[index + 1] !== undefined) {
+              rawPlatforms.push(tokens[index + 1]);
+            }
+            index += 1;
+            continue;
+          }
+          if (token.startsWith("--platform=")) {
+            rawPlatforms.push(token.slice("--platform=".length));
+            continue;
+          }
+          if (token === "--sbom") {
+            if (tokens[index + 1] !== undefined) {
+              if (normalizedCli === "podman" || normalizedCli === "buildah") {
+                rawPodmanSbomPresets.push(tokens[index + 1]);
+              } else {
+                rawAttestSpecs.push({ requireSbomType: false, rawValue: tokens[index + 1] });
+              }
+            }
+            index += 1;
+            continue;
+          }
+          if (token.startsWith("--sbom=")) {
+            const sbomVal = token.slice("--sbom=".length);
+            if (normalizedCli === "podman" || normalizedCli === "buildah") {
+              rawPodmanSbomPresets.push(sbomVal);
+            } else {
+              rawAttestSpecs.push({ requireSbomType: false, rawValue: sbomVal });
+            }
+            continue;
+          }
+          if (token === "--attest") {
+            if (tokens[index + 1] !== undefined) {
+              rawAttestSpecs.push({ requireSbomType: true, rawValue: tokens[index + 1] });
+            }
+            index += 1;
+            continue;
+          }
+          if (token.startsWith("--attest=")) {
+            rawAttestSpecs.push({
+              requireSbomType: true,
+              rawValue: token.slice("--attest=".length),
+            });
+            continue;
+          }
+          if (normalizedCli === "podman" || normalizedCli === "buildah") {
+            if (token === "--from" || token === "--sbom-scanner-image") {
+              if (token === "--sbom-scanner-image") {
+                hasPodmanSbomScanner = true;
+              }
+              if (tokens[index + 1] !== undefined) {
+                rawBuildImageOverrides.push({ flag: token, rawValue: tokens[index + 1] });
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--from=")) {
+              rawBuildImageOverrides.push({
+                flag: "--from",
+                rawValue: token.slice("--from=".length),
+              });
+              continue;
+            }
+            if (token.startsWith("--sbom-scanner-image=")) {
+              hasPodmanSbomScanner = true;
+              rawBuildImageOverrides.push({
+                flag: "--sbom-scanner-image",
+                rawValue: token.slice("--sbom-scanner-image=".length),
+              });
+              continue;
+            }
+          }
+          if (token.startsWith("-") && token !== "-") {
+            const buildValueFlags =
+              normalizedCli === "podman" || normalizedCli === "buildah"
+                ? PODMAN_BUILD_VALUE_FLAGS
+                : DOCKER_BUILD_VALUE_FLAGS;
+            if (flagConsumesNextArg(token, buildValueFlags)) {
+              index += 1;
+            }
+            continue;
+          }
+          if (contextArg === null) {
+            contextArg = token;
+          }
         }
-        if (contextArg === null) {
-          contextArg = token;
-        }
-      }
 
-      const buildRows = matrixRows.length > 0 ? matrixRows : [null];
-      const seenContextProblems = new Set();
-      const seenSyntaxProblems = new Set();
-      const seenStdinProblems = new Set();
-      const pushStdinProblem = (message) => {
-        if (!seenStdinProblems.has(message)) {
-          seenStdinProblems.add(message);
-          problems.push(message);
-        }
-      };
-      const hasExplicitNonStdinFile = rawFiles.some((file) => file !== "-");
-      const usesStdinFile = rawFiles.includes("-");
-      const usesStdinContextArchive =
-        contextArg === "-" && hasExplicitNonStdinFile && !usesStdinFile;
-      const usesStdinDockerfile = usesStdinFile || (contextArg === "-" && !hasExplicitNonStdinFile);
-      const hasStdinHeredoc = Boolean(event.hasStdinHeredoc);
-      const hasStdinRedirect = stdinRedirectTargets.length > 0;
-      const stdinInvocations = [];
-
-      if (usesStdinContextArchive) {
-        pushStdinProblem(
-          `${filePath}:${lineNumber}: stdin build context archive cannot be verified statically`,
-        );
-      }
-
-      for (const row of buildRows) {
-        const rowList = row ? [row] : [];
-        const namedContexts = new Set();
-        const rowContextProblems = [];
-        for (const rawBuildContext of rawBuildContexts) {
-          inspectBuildContextSpec(
-            rawBuildContext,
-            stepEnv,
-            frame.vars,
-            rowList,
-            filePath,
-            lineNumber,
-            shellMode,
-            rowContextProblems,
-            namedContexts,
-          );
-        }
-        for (const message of rowContextProblems) {
-          if (!seenContextProblems.has(message)) {
-            seenContextProblems.add(message);
+        const buildRows = matrixRows.length > 0 ? matrixRows : [null];
+        const seenContextProblems = new Set();
+        const seenSyntaxProblems = new Set();
+        const seenStdinProblems = new Set();
+        const pushStdinProblem = (message) => {
+          if (!seenStdinProblems.has(message)) {
+            seenStdinProblems.add(message);
             problems.push(message);
           }
+        };
+        const hasExplicitNonStdinFile = rawFiles.some((file) => file !== "-");
+        const usesStdinFile = rawFiles.includes("-");
+        const usesStdinContextArchive =
+          contextArg === "-" && hasExplicitNonStdinFile && !usesStdinFile;
+        const usesStdinDockerfile =
+          usesStdinFile || (contextArg === "-" && !hasExplicitNonStdinFile);
+        const hasStdinHeredoc = Boolean(event.hasStdinHeredoc);
+        const hasStdinRedirect = stdinRedirectTargets.length > 0;
+        const stdinInvocations = [];
+
+        if (usesStdinContextArchive) {
+          pushStdinProblem(
+            `${filePath}:${lineNumber}: stdin build context archive cannot be verified statically`,
+          );
         }
 
-        for (const { flag, rawValue } of rawBuildImageOverrides) {
-          const expandedOverride = resolveImageTokenCandidates(
-            rawValue,
-            stepEnv,
-            frame.vars,
-            lineNumber,
-            shellMode,
-          );
-          if (expandedOverride.truncated) {
-            const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
-            if (!seenContextProblems.has(limitMsg)) {
-              seenContextProblems.add(limitMsg);
-              problems.push(limitMsg);
-            }
-          }
-          for (const varCandidate of expandedOverride.candidates) {
-            for (const candidate of expandMatrixReferences(
-              varCandidate.text,
+        for (const row of buildRows) {
+          const rowList = row ? [row] : [];
+          const namedContexts = new Set();
+          const rowContextProblems = [];
+          for (const rawBuildContext of rawBuildContexts) {
+            inspectBuildContextSpec(
+              rawBuildContext,
+              stepEnv,
+              frame.vars,
               rowList,
-              varCandidate.line,
-            )) {
-              const imageRef = candidate.text.trim();
-              if (
-                !imageRef ||
-                (isDynamicReference(imageRef, shellMode) &&
-                  !hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode))
-              ) {
-                continue;
-              }
-              if (flag === "--from" && imageRef.toLowerCase() === "scratch") {
-                continue;
-              }
-              if (!isPinnedDigest(imageRef)) {
-                const msg = `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`;
-                if (!seenContextProblems.has(msg)) {
-                  seenContextProblems.add(msg);
-                  problems.push(msg);
-                }
-              }
+              filePath,
+              lineNumber,
+              shellMode,
+              rowContextProblems,
+              namedContexts,
+            );
+          }
+          for (const message of rowContextProblems) {
+            if (!seenContextProblems.has(message)) {
+              seenContextProblems.add(message);
+              problems.push(message);
             }
           }
-        }
 
-        for (const { requireSbomType, rawValue } of rawAttestSpecs) {
-          const expandedAttest = resolveImageTokenCandidates(
-            rawValue,
-            stepEnv,
-            frame.vars,
-            lineNumber,
-            shellMode,
-          );
-          if (expandedAttest.truncated) {
-            const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
-            if (!seenContextProblems.has(limitMsg)) {
-              seenContextProblems.add(limitMsg);
-              problems.push(limitMsg);
-            }
-          }
-          for (const varCandidate of expandedAttest.candidates) {
-            for (const candidate of expandMatrixReferences(
-              varCandidate.text,
-              rowList,
-              varCandidate.line,
-            )) {
-              const attestInspection = inspectAttestSbomSpec(candidate.text, {
-                requireSbomType,
-                shellMode,
-              });
-              if (attestInspection.usesDefaultScanner) {
-                const msg = `${filePath}:${candidate.line}: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)`;
-                if (!seenContextProblems.has(msg)) {
-                  seenContextProblems.add(msg);
-                  problems.push(msg);
-                }
+          for (const { flag, rawValue } of rawBuildImageOverrides) {
+            const expandedOverride = resolveImageTokenCandidates(
+              rawValue,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            if (expandedOverride.truncated) {
+              const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
+              if (!seenContextProblems.has(limitMsg)) {
+                seenContextProblems.add(limitMsg);
+                problems.push(limitMsg);
               }
-              for (const generatorImage of attestInspection.images) {
+            }
+            for (const varCandidate of expandedOverride.candidates) {
+              for (const candidate of expandMatrixReferences(
+                varCandidate.text,
+                rowList,
+                varCandidate.line,
+              )) {
+                const imageRef = candidate.text.trim();
                 if (
-                  !generatorImage ||
-                  (isDynamicReference(generatorImage, shellMode) &&
-                    !hasProvablyUnpinnedLiteralSuffix(generatorImage, shellMode))
+                  !imageRef ||
+                  (isDynamicReference(imageRef, shellMode) &&
+                    !hasProvablyUnpinnedLiteralSuffix(imageRef, shellMode))
                 ) {
                   continue;
                 }
-                if (!isPinnedDigest(generatorImage)) {
-                  const msg = `${filePath}:${candidate.line}: ${generatorImage} is not pinned to a sha256 digest`;
+                if (flag === "--from" && imageRef.toLowerCase() === "scratch") {
+                  continue;
+                }
+                if (!isPinnedDigest(imageRef)) {
+                  const msg = `${filePath}:${candidate.line}: ${imageRef} is not pinned to a sha256 digest`;
                   if (!seenContextProblems.has(msg)) {
                     seenContextProblems.add(msg);
                     problems.push(msg);
@@ -7372,333 +7730,52 @@ function inspectShellText(
               }
             }
           }
-        }
 
-        if (rawPodmanSbomPresets.length > 0 && !hasPodmanSbomScanner) {
-          for (const rawPreset of rawPodmanSbomPresets) {
-            const expandedPreset = resolveImageTokenCandidates(
-              rawPreset,
+          for (const { requireSbomType, rawValue } of rawAttestSpecs) {
+            const expandedAttest = resolveImageTokenCandidates(
+              rawValue,
               stepEnv,
               frame.vars,
               lineNumber,
               shellMode,
             );
-            for (const varCandidate of expandedPreset.candidates) {
-              for (const candidate of expandMatrixReferences(
-                varCandidate.text,
-                rowList,
-                varCandidate.line,
-              )) {
-                const preset = candidate.text.trim();
-                if (
-                  !preset ||
-                  preset.toLowerCase() === "false" ||
-                  isDynamicReference(preset, shellMode)
-                ) {
-                  continue;
-                }
-                const msg = `${filePath}:${candidate.line}: ${normalizedCli} build --sbom preset uses unpinned default scanner image (pass --sbom-scanner-image ...@sha256:...)`;
-                if (!seenContextProblems.has(msg)) {
-                  seenContextProblems.add(msg);
-                  problems.push(msg);
-                }
-              }
-            }
-          }
-        }
-
-        const buildArgsMap = new Map();
-        for (const rawBuildArg of rawBuildArgs) {
-          const parsedArg = expandBuildArgSpec(
-            rawBuildArg,
-            stepEnv,
-            frame.vars,
-            exportedCommandVars,
-            rowList,
-            lineNumber,
-            shellMode,
-          );
-          if (parsedArg) {
-            buildArgsMap.set(parsedArg.name, {
-              values: parsedArg.values,
-              truncated: parsedArg.truncated,
-            });
-          }
-        }
-
-        if (buildArgsMap.has("BUILDKIT_SYNTAX")) {
-          const rowSyntaxProblems = [];
-          checkBuildkitSyntaxOverride(
-            buildArgsMap.get("BUILDKIT_SYNTAX"),
-            filePath,
-            lineNumber,
-            rowSyntaxProblems,
-          );
-          for (const message of rowSyntaxProblems) {
-            if (!seenSyntaxProblems.has(message)) {
-              seenSyntaxProblems.add(message);
-              problems.push(message);
-            }
-          }
-        }
-
-        const buildPlatforms = [];
-        const seenBuildPlatforms = new Set();
-        for (const rawPlatform of rawPlatforms) {
-          const expandedPlatform = resolveImageTokenCandidates(
-            rawPlatform,
-            stepEnv,
-            frame.vars,
-            lineNumber,
-            shellMode,
-          );
-          for (const varCandidate of expandedPlatform.candidates) {
-            for (const candidate of expandMatrixReferences(
-              varCandidate.text,
-              rowList,
-              varCandidate.line,
-            )) {
-              for (const platformEntry of splitPlatformEntries(candidate.text)) {
-                if (!seenBuildPlatforms.has(platformEntry)) {
-                  seenBuildPlatforms.add(platformEntry);
-                  buildPlatforms.push(platformEntry);
-                }
-              }
-            }
-          }
-        }
-
-        if (usesStdinContextArchive) {
-          continue;
-        }
-
-        const { dirs: activeWorkingDirs, truncated: activeWorkingDirsTruncated } =
-          resolveCommandWorkingDirs(row);
-
-        if (usesStdinDockerfile) {
-          if (hasStdinHeredoc) {
-            stdinInvocations.push({
-              buildArgs: buildArgsMap,
-              namedContexts,
-              platforms: buildPlatforms,
-              rowList,
-            });
-          }
-          if (hasStdinRedirect) {
-            const rawStdinTarget = stdinRedirectTargets.at(-1);
-            if (!buildFileContext || activeWorkingDirs.length === 0) {
-              pushStdinProblem(
-                `${filePath}:${lineNumber}: stdin containerfile input ${rawStdinTarget} cannot be verified statically`,
-              );
-            } else {
-              if (activeWorkingDirsTruncated) {
-                pushStdinProblem(
-                  `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
-                );
-              }
-              const expandedStdin = resolveImageTokenCandidates(
-                rawStdinTarget,
-                stepEnv,
-                frame.vars,
-                lineNumber,
-                shellMode,
-              );
-              if (expandedStdin.truncated) {
-                pushStdinProblem(
-                  `${filePath}:${lineNumber}: ${rawStdinTarget} exceeds expansion limit and cannot be verified exhaustively`,
-                );
-              }
-              const resolvedStdinFiles = [];
-              const seenStdinFiles = new Set();
-              for (const activeWorkingDir of activeWorkingDirs) {
-                for (const varCandidate of expandedStdin.candidates) {
-                  for (const candidate of expandMatrixReferences(
-                    varCandidate.text,
-                    rowList,
-                    varCandidate.line,
-                  )) {
-                    const wsRel = resolveWorkspaceRelativePath(candidate.text, activeWorkingDir, {
-                      windowsPath: isWindowsShell,
-                      actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
-                    });
-                    const mappedTargets = resolveWorkspaceTargetsInRepo(
-                      wsRel,
-                      buildFileContext.root,
-                      buildFileContext.checkoutPrefixes,
-                      buildFileContext.foreignCheckoutPrefixes,
-                    ).filter((target) => target !== path.resolve(buildFileContext.root));
-                    if (mappedTargets.length === 0) {
-                      if (
-                        buildFileContext.deferUnresolvedInputs &&
-                        referencesUnresolvedInput(candidate.text)
-                      ) {
-                        continue;
-                      }
-                      pushStdinProblem(
-                        `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
-                      );
-                      continue;
-                    }
-                    for (const resolvedPath of mappedTargets) {
-                      const targetProblems = [];
-                      const safeFile = resolveSafeContainerFile(
-                        resolvedPath,
-                        buildFileContext.root,
-                        targetProblems,
-                      );
-                      if (safeFile) {
-                        if (isArchiveOrBinaryFile(safeFile)) {
-                          pushStdinProblem(
-                            `${filePath}:${lineNumber}: stdin build context archive ${candidate.text} cannot be verified statically`,
-                          );
-                          continue;
-                        }
-                        buildFileContext.explicitBuildFiles.add(resolvedPath);
-                        if (!seenStdinFiles.has(resolvedPath)) {
-                          seenStdinFiles.add(resolvedPath);
-                          resolvedStdinFiles.push(resolvedPath);
-                        }
-                      } else if (targetProblems.length > 0) {
-                        buildFileContext.explicitBuildFiles.add(resolvedPath);
-                      } else {
-                        pushStdinProblem(
-                          `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
-                        );
-                      }
-                    }
-                  }
-                }
-              }
-              for (const targetFile of resolvedStdinFiles) {
-                recordBuildInvocation(
-                  targetFile,
-                  buildArgsMap,
-                  namedContexts,
-                  filePath,
-                  lineNumber,
-                  buildFileContext.buildInvocations,
-                  buildPlatforms,
-                );
-              }
-            }
-          } else if (!hasStdinHeredoc) {
-            pushStdinProblem(
-              `${filePath}:${lineNumber}: stdin containerfile input cannot be verified statically`,
-            );
-          }
-          continue;
-        }
-
-        if (rawFiles.length === 0 && contextArg) {
-          const expandedRemoteCheck = resolveImageTokenCandidates(
-            contextArg,
-            stepEnv,
-            frame.vars,
-            lineNumber,
-            shellMode,
-          );
-          for (const varCandidate of expandedRemoteCheck.candidates) {
-            for (const candidate of expandMatrixReferences(
-              varCandidate.text,
-              rowList,
-              varCandidate.line,
-            )) {
-              const ctxText = candidate.text.trim();
-              if (isRemoteBuildContext(ctxText)) {
-                const remoteMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
-                if (!seenContextProblems.has(remoteMsg)) {
-                  seenContextProblems.add(remoteMsg);
-                  problems.push(remoteMsg);
-                }
-              }
-            }
-          }
-        }
-
-        if (!buildFileContext || activeWorkingDirs.length === 0) {
-          continue;
-        }
-
-        if (activeWorkingDirsTruncated) {
-          problems.push(
-            `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
-          );
-        }
-
-        const resolvedBuildFiles = [];
-        const seenResolvedFiles = new Set();
-        const pushResolvedFile = (resolved) => {
-          if (resolved && !seenResolvedFiles.has(resolved)) {
-            seenResolvedFiles.add(resolved);
-            resolvedBuildFiles.push(resolved);
-          }
-        };
-
-        for (const activeWorkingDir of activeWorkingDirs) {
-          const dirResolvedFiles = [];
-          for (const rawFile of rawFiles) {
-            const expanded = resolveImageTokenCandidates(
-              rawFile,
-              stepEnv,
-              frame.vars,
-              lineNumber,
-              shellMode,
-            );
-            if (expanded.truncated) {
-              const limitMsg = `${filePath}:${lineNumber}: ${rawFile} exceeds expansion limit and cannot be verified exhaustively`;
+            if (expandedAttest.truncated) {
+              const limitMsg = `${filePath}:${lineNumber}: ${rawValue} exceeds expansion limit and cannot be verified exhaustively`;
               if (!seenContextProblems.has(limitMsg)) {
                 seenContextProblems.add(limitMsg);
                 problems.push(limitMsg);
               }
             }
-            for (const varCandidate of expanded.candidates) {
+            for (const varCandidate of expandedAttest.candidates) {
               for (const candidate of expandMatrixReferences(
                 varCandidate.text,
                 rowList,
                 varCandidate.line,
               )) {
-                const wsRel = resolveWorkspaceRelativePath(candidate.text, activeWorkingDir, {
-                  windowsPath: isWindowsShell,
-                  actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                const attestInspection = inspectAttestSbomSpec(candidate.text, {
+                  requireSbomType,
+                  shellMode,
                 });
-                const mappedTargets = resolveWorkspaceTargetsInRepo(
-                  wsRel,
-                  buildFileContext.root,
-                  buildFileContext.checkoutPrefixes,
-                  buildFileContext.foreignCheckoutPrefixes,
-                ).filter((target) => target !== path.resolve(buildFileContext.root));
-                if (mappedTargets.length === 0) {
+                if (attestInspection.usesDefaultScanner) {
+                  const msg = `${filePath}:${candidate.line}: BuildKit SBOM attestation uses unpinned default scanner image (specify generator=...@sha256:...)`;
+                  if (!seenContextProblems.has(msg)) {
+                    seenContextProblems.add(msg);
+                    problems.push(msg);
+                  }
+                }
+                for (const generatorImage of attestInspection.images) {
                   if (
-                    buildFileContext.deferUnresolvedInputs &&
-                    referencesUnresolvedInput(candidate.text)
+                    !generatorImage ||
+                    (isDynamicReference(generatorImage, shellMode) &&
+                      !hasProvablyUnpinnedLiteralSuffix(generatorImage, shellMode))
                   ) {
                     continue;
                   }
-                  const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
-                  if (!seenContextProblems.has(unverifiableMsg)) {
-                    seenContextProblems.add(unverifiableMsg);
-                    problems.push(unverifiableMsg);
-                  }
-                  continue;
-                }
-                for (const resolvedPath of mappedTargets) {
-                  const targetProblems = [];
-                  const safeFile = resolveSafeContainerFile(
-                    resolvedPath,
-                    buildFileContext.root,
-                    targetProblems,
-                  );
-                  if (safeFile) {
-                    buildFileContext.explicitBuildFiles.add(resolvedPath);
-                    dirResolvedFiles.push(resolvedPath);
-                    pushResolvedFile(resolvedPath);
-                  } else if (targetProblems.length > 0) {
-                    buildFileContext.explicitBuildFiles.add(resolvedPath);
-                  } else {
-                    const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
-                    if (!seenContextProblems.has(unverifiableMsg)) {
-                      seenContextProblems.add(unverifiableMsg);
-                      problems.push(unverifiableMsg);
+                  if (!isPinnedDigest(generatorImage)) {
+                    const msg = `${filePath}:${candidate.line}: ${generatorImage} is not pinned to a sha256 digest`;
+                    if (!seenContextProblems.has(msg)) {
+                      seenContextProblems.add(msg);
+                      problems.push(msg);
                     }
                   }
                 }
@@ -7706,441 +7783,827 @@ function inspectShellText(
             }
           }
 
-          if (rawFiles.length === 0 && dirResolvedFiles.length === 0) {
-            const contextDirs = [];
-            const seenContextDirs = new Set();
-            let hadRemoteContext = false;
-            let hadUnresolvableContext = false;
-            if (contextArg) {
-              const expandedCtx = resolveImageTokenCandidates(
-                contextArg,
+          if (rawPodmanSbomPresets.length > 0 && !hasPodmanSbomScanner) {
+            for (const rawPreset of rawPodmanSbomPresets) {
+              const expandedPreset = resolveImageTokenCandidates(
+                rawPreset,
                 stepEnv,
                 frame.vars,
                 lineNumber,
                 shellMode,
               );
-              if (expandedCtx.truncated) {
-                const limitMsg = `${filePath}:${lineNumber}: ${contextArg} exceeds expansion limit and cannot be verified exhaustively`;
-                if (!seenContextProblems.has(limitMsg)) {
-                  seenContextProblems.add(limitMsg);
-                  problems.push(limitMsg);
-                }
-              }
-              for (const varCandidate of expandedCtx.candidates) {
+              for (const varCandidate of expandedPreset.candidates) {
                 for (const candidate of expandMatrixReferences(
                   varCandidate.text,
                   rowList,
                   varCandidate.line,
                 )) {
-                  const ctxText = candidate.text.trim();
-                  if (isRemoteBuildContext(ctxText)) {
-                    hadRemoteContext = true;
+                  const preset = candidate.text.trim();
+                  if (
+                    !preset ||
+                    preset.toLowerCase() === "false" ||
+                    isDynamicReference(preset, shellMode)
+                  ) {
                     continue;
                   }
-                  const wsCtx = resolveWorkspaceRelativePath(ctxText, activeWorkingDir, {
+                  const msg = `${filePath}:${candidate.line}: ${normalizedCli} build --sbom preset uses unpinned default scanner image (pass --sbom-scanner-image ...@sha256:...)`;
+                  if (!seenContextProblems.has(msg)) {
+                    seenContextProblems.add(msg);
+                    problems.push(msg);
+                  }
+                }
+              }
+            }
+          }
+
+          const buildArgsMap = new Map();
+          for (const rawBuildArg of rawBuildArgs) {
+            const parsedArg = expandBuildArgSpec(
+              rawBuildArg,
+              stepEnv,
+              frame.vars,
+              exportedCommandVars,
+              rowList,
+              lineNumber,
+              shellMode,
+            );
+            if (parsedArg) {
+              buildArgsMap.set(parsedArg.name, {
+                values: parsedArg.values,
+                truncated: parsedArg.truncated,
+              });
+            }
+          }
+
+          if (buildArgsMap.has("BUILDKIT_SYNTAX")) {
+            const rowSyntaxProblems = [];
+            checkBuildkitSyntaxOverride(
+              buildArgsMap.get("BUILDKIT_SYNTAX"),
+              filePath,
+              lineNumber,
+              rowSyntaxProblems,
+            );
+            for (const message of rowSyntaxProblems) {
+              if (!seenSyntaxProblems.has(message)) {
+                seenSyntaxProblems.add(message);
+                problems.push(message);
+              }
+            }
+          }
+
+          const buildPlatforms = [];
+          const seenBuildPlatforms = new Set();
+          for (const rawPlatform of rawPlatforms) {
+            const expandedPlatform = resolveImageTokenCandidates(
+              rawPlatform,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            for (const varCandidate of expandedPlatform.candidates) {
+              for (const candidate of expandMatrixReferences(
+                varCandidate.text,
+                rowList,
+                varCandidate.line,
+              )) {
+                for (const platformEntry of splitPlatformEntries(candidate.text)) {
+                  if (!seenBuildPlatforms.has(platformEntry)) {
+                    seenBuildPlatforms.add(platformEntry);
+                    buildPlatforms.push(platformEntry);
+                  }
+                }
+              }
+            }
+          }
+
+          if (usesStdinContextArchive) {
+            continue;
+          }
+
+          const { dirs: activeWorkingDirs, truncated: activeWorkingDirsTruncated } =
+            resolveCommandWorkingDirs(row);
+
+          if (usesStdinDockerfile) {
+            if (hasStdinHeredoc) {
+              stdinInvocations.push({
+                buildArgs: buildArgsMap,
+                namedContexts,
+                platforms: buildPlatforms,
+                rowList,
+              });
+            }
+            if (hasStdinRedirect) {
+              const rawStdinTarget = stdinRedirectTargets.at(-1);
+              if (!buildFileContext || activeWorkingDirs.length === 0) {
+                pushStdinProblem(
+                  `${filePath}:${lineNumber}: stdin containerfile input ${rawStdinTarget} cannot be verified statically`,
+                );
+              } else {
+                if (activeWorkingDirsTruncated) {
+                  pushStdinProblem(
+                    `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
+                  );
+                }
+                const expandedStdin = resolveImageTokenCandidates(
+                  rawStdinTarget,
+                  stepEnv,
+                  frame.vars,
+                  lineNumber,
+                  shellMode,
+                );
+                if (expandedStdin.truncated) {
+                  pushStdinProblem(
+                    `${filePath}:${lineNumber}: ${rawStdinTarget} exceeds expansion limit and cannot be verified exhaustively`,
+                  );
+                }
+                const resolvedStdinFiles = [];
+                const seenStdinFiles = new Set();
+                for (const activeWorkingDir of activeWorkingDirs) {
+                  for (const varCandidate of expandedStdin.candidates) {
+                    for (const candidate of expandMatrixReferences(
+                      varCandidate.text,
+                      rowList,
+                      varCandidate.line,
+                    )) {
+                      const wsRel = resolveWorkspaceRelativePath(candidate.text, activeWorkingDir, {
+                        windowsPath: isWindowsShell,
+                        actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                      });
+                      const mappedTargets = resolveWorkspaceTargetsInRepo(
+                        wsRel,
+                        buildFileContext.root,
+                        buildFileContext.checkoutPrefixes,
+                        buildFileContext.foreignCheckoutPrefixes,
+                      ).filter((target) => target !== path.resolve(buildFileContext.root));
+                      if (mappedTargets.length === 0) {
+                        if (
+                          buildFileContext.deferUnresolvedInputs &&
+                          referencesUnresolvedInput(candidate.text)
+                        ) {
+                          continue;
+                        }
+                        pushStdinProblem(
+                          `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
+                        );
+                        continue;
+                      }
+                      for (const resolvedPath of mappedTargets) {
+                        const targetProblems = [];
+                        const safeFile = resolveSafeContainerFile(
+                          resolvedPath,
+                          buildFileContext.root,
+                          targetProblems,
+                        );
+                        if (safeFile) {
+                          if (isArchiveOrBinaryFile(safeFile)) {
+                            pushStdinProblem(
+                              `${filePath}:${lineNumber}: stdin build context archive ${candidate.text} cannot be verified statically`,
+                            );
+                            continue;
+                          }
+                          buildFileContext.explicitBuildFiles.add(resolvedPath);
+                          if (!seenStdinFiles.has(resolvedPath)) {
+                            seenStdinFiles.add(resolvedPath);
+                            resolvedStdinFiles.push(resolvedPath);
+                          }
+                        } else if (targetProblems.length > 0) {
+                          buildFileContext.explicitBuildFiles.add(resolvedPath);
+                        } else {
+                          pushStdinProblem(
+                            `${filePath}:${lineNumber}: stdin containerfile input ${candidate.text} cannot be verified statically`,
+                          );
+                        }
+                      }
+                    }
+                  }
+                }
+                for (const targetFile of resolvedStdinFiles) {
+                  recordBuildInvocation(
+                    targetFile,
+                    buildArgsMap,
+                    namedContexts,
+                    filePath,
+                    lineNumber,
+                    buildFileContext.buildInvocations,
+                    buildPlatforms,
+                  );
+                }
+              }
+            } else if (!hasStdinHeredoc) {
+              pushStdinProblem(
+                `${filePath}:${lineNumber}: stdin containerfile input cannot be verified statically`,
+              );
+            }
+            continue;
+          }
+
+          if (rawFiles.length === 0 && contextArg) {
+            const expandedRemoteCheck = resolveImageTokenCandidates(
+              contextArg,
+              stepEnv,
+              frame.vars,
+              lineNumber,
+              shellMode,
+            );
+            for (const varCandidate of expandedRemoteCheck.candidates) {
+              for (const candidate of expandMatrixReferences(
+                varCandidate.text,
+                rowList,
+                varCandidate.line,
+              )) {
+                const ctxText = candidate.text.trim();
+                if (isRemoteBuildContext(ctxText)) {
+                  const remoteMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
+                  if (!seenContextProblems.has(remoteMsg)) {
+                    seenContextProblems.add(remoteMsg);
+                    problems.push(remoteMsg);
+                  }
+                }
+              }
+            }
+          }
+
+          if (!buildFileContext || activeWorkingDirs.length === 0) {
+            continue;
+          }
+
+          if (activeWorkingDirsTruncated) {
+            problems.push(
+              `${filePath}:${lineNumber}: working-directory expansion exceeds ${MAX_WORKING_DIRS_PER_ROW} paths and cannot be verified exhaustively`,
+            );
+          }
+
+          const resolvedBuildFiles = [];
+          const seenResolvedFiles = new Set();
+          const pushResolvedFile = (resolved) => {
+            if (resolved && !seenResolvedFiles.has(resolved)) {
+              seenResolvedFiles.add(resolved);
+              resolvedBuildFiles.push(resolved);
+            }
+          };
+
+          for (const activeWorkingDir of activeWorkingDirs) {
+            const dirResolvedFiles = [];
+            for (const rawFile of rawFiles) {
+              const expanded = resolveImageTokenCandidates(
+                rawFile,
+                stepEnv,
+                frame.vars,
+                lineNumber,
+                shellMode,
+              );
+              if (expanded.truncated) {
+                const limitMsg = `${filePath}:${lineNumber}: ${rawFile} exceeds expansion limit and cannot be verified exhaustively`;
+                if (!seenContextProblems.has(limitMsg)) {
+                  seenContextProblems.add(limitMsg);
+                  problems.push(limitMsg);
+                }
+              }
+              for (const varCandidate of expanded.candidates) {
+                for (const candidate of expandMatrixReferences(
+                  varCandidate.text,
+                  rowList,
+                  varCandidate.line,
+                )) {
+                  const wsRel = resolveWorkspaceRelativePath(candidate.text, activeWorkingDir, {
                     windowsPath: isWindowsShell,
                     actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
                   });
-                  const mappedCtxs = resolveWorkspaceTargetsInRepo(
-                    wsCtx,
+                  const mappedTargets = resolveWorkspaceTargetsInRepo(
+                    wsRel,
                     buildFileContext.root,
                     buildFileContext.checkoutPrefixes,
                     buildFileContext.foreignCheckoutPrefixes,
-                  );
-                  if (mappedCtxs.length > 0) {
-                    for (const resolvedCtx of mappedCtxs) {
-                      if (!seenContextDirs.has(resolvedCtx)) {
-                        seenContextDirs.add(resolvedCtx);
-                        contextDirs.push(resolvedCtx);
-                      }
-                    }
-                  } else if (ctxText) {
-                    hadUnresolvableContext = true;
+                  ).filter((target) => target !== path.resolve(buildFileContext.root));
+                  if (mappedTargets.length === 0) {
                     if (
                       buildFileContext.deferUnresolvedInputs &&
-                      referencesUnresolvedInput(ctxText)
+                      referencesUnresolvedInput(candidate.text)
                     ) {
                       continue;
                     }
-                    const unverifiableMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
+                    const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
                     if (!seenContextProblems.has(unverifiableMsg)) {
                       seenContextProblems.add(unverifiableMsg);
                       problems.push(unverifiableMsg);
                     }
+                    continue;
+                  }
+                  for (const resolvedPath of mappedTargets) {
+                    const targetProblems = [];
+                    const safeFile = resolveSafeContainerFile(
+                      resolvedPath,
+                      buildFileContext.root,
+                      targetProblems,
+                    );
+                    if (safeFile) {
+                      buildFileContext.explicitBuildFiles.add(resolvedPath);
+                      dirResolvedFiles.push(resolvedPath);
+                      pushResolvedFile(resolvedPath);
+                    } else if (targetProblems.length > 0) {
+                      buildFileContext.explicitBuildFiles.add(resolvedPath);
+                    } else {
+                      const unverifiableMsg = `${filePath}:${lineNumber}: build file ${candidate.text} cannot be verified statically`;
+                      if (!seenContextProblems.has(unverifiableMsg)) {
+                        seenContextProblems.add(unverifiableMsg);
+                        problems.push(unverifiableMsg);
+                      }
+                    }
                   }
                 }
               }
             }
-            if (
-              !contextArg &&
-              !hadRemoteContext &&
-              !hadUnresolvableContext &&
-              contextDirs.length === 0
-            ) {
-              for (const resolvedCtx of resolveWorkspaceTargetsInRepo(
-                activeWorkingDir,
-                buildFileContext.root,
-                buildFileContext.checkoutPrefixes,
-                buildFileContext.foreignCheckoutPrefixes,
-              )) {
-                if (!seenContextDirs.has(resolvedCtx)) {
-                  seenContextDirs.add(resolvedCtx);
-                  contextDirs.push(resolvedCtx);
+
+            if (rawFiles.length === 0 && dirResolvedFiles.length === 0) {
+              const contextDirs = [];
+              const seenContextDirs = new Set();
+              let hadRemoteContext = false;
+              let hadUnresolvableContext = false;
+              if (contextArg) {
+                const expandedCtx = resolveImageTokenCandidates(
+                  contextArg,
+                  stepEnv,
+                  frame.vars,
+                  lineNumber,
+                  shellMode,
+                );
+                if (expandedCtx.truncated) {
+                  const limitMsg = `${filePath}:${lineNumber}: ${contextArg} exceeds expansion limit and cannot be verified exhaustively`;
+                  if (!seenContextProblems.has(limitMsg)) {
+                    seenContextProblems.add(limitMsg);
+                    problems.push(limitMsg);
+                  }
+                }
+                for (const varCandidate of expandedCtx.candidates) {
+                  for (const candidate of expandMatrixReferences(
+                    varCandidate.text,
+                    rowList,
+                    varCandidate.line,
+                  )) {
+                    const ctxText = candidate.text.trim();
+                    if (isRemoteBuildContext(ctxText)) {
+                      hadRemoteContext = true;
+                      continue;
+                    }
+                    const wsCtx = resolveWorkspaceRelativePath(ctxText, activeWorkingDir, {
+                      windowsPath: isWindowsShell,
+                      actionWsRelDir: buildFileContext.actionWsRelDir ?? null,
+                    });
+                    const mappedCtxs = resolveWorkspaceTargetsInRepo(
+                      wsCtx,
+                      buildFileContext.root,
+                      buildFileContext.checkoutPrefixes,
+                      buildFileContext.foreignCheckoutPrefixes,
+                    );
+                    if (mappedCtxs.length > 0) {
+                      for (const resolvedCtx of mappedCtxs) {
+                        if (!seenContextDirs.has(resolvedCtx)) {
+                          seenContextDirs.add(resolvedCtx);
+                          contextDirs.push(resolvedCtx);
+                        }
+                      }
+                    } else if (ctxText) {
+                      hadUnresolvableContext = true;
+                      if (
+                        buildFileContext.deferUnresolvedInputs &&
+                        referencesUnresolvedInput(ctxText)
+                      ) {
+                        continue;
+                      }
+                      const unverifiableMsg = `${filePath}:${lineNumber}: build context ${ctxText} cannot be verified statically`;
+                      if (!seenContextProblems.has(unverifiableMsg)) {
+                        seenContextProblems.add(unverifiableMsg);
+                        problems.push(unverifiableMsg);
+                      }
+                    }
+                  }
                 }
               }
-            }
-            const defaultNames =
-              normalizedCli === "podman" || normalizedCli === "buildah"
-                ? ["Containerfile", "Dockerfile", "dockerfile"]
-                : ["Dockerfile", "dockerfile"];
-            for (const baseContext of contextDirs) {
-              const candidateFile = findDefaultBuildFile(baseContext, defaultNames);
-              let foundDefault = false;
-              if (candidateFile) {
-                const targetProblems = [];
-                const safeFile = resolveSafeContainerFile(
-                  candidateFile,
+              if (
+                !contextArg &&
+                !hadRemoteContext &&
+                !hadUnresolvableContext &&
+                contextDirs.length === 0
+              ) {
+                for (const resolvedCtx of resolveWorkspaceTargetsInRepo(
+                  activeWorkingDir,
                   buildFileContext.root,
-                  targetProblems,
-                );
-                if (safeFile) {
-                  buildFileContext.explicitBuildFiles.add(candidateFile);
-                  pushResolvedFile(candidateFile);
-                  foundDefault = true;
-                } else if (targetProblems.length > 0) {
-                  buildFileContext.explicitBuildFiles.add(candidateFile);
-                  foundDefault = true;
+                  buildFileContext.checkoutPrefixes,
+                  buildFileContext.foreignCheckoutPrefixes,
+                )) {
+                  if (!seenContextDirs.has(resolvedCtx)) {
+                    seenContextDirs.add(resolvedCtx);
+                    contextDirs.push(resolvedCtx);
+                  }
                 }
               }
-              if (!foundDefault) {
-                const expectedPath = formatPortableRelativePath(
-                  buildFileContext.root,
-                  path.join(baseContext, defaultNames[0]),
-                );
-                const unverifiableMsg = `${filePath}:${lineNumber}: default build file ${expectedPath} cannot be verified statically`;
-                if (!seenContextProblems.has(unverifiableMsg)) {
-                  seenContextProblems.add(unverifiableMsg);
-                  problems.push(unverifiableMsg);
+              const defaultNames =
+                normalizedCli === "podman" || normalizedCli === "buildah"
+                  ? ["Containerfile", "Dockerfile", "dockerfile"]
+                  : ["Dockerfile", "dockerfile"];
+              for (const baseContext of contextDirs) {
+                const candidateFile = findDefaultBuildFile(baseContext, defaultNames);
+                let foundDefault = false;
+                if (candidateFile) {
+                  const targetProblems = [];
+                  const safeFile = resolveSafeContainerFile(
+                    candidateFile,
+                    buildFileContext.root,
+                    targetProblems,
+                  );
+                  if (safeFile) {
+                    buildFileContext.explicitBuildFiles.add(candidateFile);
+                    pushResolvedFile(candidateFile);
+                    foundDefault = true;
+                  } else if (targetProblems.length > 0) {
+                    buildFileContext.explicitBuildFiles.add(candidateFile);
+                    foundDefault = true;
+                  }
+                }
+                if (!foundDefault) {
+                  const expectedPath = formatPortableRelativePath(
+                    buildFileContext.root,
+                    path.join(baseContext, defaultNames[0]),
+                  );
+                  const unverifiableMsg = `${filePath}:${lineNumber}: default build file ${expectedPath} cannot be verified statically`;
+                  if (!seenContextProblems.has(unverifiableMsg)) {
+                    seenContextProblems.add(unverifiableMsg);
+                    problems.push(unverifiableMsg);
+                  }
                 }
               }
             }
           }
+
+          for (const targetFile of resolvedBuildFiles) {
+            recordBuildInvocation(
+              targetFile,
+              buildArgsMap,
+              namedContexts,
+              filePath,
+              lineNumber,
+              buildFileContext.buildInvocations,
+              buildPlatforms,
+            );
+          }
         }
-
-        for (const targetFile of resolvedBuildFiles) {
-          recordBuildInvocation(
-            targetFile,
-            buildArgsMap,
-            namedContexts,
-            filePath,
-            lineNumber,
-            buildFileContext.buildInvocations,
-            buildPlatforms,
-          );
+        if (usesStdinDockerfile && hasStdinHeredoc) {
+          frame.pendingStdinBuilds.push({ lineNumber, invocations: stdinInvocations });
         }
+        continue;
       }
-      if (usesStdinDockerfile && hasStdinHeredoc) {
-        frame.pendingStdinBuilds.push({ lineNumber, invocations: stdinInvocations });
-      }
-      continue;
-    }
 
-    let subcommand = tokens[argIndex];
+      let subcommand = tokens[argIndex];
 
-    let allowScratchOperand = false;
-    if (normalizedCli === "buildah") {
-      if (subcommand === "pull") {
-        argIndex += 1;
-      } else if (subcommand === "from") {
+      let allowScratchOperand = false;
+      if (normalizedCli === "buildah") {
+        if (subcommand === "pull") {
+          argIndex += 1;
+        } else if (subcommand === "from") {
+          subcommand = "run";
+          allowScratchOperand = true;
+          argIndex += 1;
+        } else {
+          continue;
+        }
+      } else if (subcommand === "image" && tokens[argIndex + 1] === "pull") {
+        subcommand = "pull";
+        argIndex += 2;
+      } else if (
+        subcommand === "container" &&
+        (tokens[argIndex + 1] === "run" || tokens[argIndex + 1] === "create")
+      ) {
         subcommand = "run";
-        allowScratchOperand = true;
+        argIndex += 2;
+      } else if (subcommand === "pull" || subcommand === "run" || subcommand === "create") {
+        subcommand = subcommand === "create" ? "run" : subcommand;
         argIndex += 1;
       } else {
         continue;
       }
-    } else if (subcommand === "image" && tokens[argIndex + 1] === "pull") {
-      subcommand = "pull";
-      argIndex += 2;
-    } else if (
-      subcommand === "container" &&
-      (tokens[argIndex + 1] === "run" || tokens[argIndex + 1] === "create")
-    ) {
-      subcommand = "run";
-      argIndex += 2;
-    } else if (subcommand === "pull" || subcommand === "run" || subcommand === "create") {
-      subcommand = subcommand === "create" ? "run" : subcommand;
-      argIndex += 1;
-    } else {
-      continue;
-    }
 
-    const valueFlags =
-      normalizedCli === "buildah"
-        ? subcommand === "pull"
-          ? BUILDAH_PULL_VALUE_FLAGS
-          : BUILDAH_FROM_VALUE_FLAGS
-        : normalizedCli === "podman"
+      const valueFlags =
+        normalizedCli === "buildah"
           ? subcommand === "pull"
-            ? PODMAN_PULL_VALUE_FLAGS
-            : PODMAN_RUN_VALUE_FLAGS
-          : subcommand === "pull"
-            ? DOCKER_PULL_VALUE_FLAGS
-            : DOCKER_RUN_VALUE_FLAGS;
-    const allowMultipleImages = normalizedCli === "podman" && subcommand === "pull";
-    const seenProblems = new Set();
+            ? BUILDAH_PULL_VALUE_FLAGS
+            : BUILDAH_FROM_VALUE_FLAGS
+          : normalizedCli === "podman"
+            ? subcommand === "pull"
+              ? PODMAN_PULL_VALUE_FLAGS
+              : PODMAN_RUN_VALUE_FLAGS
+            : subcommand === "pull"
+              ? DOCKER_PULL_VALUE_FLAGS
+              : DOCKER_RUN_VALUE_FLAGS;
+      const allowMultipleImages = normalizedCli === "podman" && subcommand === "pull";
+      const seenProblems = new Set();
 
-    // Expand statically known shell option variables (e.g. `opts="--rm"` or
-    // `opts="--platform linux/amd64"`) and Bash arrays (`"${args[@]}"`) before
-    // scanning flags so option tokens are consumed and array-supplied images
-    // are validated rather than skipped.
-    let argTokenVariants = [[]];
-    let argExpansionTruncated = false;
-    const unknownArrayTokens = [];
-    const BASH_ARRAY_EXPANSION_PATTERN = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
-    for (let index = argIndex; index < tokens.length; index += 1) {
-      const token = tokens[index];
-      const isSingleQuoted = Boolean(peeledSingleQuoted[index]);
-      const isAnyQuoted = Boolean(peeledQuoted[index]);
-      const arrayExpMatch = !isSingleQuoted ? BASH_ARRAY_EXPANSION_PATTERN.exec(token) : null;
-      const isArrayExpansion =
-        Boolean(arrayExpMatch) ||
-        (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]")));
-      const fallbackLine = sourceLines
-        ? (sourceLines.find((entry) => entry.text.includes(token))?.lineNumber ?? lineNumber)
-        : lineNumber;
-      const mayContainVar =
-        !isSingleQuoted &&
-        !isArrayExpansion &&
-        (token.includes("$") || (shellMode === "cmd" && CMD_VAR_PATTERN.test(token)));
-      CMD_VAR_PATTERN.lastIndex = 0;
+      // Expand statically known shell option variables (e.g. `opts="--rm"` or
+      // `opts="--platform linux/amd64"`) and Bash arrays (`"${args[@]}"`) before
+      // scanning flags so option tokens are consumed and array-supplied images
+      // are validated rather than skipped.
+      let argTokenVariants = [[]];
+      let argExpansionTruncated = false;
+      const unknownArrayTokens = [];
+      const BASH_ARRAY_EXPANSION_PATTERN = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
+      for (let index = argIndex; index < tokens.length; index += 1) {
+        const token = tokens[index];
+        const isSingleQuoted = Boolean(peeledSingleQuoted[index]);
+        const isAnyQuoted = Boolean(peeledQuoted[index]);
+        const arrayExpMatch = !isSingleQuoted ? BASH_ARRAY_EXPANSION_PATTERN.exec(token) : null;
+        const isArrayExpansion =
+          Boolean(arrayExpMatch) ||
+          (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]")));
+        const fallbackLine = sourceLines
+          ? (sourceLines.find((entry) => entry.text.includes(token))?.lineNumber ?? lineNumber)
+          : lineNumber;
+        const mayContainVar =
+          !isSingleQuoted &&
+          !isArrayExpansion &&
+          (token.includes("$") || (shellMode === "cmd" && CMD_VAR_PATTERN.test(token)));
+        CMD_VAR_PATTERN.lastIndex = 0;
 
-      let expandedSlices = null;
-      if (arrayExpMatch) {
-        const knownArrayEntry = frame.arrays.get(arrayExpMatch.groups.name);
-        if (knownArrayEntry && knownArrayEntry.variants.length > 0) {
-          if (knownArrayEntry.truncated) {
-            const limitMessage = `${filePath}:${fallbackLine}: ${token} exceeds expansion limit and cannot be verified exhaustively`;
-            if (!seenProblems.has(limitMessage)) {
-              seenProblems.add(limitMessage);
-              problems.push(limitMessage);
+        let expandedSlices = null;
+        if (arrayExpMatch) {
+          const knownArrayEntry = frame.arrays.get(arrayExpMatch.groups.name);
+          if (knownArrayEntry && knownArrayEntry.variants.length > 0) {
+            if (knownArrayEntry.truncated) {
+              const limitMessage = `${filePath}:${fallbackLine}: ${token} exceeds expansion limit and cannot be verified exhaustively`;
+              if (!seenProblems.has(limitMessage)) {
+                seenProblems.add(limitMessage);
+                problems.push(limitMessage);
+              }
+            }
+            expandedSlices = knownArrayEntry.variants;
+          } else {
+            unknownArrayTokens.push(token);
+          }
+        } else if (mayContainVar) {
+          const varExpanded = resolveImageTokenCandidates(
+            token,
+            stepEnv,
+            frame.vars,
+            fallbackLine,
+            shellMode,
+          );
+          const affectsOptionParsing = varExpanded.candidates.some(
+            (candidate) =>
+              !isDynamicReference(candidate.text, shellMode) &&
+              (candidate.text.startsWith("-") ||
+                candidate.text.length === 0 ||
+                (!isAnyQuoted && /\s/u.test(candidate.text))),
+          );
+          if (affectsOptionParsing) {
+            if (varExpanded.truncated) {
+              const limitMessage = `${filePath}:${fallbackLine}: ${token} exceeds expansion limit and cannot be verified exhaustively`;
+              if (!seenProblems.has(limitMessage)) {
+                seenProblems.add(limitMessage);
+                problems.push(limitMessage);
+              }
+            }
+            expandedSlices = [];
+            const seenSliceKeys = new Set();
+            for (const candidate of varExpanded.candidates) {
+              const parts = isAnyQuoted
+                ? [{ text: candidate.text, line: candidate.line, preExpanded: true }]
+                : candidate.text.trim().length > 0
+                  ? candidate.text
+                      .trim()
+                      .split(/\s+/u)
+                      .map((part) => ({ text: part, line: candidate.line, preExpanded: true }))
+                  : [];
+              const key = parts.map((part) => `${part.line}:${part.text}`).join("\0");
+              if (!seenSliceKeys.has(key)) {
+                seenSliceKeys.add(key);
+                expandedSlices.push(parts);
+              }
             }
           }
-          expandedSlices = knownArrayEntry.variants;
-        } else {
-          unknownArrayTokens.push(token);
         }
-      } else if (mayContainVar) {
-        const varExpanded = resolveImageTokenCandidates(
-          token,
-          stepEnv,
-          frame.vars,
-          fallbackLine,
-          shellMode,
-        );
-        const affectsOptionParsing = varExpanded.candidates.some(
-          (candidate) =>
-            !isDynamicReference(candidate.text, shellMode) &&
-            (candidate.text.startsWith("-") ||
-              candidate.text.length === 0 ||
-              (!isAnyQuoted && /\s/u.test(candidate.text))),
-        );
-        if (affectsOptionParsing) {
-          if (varExpanded.truncated) {
-            const limitMessage = `${filePath}:${fallbackLine}: ${token} exceeds expansion limit and cannot be verified exhaustively`;
-            if (!seenProblems.has(limitMessage)) {
-              seenProblems.add(limitMessage);
-              problems.push(limitMessage);
-            }
-          }
-          expandedSlices = [];
-          const seenSliceKeys = new Set();
-          for (const candidate of varExpanded.candidates) {
-            const parts = isAnyQuoted
-              ? [{ text: candidate.text, line: candidate.line, preExpanded: true }]
-              : candidate.text.trim().length > 0
-                ? candidate.text
-                    .trim()
-                    .split(/\s+/u)
-                    .map((part) => ({ text: part, line: candidate.line, preExpanded: true }))
-                : [];
-            const key = parts.map((part) => `${part.line}:${part.text}`).join("\0");
-            if (!seenSliceKeys.has(key)) {
-              seenSliceKeys.add(key);
-              expandedSlices.push(parts);
-            }
-          }
-        }
-      }
 
-      if (expandedSlices) {
-        const nextVariants = [];
-        for (const existing of argTokenVariants) {
-          for (const slice of expandedSlices) {
-            if (nextVariants.length >= MAX_TOKEN_EXPANSIONS) {
-              argExpansionTruncated = true;
+        if (expandedSlices) {
+          const nextVariants = [];
+          for (const existing of argTokenVariants) {
+            for (const slice of expandedSlices) {
+              if (nextVariants.length >= MAX_TOKEN_EXPANSIONS) {
+                argExpansionTruncated = true;
+                break;
+              }
+              nextVariants.push([...existing, ...slice]);
+            }
+            if (argExpansionTruncated) {
               break;
             }
-            nextVariants.push([...existing, ...slice]);
           }
-          if (argExpansionTruncated) {
-            break;
+          argTokenVariants = nextVariants;
+        } else {
+          for (const existing of argTokenVariants) {
+            existing.push({ text: token, line: fallbackLine, preExpanded: false });
           }
-        }
-        argTokenVariants = nextVariants;
-      } else {
-        for (const existing of argTokenVariants) {
-          existing.push({ text: token, line: fallbackLine, preExpanded: false });
         }
       }
-    }
 
-    if (argExpansionTruncated) {
-      const limitMessage = `${filePath}:${lineNumber}: container command arguments exceed expansion limit and cannot be verified exhaustively`;
-      if (!seenProblems.has(limitMessage)) {
-        seenProblems.add(limitMessage);
-        problems.push(limitMessage);
-      }
-    }
-
-    const imageEntries = [];
-    const seenImageEntries = new Set();
-    const pushImageEntry = (entry) => {
-      const key = `${entry.preExpanded ? "1" : "0"}:${entry.line}:${entry.text}`;
-      if (!seenImageEntries.has(key)) {
-        seenImageEntries.add(key);
-        imageEntries.push(entry);
-      }
-    };
-    const mountEntries = [];
-    const seenMountEntries = new Set();
-    const pushMountEntry = (entry) => {
-      const key = `${entry.preExpanded ? "1" : "0"}:${entry.line}:${entry.text}`;
-      if (!seenMountEntries.has(key)) {
-        seenMountEntries.add(key);
-        mountEntries.push(entry);
-      }
-    };
-
-    for (const argList of argTokenVariants) {
-      let usesPodmanRootfs = false;
-      for (let index = 0; index < argList.length; index += 1) {
-        const entry = argList[index];
-        const token = entry.text;
-        if (token === "--") {
-          if (usesPodmanRootfs) {
-            break;
-          }
-          if (allowMultipleImages) {
-            for (let restIndex = index + 1; restIndex < argList.length; restIndex += 1) {
-              const restToken = argList[restIndex].text;
-              if (
-                restToken === ">" ||
-                restToken === ">>" ||
-                restToken === ">&" ||
-                restToken === "<"
-              ) {
-                restIndex += 1;
-                continue;
-              }
-              pushImageEntry(argList[restIndex]);
-            }
-          } else if (argList[index + 1] !== undefined) {
-            pushImageEntry(argList[index + 1]);
-          }
-          break;
-        }
-        if (token === ">" || token === ">>" || token === ">&" || token === "<") {
-          index += 1;
-          continue;
-        }
-        if (
-          /^\d+$/u.test(token) &&
-          (argList[index + 1]?.text === ">" ||
-            argList[index + 1]?.text === ">>" ||
-            argList[index + 1]?.text === ">&")
-        ) {
-          index += 2;
-          continue;
-        }
-        if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
-          continue;
-        }
-        if (subcommand === "run" && normalizedCli === "podman") {
-          if (token === "--rootfs" || token.toLowerCase() === "--rootfs=true") {
-            usesPodmanRootfs = true;
-            continue;
-          }
-          if (token.toLowerCase() === "--rootfs=false") {
-            usesPodmanRootfs = false;
-            continue;
-          }
-        }
-        if (subcommand === "run" && normalizedCli !== "buildah") {
-          if (token === "--mount") {
-            if (argList[index + 1] !== undefined) {
-              pushMountEntry(argList[index + 1]);
-            }
-            index += 1;
-            continue;
-          }
-          if (token.startsWith("--mount=")) {
-            pushMountEntry({
-              text: token.slice("--mount=".length),
-              line: entry.line,
-              preExpanded: entry.preExpanded,
-            });
-            continue;
-          }
-        }
-        if (token.startsWith("-")) {
-          if (flagConsumesNextArg(token, valueFlags)) {
-            index += 1;
-          }
-          continue;
-        }
-        if (usesPodmanRootfs) {
-          break;
-        }
-        pushImageEntry(entry);
-        if (!allowMultipleImages) {
-          break;
-        }
-      }
-    }
-
-    const allowLocalImageId = subcommand === "run";
-    for (const mountEntry of mountEntries) {
-      const mountToken = mountEntry.text;
-      const fallbackLine = mountEntry.line;
-      const mountExpanded = mountEntry.preExpanded
-        ? { candidates: [{ text: mountToken, line: fallbackLine }], truncated: false }
-        : resolveImageTokenCandidates(mountToken, stepEnv, frame.vars, fallbackLine, shellMode);
-      if (mountExpanded.truncated) {
-        const limitMessage = `${filePath}:${fallbackLine}: ${mountToken} exceeds expansion limit and cannot be verified exhaustively`;
+      if (argExpansionTruncated) {
+        const limitMessage = `${filePath}:${lineNumber}: container command arguments exceed expansion limit and cannot be verified exhaustively`;
         if (!seenProblems.has(limitMessage)) {
           seenProblems.add(limitMessage);
           problems.push(limitMessage);
         }
       }
-      for (const varCandidate of mountExpanded.candidates) {
-        for (const candidate of expandMatrixReferences(
-          varCandidate.text,
-          matrixRows,
-          varCandidate.line,
-        )) {
-          for (const mountImageRef of extractRunMountImageSources(candidate.text)) {
+
+      const imageEntries = [];
+      const seenImageEntries = new Set();
+      const pushImageEntry = (entry) => {
+        const key = `${entry.preExpanded ? "1" : "0"}:${entry.line}:${entry.text}`;
+        if (!seenImageEntries.has(key)) {
+          seenImageEntries.add(key);
+          imageEntries.push(entry);
+        }
+      };
+      const mountEntries = [];
+      const seenMountEntries = new Set();
+      const pushMountEntry = (entry) => {
+        const key = `${entry.preExpanded ? "1" : "0"}:${entry.line}:${entry.text}`;
+        if (!seenMountEntries.has(key)) {
+          seenMountEntries.add(key);
+          mountEntries.push(entry);
+        }
+      };
+
+      for (const argList of argTokenVariants) {
+        let usesPodmanRootfs = false;
+        for (let index = 0; index < argList.length; index += 1) {
+          const entry = argList[index];
+          const token = entry.text;
+          if (token === "--") {
+            if (usesPodmanRootfs) {
+              break;
+            }
+            if (allowMultipleImages) {
+              for (let restIndex = index + 1; restIndex < argList.length; restIndex += 1) {
+                const restToken = argList[restIndex].text;
+                if (
+                  restToken === ">" ||
+                  restToken === ">>" ||
+                  restToken === ">&" ||
+                  restToken === "<"
+                ) {
+                  restIndex += 1;
+                  continue;
+                }
+                pushImageEntry(argList[restIndex]);
+              }
+            } else if (argList[index + 1] !== undefined) {
+              pushImageEntry(argList[index + 1]);
+            }
+            break;
+          }
+          if (token === ">" || token === ">>" || token === ">&" || token === "<") {
+            index += 1;
+            continue;
+          }
+          if (
+            /^\d+$/u.test(token) &&
+            (argList[index + 1]?.text === ">" ||
+              argList[index + 1]?.text === ">>" ||
+              argList[index + 1]?.text === ">&")
+          ) {
+            index += 2;
+            continue;
+          }
+          if (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]"))) {
+            continue;
+          }
+          if (subcommand === "run" && normalizedCli === "podman") {
+            if (token === "--rootfs" || token.toLowerCase() === "--rootfs=true") {
+              usesPodmanRootfs = true;
+              continue;
+            }
+            if (token.toLowerCase() === "--rootfs=false") {
+              usesPodmanRootfs = false;
+              continue;
+            }
+          }
+          if (subcommand === "run" && normalizedCli !== "buildah") {
+            if (token === "--mount") {
+              if (argList[index + 1] !== undefined) {
+                pushMountEntry(argList[index + 1]);
+              }
+              index += 1;
+              continue;
+            }
+            if (token.startsWith("--mount=")) {
+              pushMountEntry({
+                text: token.slice("--mount=".length),
+                line: entry.line,
+                preExpanded: entry.preExpanded,
+              });
+              continue;
+            }
+          }
+          if (token.startsWith("-")) {
+            if (flagConsumesNextArg(token, valueFlags)) {
+              index += 1;
+            }
+            continue;
+          }
+          if (usesPodmanRootfs) {
+            break;
+          }
+          pushImageEntry(entry);
+          if (!allowMultipleImages) {
+            break;
+          }
+        }
+      }
+
+      const allowLocalImageId = subcommand === "run";
+      for (const mountEntry of mountEntries) {
+        const mountToken = mountEntry.text;
+        const fallbackLine = mountEntry.line;
+        const mountExpanded = mountEntry.preExpanded
+          ? { candidates: [{ text: mountToken, line: fallbackLine }], truncated: false }
+          : resolveImageTokenCandidates(mountToken, stepEnv, frame.vars, fallbackLine, shellMode);
+        if (mountExpanded.truncated) {
+          const limitMessage = `${filePath}:${fallbackLine}: ${mountToken} exceeds expansion limit and cannot be verified exhaustively`;
+          if (!seenProblems.has(limitMessage)) {
+            seenProblems.add(limitMessage);
+            problems.push(limitMessage);
+          }
+        }
+        for (const varCandidate of mountExpanded.candidates) {
+          for (const candidate of expandMatrixReferences(
+            varCandidate.text,
+            matrixRows,
+            varCandidate.line,
+          )) {
+            for (const mountImageRef of extractRunMountImageSources(candidate.text)) {
+              if (
+                !mountImageRef ||
+                (isDynamicReference(mountImageRef, shellMode) &&
+                  !hasProvablyUnpinnedLiteralSuffix(mountImageRef, shellMode))
+              ) {
+                continue;
+              }
+              const isValid =
+                isPinnedDigest(mountImageRef) ||
+                (allowLocalImageId && LOCAL_IMAGE_ID_PATTERN.test(mountImageRef));
+              if (!isValid) {
+                const message = `${filePath}:${candidate.line}: ${mountImageRef} is not pinned to a sha256 digest`;
+                if (!seenProblems.has(message)) {
+                  seenProblems.add(message);
+                  problems.push(message);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (imageEntries.length === 0) {
+        if (unknownArrayTokens.length > 0) {
+          problems.push(
+            `${filePath}:${lineNumber}: container image operand in ${unknownArrayTokens[0]} cannot be verified statically`,
+          );
+        }
+        continue;
+      }
+
+      for (const imageEntry of imageEntries) {
+        const imageToken = imageEntry.text;
+        const fallbackLine = imageEntry.line;
+
+        const varExpanded = imageEntry.preExpanded
+          ? { candidates: [{ text: imageToken, line: fallbackLine }], truncated: false }
+          : resolveImageTokenCandidates(imageToken, stepEnv, frame.vars, fallbackLine, shellMode);
+        if (varExpanded.truncated) {
+          const limitMessage = `${filePath}:${fallbackLine}: ${imageToken} exceeds expansion limit and cannot be verified exhaustively`;
+          if (!seenProblems.has(limitMessage)) {
+            seenProblems.add(limitMessage);
+            problems.push(limitMessage);
+          }
+        }
+        for (const varCandidate of varExpanded.candidates) {
+          for (const candidate of expandMatrixReferences(
+            varCandidate.text,
+            matrixRows,
+            varCandidate.line,
+          )) {
             if (
-              !mountImageRef ||
-              (isDynamicReference(mountImageRef, shellMode) &&
-                !hasProvablyUnpinnedLiteralSuffix(mountImageRef, shellMode))
+              !candidate.text ||
+              (isDynamicReference(candidate.text, shellMode) &&
+                !hasProvablyUnpinnedLiteralSuffix(candidate.text, shellMode))
             ) {
               continue;
             }
+            if (allowScratchOperand && candidate.text.toLowerCase() === "scratch") {
+              continue;
+            }
             const isValid =
-              isPinnedDigest(mountImageRef) ||
-              (allowLocalImageId && LOCAL_IMAGE_ID_PATTERN.test(mountImageRef));
+              isPinnedDigest(candidate.text) ||
+              (allowLocalImageId && LOCAL_IMAGE_ID_PATTERN.test(candidate.text));
             if (!isValid) {
-              const message = `${filePath}:${candidate.line}: ${mountImageRef} is not pinned to a sha256 digest`;
+              const message = `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`;
               if (!seenProblems.has(message)) {
                 seenProblems.add(message);
                 problems.push(message);
@@ -8150,60 +8613,10 @@ function inspectShellText(
         }
       }
     }
+  };
 
-    if (imageEntries.length === 0) {
-      if (unknownArrayTokens.length > 0) {
-        problems.push(
-          `${filePath}:${lineNumber}: container image operand in ${unknownArrayTokens[0]} cannot be verified statically`,
-        );
-      }
-      continue;
-    }
-
-    for (const imageEntry of imageEntries) {
-      const imageToken = imageEntry.text;
-      const fallbackLine = imageEntry.line;
-
-      const varExpanded = imageEntry.preExpanded
-        ? { candidates: [{ text: imageToken, line: fallbackLine }], truncated: false }
-        : resolveImageTokenCandidates(imageToken, stepEnv, frame.vars, fallbackLine, shellMode);
-      if (varExpanded.truncated) {
-        const limitMessage = `${filePath}:${fallbackLine}: ${imageToken} exceeds expansion limit and cannot be verified exhaustively`;
-        if (!seenProblems.has(limitMessage)) {
-          seenProblems.add(limitMessage);
-          problems.push(limitMessage);
-        }
-      }
-      for (const varCandidate of varExpanded.candidates) {
-        for (const candidate of expandMatrixReferences(
-          varCandidate.text,
-          matrixRows,
-          varCandidate.line,
-        )) {
-          if (
-            !candidate.text ||
-            (isDynamicReference(candidate.text, shellMode) &&
-              !hasProvablyUnpinnedLiteralSuffix(candidate.text, shellMode))
-          ) {
-            continue;
-          }
-          if (allowScratchOperand && candidate.text.toLowerCase() === "scratch") {
-            continue;
-          }
-          const isValid =
-            isPinnedDigest(candidate.text) ||
-            (allowLocalImageId && LOCAL_IMAGE_ID_PATTERN.test(candidate.text));
-          if (!isValid) {
-            const message = `${filePath}:${candidate.line}: ${candidate.text} is not pinned to a sha256 digest`;
-            if (!seenProblems.has(message)) {
-              seenProblems.add(message);
-              problems.push(message);
-            }
-          }
-        }
-      }
-    }
-  }
+  processEvents(lexShellScript(scriptText, startLine, shellMode), null);
+  inspectUncalledFunctions(scopeStack[0]);
 }
 
 function inspectShellRunScript(
@@ -10266,7 +10679,12 @@ function substituteInputsInAstNode(
           text: substituteInputsInText(entry.text, inputValues, options),
         }))
       : node.lines;
-    const result = { ...node, value: nextValue, lines: nextLines };
+    const result = {
+      ...node,
+      value: nextValue,
+      scalarType: nextValue !== node.value ? "string" : node.scalarType,
+      lines: nextLines,
+    };
     memo.set(node, result);
     return result;
   }
@@ -10863,6 +11281,8 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
     const defaultNode = getMapField(defNode, "default");
     pushValue(defaultNode);
     const optionsNode = getMapField(defNode, "options");
+    const hasFiniteOptions =
+      rawType === "choice" && optionsNode?.kind === "seq" && optionsNode.value.length > 0;
     if (optionsNode?.kind === "seq") {
       for (const optionItem of optionsNode.value) {
         pushValue(optionItem);
@@ -10888,9 +11308,16 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
         }
       }
     }
+    // For free-form inputs (string, number, environment, or choice without
+    // options), keep the default for the omitted-input case and also explore a
+    // caller-supplied unknown value so branches reachable on non-default input
+    // values (e.g. `inputs.count && '...'` when `default: 0`) are checked.
+    if (normalizedType !== "boolean" && !hasFiniteOptions && values.length > 0) {
+      values.push({ unknown: true });
+    }
     const carriesContainerCli =
       allReferenced.has(lowerName) &&
-      values.some((entry) => CONTAINER_CLI_HINT_PATTERN.test(entry.value));
+      values.some((entry) => !entry.unknown && CONTAINER_CLI_HINT_PATTERN.test(entry.value));
     if (!referenced.has(lowerName) && !carriesContainerCli) {
       continue;
     }
@@ -10914,7 +11341,9 @@ function extractWorkflowDispatchInputContexts(doc, filePath, problems) {
           break;
         }
         const clone = new Map(combo);
-        clone.set(inputName, entry);
+        if (!entry.unknown) {
+          clone.set(inputName, entry);
+        }
         nextCombos.push(clone);
       }
       if (truncated) {
@@ -11771,10 +12200,26 @@ export function unpinnedWorkflowContainerReferences(
               outValNode.line,
             );
             const rawEntries = [];
+            let outputTruncated = Boolean(resolved.truncated);
             for (const cand of resolved.candidates) {
-              for (const mCand of expandMatrixReferences(cand.text, jobMatrixRows, cand.line)) {
+              for (const mCand of expandMatrixReferences(
+                cand.text,
+                jobMatrixRows,
+                cand.line,
+                outputEnv,
+              )) {
+                if (rawEntries.length >= MAX_VAR_VALUES) {
+                  outputTruncated = true;
+                  break;
+                }
                 rawEntries.push({ value: mCand.text, line: mCand.line });
               }
+              if (outputTruncated && rawEntries.length >= MAX_VAR_VALUES) {
+                break;
+              }
+            }
+            if (outputTruncated) {
+              rawEntries.push({ value: "", line: outValNode.line, truncated: true });
             }
             const sanitized = sanitizeGithubOutputEntries(rawEntries, "posix");
             if (sanitized.length > 0) {

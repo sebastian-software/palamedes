@@ -3723,14 +3723,21 @@ describe("workflow contracts", () => {
       "<memory>:29: node:24 is not pinned to a sha256 digest",
       "<memory>:32: busybox:1.36 is not pinned to a sha256 digest",
     ]);
-    // A known non-empty default on `inputs.image` short-circuits `||` before a
-    // fallback branch, while an omitted optional dispatch input reaches it.
+    // A required finite `choice` dispatch input short-circuits `||` before a
+    // fallback branch, while a free-form string input (even with a non-empty
+    // default) or an omitted optional input can still reach the fallback when
+    // dispatched with an empty value.
     expect(
       unpinnedWorkflowContainerReferences(
         [
           "on:",
           "  workflow_dispatch:",
           "    inputs:",
+          "      pinned_choice:",
+          "        type: choice",
+          "        required: true",
+          "        options:",
+          `          - node:24@${digest}`,
           "      pinned_default:",
           `        default: node:24@${digest}`,
           "      optional_img:",
@@ -3738,14 +3745,20 @@ describe("workflow contracts", () => {
           "jobs:",
           "  short-circuit:",
           "    runs-on: ubuntu-latest",
-          "    container: ${{ inputs.pinned_default || 'node:24' }}",
+          "    container: ${{ inputs.pinned_choice || 'node:24' }}",
+          "  freeform-reaches-fallback:",
+          "    runs-on: ubuntu-latest",
+          "    container: ${{ inputs.pinned_default || 'busybox:1.36' }}",
           "  reaches-fallback:",
           "    runs-on: ubuntu-latest",
           "    container: ${{ inputs.optional_img || 'alpine:3.20' }}",
           "",
         ].join("\n"),
       ),
-    ).toEqual(["<memory>:14: alpine:3.20 is not pinned to a sha256 digest"]);
+    ).toEqual([
+      "<memory>:22: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:19: busybox:1.36 is not pinned to a sha256 digest",
+    ]);
     // Non-input triggers (`push`, `pull_request`) are analyzed per-event so
     // push-only `GITHUB_ENV` writes are not polluted by the pull_request pass;
     // boolean `false` and numeric `0` `inputs.*` remain falsy in `||`
@@ -4022,6 +4035,85 @@ describe("workflow contracts", () => {
       "<memory>:33: alpine:3.20 is not pinned to a sha256 digest",
       "<memory>:43: busybox:1.36 is not pinned to a sha256 digest",
       "<memory>:59: alpine:3.20 is not pinned to a sha256 digest",
+    ]);
+    // Typed matrix scalars (`false`, `0`), free-form workflow_dispatch inputs
+    // with non-default caller values, brace-bodied Bash function calls mutating
+    // caller variables (while `local` stays scoped), hyphenated `$GITHUB_OUTPUT`
+    // keys (single-line and heredoc), and job-output expansion truncation.
+    const truncatedBranches = (varName) => [
+      ...Array.from(
+        { length: 9 },
+        (_, i) =>
+          `          ${i === 0 ? "if" : "elif"} [ "$X" = "${i}" ]; then echo "${varName}=a${i}" >> "$GITHUB_OUTPUT"`,
+      ),
+      "          fi",
+    ];
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      count:",
+          "        type: number",
+          "        default: 0",
+          "jobs:",
+          "  typed-matrix:",
+          "    runs-on: ubuntu-latest",
+          "    strategy:",
+          "      matrix:",
+          "        flag: [false]",
+          "        zero: [0]",
+          `    container: \${{ (matrix.flag || matrix.zero) && 'alpine:3.20' || 'node:24@${digest}' }}`,
+          "    steps:",
+          "      - run: echo ok",
+          "  dispatch-freeform:",
+          "    runs-on: ubuntu-latest",
+          `    container: \${{ inputs.count && 'busybox:1.36' || 'node:24@${digest}' }}`,
+          "    steps:",
+          "      - run: echo ok",
+          "  fn-and-hyphen-outputs:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - id: pick",
+          "        run: |",
+          "          IMAGE=placeholder:latest",
+          "          set_pinned() {",
+          `            IMAGE=node:24@${digest}`,
+          "            local LOCAL_ONLY=ignored:latest",
+          "          }",
+          "          set_pinned",
+          '          docker pull "$IMAGE"',
+          `          echo "image-ref=node:24@${digest}" >> "$GITHUB_OUTPUT"`,
+          "          cat <<'EOF' >> \"$GITHUB_OUTPUT\"",
+          "          multi-ref<<END",
+          `          alpine:3.20@${digest}`,
+          "          END",
+          "          EOF",
+          "      - run: |",
+          "          docker pull \"${{ steps.pick.outputs.image-ref || 'unpinned-fallback:1' }}\"",
+          "          docker pull \"${{ steps.pick.outputs.multi-ref || 'unpinned-fallback:2' }}\"",
+          "  trunc-producer:",
+          "    runs-on: ubuntu-latest",
+          "    outputs:",
+          `      ref: \${{ format('{0}/{1}@${digest}', steps.gen.outputs.x, steps.gen.outputs.y) }}`,
+          "    steps:",
+          "      - id: gen",
+          "        run: |",
+          ...truncatedBranches("x"),
+          ...truncatedBranches("y"),
+          "  trunc-consumer:",
+          "    needs: trunc-producer",
+          "    runs-on: ubuntu-latest",
+          "    container: ${{ needs.trunc-producer.outputs.ref }}",
+          "    steps:",
+          "      - run: echo ok",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:73: ${{ needs.trunc-producer.outputs.ref }} exceeds expansion limit and cannot be verified exhaustively",
+      "<memory>:19: busybox:1.36 is not pinned to a sha256 digest",
     ]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
