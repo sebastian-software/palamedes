@@ -1315,25 +1315,11 @@ fn default_platform_equivalence() -> DirFilenameEquivalence {
     }
 }
 
-fn probe_unknown_dir_equivalence(dir: &ContainedDir) -> Option<DirFilenameEquivalence> {
-    let case_insensitive = dir.probe_names_equivalent(OsStr::new("a"), OsStr::new("A"))?;
-    let unicode_normalizing = dir
-        .probe_names_equivalent(OsStr::new("caf\u{00e9}"), OsStr::new("cafe\u{0301}"))
-        .unwrap_or(false);
-    Some(match (case_insensitive, unicode_normalizing) {
-        (false, false) => DirFilenameEquivalence::Exact,
-        (false, true) => DirFilenameEquivalence::UnicodeNfd,
-        (true, false) => DirFilenameEquivalence::CaseInsensitiveNtfs,
-        (true, true) => DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf,
-    })
-}
-
 fn resolve_directory_equivalence(
     dir: &ContainedDir,
     identity: Option<FileIdentity>,
     parent: Option<(Option<FileIdentity>, DirFilenameEquivalence, bool)>,
     cache: &mut HashMap<FileIdentity, (DirFilenameEquivalence, bool)>,
-    allow_mutating_probe: bool,
 ) -> (DirFilenameEquivalence, bool) {
     if let Some(id) = identity
         && let Some(&cached) = cache.get(&id)
@@ -1341,23 +1327,20 @@ fn resolve_directory_equivalence(
         return cached;
     }
     let same_vol_parent = match (identity, parent) {
-        (Some(id), Some((Some(parent_id), parent_eq, parent_confirmed)))
-            if id.same_volume(parent_id) =>
-        {
-            Some((parent_eq, parent_confirmed))
+        (Some(id), Some((Some(parent_id), parent_eq, true))) if id.same_volume(parent_id) => {
+            Some((parent_eq, true))
         }
         _ => None,
     };
+    // Keep directory traversal strictly read-only: when the mount's policy is
+    // unknown, bucket under the broadest equivalence (`confirmed = false`) and
+    // defer any mutating probe until two candidate paths actually collide in
+    // the same bucket.
     let resolved = dir
         .filename_equivalence()
-        .or_else(|| {
-            allow_mutating_probe
-                .then(|| probe_unknown_dir_equivalence(dir))
-                .flatten()
-        })
         .map(|eq| (eq, true))
         .or(same_vol_parent)
-        .unwrap_or_else(|| (default_platform_equivalence(), false));
+        .unwrap_or((DirFilenameEquivalence::CaseInsensitiveUnicodeNfdicf, false));
     if let Some(id) = identity {
         cache.insert(id, resolved);
     }
@@ -1400,7 +1383,14 @@ fn segment_pair_collides_on_dir(
     } else {
         anchor_dir.probe_existing_names_equivalent(left, right)
     };
-    probed != Some(false)
+    match probed {
+        Some(equivalent) => equivalent,
+        None if !equivalence_confirmed => {
+            let fallback = default_platform_equivalence();
+            fold_os_segment(left, fallback) == fold_os_segment(right, fallback)
+        }
+        None => true,
+    }
 }
 
 #[cfg(test)]
@@ -1453,6 +1443,9 @@ fn reject_colliding_extract_targets(
     config: &LoadedConfig,
     allow_mutating_probe: bool,
 ) -> Result<(), CliError> {
+    if write_jobs.len() <= 1 {
+        return Ok(());
+    }
     let mut targets = Vec::with_capacity(write_jobs.len());
     for (catalog, _, locale) in write_jobs {
         let catalog_path =
@@ -1467,6 +1460,9 @@ pub(crate) fn reject_colliding_catalog_targets(
     targets: &[(&str, PathBuf)],
     allow_mutating_probe: bool,
 ) -> Result<(), CliError> {
+    if targets.len() <= 1 {
+        return Ok(());
+    }
     let mut dir_eq_cache: HashMap<FileIdentity, (DirFilenameEquivalence, bool)> = HashMap::new();
     let mut anchor_tries: HashMap<ExtractTargetAnchor, TargetPrefixNode<'_>> = HashMap::new();
     let mut seen_identities: HashMap<FileIdentity, (&str, PathBuf)> = HashMap::new();
@@ -1487,13 +1483,8 @@ pub(crate) fn reject_colliding_catalog_targets(
             path: root_dir.to_path_buf(),
             source: error.into_io_error(),
         })?;
-        let (mut current_eq, mut current_eq_confirmed) = resolve_directory_equivalence(
-            &current,
-            current_id,
-            None,
-            &mut dir_eq_cache,
-            allow_mutating_probe,
-        );
+        let (mut current_eq, mut current_eq_confirmed) =
+            resolve_directory_equivalence(&current, current_id, None, &mut dir_eq_cache);
         let mut existing_prefix = PathBuf::new();
         let mut folded_segments: Vec<OsString> = Vec::new();
         let mut raw_segments: Vec<OsString> = Vec::new();
@@ -1538,7 +1529,6 @@ pub(crate) fn reject_colliding_catalog_targets(
                         child_id,
                         Some((current_id, current_eq, current_eq_confirmed)),
                         &mut dir_eq_cache,
-                        allow_mutating_probe,
                     );
                     current = child;
                     current_id = child_id;

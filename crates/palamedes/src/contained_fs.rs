@@ -204,11 +204,9 @@ pub struct FileIdentity {
     #[cfg(unix)]
     ino: u64,
     #[cfg(windows)]
-    volume_serial: u32,
+    volume_serial: u64,
     #[cfg(windows)]
-    file_index_high: u32,
-    #[cfg(windows)]
-    file_index_low: u32,
+    file_id: [u8; 16],
     #[cfg(not(any(unix, windows)))]
     _unsupported: (),
 }
@@ -217,6 +215,9 @@ pub struct FileIdentity {
 /// cross-process catalog locks independently of path spelling or case.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TargetLockKey {
+    #[cfg(windows)]
+    dir_id: Option<FileIdentity>,
+    #[cfg(not(windows))]
     dir_id: FileIdentity,
     target_hash: u64,
 }
@@ -497,6 +498,8 @@ mod platform {
         xattrs: Vec<(CString, Vec<u8>)>,
         #[cfg(target_os = "linux")]
         linux_flags: Option<libc::c_int>,
+        #[cfg(target_os = "linux")]
+        linux_projid: Option<u32>,
     }
 
     enum SnapshotMatch {
@@ -1561,12 +1564,16 @@ mod platform {
             let xattrs = read_existing_user_xattrs(existing_fd.as_raw_fd())?;
             #[cfg(target_os = "linux")]
             let linux_flags = read_linux_inode_flags(existing_fd.as_raw_fd())?;
+            #[cfg(target_os = "linux")]
+            let linux_projid = read_linux_project_id(existing_fd.as_raw_fd())?;
             Ok(Some(ExistingTarget {
                 entry,
                 acl,
                 xattrs,
                 #[cfg(target_os = "linux")]
                 linux_flags,
+                #[cfg(target_os = "linux")]
+                linux_projid,
             }))
         }
 
@@ -1940,7 +1947,8 @@ mod platform {
                 return Ok(SnapshotMatch::Replaced);
             }
             #[cfg(target_os = "linux")]
-            let linux_flags_changed = current.linux_flags != expected.linux_flags;
+            let linux_flags_changed = current.linux_flags != expected.linux_flags
+                || current.linux_projid != expected.linux_projid;
             #[cfg(not(target_os = "linux"))]
             let linux_flags_changed = false;
             if current.entry != expected.entry
@@ -5251,10 +5259,157 @@ mod platform {
     }
 
     #[cfg(target_os = "linux")]
+    #[repr(C)]
+    struct LinuxFsxattr {
+        fsx_xflags: u32,
+        fsx_extsize: u32,
+        fsx_nextents: u32,
+        fsx_projid: u32,
+        fsx_cowextsize: u32,
+        fsx_pad: [u8; 8],
+    }
+
+    #[cfg(all(
+        target_os = "linux",
+        any(
+            target_arch = "powerpc",
+            target_arch = "powerpc64",
+            target_arch = "mips",
+            target_arch = "mips64",
+            target_arch = "sparc",
+            target_arch = "sparc64"
+        )
+    ))]
+    const FS_IOC_FSGETXATTR: libc::Ioctl = 0x401C_581F_u32 as libc::Ioctl;
+    #[cfg(all(
+        target_os = "linux",
+        any(
+            target_arch = "powerpc",
+            target_arch = "powerpc64",
+            target_arch = "mips",
+            target_arch = "mips64",
+            target_arch = "sparc",
+            target_arch = "sparc64"
+        )
+    ))]
+    const FS_IOC_FSSETXATTR: libc::Ioctl = 0x801C_5820_u32 as libc::Ioctl;
+
+    #[cfg(all(
+        target_os = "linux",
+        not(any(
+            target_arch = "powerpc",
+            target_arch = "powerpc64",
+            target_arch = "mips",
+            target_arch = "mips64",
+            target_arch = "sparc",
+            target_arch = "sparc64"
+        ))
+    ))]
+    const FS_IOC_FSGETXATTR: libc::Ioctl = 0x801C_581F_u32 as libc::Ioctl;
+    #[cfg(all(
+        target_os = "linux",
+        not(any(
+            target_arch = "powerpc",
+            target_arch = "powerpc64",
+            target_arch = "mips",
+            target_arch = "mips64",
+            target_arch = "sparc",
+            target_arch = "sparc64"
+        ))
+    ))]
+    const FS_IOC_FSSETXATTR: libc::Ioctl = 0x401C_5820_u32 as libc::Ioctl;
+
+    #[cfg(target_os = "linux")]
+    fn read_linux_project_id(fd: std::os::fd::RawFd) -> io::Result<Option<u32>> {
+        let mut attr = LinuxFsxattr {
+            fsx_xflags: 0,
+            fsx_extsize: 0,
+            fsx_nextents: 0,
+            fsx_projid: 0,
+            fsx_cowextsize: 0,
+            fsx_pad: [0; 8],
+        };
+        // SAFETY: Linux `FS_IOC_FSGETXATTR` writes a 28-byte `struct fsxattr`.
+        if unsafe { libc::ioctl(fd, FS_IOC_FSGETXATTR, &mut attr) } == 0 {
+            return Ok(Some(attr.fsx_projid));
+        }
+        let error = io::Error::last_os_error();
+        if matches!(
+            error.raw_os_error(),
+            Some(libc::ENOTTY | libc::EOPNOTSUPP | libc::EINVAL | libc::ENOSYS)
+        ) {
+            return Ok(None);
+        }
+        Err(error)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn apply_linux_project_id(
+        temp_fd: std::os::fd::RawFd,
+        expected_projid: Option<u32>,
+    ) -> io::Result<()> {
+        let Some(expected) = expected_projid else {
+            return Ok(());
+        };
+        let mut attr = LinuxFsxattr {
+            fsx_xflags: 0,
+            fsx_extsize: 0,
+            fsx_nextents: 0,
+            fsx_projid: 0,
+            fsx_cowextsize: 0,
+            fsx_pad: [0; 8],
+        };
+        // SAFETY: Linux `FS_IOC_FSGETXATTR` writes a 28-byte `struct fsxattr`.
+        if unsafe { libc::ioctl(temp_fd, FS_IOC_FSGETXATTR, &mut attr) } != 0 {
+            let error = io::Error::last_os_error();
+            if expected == 0
+                && matches!(
+                    error.raw_os_error(),
+                    Some(libc::ENOTTY | libc::EOPNOTSUPP | libc::EINVAL | libc::ENOSYS)
+                )
+            {
+                return Ok(());
+            }
+            return Err(error);
+        }
+        if attr.fsx_projid != expected {
+            attr.fsx_projid = expected;
+            // SAFETY: Linux `FS_IOC_FSSETXATTR` reads a 28-byte `struct fsxattr`.
+            if unsafe { libc::ioctl(temp_fd, FS_IOC_FSSETXATTR, &mut attr) } != 0 {
+                let error = io::Error::last_os_error();
+                return Err(io::Error::new(
+                    error.kind(),
+                    format!("cannot safely preserve Linux project ID on replacement: {error}"),
+                ));
+            }
+            let mut verified = LinuxFsxattr {
+                fsx_xflags: 0,
+                fsx_extsize: 0,
+                fsx_nextents: 0,
+                fsx_projid: 0,
+                fsx_cowextsize: 0,
+                fsx_pad: [0; 8],
+            };
+            // SAFETY: Linux `FS_IOC_FSGETXATTR` writes a 28-byte `struct fsxattr`.
+            if unsafe { libc::ioctl(temp_fd, FS_IOC_FSGETXATTR, &mut verified) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if verified.fsx_projid != expected {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "cannot verify Linux project ID preservation on replacement",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
     fn apply_linux_pre_write_inode_flags(
         temp_fd: std::os::fd::RawFd,
         existing: &ExistingTarget,
     ) -> io::Result<()> {
+        apply_linux_project_id(temp_fd, existing.linux_projid)?;
         let Some(expected) = existing.linux_flags else {
             return Ok(());
         };
@@ -5351,8 +5506,6 @@ mod platform {
                 if raw == Some(libc::EOPNOTSUPP)
                     || raw == Some(libc::ENOTSUP)
                     || raw == Some(libc::ENOSYS)
-                    || raw == Some(libc::EPERM)
-                    || raw == Some(libc::EACCES)
                 {
                     return Ok(());
                 }
@@ -5384,8 +5537,6 @@ mod platform {
             if raw == Some(libc::EOPNOTSUPP)
                 || raw == Some(libc::ENOTSUP)
                 || raw == Some(libc::ENOSYS)
-                || raw == Some(libc::EPERM)
-                || raw == Some(libc::EACCES)
             {
                 return Ok(());
             }
@@ -5672,9 +5823,13 @@ mod platform {
                 ));
             }
         }
-        if (temp_stat.st_mode & 0o7777) != existing.entry.mode {
+        // Clear `S_ISUID` and `S_ISGID` when publishing new file contents so
+        // replacement never preserves privilege bits that an in-place Unix
+        // write would strip, while retaining ordinary permissions and sticky bit.
+        let target_mode = existing.entry.mode & !(libc::S_ISUID | libc::S_ISGID);
+        if (temp_stat.st_mode & 0o7777) != target_mode {
             // SAFETY: `temp_fd` is an open file descriptor.
-            if unsafe { libc::fchmod(temp_fd, existing.entry.mode) } != 0 {
+            if unsafe { libc::fchmod(temp_fd, target_mode) } != 0 {
                 return Err(io::Error::last_os_error());
             }
         }
@@ -6082,11 +6237,25 @@ mod platform {
     const FILE_ATTRIBUTE_HIDDEN: u32 = 0x0000_0002;
     const FILE_ATTRIBUTE_TEMPORARY: u32 = 0x0000_0100;
 
+    const FILE_ID_INFO_CLASS: i32 = 18;
+
+    #[repr(C)]
+    struct FileIdInfo {
+        volume_serial_number: u64,
+        file_id: [u8; 16],
+    }
+
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn GetFileInformationByHandle(
             file: *mut c_void,
             file_information: *mut ByHandleFileInformation,
+        ) -> i32;
+        fn GetFileInformationByHandleEx(
+            file: *mut c_void,
+            file_information_class: i32,
+            file_information: *mut c_void,
+            buffer_size: u32,
         ) -> i32;
         fn DeviceIoControl(
             device: *mut c_void,
@@ -6340,15 +6509,24 @@ mod platform {
     }
 
     const WINDOWS_DIR_LOCK_NAME: &str = ".pmds-lock";
+    static DIR_INSTANCE_NONCE: AtomicU64 = AtomicU64::new(1);
 
     /// Open directory handle on Windows used for strictly handle-relative child
     /// operations via `NtCreateFile` and `NtSetInformationFile`.
     #[derive(Debug)]
     pub struct ContainedDir {
         handle: OwnedHandle,
+        instance_id: u64,
     }
 
     impl ContainedDir {
+        fn from_handle(handle: OwnedHandle) -> Self {
+            Self {
+                handle,
+                instance_id: DIR_INSTANCE_NONCE.fetch_add(1, Ordering::Relaxed),
+            }
+        }
+
         /// Opens `root_dir` as the anchor directory handle.
         ///
         /// Uses [`OpenOptions`] so Rust's standard Windows path handling
@@ -6372,7 +6550,7 @@ mod platform {
                     format!("{} is not a directory", root_dir.display()),
                 )));
             }
-            Ok(Self { handle })
+            Ok(Self::from_handle(handle))
         }
 
         /// Opens `relative_dir` under `root_dir` handle-relatively without
@@ -6425,7 +6603,7 @@ mod platform {
                         format!("\"{}\" is not a directory", segment.to_string_lossy()),
                     )));
                 }
-                current = Self { handle: next };
+                current = Self::from_handle(next);
             }
             Ok(Some(current))
         }
@@ -6469,21 +6647,18 @@ mod platform {
                     format!("\"{}\" is not a directory", segment.to_string_lossy()),
                 )));
             }
-            Ok(Some(Self { handle: next }))
+            Ok(Some(Self::from_handle(next)))
         }
 
-        /// Returns the on-disk identity of this directory itself.
+        /// Returns the 128-bit on-disk identity of this directory itself via
+        /// `GetFileInformationByHandleEx(FileIdInfo)`, or `None` when the
+        /// volume does not expose full 128-bit file IDs.
         ///
         /// # Errors
         ///
         /// Returns [`ContainedFsError::Io`] on OS errors.
         pub fn self_identity(&self) -> Result<Option<FileIdentity>, ContainedFsError> {
-            let info = file_information(self.handle.as_raw_handle())?;
-            Ok(Some(FileIdentity {
-                volume_serial: info.volume_serial_number,
-                file_index_high: info.file_index_high,
-                file_index_low: info.file_index_low,
-            }))
+            handle_file_identity(self.handle.as_raw_handle())
         }
 
         /// Detects the filename equivalence policy of this Windows directory,
@@ -6609,12 +6784,9 @@ mod platform {
                 std::ptr::null_mut(),
             )
             .ok()?;
-            let left_info = file_information(left_handle.as_raw_handle()).ok()?;
-            let left_id = FileIdentity {
-                volume_serial: left_info.volume_serial_number,
-                file_index_high: left_info.file_index_high,
-                file_index_low: left_info.file_index_low,
-            };
+            let left_id = handle_file_identity(left_handle.as_raw_handle())
+                .ok()
+                .flatten()?;
             let result = match nt_create_relative(
                 probe_dir.handle.as_raw_handle(),
                 right,
@@ -6626,12 +6798,9 @@ mod platform {
                 std::ptr::null_mut(),
             ) {
                 Ok(right_handle) => {
-                    let right_info = file_information(right_handle.as_raw_handle()).ok()?;
-                    let right_id = FileIdentity {
-                        volume_serial: right_info.volume_serial_number,
-                        file_index_high: right_info.file_index_high,
-                        file_index_low: right_info.file_index_low,
-                    };
+                    let right_id = handle_file_identity(right_handle.as_raw_handle())
+                        .ok()
+                        .flatten()?;
                     Some(left_id == right_id)
                 }
                 Err(status) if is_not_found_status(status) => Some(false),
@@ -6671,16 +6840,22 @@ mod platform {
             file_name: &OsStr,
         ) -> Result<super::TargetLockKey, ContainedFsError> {
             validate_single_file_name(file_name)?;
-            let dir_id = self.self_identity()?.ok_or_else(|| {
-                ContainedFsError::Io(io::Error::other("missing Windows directory identity"))
-            })?;
-            // Coordinate directory-wide (matching Unix) so NTFS 8.3 short-name
-            // aliases, case variants, and long filenames targeting the same
-            // catalog always serialize under one lock key.
-            Ok(super::TargetLockKey {
-                dir_id,
-                target_hash: 0,
-            })
+            // Coordinate directory-wide (matching Unix) when 128-bit `FileIdInfo`
+            // is available so NTFS 8.3 short-name aliases, case variants, and
+            // ReFS directories serialize under one unambiguous lock key. When
+            // the volume does not expose full 128-bit IDs, key by this handle's
+            // unique instance ID so distinct directories never collide as
+            // reentrant while same-handle nested calls still reenter safely.
+            match self.self_identity()? {
+                Some(dir_id) => Ok(super::TargetLockKey {
+                    dir_id: Some(dir_id),
+                    target_hash: 0,
+                }),
+                None => Ok(super::TargetLockKey {
+                    dir_id: None,
+                    target_hash: self.instance_id,
+                }),
+            }
         }
 
         /// Acquires an exclusive cross-process, cross-session, and cross-thread
@@ -6947,7 +7122,7 @@ mod platform {
             validate_single_file_name(file_name)?;
             Ok(self
                 .inspect_entry(file_name, false)?
-                .map(|(identity, _)| identity))
+                .and_then(|(identity, _)| identity))
         }
 
         /// Reads `file_name` handle-relatively without following reparse points.
@@ -7087,8 +7262,8 @@ mod platform {
             let _target_lock = self.lock_target(file_name)?;
             for _ in 0..8 {
                 let existing_entry = self.inspect_entry(file_name, true)?;
-                let existing_identity = existing_entry.as_ref().map(|(identity, _)| *identity);
-                let target_existed = existing_identity.is_some();
+                let target_existed = existing_entry.is_some();
+                let existing_identity = existing_entry.as_ref().and_then(|(identity, _)| *identity);
                 let mut existing_security = existing_entry.and_then(|(_, security)| security);
                 let has_security_descriptors = existing_security.as_ref().is_some_and(|security| {
                     security.owner_sd.is_some()
@@ -7103,46 +7278,43 @@ mod platform {
                         || security.has_extended_attributes
                         || (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) != 0
                 });
-                if needs_transacted_update {
-                    if let Some(expected_identity) = existing_identity {
-                        match self.try_overwrite_existing_transacted(
-                            file_name,
-                            expected_identity,
-                            bytes,
-                            durability,
-                        )? {
-                            TransactedOverwriteOutcome::Committed => {
-                                return Ok(ContainedWriteOutcome::Committed);
-                            }
-                            TransactedOverwriteOutcome::Unsupported => {
-                                let reason = if existing_security
-                                    .as_ref()
-                                    .is_some_and(|security| security.is_encrypted)
-                                {
-                                    "cannot safely preserve Windows EFS encryption recipients across atomic replacement"
-                                } else if existing_security
-                                    .as_ref()
-                                    .is_some_and(|security| security.has_named_streams)
-                                {
-                                    "cannot safely preserve Windows NTFS named data streams across atomic replacement"
-                                } else if existing_security
-                                    .as_ref()
-                                    .is_some_and(|security| security.has_extended_attributes)
-                                {
-                                    "cannot safely preserve Windows NTFS extended attributes across atomic replacement"
-                                } else if existing_security.as_ref().is_some_and(|security| {
-                                    (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES)
-                                        != 0
-                                }) {
-                                    "cannot safely preserve per-file Windows NTFS storage attributes across atomic replacement"
-                                } else {
-                                    "cannot atomically replace existing Windows file without SeSecurityPrivilege or NTFS TxF because audit SACL preservation cannot be guaranteed"
-                                };
-                                return Err(ContainedFsError::Io(io::Error::new(
-                                    io::ErrorKind::Unsupported,
-                                    reason,
-                                )));
-                            }
+                if target_existed && needs_transacted_update {
+                    match self.try_overwrite_existing_transacted(
+                        file_name,
+                        existing_identity,
+                        bytes,
+                        durability,
+                    )? {
+                        TransactedOverwriteOutcome::Committed => {
+                            return Ok(ContainedWriteOutcome::Committed);
+                        }
+                        TransactedOverwriteOutcome::Unsupported => {
+                            let reason = if existing_security
+                                .as_ref()
+                                .is_some_and(|security| security.is_encrypted)
+                            {
+                                "cannot safely preserve Windows EFS encryption recipients across atomic replacement"
+                            } else if existing_security
+                                .as_ref()
+                                .is_some_and(|security| security.has_named_streams)
+                            {
+                                "cannot safely preserve Windows NTFS named data streams across atomic replacement"
+                            } else if existing_security
+                                .as_ref()
+                                .is_some_and(|security| security.has_extended_attributes)
+                            {
+                                "cannot safely preserve Windows NTFS extended attributes across atomic replacement"
+                            } else if existing_security.as_ref().is_some_and(|security| {
+                                (security.file_attributes & UNPRESERVABLE_STORAGE_ATTRIBUTES) != 0
+                            }) {
+                                "cannot safely preserve per-file Windows NTFS storage attributes across atomic replacement"
+                            } else {
+                                "cannot atomically replace existing Windows file without SeSecurityPrivilege or NTFS TxF because audit SACL preservation cannot be guaranteed"
+                            };
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::Unsupported,
+                                reason,
+                            )));
                         }
                     }
                 }
@@ -7218,7 +7390,7 @@ mod platform {
                     temp_guard.file.sync_all()?;
                 }
 
-                if let Some(expected_identity) = existing_identity {
+                if target_existed {
                     let current = self.inspect_entry(file_name, true)?;
                     let Some((current_identity, mut current_security)) = current else {
                         return Err(ContainedFsError::Io(io::Error::new(
@@ -7229,7 +7401,9 @@ mod platform {
                             ),
                         )));
                     };
-                    if current_identity != expected_identity {
+                    if let Some(expected_identity) = existing_identity
+                        && current_identity != Some(expected_identity)
+                    {
                         return Err(ContainedFsError::Io(io::Error::new(
                             io::ErrorKind::AlreadyExists,
                             format!(
@@ -7288,7 +7462,7 @@ mod platform {
             &self,
             file_name: &OsStr,
             for_replace: bool,
-        ) -> Result<Option<(FileIdentity, Option<ExistingWindowsSecurity>)>, ContainedFsError>
+        ) -> Result<Option<(Option<FileIdentity>, Option<ExistingWindowsSecurity>)>, ContainedFsError>
         {
             let access = if for_replace {
                 FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE
@@ -7374,20 +7548,14 @@ mod platform {
             } else {
                 None
             };
-            Ok(Some((
-                FileIdentity {
-                    volume_serial: info.volume_serial_number,
-                    file_index_high: info.file_index_high,
-                    file_index_low: info.file_index_low,
-                },
-                security,
-            )))
+            let identity = handle_file_identity(handle.as_raw_handle())?;
+            Ok(Some((identity, security)))
         }
 
         fn try_overwrite_existing_transacted(
             &self,
             file_name: &OsStr,
-            expected_identity: FileIdentity,
+            expected_identity: Option<FileIdentity>,
             bytes: &[u8],
             durability: ContainedWriteDurability,
         ) -> Result<TransactedOverwriteOutcome, ContainedFsError> {
@@ -7487,12 +7655,10 @@ mod platform {
                     file_name.to_string_lossy()
                 )));
             }
-            let live_identity = FileIdentity {
-                volume_serial: info.volume_serial_number,
-                file_index_high: info.file_index_high,
-                file_index_low: info.file_index_low,
-            };
-            if live_identity != expected_identity {
+            let live_identity = handle_file_identity(handle.as_raw_handle())?;
+            if let Some(expected_identity) = expected_identity
+                && live_identity != Some(expected_identity)
+            {
                 return Err(ContainedFsError::Io(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     format!(
@@ -7523,7 +7689,7 @@ mod platform {
         fn overwrite_existing_exclusively(
             &self,
             file_name: &OsStr,
-            expected_identity: FileIdentity,
+            expected_identity: Option<FileIdentity>,
             bytes: &[u8],
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
@@ -7579,12 +7745,10 @@ mod platform {
                     file_name.to_string_lossy()
                 )));
             }
-            let live_identity = FileIdentity {
-                volume_serial: info.volume_serial_number,
-                file_index_high: info.file_index_high,
-                file_index_low: info.file_index_low,
-            };
-            if live_identity != expected_identity {
+            let live_identity = handle_file_identity(handle.as_raw_handle())?;
+            if let Some(expected_identity) = expected_identity
+                && live_identity != Some(expected_identity)
+            {
                 return Err(ContainedFsError::Io(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     format!(
@@ -8538,6 +8702,39 @@ mod platform {
             ));
         }
         Ok(())
+    }
+
+    fn handle_file_identity(handle: *mut c_void) -> Result<Option<FileIdentity>, ContainedFsError> {
+        let mut id_info = std::mem::MaybeUninit::<FileIdInfo>::zeroed();
+        // SAFETY: `handle` is open and `id_info` is valid for `size_of::<FileIdInfo>()` bytes.
+        let ok = unsafe {
+            GetFileInformationByHandleEx(
+                handle,
+                FILE_ID_INFO_CLASS,
+                id_info.as_mut_ptr().cast::<c_void>(),
+                u32::try_from(std::mem::size_of::<FileIdInfo>()).unwrap_or(24),
+            )
+        };
+        if ok == 0 {
+            let error = io::Error::last_os_error();
+            const ERROR_INVALID_PARAMETER: i32 = 87;
+            if matches!(
+                error.raw_os_error(),
+                Some(ERROR_INVALID_FUNCTION | ERROR_NOT_SUPPORTED | ERROR_INVALID_PARAMETER)
+            ) {
+                return Ok(None);
+            }
+            return Err(ContainedFsError::Io(error));
+        }
+        // SAFETY: `GetFileInformationByHandleEx(FileIdInfo)` succeeded and initialized `id_info`.
+        let id_info = unsafe { id_info.assume_init() };
+        if id_info.volume_serial_number == 0 && id_info.file_id == [0u8; 16] {
+            return Ok(None);
+        }
+        Ok(Some(FileIdentity {
+            volume_serial: id_info.volume_serial_number,
+            file_id: id_info.file_id,
+        }))
     }
 
     fn file_information(handle: *mut c_void) -> Result<ByHandleFileInformation, ContainedFsError> {
@@ -10248,6 +10445,45 @@ mod tests {
             e_claim_used,
             format!(".pmds-claim-{}-1", lock_id.ino),
             "writer E must serialize at generation 1 instead of sneaking into generation 0"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacing_file_strips_setuid_and_setgid_bits() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let file_path = root.path().join("en.mjs");
+        fs::write(&file_path, "export default { v: 1 };\n").expect("seed module");
+        if fs::set_permissions(&file_path, fs::Permissions::from_mode(0o4755)).is_err() {
+            // Filesystem or mount (e.g. nosuid) refused setting S_ISUID.
+            return;
+        }
+        let seeded_mode = fs::metadata(&file_path)
+            .expect("stat seeded")
+            .permissions()
+            .mode()
+            & 0o7777;
+        if (seeded_mode & 0o6000) == 0 {
+            return;
+        }
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        dir.write_file_in_place(OsStr::new("en.mjs"), b"export default { v: 2 };\n")
+            .expect("replace module");
+        let after_mode = fs::metadata(&file_path)
+            .expect("stat replaced")
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(
+            after_mode & 0o6000,
+            0,
+            "S_ISUID and S_ISGID must be cleared when replacing file contents, got 0o{after_mode:04o}"
+        );
+        assert_eq!(
+            after_mode & 0o0777,
+            0o0755,
+            "ordinary permission bits must still be preserved"
         );
     }
 }
