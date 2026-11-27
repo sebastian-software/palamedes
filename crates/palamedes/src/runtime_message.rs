@@ -122,7 +122,9 @@ pub(crate) fn exceeds_icu_nesting_depth(pattern: &str, max_depth: usize) -> bool
                     index += 2;
                     continue;
                 }
-                in_quote = true;
+                if matches!(bytes.get(index + 1), Some(b'{' | b'}' | b'<')) {
+                    in_quote = true;
+                }
                 index += 1;
             }
             b'{' => {
@@ -489,6 +491,16 @@ mod tests {
         );
         assert_eq!(
             compile(&huge_dotted_tags),
+            Some(RuntimeCompiledMessage::Lazy)
+        );
+
+        let apostrophe_ident_choices = format!(
+            "{}leaf{}",
+            "{a'b, select, other {".repeat(10_000),
+            "}}".repeat(10_000)
+        );
+        assert_eq!(
+            compile(&apostrophe_ident_choices),
             Some(RuntimeCompiledMessage::Lazy)
         );
     }

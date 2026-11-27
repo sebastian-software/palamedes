@@ -7819,7 +7819,7 @@ catalogs:
             &root,
             Path::new("pmds"),
             None,
-            InvocationPolicy::new(Some(Duration::from_millis(200)), "run"),
+            InvocationPolicy::new(Some(Duration::from_millis(1_500)), "run"),
         )
         .expect_err("writer timeout must fail");
         assert_eq!(error.code, "PLUGIN_BINARY_TIMEOUT");
