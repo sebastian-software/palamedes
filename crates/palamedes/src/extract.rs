@@ -36,9 +36,9 @@ use crate::translation_scope::validate_translation_macro_scopes;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, BindingIdentifier, BindingPattern, CallExpression, CommentKind, Declaration,
-    Expression, ImportDeclaration, JSXChild, JSXElement, JSXExpression, JSXOpeningElement,
-    LogicalOperator, MemberExpression, ObjectExpression, ObjectPropertyKind, Program,
-    TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
+    Expression, ImportDeclaration, JSXAttributeItem, JSXChild, JSXElement, JSXExpression,
+    JSXOpeningElement, LogicalOperator, MemberExpression, ObjectExpression, ObjectPropertyKind,
+    Program, TaggedTemplateExpression, TemplateLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::Parser;
@@ -528,6 +528,45 @@ impl<'a> ExtractionVisitor<'a> {
         });
     }
 
+    fn fail_nested_macro_in_value(
+        &mut self,
+        outer_macro: &str,
+        nested_macro: &str,
+        nested_start: usize,
+    ) {
+        self.fail(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: outer_macro.to_string(),
+            location: self.location(nested_start),
+            detail: format!(
+                "nested `{nested_macro}` macro inside a value expression cannot be transformed; extract it into a variable before passing it or write complete messages in each branch"
+            ),
+        });
+    }
+
+    fn walk_trans_preserved_attributes(&mut self, children: &[JSXChild<'a>]) {
+        for child in children {
+            if self.error.is_some() {
+                return;
+            }
+            match child {
+                JSXChild::Element(element) => {
+                    walk::walk_jsx_opening_element(self, &element.opening_element);
+                    if let Some(tag_name) = element.opening_element.name.get_identifier_name() {
+                        self.jsx_parent_stack.push(tag_name.as_str());
+                        self.walk_trans_preserved_attributes(&element.children);
+                        self.jsx_parent_stack.pop();
+                    } else {
+                        self.walk_trans_preserved_attributes(&element.children);
+                    }
+                }
+                JSXChild::Fragment(fragment) => {
+                    self.walk_trans_preserved_attributes(&fragment.children);
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn origin(&self, span_start: usize) -> (String, usize, Option<usize>) {
         (
             self.filename.clone(),
@@ -652,6 +691,37 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     .indexed_location(&self.filename, it.span.start as usize),
             ) {
                 Ok(Some(message)) => {
+                    let nested = if macro_name == "Trans" {
+                        nested_macro_use_in_jsx_attributes(
+                            &it.opening_element.attributes,
+                            self.imported_macros,
+                            self.macro_resolution,
+                        )
+                        .or_else(|| {
+                            nested_macro_use_in_trans_expressions(
+                                &it.children,
+                                self.imported_macros,
+                                self.macro_resolution,
+                            )
+                        })
+                    } else {
+                        nested_macro_use_in_jsx_attributes(
+                            &it.opening_element.attributes,
+                            self.imported_macros,
+                            self.macro_resolution,
+                        )
+                        .or_else(|| {
+                            nested_macro_use_in_jsx_children(
+                                &it.children,
+                                self.imported_macros,
+                                self.macro_resolution,
+                            )
+                        })
+                    };
+                    if let Some((nested_macro, nested_start)) = nested {
+                        self.fail_nested_macro_in_value(&macro_name, &nested_macro, nested_start);
+                        return;
+                    }
                     let surface = if macro_name == "Trans" {
                         SourceMessageSurface::Trans
                     } else {
@@ -665,6 +735,12 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     let facts =
                         self.facts(surface, it.span.start as usize, it.span.end as usize, parts);
                     self.push(message, facts);
+                    if macro_name == "Trans" {
+                        self.jsx_parent_stack.push(tag_name);
+                        self.walk_trans_preserved_attributes(&it.children);
+                        self.jsx_parent_stack.pop();
+                    }
+                    return;
                 }
                 Ok(None) => {
                     self.fail_unsupported_macro(&macro_name, it.span.start as usize);
@@ -720,6 +796,14 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                     .indexed_location(&self.filename, it.span.start as usize),
             ) {
                 Ok(Some(message)) => {
+                    if let Some((nested_macro, nested_start)) = nested_macro_use_in_expressions(
+                        &it.quasi.expressions,
+                        self.imported_macros,
+                        self.macro_resolution,
+                    ) {
+                        self.fail_nested_macro_in_value(&macro_name, &nested_macro, nested_start);
+                        return;
+                    }
                     let facts = self.facts(
                         SourceMessageSurface::TaggedTemplate,
                         it.span.start as usize,
@@ -732,6 +816,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                         it.span.end as usize,
                         &macro_source,
                     );
+                    return;
                 }
                 Ok(None) => {
                     self.fail_unsupported_macro(&macro_name, it.span.start as usize);
@@ -834,6 +919,14 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
 
             match message {
                 Ok(Some(message)) => {
+                    if let Some((nested_macro, nested_start)) = nested_macro_use_in_arguments(
+                        &it.arguments,
+                        self.imported_macros,
+                        self.macro_resolution,
+                    ) {
+                        self.fail_nested_macro_in_value(&macro_name, &nested_macro, nested_start);
+                        return;
+                    }
                     let (surface, parts) = if macro_name == "t" {
                         (
                             SourceMessageSurface::Descriptor,
@@ -852,6 +945,7 @@ impl<'a> Visit<'a> for ExtractionVisitor<'a> {
                             &macro_source,
                         );
                     }
+                    return;
                 }
                 Ok(None) => {
                     self.fail_unsupported_macro(&macro_name, it.span.start as usize);
@@ -989,6 +1083,198 @@ fn jsx_children_authored_parts(children: &[JSXChild<'_>]) -> Vec<AuthoredMessage
         }
     }
     parts
+}
+
+fn nested_macro_use_in_expressions<'a>(
+    expressions: &[Expression<'a>],
+    imported_macros: &HashMap<String, ImportedMacro>,
+    macro_resolution: &MacroResolution,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imported_macros,
+        macro_resolution,
+        nested: None,
+    };
+    for expression in expressions {
+        finder.visit_expression(expression);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_arguments<'a>(
+    arguments: &[Argument<'a>],
+    imported_macros: &HashMap<String, ImportedMacro>,
+    macro_resolution: &MacroResolution,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imported_macros,
+        macro_resolution,
+        nested: None,
+    };
+    for argument in arguments {
+        finder.visit_argument(argument);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_jsx_attributes<'a>(
+    attributes: &[JSXAttributeItem<'a>],
+    imported_macros: &HashMap<String, ImportedMacro>,
+    macro_resolution: &MacroResolution,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imported_macros,
+        macro_resolution,
+        nested: None,
+    };
+    for attribute in attributes {
+        finder.visit_jsx_attribute_item(attribute);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_jsx_children<'a>(
+    children: &[JSXChild<'a>],
+    imported_macros: &HashMap<String, ImportedMacro>,
+    macro_resolution: &MacroResolution,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imported_macros,
+        macro_resolution,
+        nested: None,
+    };
+    for child in children {
+        finder.visit_jsx_child(child);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_trans_expressions<'a>(
+    children: &[JSXChild<'a>],
+    imported_macros: &HashMap<String, ImportedMacro>,
+    macro_resolution: &MacroResolution,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imported_macros,
+        macro_resolution,
+        nested: None,
+    };
+    fn visit_children<'a>(children: &[JSXChild<'a>], finder: &mut NestedMacroUseFinder<'_>) {
+        for child in children {
+            if finder.nested.is_some() {
+                return;
+            }
+            match child {
+                JSXChild::ExpressionContainer(container) => {
+                    finder.visit_jsx_expression_container(container);
+                }
+                JSXChild::Element(element) => {
+                    visit_children(&element.children, finder);
+                }
+                JSXChild::Fragment(fragment) => {
+                    visit_children(&fragment.children, finder);
+                }
+                _ => {}
+            }
+        }
+    }
+    visit_children(children, &mut finder);
+    finder.nested
+}
+
+struct NestedMacroUseFinder<'a> {
+    imported_macros: &'a HashMap<String, ImportedMacro>,
+    macro_resolution: &'a MacroResolution,
+    nested: Option<(String, usize)>,
+}
+
+impl NestedMacroUseFinder<'_> {
+    fn imported_macro_name(
+        &self,
+        local_name: &str,
+        span: (u32, u32),
+        expected: &[&str],
+    ) -> Option<String> {
+        self.imported_macros
+            .get(local_name)
+            .filter(|_| self.macro_resolution.is_macro_use(span))
+            .and_then(|macro_info| {
+                expected
+                    .contains(&macro_info.imported_name.as_str())
+                    .then(|| macro_info.imported_name.clone())
+            })
+    }
+}
+
+impl<'a> Visit<'a> for NestedMacroUseFinder<'_> {
+    fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
+        if self.nested.is_some() {
+            return;
+        }
+        if let Some((tag_name, tag_span)) = identifier_name(&it.tag)
+            && let Some(macro_name) = self.imported_macro_name(tag_name, tag_span, &["t"])
+        {
+            self.nested = Some((macro_name, it.span.start as usize));
+            return;
+        }
+        walk::walk_tagged_template_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.nested.is_some() {
+            return;
+        }
+        if let Some((type_name, type_span)) = create_element_type(it)
+            && let Some(macro_name) = self.imported_macro_name(
+                type_name,
+                type_span,
+                &["Trans", "Plural", "Select", "SelectOrdinal"],
+            )
+        {
+            self.nested = Some((macro_name, it.span.start as usize));
+            return;
+        }
+        if let Some((callee_name, callee_span)) = identifier_name(&it.callee)
+            && let Some(macro_name) = self.imported_macro_name(
+                callee_name,
+                callee_span,
+                &["t", "plural", "select", "selectOrdinal"],
+            )
+        {
+            self.nested = Some((macro_name, it.span.start as usize));
+            return;
+        }
+        walk::walk_call_expression(self, it);
+    }
+
+    fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
+        if self.nested.is_some() {
+            return;
+        }
+        if let Some(tag_name) = it.opening_element.name.get_identifier_name()
+            && let Some(macro_name) = self.imported_macro_name(
+                tag_name.as_str(),
+                jsx_element_name_span(it),
+                &["Trans", "Plural", "Select", "SelectOrdinal"],
+            )
+        {
+            self.nested = Some((macro_name, it.span.start as usize));
+            return;
+        }
+        walk::walk_jsx_element(self, it);
+    }
 }
 
 fn nested_message_macro_in_children<'a>(
@@ -1588,7 +1874,7 @@ fn extract_jsx_children_as_message(
     macros: &MacroImports,
     location: &(impl DiagnosticLocation + ?Sized),
 ) -> PalamedesResult<String> {
-    let lowered = lower_jsx_children(children, source, macros, |_| String::new())?;
+    let lowered = lower_jsx_children(children, source, macros, |_| Ok(String::new()))?;
     check_lowered_message(
         &lowered.message,
         lowered.values.iter().map(|value| value.name.as_str()),

@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use oxc_ast::ast::{
-    CallExpression, Expression, JSXChild, JSXElement, JSXOpeningElement, TaggedTemplateExpression,
+    Argument, CallExpression, Expression, JSXAttributeItem, JSXChild, JSXElement,
+    JSXOpeningElement, TaggedTemplateExpression,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_semantic::Semantic;
@@ -102,6 +103,24 @@ impl<'a> TransformVisitor<'a> {
         });
     }
 
+    fn fail_nested_macro_in_value(
+        &mut self,
+        outer_macro: &str,
+        nested_macro: &str,
+        nested_start: usize,
+    ) {
+        let location = self
+            .source_locator
+            .indexed_location(self.filename, nested_start);
+        self.fail(PalamedesError::UnsupportedMacroSyntax {
+            macro_name: outer_macro.to_string(),
+            location: location.format(),
+            detail: format!(
+                "nested `{nested_macro}` macro inside a value expression cannot be transformed; extract it into a variable before passing it or write complete messages in each branch"
+            ),
+        });
+    }
+
     fn record_consumed_binding(&mut self, symbol_id: SymbolId, start: usize, end: usize) {
         self.consumed_binding_ranges.push((symbol_id, start, end));
     }
@@ -178,9 +197,6 @@ impl<'a> TransformVisitor<'a> {
                 }
                 JSXChild::Fragment(fragment) => {
                     self.visit_preserved_attribute_macros(&fragment.children);
-                }
-                JSXChild::ExpressionContainer(container) => {
-                    walk::walk_jsx_expression_container(self, container);
                 }
                 _ => {}
             }
@@ -268,6 +284,23 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
 
         match replacement {
             Ok(Some((text, compiled_id))) => {
+                let nested = if macro_info.imported_name == "Trans" {
+                    nested_macro_use_in_jsx_attributes(&it.opening_element.attributes, self.imports)
+                        .or_else(|| {
+                            nested_macro_use_in_trans_expressions(&it.children, self.imports)
+                        })
+                } else {
+                    nested_macro_use_in_jsx_attributes(&it.opening_element.attributes, self.imports)
+                        .or_else(|| nested_macro_use_in_jsx_children(&it.children, self.imports))
+                };
+                if let Some((nested_macro, nested_start)) = nested {
+                    self.fail_nested_macro_in_value(
+                        &macro_info.imported_name,
+                        &nested_macro,
+                        nested_start,
+                    );
+                    return;
+                }
                 let text = if macro_info.imported_name != "Trans"
                     && self.is_current_jsx_child_element(it)
                 {
@@ -356,6 +389,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
             self.options,
         ) {
             Ok(Some((text, compiled_id))) => {
+                if let Some((nested_macro, nested_start)) =
+                    nested_macro_use_in_expressions(&it.quasi.expressions, self.imports)
+                {
+                    self.fail_nested_macro_in_value(
+                        &macro_info.imported_name,
+                        &nested_macro,
+                        nested_start,
+                    );
+                    return;
+                }
                 self.replacements.push(Replacement {
                     start: it.span.start as usize,
                     end: it.span.end as usize,
@@ -364,22 +407,18 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                 self.push_compiled_id(&compiled_id);
                 self.record_consumed_binding(
                     macro_symbol_id,
-                    it.span.start as usize,
-                    it.span.end as usize,
+                    tag_span.0 as usize,
+                    tag_span.1 as usize,
                 );
                 self.needs_runtime_import = true;
             }
             Ok(None) => {
                 self.fail_unsupported_macro(&macro_info.imported_name, it.span.start as usize);
-                return;
             }
             Err(error) => {
                 self.fail(error);
-                return;
             }
         }
-
-        walk::walk_tagged_template_expression(self, it);
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
@@ -437,6 +476,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     self.options,
                 ) {
                     Ok(Some((text, compiled_id))) => {
+                        if let Some((nested_macro, nested_start)) =
+                            nested_macro_use_in_arguments(&it.arguments, self.imports)
+                        {
+                            self.fail_nested_macro_in_value(
+                                &macro_info.imported_name,
+                                &nested_macro,
+                                nested_start,
+                            );
+                            return;
+                        }
                         self.replacements.push(Replacement {
                             start: it.span.start as usize,
                             end: it.span.end as usize,
@@ -445,8 +494,8 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                         self.push_compiled_id(&compiled_id);
                         self.record_consumed_binding(
                             macro_symbol_id,
-                            it.span.start as usize,
-                            it.span.end as usize,
+                            callee_span.0 as usize,
+                            callee_span.1 as usize,
                         );
                         self.needs_runtime_import = true;
                     }
@@ -455,11 +504,9 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             &macro_info.imported_name,
                             it.span.start as usize,
                         );
-                        return;
                     }
                     Err(error) => {
                         self.fail(error);
-                        return;
                     }
                 }
             }
@@ -473,6 +520,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                     self.options,
                 ) {
                     Ok(Some((text, compiled_id))) => {
+                        if let Some((nested_macro, nested_start)) =
+                            nested_macro_use_in_arguments(&it.arguments, self.imports)
+                        {
+                            self.fail_nested_macro_in_value(
+                                &macro_info.imported_name,
+                                &nested_macro,
+                                nested_start,
+                            );
+                            return;
+                        }
                         self.replacements.push(Replacement {
                             start: it.span.start as usize,
                             end: it.span.end as usize,
@@ -481,8 +538,8 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                         self.push_compiled_id(&compiled_id);
                         self.record_consumed_binding(
                             macro_symbol_id,
-                            it.span.start as usize,
-                            it.span.end as usize,
+                            callee_span.0 as usize,
+                            callee_span.1 as usize,
                         );
                         self.needs_runtime_import = true;
                     }
@@ -491,21 +548,16 @@ impl<'a> Visit<'a> for TransformVisitor<'a> {
                             &macro_info.imported_name,
                             it.span.start as usize,
                         );
-                        return;
                     }
                     Err(error) => {
                         self.fail(error);
-                        return;
                     }
                 }
             }
             _ => {
                 walk::walk_call_expression(self, it);
-                return;
             }
         }
-
-        walk::walk_call_expression(self, it);
     }
 }
 
@@ -557,6 +609,17 @@ impl TransformVisitor<'_> {
 
         match replacement {
             Ok(Some((text, compiled_id))) => {
+                if macro_info.imported_name != "Trans"
+                    && let Some((nested_macro, nested_start)) =
+                        nested_macro_use_in_arguments(&call.arguments[1..], self.imports)
+                {
+                    self.fail_nested_macro_in_value(
+                        &macro_info.imported_name,
+                        &nested_macro,
+                        nested_start,
+                    );
+                    return true;
+                }
                 self.replacements.push(Replacement {
                     start: call.span.start as usize,
                     end: call.span.end as usize,
@@ -588,6 +651,190 @@ impl TransformVisitor<'_> {
             Err(error) => self.fail(error),
         }
         true
+    }
+}
+
+fn nested_macro_use_in_expressions<'a>(
+    expressions: &[Expression<'a>],
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    for expression in expressions {
+        finder.visit_expression(expression);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_arguments<'a>(
+    arguments: &[Argument<'a>],
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    for argument in arguments {
+        finder.visit_argument(argument);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_jsx_attributes<'a>(
+    attributes: &[JSXAttributeItem<'a>],
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    for attribute in attributes {
+        finder.visit_jsx_attribute_item(attribute);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_jsx_children<'a>(
+    children: &[JSXChild<'a>],
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    for child in children {
+        finder.visit_jsx_child(child);
+        if finder.nested.is_some() {
+            break;
+        }
+    }
+    finder.nested
+}
+
+fn nested_macro_use_in_trans_expressions<'a>(
+    children: &[JSXChild<'a>],
+    imports: &ImportCollector,
+) -> Option<(String, usize)> {
+    let mut finder = NestedMacroUseFinder {
+        imports,
+        nested: None,
+    };
+    fn visit_children<'a>(children: &[JSXChild<'a>], finder: &mut NestedMacroUseFinder<'_>) {
+        for child in children {
+            if finder.nested.is_some() {
+                return;
+            }
+            match child {
+                JSXChild::ExpressionContainer(container) => {
+                    finder.visit_jsx_expression_container(container);
+                }
+                JSXChild::Element(element) => {
+                    visit_children(&element.children, finder);
+                }
+                JSXChild::Fragment(fragment) => {
+                    visit_children(&fragment.children, finder);
+                }
+                _ => {}
+            }
+        }
+    }
+    visit_children(children, &mut finder);
+    finder.nested
+}
+
+struct NestedMacroUseFinder<'a> {
+    imports: &'a ImportCollector,
+    nested: Option<(String, usize)>,
+}
+
+impl<'a> Visit<'a> for NestedMacroUseFinder<'_> {
+    fn visit_tagged_template_expression(&mut self, it: &TaggedTemplateExpression<'a>) {
+        if self.nested.is_some() {
+            return;
+        }
+        if let Some((local_name, tag_span)) = identifier_name_and_span(&it.tag)
+            && let Some((macro_info, _)) = self.imports.macro_at(local_name, tag_span)
+            && macro_info.imported_name == "t"
+        {
+            self.nested = Some((macro_info.imported_name, it.span.start as usize));
+            return;
+        }
+        walk::walk_tagged_template_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.nested.is_some() {
+            return;
+        }
+        if let Some((type_name, type_span)) = create_element_type(it)
+            && let Some((macro_info, _)) = self.imports.macro_at(type_name, type_span)
+            && matches!(
+                macro_info.imported_name.as_str(),
+                "Trans" | "Plural" | "Select" | "SelectOrdinal"
+            )
+        {
+            self.nested = Some((macro_info.imported_name, it.span.start as usize));
+            return;
+        }
+        if let Some((local_name, callee_span)) = identifier_name_and_span(&it.callee) {
+            if self.imports.remix_jsx_binding_at(local_name, callee_span)
+                == Some(super::imports::RemixJsxBinding::Helper)
+                && let Some(element_type) = it.arguments.first().and_then(Argument::as_expression)
+                && let Some((element_name, element_span)) = identifier_name_and_span(element_type)
+                && let Some((macro_info, _)) = self.imports.macro_at(element_name, element_span)
+                && matches!(
+                    macro_info.imported_name.as_str(),
+                    "Trans" | "Plural" | "Select" | "SelectOrdinal"
+                )
+            {
+                self.nested = Some((macro_info.imported_name, it.span.start as usize));
+                return;
+            }
+            if let Some((macro_info, _)) = self.imports.macro_at(local_name, callee_span)
+                && matches!(
+                    macro_info.imported_name.as_str(),
+                    "t" | "plural" | "select" | "selectOrdinal"
+                )
+            {
+                self.nested = Some((macro_info.imported_name, it.span.start as usize));
+                return;
+            }
+        }
+        walk::walk_call_expression(self, it);
+    }
+
+    fn visit_jsx_element(&mut self, it: &JSXElement<'a>) {
+        if self.nested.is_some() {
+            return;
+        }
+        if let Some(tag_name) = it.opening_element.name.get_identifier_name()
+            && let Some((macro_info, _)) = self.imports.macro_at(
+                tag_name.as_str(),
+                (
+                    it.opening_element.name.span().start,
+                    it.opening_element.name.span().end,
+                ),
+            )
+            && matches!(
+                macro_info.imported_name.as_str(),
+                "Trans" | "Plural" | "Select" | "SelectOrdinal"
+            )
+        {
+            self.nested = Some((macro_info.imported_name, it.span.start as usize));
+            return;
+        }
+        walk::walk_jsx_element(self, it);
     }
 }
 

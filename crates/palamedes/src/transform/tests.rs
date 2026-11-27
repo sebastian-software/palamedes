@@ -3137,3 +3137,97 @@ fn emits_computed_proto_keys_in_macro_value_bindings() {
         );
     }
 }
+
+#[test]
+fn rejects_nested_macros_in_value_expressions_without_overlapping_replacements() {
+    let cases = [
+        (
+            "descriptor-value.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"a {x}\" }, { x: t`b` }); }\n",
+            "t",
+        ),
+        (
+            "descriptor-raw-values.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"a {x}\" }, buildValues(t`b`)); }\n",
+            "t",
+        ),
+        (
+            "tagged-template-coalesce.ts",
+            "import { t } from \"@palamedes/core/macro\";\nexport function f(name?: string) { return t`a ${name ?? t`b`}`; }\n",
+            "t",
+        ),
+        (
+            "choice-value.ts",
+            "import { plural, t } from \"@palamedes/core/macro\";\nexport function f(count?: number) { return plural(count ?? t`b`, { one: \"# item\", other: \"# items\" }); }\n",
+            "plural",
+        ),
+        (
+            "choice-branch-template.ts",
+            "import { plural, t } from \"@palamedes/core/macro\";\nexport function f(count: number, name?: string) { return plural(count, { one: `${name ?? t`b`}`, other: \"# items\" }); }\n",
+            "plural",
+        ),
+        (
+            "jsx-choice-value.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Plural } from \"@palamedes/react/macro\";\nexport function f(count?: number) { return <Plural value={count ?? t`b`} one=\"# item\" other=\"# items\" />; }\n",
+            "Plural",
+        ),
+        (
+            "trans-expression-value.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f(name?: string) { return <Trans>Hello {name ?? t`b`}</Trans>; }\n",
+            "Trans",
+        ),
+        (
+            "trans-attribute-nested-descriptor.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f() { return <Trans>Click <Button title={t({ message: \"a {x}\" }, { x: t`b` })} /> now</Trans>; }\n",
+            "t",
+        ),
+        (
+            "trans-attribute-nested-template.tsx",
+            "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f(name?: string) { return <Trans>Click <Button title={t`a ${name ?? t`b`}`} /> now</Trans>; }\n",
+            "t",
+        ),
+    ];
+
+    for (filename, source, expected_outer) in cases {
+        let transform_err = transform_macros_raw(source, filename, None)
+            .expect_err("nested macro in value expression must fail transform cleanly");
+        assert!(
+            matches!(
+                &transform_err,
+                PalamedesError::UnsupportedMacroSyntax { macro_name, detail, .. }
+                    if macro_name == expected_outer && detail.contains("nested `t` macro")
+            ),
+            "{filename}: unexpected transform error: {transform_err:?}"
+        );
+
+        let extract_err = extract_messages(source, filename)
+            .expect_err("nested macro in value expression must fail extraction cleanly");
+        assert!(
+            matches!(
+                &extract_err,
+                PalamedesError::UnsupportedMacroSyntax { macro_name, detail, .. }
+                    if macro_name == expected_outer && detail.contains("nested `t` macro")
+            ),
+            "{filename}: unexpected extract error: {extract_err:?}"
+        );
+    }
+
+    // Valid: a single `t` macro inside a `<Trans>` component attribute still transforms cleanly.
+    let valid_attr = "import { t } from \"@palamedes/core/macro\";\nimport { Trans } from \"@palamedes/react/macro\";\nexport function f() { return <Trans>Click <Button title={t`Tooltip`} /> now</Trans>; }\n";
+    let extracted = extract_messages(valid_attr, "valid-attr.tsx")
+        .expect("single t macro in Trans component attribute should extract");
+    assert_eq!(extracted.len(), 2);
+    let transformed = transform_macros_raw(valid_attr, "valid-attr.tsx", None)
+        .expect("single t macro in Trans component attribute should transform");
+    assert_eq!(transformed.compiled_ids.len(), 2);
+    assert!(!transformed.code.contains("t`Tooltip`"));
+
+    // Valid: a shadowed local binding named `t` inside a descriptor value is not a nested macro.
+    let shadowed = "import { t } from \"@palamedes/core/macro\";\nexport function f() { return t({ message: \"a {fn}\" }, { fn: (t: any) => t`local` }); }\n";
+    let extracted = extract_messages(shadowed, "shadowed.ts")
+        .expect("shadowed t inside descriptor value should extract");
+    assert_eq!(extracted.len(), 1);
+    let transformed = transform_macros_raw(shadowed, "shadowed.ts", None)
+        .expect("shadowed t inside descriptor value should transform");
+    assert!(transformed.code.contains("(t: any) => t`local`"));
+}

@@ -2684,18 +2684,25 @@ fn validate_translation_icu(value: &TranslationValue) -> Vec<String> {
             plural_kind,
             values,
             ..
-        } => values
-            .iter()
-            .filter_map(|(selector, branch)| {
-                parse_plural_branch(variable, *plural_kind, branch)
-                    .err()
-                    .map(|source| {
-                        format!(
-                            "Plural translation branch `translation.values.{selector}` is not valid ICU: {source}"
-                        )
-                    })
-            })
-            .collect(),
+        } => {
+            if let Err(source) = validate_plural_variable(variable) {
+                return vec![format!(
+                    "Plural translation variable `translation.variable` is not valid ICU: {source}"
+                )];
+            }
+            values
+                .iter()
+                .filter_map(|(selector, branch)| {
+                    parse_plural_branch(variable, *plural_kind, branch)
+                        .err()
+                        .map(|source| {
+                            format!(
+                                "Plural translation branch `translation.values.{selector}` is not valid ICU: {source}"
+                            )
+                        })
+                })
+                .collect()
+        }
     }
 }
 
@@ -2797,6 +2804,7 @@ pub(crate) fn render_translation_value(value: &TranslationValue) -> PalamedesRes
             offset,
             values,
         } => {
+            validate_plural_variable(variable)?;
             let options = values
                 .iter()
                 .map(|(selector, value)| {
@@ -2822,20 +2830,56 @@ pub(crate) fn render_translation_value(value: &TranslationValue) -> PalamedesRes
     }
 }
 
+fn validate_plural_variable(variable: &str) -> Result<(), ferrocat_icu::IcuParseError> {
+    if variable.is_empty()
+        || variable
+            .chars()
+            .any(|ch| ch.is_whitespace() || matches!(ch, '{' | '}' | ',' | '\'' | '#' | '<' | '>'))
+    {
+        return Err(ferrocat_icu::IcuParseError::syntax(
+            "plural variable must be a valid ICU argument identifier",
+            variable,
+            0,
+        ));
+    }
+    let wrapped = format!("{{{variable}}}");
+    let parsed = ferrocat_icu::parse_icu(&wrapped)?;
+    match parsed.nodes.as_slice() {
+        [IcuNode::Argument { name }] if name == variable => Ok(()),
+        _ => Err(ferrocat_icu::IcuParseError::syntax(
+            "plural variable must be a valid ICU argument identifier",
+            variable,
+            0,
+        )),
+    }
+}
+
 fn parse_plural_branch(
     variable: &str,
     plural_kind: TranslationPluralKind,
     value: &str,
 ) -> Result<Vec<IcuNode>, ferrocat_icu::IcuParseError> {
+    validate_plural_variable(variable)?;
     let formatter = match plural_kind {
         TranslationPluralKind::Cardinal => "plural",
         TranslationPluralKind::Ordinal => "selectordinal",
     };
     let wrapped = format!("{{{variable}, {formatter}, other {{{value}}}}}");
     let parsed = parse_runtime_icu(&wrapped)?;
-    let [IcuNode::Plural { options, .. }] = parsed.nodes.as_slice() else {
-        unreachable!("the generated plural wrapper always parses to one plural node");
+    let [IcuNode::Plural { name, options, .. }] = parsed.nodes.as_slice() else {
+        return Err(ferrocat_icu::IcuParseError::syntax(
+            "a plural branch value must not escape its plural block",
+            value,
+            0,
+        ));
     };
+    if name != variable {
+        return Err(ferrocat_icu::IcuParseError::syntax(
+            "plural variable must be a valid ICU argument identifier",
+            variable,
+            0,
+        ));
+    }
     /*
      * A value such as `# Datei} one {# Dateien` closes the wrapper's own branch
      * and opens another one, which is valid ICU. Keeping the first option would
@@ -2849,6 +2893,13 @@ fn parse_plural_branch(
             0,
         ));
     };
+    if option.selector != "other" {
+        return Err(ferrocat_icu::IcuParseError::syntax(
+            "a plural branch value must not escape its plural branch",
+            value,
+            0,
+        ));
+    }
     Ok(option.value.clone())
 }
 
@@ -4600,6 +4651,143 @@ mod tests {
         assert!(result.diagnostics.iter().any(|diagnostic| {
             diagnostic.code == "translation.invalid_icu"
                 && diagnostic.message.contains("translation.values.one")
+        }));
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn rejects_plural_brace_breakout_in_value_and_variable_without_panicking() {
+        use std::collections::BTreeMap;
+
+        use super::{parse_plural_branch, render_translation_value};
+
+        // Direct parser / renderer checks for brace-breakout payloads.
+        for payload in [
+            "}} {b, select, other {",
+            "}} {x",
+            "}} {count, plural, other {",
+            "# Datei} one {# Dateien",
+        ] {
+            assert!(
+                parse_plural_branch("count", TranslationPluralKind::Cardinal, payload).is_err(),
+                "expected parse_plural_branch to reject {payload:?}"
+            );
+            assert!(
+                parse_plural_branch("count", TranslationPluralKind::Ordinal, payload).is_err(),
+                "expected ordinal parse_plural_branch to reject {payload:?}"
+            );
+        }
+
+        for bad_var in [
+            "",
+            "a} {b",
+            "count, plural, other {#}",
+            " count ",
+            "a{b",
+            "a}b",
+            "a,b",
+            "a'b",
+            "a#b",
+            "a<b>",
+        ] {
+            assert!(
+                parse_plural_branch(bad_var, TranslationPluralKind::Cardinal, "# files").is_err(),
+                "expected parse_plural_branch to reject variable {bad_var:?}"
+            );
+            let value = TranslationValue::Plural {
+                variable: bad_var.to_owned(),
+                plural_kind: TranslationPluralKind::Cardinal,
+                offset: 0,
+                values: BTreeMap::new(),
+            };
+            assert!(
+                render_translation_value(&value).is_err(),
+                "expected render_translation_value to reject variable {bad_var:?}"
+            );
+        }
+
+        // End-to-end apply_translation_patches checks for both value and variable breakouts.
+        let fixture = tempfile::tempdir().expect("fixture directory");
+        let path = fixture.path().join("messages/de.po");
+        write_po_fixture(&path, "de");
+        let listed = list_translation_candidates(&TranslationCandidateRequest {
+            config: po_config(fixture.path()),
+            locales: vec!["de".to_owned()],
+            targets: vec![id(
+                "messages/{locale}",
+                "de",
+                "{count, plural, one {# file} other {# files}}",
+                None,
+            )],
+            max_origins: 8,
+        })
+        .expect("list plural patch candidate");
+        let plural = candidate(
+            &listed.candidates,
+            "{count, plural, one {# file} other {# files}}",
+        );
+        let before = fs::read_to_string(&path).expect("read catalog before invalid patches");
+
+        // 1) Value brace breakout (`}} {b, select, other {`).
+        let mut value_breakout = plural.source.clone();
+        let TranslationValue::Plural { values, .. } = &mut value_breakout else {
+            panic!("expected a plural candidate");
+        };
+        values.insert("one".to_owned(), "}} {b, select, other {".to_owned());
+        values.insert("other".to_owned(), "# Dateien".to_owned());
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![TranslationPatch {
+                id: plural.id.clone(),
+                fingerprint: plural.fingerprint.clone(),
+                translation: value_breakout,
+                machine: None,
+            }],
+        })
+        .expect("value brace breakout should return structured diagnostic");
+        assert!(!result.updated);
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::Rejected
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "translation.invalid_icu"
+                && diagnostic.message.contains("translation.values.one")
+        }));
+
+        // 2) Variable brace breakout (`a} {b`).
+        let mut variable_breakout = plural.source.clone();
+        let TranslationValue::Plural {
+            variable, values, ..
+        } = &mut variable_breakout
+        else {
+            panic!("expected a plural candidate");
+        };
+        *variable = "a} {b".to_owned();
+        values.insert("one".to_owned(), "# Datei".to_owned());
+        values.insert("other".to_owned(), "# Dateien".to_owned());
+
+        let result = apply_translation_patches(TranslationPatchRequest {
+            config: po_config(fixture.path()),
+            po: None,
+            patches: vec![TranslationPatch {
+                id: plural.id.clone(),
+                fingerprint: plural.fingerprint.clone(),
+                translation: variable_breakout,
+                machine: None,
+            }],
+        })
+        .expect("variable brace breakout should return structured diagnostic");
+        assert!(!result.updated);
+        assert_eq!(
+            result.outcomes[0].status,
+            TranslationPatchOutcomeStatus::Rejected
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "translation.invalid_icu"
+                && diagnostic.message.contains("translation.variable")
         }));
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
     }

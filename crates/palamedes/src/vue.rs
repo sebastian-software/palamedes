@@ -184,16 +184,12 @@ fn check_template(
             for (name, value) in &tag.attributes {
                 if let Some(open) = name.find('[')
                     && let Some(close) = name.rfind(']')
+                    && close > open
                 {
-                    let start = name.as_ptr() as usize - source.as_ptr() as usize + open + 1;
-                    check_template_expression(
-                        source,
-                        filename,
-                        start,
-                        start + close - open - 1,
-                        &scopes,
-                        macros,
-                    )?;
+                    let name_start = name.as_ptr() as usize - source.as_ptr() as usize;
+                    let start = name_start + open + 1;
+                    let end = name_start + close;
+                    check_template_expression(source, filename, start, end, &scopes, macros)?;
                 }
                 if name.starts_with("v-slot") || name.starts_with('#') {
                     continue;
@@ -812,5 +808,37 @@ mod markup_tests {
         assert_eq!(split_for("t intems"), None);
         assert_eq!(split_for("t in "), None);
         assert_eq!(split_for("t"), None);
+    }
+
+    #[test]
+    fn vue_template_scanner_handles_reversed_and_empty_brackets_without_panicking() {
+        let script = "<script setup>import { t } from '@palamedes/core/macro'; const title = t`Title`;</script>";
+        for markup in [
+            "<div ][=\"1\"/>",
+            "<div ]t[=\"1\"/>",
+            "<div :[]=\"1\"/>",
+            "<div v-bind:][=\"1\"/>",
+            "<div ][=\"1\" :title=\"title\"/>",
+        ] {
+            let source = format!("{script}<template>{markup}</template>");
+            assert_eq!(
+                extract_messages(&source, "View.vue")
+                    .unwrap_or_else(|e| panic!("{markup}: {e}"))
+                    .len(),
+                1
+            );
+            assert_eq!(
+                transform_macros(&source, "View.vue", None)
+                    .unwrap_or_else(|e| panic!("{markup}: {e}"))
+                    .compiled_ids
+                    .len(),
+                1
+            );
+        }
+
+        // Valid dynamic arguments alongside reversed brackets are still checked.
+        let source = format!("{script}<template><div ][=\"1\" :[t]=\"title\"/></template>");
+        assert!(extract_messages(&source, "View.vue").is_err());
+        assert!(transform_macros(&source, "View.vue", None).is_err());
     }
 }

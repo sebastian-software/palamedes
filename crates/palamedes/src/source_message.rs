@@ -637,7 +637,7 @@ pub(crate) fn lower_jsx_children(
     children: &[JSXChild<'_>],
     source: &str,
     macros: &MacroImports,
-    component_expression: impl Fn(&JSXOpeningElement<'_>) -> String,
+    component_expression: impl Fn(&JSXOpeningElement<'_>) -> PalamedesResult<String>,
 ) -> PalamedesResult<LoweredJsxMessage> {
     let mut used_value_names = ValueNames::default();
     let mut next_component_index = 0usize;
@@ -661,7 +661,7 @@ fn lower_jsx_children_with_state<F>(
     next_component_index: &mut usize,
 ) -> PalamedesResult<LoweredJsxMessage>
 where
-    F: Fn(&JSXOpeningElement<'_>) -> String,
+    F: Fn(&JSXOpeningElement<'_>) -> PalamedesResult<String>,
 {
     let mut parts = Vec::new();
     let mut values = Vec::new();
@@ -720,7 +720,7 @@ where
                 parts.push(JsxMessagePart::ComponentPlaceholder { value, is_empty });
                 append_unique_values(&mut values, inner.values);
                 components.push(SourceValue {
-                    expression: component_expression(&element.opening_element),
+                    expression: component_expression(&element.opening_element)?,
                     name,
                 });
                 components.extend(inner.components);
