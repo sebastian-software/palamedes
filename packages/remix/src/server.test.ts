@@ -838,6 +838,71 @@ describe("createRemixI18nServer", () => {
       rmSync(root, { force: true, recursive: true });
     }
   });
+
+  it("validates cookieName, cookieMaxAge, and serializeLocaleCookie inputs and supports Secure", () => {
+    for (const invalidName of ["", "bad; Path=/", "bad\r\nSet-Cookie: x=1", "has space", "a=b"]) {
+      expect(() =>
+        createRemixI18nServer({
+          locales,
+          strategy: "cookie",
+          loadMessages: () => defineCompiledCatalog({}),
+          cookieName: invalidName,
+        }),
+      ).toThrowError(TypeError);
+    }
+
+    for (const invalidMaxAge of [
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+      "3600" as never,
+    ]) {
+      expect(() =>
+        createRemixI18nServer({
+          locales,
+          strategy: "cookie",
+          loadMessages: () => defineCompiledCatalog({}),
+          cookieMaxAge: invalidMaxAge,
+        }),
+      ).toThrowError(RangeError);
+    }
+
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+      cookieName: "app-locale",
+      cookieMaxAge: 0,
+    });
+
+    expect(remixI18n.serializeLocaleCookie("de")).toBe(
+      "app-locale=de; Path=/; Max-Age=0; SameSite=Lax",
+    );
+    expect(remixI18n.serializeLocaleCookie("de", { secure: false })).toBe(
+      "app-locale=de; Path=/; Max-Age=0; SameSite=Lax",
+    );
+    expect(remixI18n.serializeLocaleCookie("de", { secure: true })).toBe(
+      "app-locale=de; Path=/; Max-Age=0; SameSite=Lax; Secure",
+    );
+
+    for (const invalidLocale of [
+      "fr",
+      "de; HttpOnly",
+      "de\r\nSet-Cookie: evil=1",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(() => remixI18n.serializeLocaleCookie(invalidLocale as never)).toThrowError(TypeError);
+    }
+
+    expect(() => remixI18n.serializeLocaleCookie("de", { secure: "yes" as never })).toThrowError(
+      TypeError,
+    );
+    expect(() => remixI18n.serializeLocaleCookie("de", null as never)).toThrowError(TypeError);
+  });
 });
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

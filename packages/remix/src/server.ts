@@ -162,7 +162,7 @@ export type RemixI18nServer<TLocale extends string> = {
   /** Render the stable Remix import map and external adapter bootstrap for an entry file. */
   renderClientEntry(entryPath: string, options: RemixClientEntryOptions): Promise<string>;
   serveClientCatalogAsset(request: Request): Response | undefined;
-  serializeLocaleCookie(locale: TLocale): string;
+  serializeLocaleCookie(locale: TLocale, options?: { secure?: boolean }): string;
 };
 
 export type RemixClientEntryOptions = {
@@ -224,6 +224,8 @@ await startRemixClient(
 
 const DEFAULT_FAILURE_MESSAGE =
   "Palamedes Remix i18n initialization failed before the handler ran.";
+const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const COOKIE_VALUE_PATTERN = /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/;
 
 export function createRemixI18nRequestScope<T extends I18nInstance = I18nInstance>(
   resolveI18n: RemixI18nResolver<T>,
@@ -268,7 +270,15 @@ export function createRemixI18nServer<TLocale extends string>(
     RemixI18nContextValue<TLocale, PalamedesI18n>
   >();
   const cookieName = options.cookieName ?? "locale";
+  if (typeof cookieName !== "string" || !COOKIE_NAME_PATTERN.test(cookieName)) {
+    throw new TypeError("createRemixI18nServer: cookieName must be a valid cookie name.");
+  }
   const cookieMaxAge = options.cookieMaxAge ?? 60 * 60 * 24 * 365;
+  if (typeof cookieMaxAge !== "number" || !Number.isSafeInteger(cookieMaxAge) || cookieMaxAge < 0) {
+    throw new RangeError(
+      "createRemixI18nServer: cookieMaxAge must be a non-negative safe integer.",
+    );
+  }
   let serverRegistryGeneration = options.catalogAssets?.registry?.generation?.();
 
   if (!options.loadMessages && !options.catalogAssets?.registry?.load) {
@@ -542,8 +552,26 @@ export function createRemixI18nServer<TLocale extends string>(
 
     serveClientCatalogAsset,
 
-    serializeLocaleCookie(locale) {
-      return `${cookieName}=${locale}; Path=/; Max-Age=${cookieMaxAge}; SameSite=Lax`;
+    serializeLocaleCookie(locale, serializeOptions) {
+      if (!options.locales.isLocale(locale) || !COOKIE_VALUE_PATTERN.test(locale)) {
+        throw new TypeError(
+          "createRemixI18nServer: serializeLocaleCookie locale must be a configured, cookie-safe locale.",
+        );
+      }
+      if (
+        serializeOptions !== undefined &&
+        (serializeOptions === null ||
+          typeof serializeOptions !== "object" ||
+          Array.isArray(serializeOptions) ||
+          (serializeOptions.secure !== undefined && typeof serializeOptions.secure !== "boolean"))
+      ) {
+        throw new TypeError(
+          "createRemixI18nServer: serializeLocaleCookie options.secure must be a boolean.",
+        );
+      }
+
+      const secure = serializeOptions?.secure === true ? "; Secure" : "";
+      return `${cookieName}=${locale}; Path=/; Max-Age=${cookieMaxAge}; SameSite=Lax${secure}`;
     },
   };
 }

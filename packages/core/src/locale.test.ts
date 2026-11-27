@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLocaleSwitchItems, defineLocaleControls } from "./locale";
+import { buildLocaleSwitchItems, defineLocaleControls, parseAcceptLanguage } from "./locale";
 
 const controls = defineLocaleControls({
   locales: ["en", "de", "es"] as const,
@@ -674,5 +674,333 @@ describe("tld strategy", () => {
     expect(suggestion?.reason).toBe("host");
     expect(suggestion?.recommendedLocale).toBe("fr");
     expect(suggestion?.recommendedUrl).toBe("//nextjs.palamedes-i18n.fr/");
+  });
+});
+
+describe("security hardening", () => {
+  const mappedWithDefault = defineLocaleControls({
+    locales: ["en", "de", "es"] as const,
+    defaultLocale: "en",
+    hosts: {
+      locales: { de: "de.example.test" },
+      defaultHost: "example.test",
+    },
+  });
+
+  const domains = defineLocaleControls({
+    locales: ["en", "de"] as const,
+    defaultLocale: "en",
+    protocol: "https",
+    hosts: {
+      mode: "domain",
+      locales: { en: "product.example", de: "mein-produkt.de" },
+    },
+  });
+
+  describe("requestHost validation", () => {
+    const malformedHosts = [
+      "evil.example@de.example.test",
+      "de.example.test/evil",
+      "de.example.test\\evil",
+      "de.example.test evil",
+      "de.example.test\r\nX-Injected: 1",
+      "de..example.test",
+      "-de.example.test",
+      "de.example.test:0",
+      "de.example.test:080",
+      "de.example.test:65536",
+      "de.example.test:99999",
+      "de.example.test:abc",
+      "de.example.test:",
+      "[::1]:3000",
+    ];
+
+    it.each(malformedHosts)(
+      "ignores malformed requestHost %j across subdomain, tld, map, and domain modes",
+      (malformedHost) => {
+        expect(
+          subdomained.resolve({
+            strategy: "subdomain",
+            requestHost: malformedHost,
+            acceptLanguageHeader: "es",
+          }),
+        ).toStrictEqual({ locale: "es", source: "accept-language" });
+
+        expect(
+          subdomained.canonicalUrl({
+            locale: "de",
+            pathname: "/checkout",
+            requestHost: malformedHost,
+          }),
+        ).toBe("/checkout");
+
+        expect(
+          subdomained.suggest({
+            currentLocale: "en",
+            pathname: "/checkout",
+            requestHost: malformedHost,
+            acceptLanguageHeader: "de",
+          })?.recommendedUrl,
+        ).toBe("/checkout");
+
+        expect(
+          subdomained.seoLinks({
+            locale: "de",
+            pathname: "/checkout",
+            requestHost: malformedHost,
+          })[0]?.href,
+        ).toBe("/checkout");
+
+        expect(
+          tlded.resolve({
+            strategy: "tld",
+            requestHost: malformedHost,
+            acceptLanguageHeader: "es",
+          }),
+        ).toStrictEqual({ locale: "es", source: "accept-language" });
+
+        expect(
+          tlded.canonicalUrl({
+            locale: "fr",
+            pathname: "/checkout",
+            requestHost: malformedHost,
+          }),
+        ).toBe("/checkout");
+
+        expect(
+          mappedWithDefault.canonicalUrl({
+            locale: "en",
+            pathname: "/docs",
+            requestHost: malformedHost,
+          }),
+        ).toBe("//example.test/en/docs");
+
+        expect(
+          mappedWithDefault.canonicalUrl({
+            locale: "de",
+            pathname: "/docs",
+            requestHost: malformedHost,
+          }),
+        ).toBe("//de.example.test/de/docs");
+
+        expect(
+          domains.resolve({
+            strategy: "domain",
+            requestHost: malformedHost,
+            acceptLanguageHeader: "de",
+          }),
+        ).toStrictEqual({ locale: "de", source: "accept-language" });
+      },
+    );
+
+    it("preserves legitimate localhost and port-bearing hosts", () => {
+      expect(
+        mappedWithDefault.canonicalUrl({
+          locale: "en",
+          pathname: "/docs",
+          requestHost: "localhost:3000",
+        }),
+      ).toBe("//localhost:3000/en/docs");
+
+      expect(
+        subdomained.canonicalUrl({
+          locale: "de",
+          pathname: "/docs",
+          requestHost: "en.example.test:4010",
+        }),
+      ).toBe("//de.example.test:4010/docs");
+
+      expect(
+        subdomained.canonicalUrl({
+          locale: "de",
+          pathname: "/docs",
+          requestHost: "localhost:3000",
+        }),
+      ).toBe("//de.localhost:3000/docs");
+    });
+
+    it("falls back to a bare path if subdomain or tld substitution would exceed DNS limits", () => {
+      const longHost = `${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.example`;
+      expect(
+        subdomained.canonicalUrl({
+          locale: "de",
+          pathname: "/docs",
+          requestHost: longHost,
+        }),
+      ).toBe("/docs");
+    });
+  });
+
+  describe("pathname and search redirect hardening", () => {
+    it.each([
+      ["//evil.example", "/evil.example"],
+      ["///evil.example/path", "/evil.example/path"],
+      ["/\\evil.example", "/evil.example"],
+      ["\\evil.example", "/evil.example"],
+      ["\\\\evil.example/path", "/evil.example/path"],
+      ["/\\/evil.example", "/evil.example"],
+      ["  //evil.example", "/evil.example"],
+      ["@evil.example", "/@evil.example"],
+      ["/@evil.example", "/@evil.example"],
+      [":8080/evil", "/:8080/evil"],
+      ["", "/"],
+    ])("normalizes %j to %j without open redirects across all modes", (pathname, expectedPath) => {
+      expect(domains.canonicalUrl({ locale: "de", pathname })).toBe(
+        `https://mein-produkt.de${expectedPath}`,
+      );
+      expect(
+        subdomained.canonicalUrl({ locale: "de", pathname, requestHost: "en.example.test" }),
+      ).toBe(`//de.example.test${expectedPath}`);
+      expect(subdomained.canonicalUrl({ locale: "de", pathname })).toBe(expectedPath);
+      expect(tlded.canonicalUrl({ locale: "fr", pathname, requestHost: "shop.example.de" })).toBe(
+        `//shop.example.fr${expectedPath}`,
+      );
+      expect(tlded.canonicalUrl({ locale: "fr", pathname })).toBe(expectedPath);
+
+      const pathOnly = controls.canonicalUrl({ locale: "de", pathname });
+      expect(pathOnly.startsWith("/de")).toBe(true);
+      expect(new URL(pathOnly, "https://app.example").origin).toBe("https://app.example");
+
+      const mapped = mappedWithDefault.canonicalUrl({
+        locale: "de",
+        pathname,
+        requestHost: "en.example.test",
+      });
+      expect(new URL(mapped, "https://app.example").origin).toBe("https://de.example.test");
+
+      const subdomainResolved = new URL(
+        subdomained.canonicalUrl({ locale: "de", pathname }),
+        "https://app.example",
+      );
+      expect(subdomainResolved.origin).toBe("https://app.example");
+
+      const domainResolved = new URL(domains.canonicalUrl({ locale: "de", pathname }));
+      expect(domainResolved.origin).toBe("https://mein-produkt.de");
+
+      const links = domains.seoLinks({ locale: "de", pathname });
+      expect(links.every((link) => link.href.endsWith(expectedPath))).toBe(true);
+    });
+
+    it("rejects control characters in pathname and invalid search values", () => {
+      expect(() =>
+        domains.canonicalUrl({ locale: "de", pathname: "/\t/evil.example" }),
+      ).toThrowError(TypeError);
+      expect(() =>
+        domains.canonicalUrl({ locale: "de", pathname: "/docs\r\nLocation: https://evil.example" }),
+      ).toThrowError(TypeError);
+
+      for (const badSearch of [
+        "foo=bar",
+        "/evil.example",
+        "\\evil.example",
+        "@evil.example",
+        "?ok=1\r\nSet-Cookie: evil=1",
+        "?ok=1\n",
+        "?ok=1\r",
+        "?ok=1\t",
+      ]) {
+        expect(() =>
+          controls.canonicalUrl({ locale: "de", pathname: "/", search: badSearch }),
+        ).toThrowError(TypeError);
+        expect(() =>
+          domains.seoLinks({ locale: "de", pathname: "/", search: badSearch }),
+        ).toThrowError(TypeError);
+        expect(() =>
+          controls.suggest({
+            currentLocale: "en",
+            acceptLanguageHeader: "de",
+            pathname: "/en",
+            search: badSearch,
+          }),
+        ).toThrowError(TypeError);
+      }
+
+      expect(controls.canonicalUrl({ locale: "de", pathname: "/", search: "" })).toBe("/de");
+      expect(controls.canonicalUrl({ locale: "de", pathname: "/", search: null })).toBe("/de");
+      expect(controls.canonicalUrl({ locale: "de", pathname: "/", search: "?tab=1" })).toBe(
+        "/de?tab=1",
+      );
+    });
+
+    it("rejects unconfigured locales in canonicalUrl across all modes", () => {
+      expect(() => controls.canonicalUrl({ locale: "fr" as never, pathname: "/" })).toThrowError(
+        TypeError,
+      );
+      expect(() =>
+        subdomained.canonicalUrl({ locale: "evil.example@" as never, pathname: "/" }),
+      ).toThrowError(TypeError);
+    });
+  });
+
+  describe("Accept-Language CPU DoS hardening", () => {
+    it("bounds oversized headers, entry counts, and overly long tags", () => {
+      const oversizedHeader = `${Array.from({ length: 5000 }, (_, i) => `xx-r${i};q=0.5`).join(",")},de;q=0.9`;
+      const start = performance.now();
+      expect(controls.preferredLocale(oversizedHeader)).toBe("en");
+      const elapsed = performance.now() - start;
+      expect(elapsed).toBeLessThan(200);
+
+      const manyEntries = `${Array.from({ length: 40 }, () => "xx-YY;q=0.5").join(",")},de;q=0.9`;
+      expect(parseAcceptLanguage(manyEntries).length).toBeLessThanOrEqual(64);
+      expect(controls.preferredLocale(manyEntries)).toBe("en");
+
+      const withinCap = `${Array.from({ length: 31 }, () => "xx-YY;q=0.5").join(",")},de;q=0.9`;
+      expect(controls.preferredLocale(withinCap)).toBe("de");
+
+      const longTag = `${"a".repeat(80)}-US`;
+      expect(parseAcceptLanguage(`${longTag}, de;q=0.8`)).toStrictEqual(["de"]);
+      expect(controls.preferredLocale(`${longTag}, de;q=0.8`)).toBe("de");
+    });
+
+    it("does not turn a truncated q=0 exclusion at the 2 KiB boundary into an accepted tag", () => {
+      // Place "de;q=0" straddling the 2048-character boundary so naive slicing would leave "de".
+      const prefix = `${"xx,".repeat(682)}`; // 2046 chars
+      const header = `${prefix}de;q=0`;
+      expect(controls.preferredLocale(header)).toBe("en");
+    });
+
+    it("handles adversarial exclusion combinations in bounded time", () => {
+      const crafted = [
+        ...Array.from({ length: 1000 }, (_, i) => `zh-Hans-CN-u-ca-x${i};q=0`),
+        ...Array.from({ length: 1000 }, (_, i) => `zh-Hant-TW-u-ca-x${i};q=0.5`),
+        "de;q=0.4",
+      ].join(",");
+      const start = performance.now();
+      expect(controls.preferredLocale(crafted)).toBe("en");
+      expect(performance.now() - start).toBeLessThan(200);
+    });
+  });
+
+  describe("serializeChoice validation and Secure attribute", () => {
+    it("supports optional Secure attribute while staying backwards-compatible", () => {
+      expect(controls.serializeChoice("de")).toBe(
+        "locale-choice=de; Path=/; Max-Age=31536000; SameSite=Lax",
+      );
+      expect(controls.serializeChoice("de", { secure: false })).toBe(
+        "locale-choice=de; Path=/; Max-Age=31536000; SameSite=Lax",
+      );
+      expect(controls.serializeChoice("de", { secure: true })).toBe(
+        "locale-choice=de; Path=/; Max-Age=31536000; SameSite=Lax; Secure",
+      );
+    });
+
+    it("rejects unconfigured or header/attribute-injecting locale values and invalid options", () => {
+      for (const invalidLocale of [
+        "fr",
+        "de; HttpOnly",
+        "de\r\nSet-Cookie: evil=1",
+        "de\n",
+        "",
+        null,
+        undefined,
+      ]) {
+        expect(() => controls.serializeChoice(invalidLocale as never)).toThrowError(TypeError);
+      }
+
+      expect(() => controls.serializeChoice("de", { secure: "true" as never })).toThrowError(
+        TypeError,
+      );
+      expect(() => controls.serializeChoice("de", null as never)).toThrowError(TypeError);
+    });
   });
 });

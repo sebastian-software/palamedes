@@ -259,12 +259,15 @@ Supported strategies are `cookie`, `route`, `subdomain`, and `tld`. Route
 strategy reads `context.params.locale` by default; when that param is absent,
 it falls back to the request URL's first path segment. Pass `routeParam` to use
 a different param name. Cookie serialization is available through
-`remixI18n.serializeLocaleCookie(locale)`.
+`remixI18n.serializeLocaleCookie(locale, { secure? })`, which validates that
+`locale` is configured and cookie-safe and appends `; Secure` when
+`secure: true`.
 
 Further `createRemixI18nServer` options: `i18nOptions` (the request-local
 `createI18n` options such as `timeZone`, or `(request, locale) => options`),
-`failureMessage`, `cookieName` (default `"locale"`), and `cookieMaxAge`
-(default one year, in seconds). `catalogAssets` accepts a
+`failureMessage`, `cookieName` (default `"locale"`, validated as an RFC 6265
+cookie name), and `cookieMaxAge` (default one year, in seconds; validated as a
+non-negative safe integer). `catalogAssets` accepts a
 `RemixCatalogAssetConfig` (the resolved catalog configuration) and a
 locale-to-`.po` resolver. For automatic browser catalog delivery, pass
 one `createPalamedesRemixCatalogAssetRegistry()` result to both the browser
