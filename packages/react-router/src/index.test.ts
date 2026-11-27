@@ -1,10 +1,11 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 
 import { getI18n, resetI18nRuntime, type I18nInstance } from "@palamedes/runtime";
 import type * as RuntimeServer from "@palamedes/runtime/server";
-import { createElement, type ReactNode } from "react";
+import { createElement, Suspense, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   createContext,
@@ -556,6 +557,108 @@ describe("createReactRouterI18n", () => {
     expect(message).toBe("es[UTC]:custom");
     expect(i18n.getLocale(context)).toBe("es");
     expect(() => getI18n()).toThrow("No active server i18n instance");
+  });
+
+  it("forwards documentTransform stream errors to the response body instead of crashing", async () => {
+    const app = createTestApp({ catalogDelivery: false });
+    const originalPipe = PassThrough.prototype.pipe;
+    let piped = false;
+    const pipeSpy = vi
+      .spyOn(PassThrough.prototype, "pipe")
+      .mockImplementation(function (this: PassThrough, destination, options) {
+        const result = originalPipe.call(this, destination, options);
+        if (!piped) {
+          piped = true;
+          queueMicrotask(() => {
+            this.emit("error", new Error("document transform failed"));
+          });
+        }
+        return result;
+      });
+    try {
+      const response = await app.handler(new Request("https://example.test/?locale=en"));
+      await expect(response.text()).rejects.toThrow("document transform failed");
+    } finally {
+      pipeSpy.mockRestore();
+    }
+  });
+
+  it("clears the stream abort timer when the response body is closed early", async () => {
+    const never = new Promise<never>(() => {});
+    function Suspended(): ReactNode {
+      throw never;
+    }
+    const i18n = createReactRouterI18n({
+      resolveLocale: localeFromRequest,
+      catalogDelivery: false,
+      streamTimeout: 5000,
+    });
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const build: ServerBuild = {
+      entry: { module: { default: i18n.handleRequest } },
+      routes: {
+        root: {
+          id: "root",
+          path: "",
+          module: {
+            default: () =>
+              createElement(
+                "html",
+                null,
+                createElement("head"),
+                createElement(
+                  "body",
+                  null,
+                  createElement(Suspense, { fallback: "loading" }, createElement(Suspended)),
+                ),
+              ),
+            middleware: [i18n.middleware],
+          },
+        },
+      },
+      assets: {
+        entry: { imports: [], module: "/entry.client.js" },
+        routes: {
+          root: {
+            id: "root",
+            path: "",
+            module: "/root.js",
+            hasAction: false,
+            hasLoader: false,
+            hasClientAction: false,
+            hasClientLoader: false,
+            hasClientMiddleware: false,
+            hasErrorBoundary: false,
+            clientActionModule: undefined,
+            clientLoaderModule: undefined,
+            clientMiddlewareModule: undefined,
+            hydrateFallbackModule: undefined,
+          },
+        },
+        url: "/manifest.js",
+        version: "test",
+      },
+      publicPath: "/",
+      assetsBuildDirectory: "build/client",
+      future: {} as ServerBuild["future"],
+      ssr: true,
+      isSpaMode: false,
+      prerender: [],
+      routeDiscovery: { mode: "lazy", manifestPath: "/__manifest" },
+    };
+    const handle = createRequestHandler(build, "production");
+    try {
+      const response = await handle(new Request("https://example.test/?locale=en"));
+      const streamTimer = setTimeoutSpy.mock.results.at(-1)?.value;
+      expect(streamTimer).toBeDefined();
+      await response.body?.cancel();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(streamTimer);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
   });
 });
 

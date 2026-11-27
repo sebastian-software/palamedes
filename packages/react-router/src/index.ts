@@ -383,6 +383,10 @@ function renderDocument({
       () => abort(),
       streamTimeout + 1000,
     );
+    const clearStreamTimeout = () => {
+      clearTimeout(timeoutId);
+      timeoutId = undefined;
+    };
 
     const { pipe, abort } = renderToPipeableStream(
       // `useDocumentLocale()` and `useCatalogAvailable()` read the document
@@ -402,19 +406,22 @@ function renderDocument({
           shellRendered = true;
           const body = new PassThrough({
             final(callback) {
-              clearTimeout(timeoutId);
-              timeoutId = undefined;
+              clearStreamTimeout();
               callback();
             },
           });
+          body.once("close", clearStreamTimeout);
           const stream = createReadableStreamFromReadable(body);
           responseHeaders.set("Content-Type", "text/html");
+          documentTransform.on("error", (error) => {
+            body.destroy(error);
+          });
           documentTransform.pipe(body);
           pipe(documentTransform);
           resolve(new Response(stream, { headers: responseHeaders, status: statusCode }));
         },
         onShellError(error: unknown) {
-          clearTimeout(timeoutId);
+          clearStreamTimeout();
           reject(error);
         },
         onError(error: unknown) {

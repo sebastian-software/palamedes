@@ -166,6 +166,9 @@ export async function loadRegisteredMessages<T extends I18nInstance>(
   const pending: { state: RegisteredMessageLoaderState; loader: RegisteredMessageLoader }[] = [];
 
   for (const state of getRegisteredMessageLoaders().values()) {
+    if (!Object.hasOwn(state.loaders, locale)) {
+      continue;
+    }
     const loader = state.loaders[locale];
     if (!loader) {
       continue;
@@ -186,10 +189,14 @@ export async function loadRegisteredMessages<T extends I18nInstance>(
       return existing;
     }
 
-    const resource = loader().catch((error: unknown) => {
-      state.resources.delete(locale);
-      throw error;
-    });
+    const resource = Promise.resolve()
+      .then(() => loader())
+      .catch((error: unknown) => {
+        if (state.resources.get(locale) === resource) {
+          state.resources.delete(locale);
+        }
+        throw error;
+      });
     state.resources.set(locale, resource);
     return resource;
   });

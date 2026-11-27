@@ -471,7 +471,12 @@ export function createRemixI18nServer<TLocale extends string>(
       return undefined;
     }
     const encodedLocale = pathname.slice(prefix.length, -3);
-    const locale = decodeURIComponent(encodedLocale) as TLocale;
+    let locale: TLocale;
+    try {
+      locale = decodeURIComponent(encodedLocale) as TLocale;
+    } catch {
+      return new Response("Malformed Palamedes locale encoding.", { status: 400 });
+    }
     if (!options.locales.locales.includes(locale)) {
       return new Response(`Unknown Palamedes locale "${locale}".`, { status: 404 });
     }

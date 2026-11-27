@@ -172,13 +172,23 @@ function createWakuBootstrapGateTransform(options: { allowMissingPromise: boolea
 
   return new Transform({
     transform(chunk, _encoding, callback) {
-      tail += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      flushSafePrefix(this, false);
+      try {
+        tail += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        flushSafePrefix(this, false);
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
       callback();
     },
     flush(callback) {
-      tail += decoder.end();
-      flushSafePrefix(this, true);
+      try {
+        tail += decoder.end();
+        flushSafePrefix(this, true);
+      } catch (error) {
+        callback(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
       callback();
     },
   });

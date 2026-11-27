@@ -520,4 +520,42 @@ describe("registerMessages", () => {
 
     expect(i18n.loaded["reg-eager-key"]).toEqual([{ keyP: "new" }, { keyQ: "other" }]);
   });
+
+  it("ignores Object.prototype keys when resolving lazy message loaders", async () => {
+    const loadEn = vi.fn(async () => ({ keyProto: "en" }));
+    const release = registerMessageLoaders("reg-server-proto", { en: loadEn });
+    try {
+      for (const locale of ["toString", "constructor", "valueOf"]) {
+        const i18n = createLoadableI18n(locale);
+        await expect(loadRegisteredMessages(i18n, locale)).resolves.toBe(i18n);
+        expect(Object.keys(i18n.loaded)).toEqual([]);
+      }
+      expect(loadEn).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+  });
+
+  it("turns synchronous loader throws into rejections and allows retries", async () => {
+    const load = vi
+      .fn<() => Promise<Record<string, string>>>()
+      .mockImplementationOnce(() => {
+        throw new Error("sync loader crash");
+      })
+      .mockResolvedValueOnce({ keySync: "recovered" });
+    const release = registerMessageLoaders("reg-server-sync-throw", {
+      "reg-server-sync-throw": load,
+    });
+    try {
+      const i18n = createLoadableI18n("reg-server-sync-throw");
+      await expect(loadRegisteredMessages(i18n, "reg-server-sync-throw")).rejects.toThrow(
+        "sync loader crash",
+      );
+      await expect(loadRegisteredMessages(i18n, "reg-server-sync-throw")).resolves.toBe(i18n);
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(i18n.loaded["reg-server-sync-throw"]).toEqual([{ keySync: "recovered" }]);
+    } finally {
+      release();
+    }
+  });
 });
