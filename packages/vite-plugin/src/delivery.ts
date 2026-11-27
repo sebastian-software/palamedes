@@ -69,6 +69,7 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
   const manifestName = options.manifestName ?? SPLIT_MANIFEST_NAME;
   let manifestStamp: string | undefined;
   let manifest: ViteCatalogManifest | null | undefined;
+  const bindingCache = new Map<string, ViteCatalogBinding>();
 
   function readManifest(): ViteCatalogManifest | null {
     if (options.development) return null;
@@ -81,6 +82,7 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
       if (options.development && isMissingFile(error)) {
         manifest = null;
         manifestStamp = undefined;
+        bindingCache.clear();
         return null;
       }
       throw new Error(
@@ -102,6 +104,7 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
     }
     manifest = validateManifest(parsed, manifestPath);
     manifestStamp = stamp;
+    bindingCache.clear();
     return manifest;
   }
 
@@ -142,24 +145,39 @@ export function createViteCatalogDelivery(options: ViteCatalogDeliveryOptions): 
         `Palamedes Vite catalog delivery manifest ${path.join(clientDirectory, manifestName)} has an invalid import-map path for locale ${JSON.stringify(locale)}.`,
       );
     }
+    const cacheKey = `${manifestStamp}:${locale}:${mapName}`;
+    const cached = bindingCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
     let importMapJson: string;
+    let imports: Record<string, string>;
     try {
       importMapJson = readFileSync(mapPath, "utf8");
-      const candidate = JSON.parse(importMapJson) as { imports?: unknown };
-      if (!isStringRecord(candidate.imports)) throw new TypeError("the imports object is missing");
+      const candidate = JSON.parse(importMapJson) as { imports?: unknown } | null;
+      if (
+        !candidate ||
+        typeof candidate !== "object" ||
+        Array.isArray(candidate) ||
+        !isStringRecord(candidate.imports)
+      ) {
+        throw new TypeError("the imports object is missing");
+      }
+      imports = candidate.imports;
     } catch (error) {
       throw new Error(
         `Palamedes Vite catalog delivery could not read the generated import map for locale ${JSON.stringify(locale)} at ${mapPath}.`,
         { cause: error },
       );
     }
-    const parsed = JSON.parse(importMapJson) as { imports: Record<string, string> };
-    return {
+    const binding: ViteCatalogBinding = {
       locale,
       importMapJson,
-      imports: parsed.imports,
+      imports,
       chunkImports: current.chunkImports,
     };
+    bindingCache.set(cacheKey, binding);
+    return binding;
   }
 
   return { readManifest, getLocaleBinding, createDocumentTransform };

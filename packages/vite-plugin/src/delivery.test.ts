@@ -53,6 +53,51 @@ describe("Vite catalog delivery", () => {
     );
   });
 
+  it("caches parsed locale bindings per manifest stamp and invalidates when the manifest changes", async () => {
+    const clientDirectory = await createFixture();
+    const delivery = createViteCatalogDelivery({ clientDirectory });
+    const parseSpy = vi.spyOn(JSON, "parse");
+    try {
+      const first = delivery.getLocaleBinding("de");
+      // One parse for the manifest and a single parse for the import map.
+      expect(parseSpy).toHaveBeenCalledTimes(2);
+
+      const second = delivery.getLocaleBinding("de");
+      expect(second).toBe(first);
+      expect(parseSpy).toHaveBeenCalledTimes(2);
+
+      // A second locale reuses the cached manifest and parses only its own map once.
+      const enFirst = delivery.getLocaleBinding("en");
+      expect(parseSpy).toHaveBeenCalledTimes(3);
+      expect(delivery.getLocaleBinding("en")).toBe(enFirst);
+      expect(parseSpy).toHaveBeenCalledTimes(3);
+
+      // Updating the manifest clears cached bindings so subsequent calls read the new maps.
+      await writeFile(
+        path.join(clientDirectory, "palamedes-importmap.de-v2.json"),
+        JSON.stringify({ imports: { "#pmds/route": "/app/assets/route.de-v2.js" } }),
+      );
+      await writeFile(
+        path.join(clientDirectory, "palamedes-split-manifest.json"),
+        JSON.stringify({
+          locales: ["en", "de"],
+          importMaps: { en: "palamedes-importmap.en.json", de: "palamedes-importmap.de-v2.json" },
+          chunkImports: { "assets/route.js": ["#pmds/route"] },
+        }),
+      );
+
+      const refreshed = delivery.getLocaleBinding("de");
+      expect(refreshed).not.toBe(first);
+      expect(refreshed?.imports["#pmds/route"]).toBe("/app/assets/route.de-v2.js");
+      // One parse for the updated manifest + one parse for the new de import map.
+      expect(parseSpy).toHaveBeenCalledTimes(5);
+      expect(delivery.getLocaleBinding("de")).toBe(refreshed);
+      expect(parseSpy).toHaveBeenCalledTimes(5);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
   it("ignores stale production assets while the development server owns dependencies", async () => {
     const clientDirectory = await createFixture();
     const delivery = createViteCatalogDelivery({ clientDirectory, development: true });

@@ -327,7 +327,7 @@ describe("palamedes vite plugin", () => {
     Object.assign(server, { restart: vi.fn(async () => plugin.configureServer(server)) });
     plugin.configureServer(server);
     await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 1, server });
-    await vi.waitFor(() => expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(1));
     await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 1.5, server });
     await plugin.hotUpdate.handler({
       file: "/repo/palamedes.yaml",
@@ -341,8 +341,324 @@ describe("palamedes vite plugin", () => {
       expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: "custom" })),
     );
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(6);
+    expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(2);
     expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "error" }));
+  });
+
+  it("recompiles only affected locales, batches sidecar selection, and reloads modules in parallel during experimental catalog HMR", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de", "de-AT", "fr"],
+      sourceLocale: "en",
+      fallbackLocales: { "de-AT": ["de"] },
+      catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
+    });
+    const plugins = palamedes({ experimentalReactCatalogHmr: true, mdx: false });
+    const transformPlugin = plugins.find(
+      (candidate) => candidate.name === "palamedes:transform",
+    ) as any;
+    const sidecarPlugin = plugins.find(
+      (candidate) => candidate.name === "palamedes:message-sidecars",
+    ) as any;
+    const transform = transformHandler(transformPlugin.transform)!;
+    for (const [sourceId, compiledIds] of [
+      ["/repo/src/App.tsx", ["id-a", "id-shared"]],
+      ["/repo/src/Nav.tsx", ["id-b", "id-shared"]],
+    ] as const) {
+      mocks.transformPalamedesMacros.mockReturnValue({
+        code: "transformed",
+        hasChanged: true,
+        compiledIds: [...compiledIds],
+        map: null,
+      });
+      await transform.call(
+        { error: vi.fn() } as never,
+        'import { t } from "@palamedes/core/macro"; export const label = t`Hello`;',
+        sourceId,
+      );
+    }
+
+    const appModule = { id: "/repo/src/App.tsx", importedModules: new Set([{}]) };
+    const navModule = { id: "/repo/src/Nav.tsx", importedModules: new Set([{}]) };
+    let inFlightReloads = 0;
+    let maxConcurrentReloads = 0;
+    const releaseReloads: Array<() => void> = [];
+    const reloadModule = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          inFlightReloads += 1;
+          maxConcurrentReloads = Math.max(maxConcurrentReloads, inFlightReloads);
+          releaseReloads.push(() => {
+            inFlightReloads -= 1;
+            resolve();
+          });
+          if (releaseReloads.length === 2) {
+            releaseReloads.splice(0).forEach((release) => release());
+          }
+        }),
+    );
+    const send = vi.fn();
+    const server = {
+      config: { logger: { warn: vi.fn() } },
+      environments: {
+        client: {
+          hot: { send },
+          moduleGraph: {
+            idToModuleMap: new Map(),
+            getModulesByFile(file: string) {
+              if (file === "/repo/src/App.tsx") return [appModule];
+              if (file === "/repo/src/Nav.tsx") return [navModule];
+              return [];
+            },
+            invalidateModule: vi.fn(),
+          },
+          reloadModule,
+        },
+      },
+    };
+    transformPlugin.configureServer(server);
+
+    // Seed an unaffected locale snapshot so we can verify it stays cached.
+    await sidecarPlugin.load.call(
+      { addWatchFile: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      "\0palamedes:react-catalog-snapshot/0/fr",
+    );
+    expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(1);
+    mocks.compileCatalogArtifact.mockClear();
+    mocks.compileCatalogArtifactSelected.mockClear();
+
+    // Updating de.po affects de and de-AT (which falls back to de), not en or fr.
+    await transformPlugin.hotUpdate.handler({
+      file: deCatalogPath,
+      type: "update",
+      timestamp: 1,
+      server,
+    });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "custom",
+          event: "palamedes:catalog-update",
+          data: { generation: 1 },
+        }),
+      ),
+    );
+    await vi.waitFor(() => expect(reloadModule).toHaveBeenCalledTimes(2));
+
+    expect(maxConcurrentReloads).toBe(2);
+    // Batched per (catalog, affected locale): 1 catalog * 2 affected locales = 2 calls (not 2 sidecars * 4 locales = 8).
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledTimes(2);
+    expect(
+      mocks.compileCatalogArtifactSelected.mock.calls.map(([, resourcePath, ids]) => [
+        resourcePath,
+        ids,
+      ]),
+    ).toEqual([
+      [path.resolve("/repo/src/locales/de.po"), ["id-a", "id-b", "id-shared"]],
+      [path.resolve("/repo/src/locales/de-AT.po"), ["id-a", "id-b", "id-shared"]],
+    ]);
+    // Snapshots only recompiled for de and de-AT.
+    expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(2);
+    expect(mocks.compileCatalogArtifact.mock.calls.map(([, resourcePath]) => resourcePath)).toEqual(
+      [path.resolve("/repo/src/locales/de.po"), path.resolve("/repo/src/locales/de-AT.po")],
+    );
+
+    // Unaffected fr snapshot remains cached after the de update.
+    mocks.compileCatalogArtifact.mockClear();
+    await sidecarPlugin.load.call(
+      { addWatchFile: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      "\0palamedes:react-catalog-snapshot/1/fr",
+    );
+    expect(mocks.compileCatalogArtifact).not.toHaveBeenCalled();
+
+    // Updating the sourceLocale (en.po) affects all configured locales because every locale falls back to sourceLocale.
+    mocks.compileCatalogArtifactSelected.mockClear();
+    mocks.compileCatalogArtifact.mockClear();
+    await transformPlugin.hotUpdate.handler({
+      file: path.resolve("/repo/src/locales/en.po"),
+      type: "update",
+      timestamp: 2,
+      server,
+    });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "custom",
+          event: "palamedes:catalog-update",
+          data: { generation: 2 },
+        }),
+      ),
+    );
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledTimes(4);
+    expect(mocks.compileCatalogArtifact).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps prior failed catalog files in subsequent HMR transactions until fixed", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de", "fr"],
+      sourceLocale: "en",
+      catalogs: [{ path: "src/locales/{locale}", include: ["src/**/*"] }],
+    });
+    const plugin = palamedes({
+      framework: "solid",
+      experimentalSolidCatalogHmr: true,
+      mdx: false,
+    }).find((candidate) => candidate.name === "palamedes:transform") as any;
+    const send = vi.fn();
+    const server = {
+      config: { logger: { warn: vi.fn() } },
+      environments: {
+        client: {
+          hot: { send },
+          moduleGraph: { idToModuleMap: new Map(), getModulesByFile: () => [] },
+        },
+      },
+    };
+    plugin.configureServer(server);
+
+    const frCatalogPath = path.resolve("/repo/src/locales/fr.po");
+    let deBroken = true;
+    mocks.compileCatalogArtifact.mockImplementation(async (_config, resourcePath: string) => {
+      if (deBroken && resourcePath === deCatalogPath) {
+        throw new Error("invalid ICU in de.po");
+      }
+      return { messages: { greeting: "ok" }, missing: [], diagnostics: [], watchFiles: [] };
+    });
+
+    // 1. Broken edit in de.po enters error state.
+    await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 1, server });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          err: expect.objectContaining({ message: "invalid ICU in de.po" }),
+        }),
+      ),
+    );
+
+    // 2. Saving unrelated fr.po must still revalidate de.po and must NOT reload Solid while de.po is broken.
+    send.mockClear();
+    mocks.compileCatalogArtifact.mockClear();
+    await plugin.hotUpdate.handler({ file: frCatalogPath, type: "update", timestamp: 2, server });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          err: expect.objectContaining({ message: "invalid ICU in de.po" }),
+        }),
+      ),
+    );
+    expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "full-reload" }));
+
+    // 3. Once de.po is fixed, both pending de.po and fr.po validate and Solid recovers cleanly.
+    deBroken = false;
+    send.mockClear();
+    mocks.compileCatalogArtifact.mockClear();
+    await plugin.hotUpdate.handler({ file: deCatalogPath, type: "update", timestamp: 3, server });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: "full-reload" })),
+    );
+    expect(mocks.compileCatalogArtifact.mock.calls.map(([, resourcePath]) => resourcePath)).toEqual(
+      [deCatalogPath, frCatalogPath],
+    );
+  });
+
+  it("reloads active React source modules when an unused catalog resolves a conflict error", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [
+        { path: "src/locales/{locale}", include: ["src/**/*"] },
+        { path: "src/other/{locale}", include: ["unused/**/*"] },
+      ],
+    });
+    const plugin = palamedes({ experimentalReactCatalogHmr: true, mdx: false }).find(
+      (candidate) => candidate.name === "palamedes:transform",
+    ) as any;
+    mocks.transformPalamedesMacros.mockReturnValue({
+      code: "transformed",
+      hasChanged: true,
+      compiledIds: ["label"],
+      map: null,
+    });
+    await transformHandler(plugin.transform)!.call(
+      { error: vi.fn() } as never,
+      'import { t } from "@palamedes/core/macro"; export const label = t`Hello`;',
+      "/repo/src/App.tsx",
+    );
+
+    const appModule = { id: "/repo/src/App.tsx", importedModules: new Set([{}]) };
+    const reloadModule = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn();
+    const server = {
+      config: { logger: { warn: vi.fn() } },
+      environments: {
+        client: {
+          hot: { send },
+          moduleGraph: {
+            idToModuleMap: new Map(),
+            getModulesByFile: (file: string) => (file === "/repo/src/App.tsx" ? [appModule] : []),
+            invalidateModule: vi.fn(),
+          },
+          reloadModule,
+        },
+      },
+    };
+    plugin.configureServer(server);
+
+    const otherDeCatalogPath = path.resolve("/repo/src/other/de.po");
+    let conflict = true;
+    mocks.compileCatalogArtifact.mockImplementation(async (_config, resourcePath: string) => ({
+      messages: {
+        label: conflict && resourcePath === otherDeCatalogPath ? "Other DE" : "Primary DE",
+      },
+      missing: [],
+      diagnostics: [],
+      watchFiles: [],
+    }));
+
+    // 1. Conflicting translation in the unused catalog triggers Vite's error overlay.
+    await plugin.hotUpdate.handler({
+      file: otherDeCatalogPath,
+      type: "update",
+      timestamp: 1,
+      server,
+    });
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          err: expect.objectContaining({ message: expect.stringContaining("conflicting") }),
+        }),
+      ),
+    );
+    expect(reloadModule).not.toHaveBeenCalled();
+
+    // 2. Resolving the conflict in the unused catalog must still reload App.tsx so Vite dismisses the overlay,
+    // without needlessly running selected-ID compilation on the untouched primary catalog.
+    conflict = false;
+    send.mockClear();
+    mocks.compileCatalogArtifactSelected.mockClear();
+    await plugin.hotUpdate.handler({
+      file: otherDeCatalogPath,
+      type: "update",
+      timestamp: 2,
+      server,
+    });
+    await vi.waitFor(() => expect(reloadModule).toHaveBeenCalledWith(appModule));
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "custom",
+        event: "palamedes:catalog-update",
+        data: { generation: 1 },
+      }),
+    );
+    expect(mocks.compileCatalogArtifactSelected).not.toHaveBeenCalled();
   });
 
   it("still reports a current refresh failure after committing its catalog generation", async () => {
@@ -1699,16 +2015,132 @@ describe("automatic graph splitting", () => {
     );
 
     // Names and hashes only depend on the sidecars, not on emission runs.
+    mocks.compileCatalogArtifactSelected.mockClear();
     expect(await emitImportMap(sidecarPlugin, label, bundle())).toEqual(emitted);
+    // Batched once per (catalog, locale): 1 catalog * 3 locales = 3 calls (not 4 sidecars * 3 locales = 12).
+    expect(mocks.compileCatalogArtifactSelected).toHaveBeenCalledTimes(3);
+    expect(mocks.compileCatalogArtifactSelected.mock.calls.map((call) => call[2])).toEqual([
+      ["id-button", "id-label", "id-lazy", "id-shared", "id-unused"],
+      ["id-button", "id-label", "id-lazy", "id-shared", "id-unused"],
+      ["id-button", "id-label", "id-lazy", "id-shared", "id-unused"],
+    ]);
   });
 
-  it("keeps separate assets when a chunk's sidecars disagree or a sidecar has two importers", async () => {
+  it("attributes batched missing-translation warnings only to sidecars that reference the missing ID", async () => {
     mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
       nativeModuleShape(JSON.stringify(messages)),
     );
     mocks.compileCatalogArtifactSelected.mockImplementation(
-      (_config: unknown, _resourcePath: string, ids: string[]) => ({
-        messages: Object.fromEntries(ids.map((id) => [id.replace(/:.*/u, ""), id])),
+      (_config: unknown, resourcePath: string) => ({
+        messages: { "id-present": "Present" },
+        missing:
+          resourcePath === deCatalogPath
+            ? [
+                {
+                  compiledId: "id-missing",
+                  sourceKey: { message: "Missing" },
+                  requestedLocale: "de",
+                },
+              ]
+            : [],
+        diagnostics: [],
+        watchFiles: [],
+        resolvedLocaleChain: [],
+      }),
+    );
+
+    const { sidecarPlugin, addSidecar } = await runSidecarLoad(
+      ["id-present"],
+      {},
+      { pluginOptions: {}, command: "build", sourceId: "/repo/src/ok.ts" },
+    );
+    await addSidecar("/repo/src/broken.ts", ["id-missing"]);
+
+    const warn = vi.fn();
+    await sidecarPlugin.generateBundle.call(
+      { environment: { name: "client" }, emitFile: vi.fn(), warn } as never,
+      {},
+      {},
+    );
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("/repo/src/broken.ts"));
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("/repo/src/ok.ts"));
+  });
+
+  it("uses its snapshotted sidecar entries when another environment re-registers a key during generateBundle", async () => {
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages)),
+    );
+    let releaseCompile!: () => void;
+    const compileGate = new Promise<void>((resolve) => {
+      releaseCompile = resolve;
+    });
+    const compileStarted = new Promise<void>((resolve) => {
+      mocks.compileCatalogArtifactSelected.mockImplementation(
+        async (_config: unknown, resourcePath: string, ids: string[]) => {
+          resolve();
+          await compileGate;
+          return {
+            messages: Object.fromEntries(
+              ids.map((id) => [id, `${id}:${resourcePath === deCatalogPath ? "de" : "en"}`]),
+            ),
+            missing: [],
+            diagnostics: [],
+            watchFiles: [],
+            resolvedLocaleChain: [],
+          };
+        },
+      );
+    });
+
+    const { key, sidecarPlugin, addSidecar } = await runSidecarLoad(
+      ["id-a"],
+      {},
+      { pluginOptions: {}, command: "build", sourceId: "/repo/src/label.ts" },
+    );
+    const emitPromise = emitImportMap(sidecarPlugin, key);
+    await compileStarted;
+    // Simulate a concurrent SSR transform replacing the sidecar registry entry object for the same key.
+    await addSidecar("/repo/src/label.ts", ["id-a"]);
+    releaseCompile();
+
+    const emitted = await emitPromise;
+    const deAsset = emitted.find(
+      (file) => file.fileName.startsWith("assets/palamedes-m-") && file.fileName.includes(".de-"),
+    );
+    expect(deAsset?.source).toBe(
+      'export const locale="de";export const messages=({"id-a":"id-a:de"});',
+    );
+  });
+
+  it("keeps separate assets when a chunk's sidecars disagree or a sidecar has two importers", async () => {
+    mocks.loadPalamedesConfig.mockResolvedValue({
+      configPath: "/repo/palamedes.yaml",
+      rootDir: "/repo",
+      locales: ["en", "de"],
+      sourceLocale: "en",
+      catalogs: [
+        { path: "src/first/locales/{locale}", include: ["src/first/**"] },
+        { path: "src/second/locales/{locale}", include: ["src/second/**"] },
+        { path: "src/common/locales/{locale}", include: ["src/common/**"] },
+      ],
+    });
+    mocks.renderCatalogModule.mockImplementation((messages: Record<string, string>) =>
+      nativeModuleShape(JSON.stringify(messages)),
+    );
+    mocks.compileCatalogArtifactSelected.mockImplementation(
+      (_config: unknown, resourcePath: string, ids: string[]) => ({
+        messages: Object.fromEntries(
+          ids.map((id) => [
+            id,
+            resourcePath.includes(`${path.sep}first${path.sep}`)
+              ? `${id}:first`
+              : resourcePath.includes(`${path.sep}second${path.sep}`)
+                ? `${id}:second`
+                : `${id}:common`,
+          ]),
+        ),
         missing: [],
         diagnostics: [],
         watchFiles: [],
@@ -1720,9 +2152,13 @@ describe("automatic graph splitting", () => {
       key: first,
       sidecarPlugin,
       addSidecar,
-    } = await runSidecarLoad(["id-shared:first"], {}, { pluginOptions: {}, command: "build" });
-    const second = await addSidecar("/repo/src/second.ts", ["id-shared:second"]);
-    const common = await addSidecar("/repo/src/common.ts", ["id-common"]);
+    } = await runSidecarLoad(
+      ["id-shared"],
+      {},
+      { pluginOptions: {}, command: "build", sourceId: "/repo/src/first/view.ts" },
+    );
+    const second = await addSidecar("/repo/src/second/view.ts", ["id-shared"]);
+    const common = await addSidecar("/repo/src/common/view.ts", ["id-common"]);
     const emitted = await emitImportMap(sidecarPlugin, first, {
       "assets/home-abc.js": {
         type: "chunk",
