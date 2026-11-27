@@ -312,6 +312,7 @@ struct PreparedCatalog {
     path: PathBuf,
     parent_dir: Arc<ContainedDir>,
     file_name: OsString,
+    expected_original: Option<String>,
     content: String,
 }
 
@@ -462,7 +463,7 @@ where
         Option<&PoOutputOptions>,
     ) -> PalamedesResult<CatalogReplacement>,
 {
-    apply_translation_patches_with_options(request, replace_catalog, false, None)
+    apply_translation_patches_with_options(request, replace_catalog, false, None, None)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -471,6 +472,7 @@ fn apply_translation_patches_with_options<F>(
     mut replace_catalog: F,
     simulate_missing_file_identity: bool,
     simulated_dir_equivalence: Option<Option<DirFilenameEquivalence>>,
+    simulated_8dot3_alias_probe: Option<Option<bool>>,
 ) -> PalamedesResult<TranslationPatchResult>
 where
     F: FnMut(
@@ -627,6 +629,7 @@ where
     // write occurs.
     let mut seen_identities: HashMap<FileIdentity, Vec<usize>> = HashMap::new();
     let mut dir_eq_cache: HashMap<PathBuf, Option<DirFilenameEquivalence>> = HashMap::new();
+    let mut alias_probe_cache: HashMap<(PathBuf, OsString, OsString), bool> = HashMap::new();
     let mut unidentified_trie = UnidentifiedPatchNode::default();
     let mut prepared_plans = Vec::new();
     for (batch, patch_indexes) in groups {
@@ -684,7 +687,19 @@ where
                 simulated_dir_equivalence,
             )?;
             let mut colliding_priors = Vec::new();
-            unidentified_trie.collect_colliding_leaf_patches(&segments, &mut colliding_priors);
+            let mut probe_ctx = UnidentifiedAliasProbeContext {
+                root_dir,
+                leaf_parent_rel: &relative_parent,
+                leaf_parent_dir: &loaded.parent_dir,
+                cache: &mut alias_probe_cache,
+                simulated_8dot3_alias_probe,
+            };
+            unidentified_trie.collect_colliding_leaf_patches(
+                &segments,
+                Path::new(""),
+                &mut probe_ctx,
+                &mut colliding_priors,
+            );
             if !colliding_priors.is_empty() {
                 reject_ambiguous_catalog_patches(
                     &colliding_priors,
@@ -903,8 +918,8 @@ where
                     });
                 }
             };
-            let (changed, content) = if current_original == plan.original {
-                (true, plan.content)
+            let (changed, content, expected_original) = if current_original == plan.original {
+                (true, plan.content, current_original)
             } else {
                 // Another writer modified this catalog after Phase 1 validation.
                 // Re-parse under the exclusive lock, re-verify every patch
@@ -974,7 +989,7 @@ where
                     reloaded.format,
                     request.po.as_ref(),
                 )?;
-                (rendered != reloaded.original, rendered)
+                (rendered != reloaded.original, rendered, reloaded.original)
             };
             if !changed {
                 return Ok(None);
@@ -983,6 +998,7 @@ where
                 path: plan.path.clone(),
                 parent_dir: Arc::clone(&parent_dir),
                 file_name: plan.file_name.clone(),
+                expected_original: Some(expected_original),
                 content,
             };
             replace_catalog(
@@ -1461,10 +1477,51 @@ fn parse_8dot3_long_name(segment: &OsStr) -> Option<Long83Derived> {
     })
 }
 
+struct UnidentifiedAliasProbeContext<'a> {
+    root_dir: &'a Path,
+    leaf_parent_rel: &'a Path,
+    leaf_parent_dir: &'a ContainedDir,
+    cache: &'a mut HashMap<(PathBuf, OsString, OsString), bool>,
+    simulated_8dot3_alias_probe: Option<Option<bool>>,
+}
+
+impl UnidentifiedAliasProbeContext<'_> {
+    fn verify_8dot3_pair(&mut self, dir_rel: &Path, left: &OsStr, right: &OsStr) -> bool {
+        if left == right {
+            return true;
+        }
+        let (first, second) = if left <= right {
+            (left.to_os_string(), right.to_os_string())
+        } else {
+            (right.to_os_string(), left.to_os_string())
+        };
+        let key = (dir_rel.to_path_buf(), first, second);
+        if let Some(&cached) = self.cache.get(&key) {
+            return cached;
+        }
+        let probed = if let Some(simulated) = self.simulated_8dot3_alias_probe {
+            simulated
+        } else if dir_rel == self.leaf_parent_rel {
+            self.leaf_parent_dir.probe_names_equivalent(left, right)
+        } else {
+            ContainedDir::open_subpath(self.root_dir, dir_rel, false)
+                .ok()
+                .flatten()
+                .and_then(|dir| dir.probe_names_equivalent(left, right))
+        };
+        // Only treat the pair as distinct when the filesystem explicitly
+        // disproves aliasing (`Some(false)`); fail closed on `Some(true)` or
+        // unprobeable (`None`).
+        let collides = probed != Some(false);
+        self.cache.insert(key, collides);
+        collides
+    }
+}
+
 #[derive(Default)]
 struct UnidentifiedPatchNode {
     leaf_patch_indexes: Vec<usize>,
-    child_nodes: Vec<Self>,
+    child_nodes: Vec<(OsString, Self)>,
     by_folded: HashMap<OsString, usize>,
     // Bidirectional O(1) indexes for NTFS/FAT 8.3 short/long aliases.
     long_by_prefix: HashMap<(String, String, usize), Vec<usize>>,
@@ -1619,6 +1676,8 @@ impl UnidentifiedPatchNode {
     fn collect_colliding_leaf_patches(
         &self,
         segments: &[UnidentifiedPatchSegment],
+        current_rel: &Path,
+        probe_ctx: &mut UnidentifiedAliasProbeContext<'_>,
         out: &mut Vec<usize>,
     ) {
         let Some((seg, rest)) = segments.split_first() else {
@@ -1632,14 +1691,23 @@ impl UnidentifiedPatchNode {
         }
         if equivalence_allows_8dot3(seg.equivalence) {
             for child_idx in self.matching_8dot3_children(&seg.raw) {
-                if !matched_children.contains(&child_idx) {
+                if !matched_children.contains(&child_idx)
+                    && probe_ctx.verify_8dot3_pair(
+                        current_rel,
+                        &self.child_nodes[child_idx].0,
+                        &seg.raw,
+                    )
+                {
                     matched_children.push(child_idx);
                 }
             }
         }
 
         for child_idx in matched_children {
-            self.child_nodes[child_idx].collect_colliding_leaf_patches(rest, out);
+            let next_rel = current_rel.join(&seg.raw);
+            self.child_nodes[child_idx]
+                .1
+                .collect_colliding_leaf_patches(rest, &next_rel, probe_ctx, out);
         }
     }
 
@@ -1650,14 +1718,14 @@ impl UnidentifiedPatchNode {
                 existing_idx
             } else {
                 let new_idx = node.child_nodes.len();
-                node.child_nodes.push(Self::default());
+                node.child_nodes.push((seg.raw.clone(), Self::default()));
                 node.by_folded.insert(seg.folded.clone(), new_idx);
                 if equivalence_allows_8dot3(seg.equivalence) {
                     node.record_8dot3_child(&seg.raw, new_idx);
                 }
                 new_idx
             };
-            node = &mut node.child_nodes[child_idx];
+            node = &mut node.child_nodes[child_idx].1;
         }
         node.leaf_patch_indexes.extend_from_slice(patch_indexes);
     }
@@ -2639,24 +2707,32 @@ where
     // configured root. Metadata and ACLs are restored before the temporary file is synced and
     // renamed; a later directory-sync failure returns an explicit durability warning because the
     // rename is already visibly committed.
-    catalog
-        .parent_dir
-        .write_file_atomically(
+    let write_result = if let Some(expected_original) = catalog.expected_original.as_deref() {
+        catalog.parent_dir.write_file_atomically_if_unchanged(
+            &catalog.file_name,
+            catalog.content.as_bytes(),
+            Some(expected_original.as_bytes()),
+            ContainedNewFileMode::Private,
+            ContainedWriteDurability::FileOnly,
+        )
+    } else {
+        catalog.parent_dir.write_file_atomically(
             &catalog.file_name,
             catalog.content.as_bytes(),
             ContainedNewFileMode::Private,
             ContainedWriteDurability::FileOnly,
         )
-        .map_err(|error| match error {
-            ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
-                path: catalog.path.to_string_lossy().into_owned(),
-                reason,
-            },
-            ContainedFsError::Io(source) => PalamedesError::WriteFile {
-                path: catalog.path.clone(),
-                source,
-            },
-        })?;
+    };
+    write_result.map_err(|error| match error {
+        ContainedFsError::Containment(reason) => PalamedesError::UnsafeCatalogPath {
+            path: catalog.path.to_string_lossy().into_owned(),
+            reason,
+        },
+        ContainedFsError::Io(source) => PalamedesError::WriteFile {
+            path: catalog.path.clone(),
+            source,
+        },
+    })?;
     Ok(match sync_directory(&catalog.parent_dir) {
         Ok(()) => CatalogReplacement::Durable,
         Err(source) => CatalogReplacement::CommittedWithDurabilityWarning(source),
@@ -4599,6 +4675,7 @@ mod tests {
             path: path.clone(),
             parent_dir,
             file_name: OsString::from("messages.po"),
+            expected_original: None,
             content: "msgid \"Hello\"\nmsgstr \"Hallo\"\n".to_owned(),
         };
 
@@ -5219,6 +5296,7 @@ mod tests {
                 },
                 true,
                 Some(simulated_eq),
+                None,
             )
             .expect("ambiguous batch returns structured rejection");
 
@@ -5289,6 +5367,7 @@ mod tests {
             atomic_replace_catalog,
             true,
             Some(Some(DirFilenameEquivalence::CaseInsensitiveNtfs)),
+            None,
         )
         .expect("distinct locales must succeed when file_identity is unavailable");
         assert!(result.updated);
@@ -5341,7 +5420,43 @@ mod tests {
             .find(|c| c.id.catalog == "LONGDI~1/{locale}" && c.id.message == "Hello")
             .expect("short Hello");
 
-        let mut writes = 0usize;
+        // 1. When the filesystem confirms or cannot disprove that `LONGDI~1` aliases
+        // `LongDirectory`, reject the ambiguous batch before any write occurs.
+        for probe_outcome in [Some(true), None] {
+            let mut writes = 0usize;
+            let result = apply_translation_patches_with_options(
+                TranslationPatchRequest {
+                    config: make_config(),
+                    po: None,
+                    patches: vec![
+                        singular_patch(long_candidate, "Hallo Long"),
+                        singular_patch(short_candidate, "Hallo Short"),
+                    ],
+                },
+                |catalog, source_locale, po| {
+                    writes += 1;
+                    atomic_replace_catalog(catalog, source_locale, po)
+                },
+                true,
+                Some(Some(DirFilenameEquivalence::CaseInsensitiveNtfs)),
+                Some(probe_outcome),
+            )
+            .expect("8.3 aliased batch returns structured rejection");
+
+            assert!(!result.updated);
+            assert_eq!(writes, 0);
+            assert_eq!(result.stats.applied, 0);
+            assert_eq!(result.diagnostics.len(), 2);
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .all(|diag| diag.code == "translation.ambiguous_catalog")
+            );
+        }
+
+        // 2. When the live filesystem disproves aliasing (two separately created
+        // directories/files on a volume with 8.3 disabled), the batch succeeds!
         let result = apply_translation_patches_with_options(
             TranslationPatchRequest {
                 config: make_config(),
@@ -5351,25 +5466,15 @@ mod tests {
                     singular_patch(short_candidate, "Hallo Short"),
                 ],
             },
-            |catalog, source_locale, po| {
-                writes += 1;
-                atomic_replace_catalog(catalog, source_locale, po)
-            },
+            atomic_replace_catalog,
             true,
             Some(Some(DirFilenameEquivalence::CaseInsensitiveNtfs)),
+            None,
         )
-        .expect("8.3 aliased batch returns structured rejection");
-
-        assert!(!result.updated);
-        assert_eq!(writes, 0);
-        assert_eq!(result.stats.applied, 0);
-        assert_eq!(result.diagnostics.len(), 2);
-        assert!(
-            result
-                .diagnostics
-                .iter()
-                .all(|diag| diag.code == "translation.ambiguous_catalog")
-        );
+        .expect("separately created LongDirectory and LONGDI~1 must succeed when distinct on disk");
+        assert!(result.updated);
+        assert_eq!(result.stats.applied, 2);
+        assert_eq!(result.stats.catalogs_updated, 2);
     }
 
     #[test]
@@ -5441,6 +5546,7 @@ mod tests {
                 },
                 true,
                 Some(simulated_eq),
+                None,
             )
             .expect("sigma/final-sigma alias returns structured rejection");
 
@@ -5536,6 +5642,7 @@ mod tests {
             },
             true,
             Some(None),
+            None,
         )
         .expect("NFC/NFD alias returns structured rejection");
 

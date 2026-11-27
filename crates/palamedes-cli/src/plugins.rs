@@ -218,6 +218,7 @@ fn run_invocation(
         })?,
         "catalogs": plugin_catalogs(&config),
     });
+    let run_resolved = prepare_selected_plugin_for_run(plugin, &config.config_path)?;
     let mut print_output = |text: &str| println!("{text}");
     let stream: Option<&mut dyn FnMut(&str)> = if invocation.json {
         None
@@ -225,14 +226,14 @@ fn run_invocation(
         Some(&mut print_output)
     };
     let result = invoke_binary(
-        &plugin.resolved,
+        &run_resolved,
         &request,
         &cwd,
         &native_executable,
         stream,
         InvocationPolicy::run(invocation.plugin_timeout),
     )?;
-    let mut output = finish_run(&plugin.resolved, result, !invocation.json)?;
+    let mut output = finish_run(&run_resolved, result, !invocation.json)?;
     if !registry.skipped.is_empty() {
         let mut diagnostics = skipped_diagnostics(&registry.skipped);
         diagnostics.append(&mut output.diagnostics);
@@ -287,7 +288,8 @@ fn load_registry_with_binary_hasher(
         // A plugin that cannot resolve or describe blocks only its own
         // namespace; other configured commands keep working and surface the
         // skipped plugin as a warning diagnostic.
-        let resolved = match resolve_binary_plugin(declaration.specifier(), &config.config_path) {
+        let mut resolved = match resolve_binary_plugin(declaration.specifier(), &config.config_path)
+        {
             Ok(resolved) => resolved,
             Err(failure) => {
                 registry.skipped.push(SkippedPlugin {
@@ -332,6 +334,17 @@ fn load_registry_with_binary_hasher(
         let cache_identity = binary_path.as_deref().and_then(|binary_path| {
             plugin_cache_identity_for_resolved(&resolved, binary_path, cached_stamp, hash_binary)
         });
+        let verified_stamp = cache_identity.as_ref().map(|(_, stamp)| stamp.clone());
+        let expected_metadata = verified_stamp
+            .as_ref()
+            .map(|stamp| stamp.metadata.clone())
+            .or_else(|| resolved.pinned_binary_metadata())
+            .or_else(|| {
+                binary_path
+                    .as_deref()
+                    .and_then(|path| fs::metadata(path).ok())
+                    .map(|meta| plugin_binary_metadata(&meta))
+            });
         let manifest = match cache_identity.as_ref().and_then(|(key, stamp)| {
             active_cache_keys.insert(key.clone());
             if !reuse_cached_manifests {
@@ -377,12 +390,20 @@ fn load_registry_with_binary_hasher(
             collision.get_or_insert(namespace);
             continue;
         }
+        // Release the pinned executable descriptor once discovery/describe
+        // finishes so loading many configured plugins keeps open descriptors
+        // O(1). `dispatch` re-pins and verifies the single selected plugin
+        // against `verified_stamp` / `expected_metadata` before spawning it.
+        resolved.pinned_binary = None;
         registry.plugins.insert(
             namespace,
             LoadedPlugin {
                 resolved,
                 manifest,
                 options: declaration.options(),
+                canonical_binary_path: binary_path,
+                verified_stamp,
+                expected_metadata,
             },
         );
     }
@@ -1748,6 +1769,39 @@ struct PinnedPluginBinary {
 }
 
 impl ResolvedPlugin {
+    fn pinned_binary_metadata(&self) -> Option<PluginBinaryMetadata> {
+        #[cfg(unix)]
+        if let Some(ref pinned) = self.pinned_binary {
+            use std::mem::ManuallyDrop;
+            use std::os::fd::{AsRawFd, FromRawFd};
+            use std::os::unix::fs::MetadataExt;
+
+            // SAFETY: `pinned.file_fd` is open and owned by `pinned`;
+            // `ManuallyDrop` keeps ownership on `pinned` without closing it.
+            let pinned_file =
+                ManuallyDrop::new(unsafe { fs::File::from_raw_fd(pinned.file_fd.as_raw_fd()) });
+            let fd_meta = pinned_file.metadata().ok()?;
+            if fd_meta.dev() != pinned.dev || fd_meta.ino() != pinned.ino {
+                return None;
+            }
+            return Some(plugin_binary_metadata(&fd_meta));
+        }
+        #[cfg(windows)]
+        if let Some(ref pinned) = self.pinned_binary {
+            use std::mem::ManuallyDrop;
+            use std::os::windows::io::{AsRawHandle, FromRawHandle};
+
+            // SAFETY: `pinned.pinned_handle` is open and owned by `pinned`;
+            // `ManuallyDrop` keeps ownership on `pinned` without closing it.
+            let pinned_file = ManuallyDrop::new(unsafe {
+                fs::File::from_raw_handle(pinned.pinned_handle.as_raw_handle())
+            });
+            let fd_meta = pinned_file.metadata().ok()?;
+            return Some(plugin_binary_metadata(&fd_meta));
+        }
+        None
+    }
+
     fn pinned_matches_path(&self, binary_path: &Path, metadata: &PluginBinaryMetadata) -> bool {
         #[cfg(unix)]
         if let Some(ref pinned) = self.pinned_binary {
@@ -4261,6 +4315,65 @@ struct LoadedPlugin {
     resolved: ResolvedPlugin,
     manifest: PluginManifest,
     options: Value,
+    canonical_binary_path: Option<PathBuf>,
+    verified_stamp: Option<PluginBinaryStamp>,
+    expected_metadata: Option<PluginBinaryMetadata>,
+}
+
+fn prepare_selected_plugin_for_run(
+    plugin: &LoadedPlugin,
+    config_path: &Path,
+) -> Result<ResolvedPlugin, PluginFailure> {
+    if plugin.resolved.pinned_binary.is_some() {
+        return Ok(plugin.resolved.clone());
+    }
+    let repinned = resolve_binary_plugin(&plugin.resolved.specifier, config_path)?;
+    let changed_failure = |detail: &str| {
+        PluginFailure::new(
+            "PLUGIN_BINARY_CHANGED",
+            format!(
+                "Binary plugin \"{}\" changed after manifest discovery ({detail}). Re-run the command to reload its manifest.",
+                plugin.resolved.specifier
+            ),
+        )
+    };
+    if repinned.invocation_path != plugin.resolved.invocation_path {
+        return Err(changed_failure("invocation path changed"));
+    }
+    let repinned_canonical = fs::canonicalize(&repinned.binary_path)
+        .map_err(|_| changed_failure("executable path could not be canonicalized"))?;
+    if let Some(ref expected_canonical) = plugin.canonical_binary_path
+        && &repinned_canonical != expected_canonical
+    {
+        return Err(changed_failure("canonical executable path changed"));
+    }
+    if let Some(ref expected_stamp) = plugin.verified_stamp {
+        let (_, actual_stamp) = plugin_cache_identity_for_resolved(
+            &repinned,
+            &repinned_canonical,
+            Some(expected_stamp),
+            &hash_plugin_source,
+        )
+        .ok_or_else(|| changed_failure("executable identity could not be verified"))?;
+        if actual_stamp.sha256 != expected_stamp.sha256 {
+            return Err(changed_failure("executable digest mismatch"));
+        }
+    } else if let Some(ref expected_metadata) = plugin.expected_metadata {
+        let actual_metadata = repinned
+            .pinned_binary_metadata()
+            .or_else(|| {
+                fs::metadata(&repinned_canonical)
+                    .ok()
+                    .map(|meta| plugin_binary_metadata(&meta))
+            })
+            .ok_or_else(|| changed_failure("executable metadata could not be verified"))?;
+        if &actual_metadata != expected_metadata
+            || !repinned.pinned_matches_path(&repinned_canonical, expected_metadata)
+        {
+            return Err(changed_failure("executable metadata mismatch"));
+        }
+    }
+    Ok(repinned)
 }
 
 #[derive(Clone, Debug)]
@@ -6197,5 +6310,81 @@ catalogs:
         assert!(warm.plugins.contains_key("alpha"));
         assert!(warm.plugins.contains_key("beta"));
         assert_eq!(hash_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn registry_releases_unselected_handles_and_repins_selected_plugin_with_verification() {
+        let _guard = PLUGIN_REGISTRY_TEST_LOCK.lock().unwrap();
+        let fixture = tempfile::tempdir().expect("temp dir");
+        let root = fixture.path().to_path_buf();
+        let mut plugin_entries = Vec::new();
+        for idx in 0..4 {
+            let pkg_name = format!("@acme/pmds-bounded-{idx}");
+            let pkg_dir = root.join(format!("node_modules/@acme/pmds-bounded-{idx}"));
+            let bin_path = pkg_dir.join("bin/plugin");
+            fs::create_dir_all(bin_path.parent().unwrap()).expect("bin dir");
+            fs::write(
+                pkg_dir.join("package.json"),
+                r#"{"name":"@acme/pmds-bounded","palamedes":{"pluginBinary":"bin/plugin"}}"#,
+            )
+            .expect("package.json");
+            let script = format!(
+                "#!/bin/sh\nread _request\nprintf '%s\\n' '{{\"event\":\"manifest\",\"name\":\"bounded-{idx}\",\"protocolVersion\":1,\"commands\":{{\"ping\":{{}}}}}}'\n"
+            );
+            fs::write(&bin_path, script).expect("plugin script");
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&bin_path, fs::Permissions::from_mode(0o755))
+                .expect("chmod plugin");
+            plugin_entries.push(format!("  - '{pkg_name}'"));
+        }
+        fs::write(
+            root.join("palamedes.yaml"),
+            format!(
+                "locales: [en]\nsource-locale: en\ncatalogs:\n  - path: locales/{{locale}}/messages\n    include: [src]\nplugins:\n{}\n",
+                plugin_entries.join("\n")
+            ),
+        )
+        .expect("write config");
+
+        let config = load_config(&root, None).expect("load config");
+        let registry = super::load_registry_with_binary_hasher(
+            &config,
+            &root,
+            Path::new("pmds"),
+            true,
+            &super::hash_plugin_source,
+        )
+        .expect("load registry");
+        assert_eq!(registry.plugins.len(), 4);
+        for loaded in registry.plugins.values() {
+            assert!(
+                loaded.resolved.pinned_binary.is_none(),
+                "loaded registry must not retain open executable descriptors for unselected plugins"
+            );
+            assert!(
+                loaded.verified_stamp.is_some(),
+                "loaded plugin must retain its verified stamp for pre-dispatch re-pin verification"
+            );
+        }
+
+        let selected = registry.plugins.get("bounded-2").expect("selected plugin");
+        let repinned = super::prepare_selected_plugin_for_run(selected, &config.config_path)
+            .expect("unchanged selected plugin must re-pin cleanly");
+        assert!(
+            repinned.pinned_binary.is_some(),
+            "selected plugin must be pinned again for execution"
+        );
+        drop(repinned);
+
+        // Replacing the executable after discovery must fail closed before execution.
+        let swapped_path = root.join("node_modules/@acme/pmds-bounded-2/bin/plugin");
+        fs::write(&swapped_path, "#!/bin/sh\necho tampered\n").expect("tamper binary");
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&swapped_path, fs::Permissions::from_mode(0o755))
+            .expect("chmod tampered");
+        let err = super::prepare_selected_plugin_for_run(selected, &config.config_path)
+            .expect_err("swapped plugin executable must be rejected before dispatch");
+        assert_eq!(err.code, "PLUGIN_BINARY_CHANGED");
     }
 }

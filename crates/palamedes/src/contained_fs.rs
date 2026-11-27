@@ -108,6 +108,34 @@ pub enum ContainedWriteOutcome {
     CommittedWithoutDirSync(io::Error),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WriteCondition {
+    Unconditional,
+    MustNotExist,
+    MatchesDigest([u8; 32]),
+}
+
+#[cfg(any(unix, windows))]
+fn sha256_bytes(bytes: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes).into()
+}
+
+#[cfg(any(unix, windows))]
+fn sha256_reader(mut reader: impl io::Read) -> io::Result<[u8; 32]> {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 16 * 1024];
+    loop {
+        let count = reader.read(&mut buf)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buf[..count]);
+    }
+    Ok(hasher.finalize().into())
+}
+
 /// Filename equivalence policy detected for a directory's filesystem.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DirFilenameEquivalence {
@@ -507,10 +535,14 @@ mod platform {
         ))]
         flags: u32,
         identity: FileIdentity,
+        size: i64,
+        mtime_sec: i64,
+        mtime_nsec: i64,
     }
 
     struct ExistingTarget {
         entry: ExistingEntry,
+        content_digest: Option<[u8; 32]>,
         acl: Option<ExistingAcl>,
         xattrs: Vec<(CString, Vec<u8>)>,
         #[cfg(target_os = "linux")]
@@ -1370,7 +1402,8 @@ mod platform {
                             bytes,
                             ContainedNewFileMode::RespectUmask,
                             ContainedWriteDurability::Rename,
-                            false,
+                            super::WriteCondition::MustNotExist,
+                            &mut || {},
                         ) {
                             Ok(_) => return Ok(()),
                             Err(ContainedFsError::Io(io_err))
@@ -1530,7 +1563,75 @@ mod platform {
             new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
-            self.write_file_atomically_inner(file_name, bytes, new_file_mode, durability, true)
+            self.write_file_atomically_inner(
+                file_name,
+                bytes,
+                new_file_mode,
+                durability,
+                super::WriteCondition::Unconditional,
+                &mut || {},
+            )
+        }
+
+        /// Atomically publishes `bytes` to `file_name` only if the live
+        /// destination still matches `expected_original` (`None` requires the
+        /// destination not to exist yet; `Some(orig)` requires its content
+        /// digest to still match `orig` right before publication).
+        ///
+        /// If an external writer edited the file in place or replaced it since
+        /// the caller read `expected_original`, returns an
+        /// [`io::ErrorKind::AlreadyExists`] conflict without overwriting it so
+        /// the caller can re-read and merge.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is invalid
+        /// or refers to a symlink, or [`ContainedFsError::Io`] on OS errors or
+        /// concurrent modification conflicts.
+        pub fn write_file_atomically_if_unchanged(
+            &self,
+            file_name: &OsStr,
+            bytes: &[u8],
+            expected_original: Option<&[u8]>,
+            new_file_mode: ContainedNewFileMode,
+            durability: ContainedWriteDurability,
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
+            let condition = match expected_original {
+                None => super::WriteCondition::MustNotExist,
+                Some(orig) => super::WriteCondition::MatchesDigest(super::sha256_bytes(orig)),
+            };
+            self.write_file_atomically_inner(
+                file_name,
+                bytes,
+                new_file_mode,
+                durability,
+                condition,
+                &mut || {},
+            )
+        }
+
+        #[cfg(test)]
+        pub(super) fn write_file_atomically_with_pre_publish_hook<F: FnMut()>(
+            &self,
+            file_name: &OsStr,
+            bytes: &[u8],
+            expected_original: Option<&[u8]>,
+            new_file_mode: ContainedNewFileMode,
+            durability: ContainedWriteDurability,
+            mut pre_publish_hook: F,
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
+            let condition = match expected_original {
+                None => super::WriteCondition::Unconditional,
+                Some(orig) => super::WriteCondition::MatchesDigest(super::sha256_bytes(orig)),
+            };
+            self.write_file_atomically_inner(
+                file_name,
+                bytes,
+                new_file_mode,
+                durability,
+                condition,
+                &mut pre_publish_hook,
+            )
         }
 
         fn write_file_atomically_inner(
@@ -1539,7 +1640,8 @@ mod platform {
             bytes: &[u8],
             new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
-            allow_replace: bool,
+            condition: super::WriteCondition,
+            pre_publish_hook: &mut dyn FnMut(),
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             super::validate_writable_file_name(file_name)?;
             let _target_lock = self.lock_target(file_name)?;
@@ -1547,14 +1649,39 @@ mod platform {
 
             for _ in 0..8 {
                 let existing = self.open_existing_for_replace(file_name)?;
-                if !allow_replace && existing.is_some() {
-                    return Err(ContainedFsError::Io(io::Error::new(
-                        io::ErrorKind::AlreadyExists,
-                        format!(
-                            "destination \"{}\" was created concurrently",
-                            file_name.to_string_lossy()
-                        ),
-                    )));
+                match condition {
+                    super::WriteCondition::Unconditional => {}
+                    super::WriteCondition::MustNotExist => {
+                        if existing.is_some() {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "destination \"{}\" was created concurrently",
+                                    file_name.to_string_lossy()
+                                ),
+                            )));
+                        }
+                    }
+                    super::WriteCondition::MatchesDigest(expected_digest) => {
+                        let Some(ref existing_target) = existing else {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "destination \"{}\" was removed concurrently before publication",
+                                    file_name.to_string_lossy()
+                                ),
+                            )));
+                        };
+                        if existing_target.content_digest != Some(expected_digest) {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "destination \"{}\" was modified concurrently before publication",
+                                    file_name.to_string_lossy()
+                                ),
+                            )));
+                        }
+                    }
                 }
                 enum StageOutcome {
                     Published,
@@ -1585,19 +1712,22 @@ mod platform {
                         drop(temp_file);
                         write_result?;
 
-                        // Guard against concurrent destination replacement or
-                        // mode/owner/ACL/SELinux tightening while staging.
-                        // Replacing or deleting the target returns a conflict so
-                        // callers can re-read and merge instead of discarding a
-                        // concurrent edit; only same-inode metadata changes retry.
-                        match self.check_destination_snapshot(file_name, existing)? {
+                        pre_publish_hook();
+
+                        // Guard against concurrent destination replacement,
+                        // in-place content edits, or mode/owner/ACL/SELinux
+                        // tightening while staging. Replacing, deleting, or
+                        // modifying content returns a conflict so callers can
+                        // re-read and merge instead of discarding a concurrent
+                        // edit; only same-inode metadata-only changes retry.
+                        match self.check_destination_snapshot(file_name, existing, condition)? {
                             SnapshotMatch::Unchanged => {}
                             SnapshotMatch::MetadataChanged => return Ok(StageOutcome::Retry),
                             SnapshotMatch::Replaced => {
                                 return Err(ContainedFsError::Io(io::Error::new(
                                     io::ErrorKind::AlreadyExists,
                                     format!(
-                                        "destination \"{}\" was replaced concurrently before publication",
+                                        "destination \"{}\" was modified concurrently before publication",
                                         file_name.to_string_lossy()
                                     ),
                                 )));
@@ -1759,16 +1889,30 @@ mod platform {
             let c_name = os_str_to_cstring(file_name)?;
             // Open without `O_TRUNC` so existing file write permissions (for
             // example `0444`) are honored without modifying the file, symlinks
-            // are rejected atomically, and metadata + ACLs are read from the
-            // exact pinned inode.
+            // are rejected atomically, and metadata + content digest + ACLs are
+            // read from the exact pinned inode. Prefer `O_RDWR` so we can hash
+            // the live bytes to detect in-place edits; fall back to `O_WRONLY`
+            // only on write-only (`0200`) files.
             // SAFETY: `self.fd` is an open directory descriptor and `c_name` is valid.
-            let raw = unsafe {
+            let mut readable = true;
+            let mut raw = unsafe {
                 libc::openat(
                     self.fd.as_raw_fd(),
                     c_name.as_ptr(),
-                    libc::O_WRONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                    libc::O_RDWR | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
                 )
             };
+            if raw < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EACCES) {
+                readable = false;
+                // SAFETY: `self.fd` is an open directory descriptor and `c_name` is valid.
+                raw = unsafe {
+                    libc::openat(
+                        self.fd.as_raw_fd(),
+                        c_name.as_ptr(),
+                        libc::O_WRONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                    )
+                };
+            }
             if raw < 0 {
                 let error = io::Error::last_os_error();
                 if error.raw_os_error() == Some(libc::ENOENT) {
@@ -1805,6 +1949,7 @@ mod platform {
                 dev: stat.st_dev as u64,
                 ino: stat.st_ino as u64,
             };
+            #[allow(clippy::unnecessary_cast)]
             let entry = ExistingEntry {
                 mode: stat_mode(&stat) & 0o7777,
                 uid: stat.st_uid,
@@ -1818,6 +1963,19 @@ mod platform {
                 ))]
                 flags: stat.st_flags,
                 identity,
+                size: stat.st_size as i64,
+                mtime_sec: stat.st_mtime as i64,
+                mtime_nsec: stat.st_mtime_nsec as i64,
+            };
+            let content_digest = if readable {
+                let mut borrowed = std::mem::ManuallyDrop::new(File::from(
+                    // SAFETY: `existing_fd` is a valid open regular file descriptor;
+                    // `ManuallyDrop` keeps ownership on `existing_fd`.
+                    unsafe { OwnedFd::from_raw_fd(existing_fd.as_raw_fd()) },
+                ));
+                Some(super::sha256_reader(&mut *borrowed)?)
+            } else {
+                None
             };
             let acl = read_existing_acl(existing_fd.as_raw_fd())?;
             let xattrs = read_existing_user_xattrs(existing_fd.as_raw_fd())?;
@@ -1830,6 +1988,7 @@ mod platform {
                 read_linux_xattr(existing_fd.as_raw_fd(), c"btrfs.compression")?;
             Ok(Some(ExistingTarget {
                 entry,
+                content_digest,
                 acl,
                 xattrs,
                 #[cfg(target_os = "linux")]
@@ -1876,6 +2035,7 @@ mod platform {
                 dev: stat.st_dev as u64,
                 ino: stat.st_ino as u64,
             };
+            #[allow(clippy::unnecessary_cast)]
             Ok(Some(ExistingEntry {
                 mode: stat_mode(&stat) & 0o7777,
                 uid: stat.st_uid,
@@ -1889,6 +2049,9 @@ mod platform {
                 ))]
                 flags: stat.st_flags,
                 identity,
+                size: stat.st_size as i64,
+                mtime_sec: stat.st_mtime as i64,
+                mtime_nsec: stat.st_mtime_nsec as i64,
             }))
         }
 
@@ -2203,11 +2366,24 @@ mod platform {
             &self,
             file_name: &OsStr,
             expected: &ExistingTarget,
+            condition: super::WriteCondition,
         ) -> Result<SnapshotMatch, ContainedFsError> {
             let Some(current) = self.open_existing_for_replace(file_name)? else {
                 return Ok(SnapshotMatch::Replaced);
             };
             if current.entry.identity != expected.entry.identity {
+                return Ok(SnapshotMatch::Replaced);
+            }
+            if let super::WriteCondition::MatchesDigest(required_digest) = condition
+                && current.content_digest != Some(required_digest)
+            {
+                return Ok(SnapshotMatch::Replaced);
+            }
+            if current.content_digest != expected.content_digest
+                || current.entry.size != expected.entry.size
+                || current.entry.mtime_sec != expected.entry.mtime_sec
+                || current.entry.mtime_nsec != expected.entry.mtime_nsec
+            {
                 return Ok(SnapshotMatch::Replaced);
             }
             #[cfg(target_os = "linux")]
@@ -2874,18 +3050,7 @@ mod platform {
         flock_shared(existing_fd.as_raw_fd()).map_err(ContainedFsError::Io)?;
 
         match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
-            Ok(stat) if stat_identity(&stat) == existing_id => {
-                if stat.st_nlink > 1 {
-                    reclaim_interrupted_lock_temp_links(dir, existing_id);
-                    let rechecked = fstat_fd(existing_fd.as_raw_fd())?;
-                    if rechecked.st_nlink > 1 {
-                        return Err(ContainedFsError::Containment(
-                            "refusing to use hard-linked file as catalog lock \".pmds-lock\""
-                                .to_owned(),
-                        ));
-                    }
-                }
-            }
+            Ok(stat) if stat_identity(&stat) == existing_id => {}
             Ok(_) => return Ok(ReadonlyRecoveryOutcome::LockReleased),
             Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
                 return Ok(ReadonlyRecoveryOutcome::LockReleased);
@@ -2941,32 +3106,46 @@ mod platform {
                     let mut main_lock_retired = false;
                     match fstatat_nofollow(dir_raw, UNIX_DIR_LOCK_NAME) {
                         Ok(stat) if stat_identity(&stat) == existing_id => {
-                            match unlink_lock(dir_raw) {
-                                Ok(()) => {
-                                    main_lock_retired = true;
+                            if stat.st_nlink > 1 {
+                                // Only reclaim stale interrupted links once we
+                                // are the sole exclusive recovery-claim winner.
+                                reclaim_interrupted_lock_temp_links(dir, existing_id);
+                                let rechecked = fstat_fd(existing_fd.as_raw_fd())?;
+                                if rechecked.st_nlink > 1 {
+                                    result = Err(ContainedFsError::Containment(
+                                        "refusing to use hard-linked file as catalog lock \".pmds-lock\""
+                                            .to_owned(),
+                                    ));
                                 }
-                                Err(error) => match error.raw_os_error() {
-                                    Some(libc::ENOENT) => {
+                            }
+                            if result.is_ok() {
+                                match unlink_lock(dir_raw) {
+                                    Ok(()) => {
                                         main_lock_retired = true;
                                     }
-                                    Some(libc::EPERM | libc::EACCES) => {
-                                        // Distinct UID in a sticky directory cannot delete
-                                        // another user's `.pmds-lock`. Keep earlier claims
-                                        // intact so no concurrent waiter can claim a vacant
-                                        // lower generation while we hold `claim_name`, and
-                                        // return `HeldViaClaim` holding `LOCK_SH` on
-                                        // `existing_fd` plus `LOCK_EX` on `claim_fd`.
-                                        return Ok(ReadonlyRecoveryOutcome::HeldViaClaim {
-                                            claim_name,
-                                            claim_id,
-                                            claim_fd,
-                                            existing_fd,
-                                        });
-                                    }
-                                    _ => {
-                                        result = Err(ContainedFsError::Io(error));
-                                    }
-                                },
+                                    Err(error) => match error.raw_os_error() {
+                                        Some(libc::ENOENT) => {
+                                            main_lock_retired = true;
+                                        }
+                                        Some(libc::EPERM | libc::EACCES) => {
+                                            // Distinct UID in a sticky directory cannot delete
+                                            // another user's `.pmds-lock`. Keep earlier claims
+                                            // intact so no concurrent waiter can claim a vacant
+                                            // lower generation while we hold `claim_name`, and
+                                            // return `HeldViaClaim` holding `LOCK_SH` on
+                                            // `existing_fd` plus `LOCK_EX` on `claim_fd`.
+                                            return Ok(ReadonlyRecoveryOutcome::HeldViaClaim {
+                                                claim_name,
+                                                claim_id,
+                                                claim_fd,
+                                                existing_fd,
+                                            });
+                                        }
+                                        _ => {
+                                            result = Err(ContainedFsError::Io(error));
+                                        }
+                                    },
+                                }
                             }
                         }
                         Ok(_) => {
@@ -3306,6 +3485,15 @@ mod platform {
         }
         // SAFETY: `geteuid` has no preconditions.
         let euid = unsafe { libc::geteuid() };
+        // Direct entries in `dir` can only be unlinked safely when `dir` is
+        // exclusively writable by `euid` (not group/world-writable, not owned
+        // by another user, and with no foreign write ACL). Otherwise another
+        // user could remove a stale `.pmds-ltmp-*` link and reuse the name
+        // before `unlinkat`, so leave top-level entries untouched.
+        let dir_private_to_euid = fstat_fd(dir.fd.as_raw_fd())
+            .ok()
+            .is_some_and(|st| st.st_uid == euid && (stat_mode(&st) & 0o0022) == 0)
+            && !parent_has_foreign_write_acl(dir).unwrap_or(true);
         let mut stale_names: Vec<CString> = Vec::new();
         let mut stage_dirs: Vec<(CString, FileIdentity)> = Vec::new();
         loop {
@@ -3316,7 +3504,7 @@ mod platform {
             }
             // SAFETY: `entry` is non-null and `d_name` is a NUL-terminated C string.
             let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
-            if name.to_bytes().starts_with(UNIX_DIR_LOCK_TEMP_PREFIX) {
+            if dir_private_to_euid && name.to_bytes().starts_with(UNIX_DIR_LOCK_TEMP_PREFIX) {
                 if let Ok(stat) = fstatat_nofollow(dir.fd.as_raw_fd(), name)
                     && stat_identity(&stat) == lock_id
                 {
@@ -3335,10 +3523,18 @@ mod platform {
         unsafe {
             libc::closedir(dir_ptr);
         }
-        for stale in stale_names {
-            // SAFETY: `dir.fd` is open and `stale` is a verified `.pmds-ltmp-*` C string.
-            unsafe {
-                let _ = libc::unlinkat(dir.fd.as_raw_fd(), stale.as_ptr(), 0);
+        if dir_private_to_euid {
+            for stale in stale_names {
+                // Re-verify identity immediately before unlinking so a name
+                // removed and reused during directory enumeration is never deleted.
+                if let Ok(stat) = fstatat_nofollow(dir.fd.as_raw_fd(), &stale)
+                    && stat_identity(&stat) == lock_id
+                {
+                    // SAFETY: `dir.fd` is open and `stale` is a verified `.pmds-ltmp-*` C string.
+                    unsafe {
+                        let _ = libc::unlinkat(dir.fd.as_raw_fd(), stale.as_ptr(), 0);
+                    }
+                }
             }
         }
         for (stage_name, stage_id) in stage_dirs {
@@ -3355,7 +3551,8 @@ mod platform {
             }
             // SAFETY: `stage_raw` is a newly opened valid directory descriptor.
             let stage_fd = unsafe { OwnedFd::from_raw_fd(stage_raw) };
-            if fstat_fd(stage_fd.as_raw_fd())
+            let stage_dir = ContainedDir { fd: stage_fd };
+            let stage_private_to_euid = fstat_fd(stage_dir.fd.as_raw_fd())
                 .map(|st| {
                     (stat_mode(&st) & libc::S_IFMT) == libc::S_IFDIR
                         && stat_identity(&st) == stage_id
@@ -3363,10 +3560,11 @@ mod platform {
                         && (stat_mode(&st) & 0o0077) == 0
                 })
                 .unwrap_or(false)
-            {
-                // SAFETY: `stage_fd` is an open readable directory descriptor.
+                && !parent_has_foreign_write_acl(&stage_dir).unwrap_or(true);
+            if stage_private_to_euid {
+                // SAFETY: `stage_dir.fd` is an open readable directory descriptor.
                 let stage_dup =
-                    unsafe { libc::fcntl(stage_fd.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
+                    unsafe { libc::fcntl(stage_dir.fd.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
                 if stage_dup >= 0 {
                     // SAFETY: `stage_dup` is valid; `fdopendir` takes ownership on success.
                     let stage_ptr = unsafe { libc::fdopendir(stage_dup) };
@@ -3387,7 +3585,7 @@ mod platform {
                             let name =
                                 unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
                             if name.to_bytes().starts_with(UNIX_DIR_LOCK_TEMP_PREFIX)
-                                && let Ok(stat) = fstatat_nofollow(stage_fd.as_raw_fd(), name)
+                                && let Ok(stat) = fstatat_nofollow(stage_dir.fd.as_raw_fd(), name)
                                 && stat_identity(&stat) == lock_id
                             {
                                 inner_stale.push(name.to_owned());
@@ -3397,14 +3595,22 @@ mod platform {
                         unsafe {
                             libc::closedir(stage_ptr);
                         }
-                        let removed_any = !inner_stale.is_empty();
+                        let mut removed_any = false;
                         for stale in inner_stale {
-                            // SAFETY: `stage_fd` is open and `stale` is a verified `.pmds-ltmp-*`.
-                            unsafe {
-                                let _ = libc::unlinkat(stage_fd.as_raw_fd(), stale.as_ptr(), 0);
+                            if let Ok(stat) = fstatat_nofollow(stage_dir.fd.as_raw_fd(), &stale)
+                                && stat_identity(&stat) == lock_id
+                            {
+                                // SAFETY: `stage_dir.fd` is open and `stale` is a verified `.pmds-ltmp-*`.
+                                unsafe {
+                                    if libc::unlinkat(stage_dir.fd.as_raw_fd(), stale.as_ptr(), 0)
+                                        == 0
+                                    {
+                                        removed_any = true;
+                                    }
+                                }
                             }
                         }
-                        drop(stage_fd);
+                        drop(stage_dir);
                         if removed_any {
                             let _ = dir.rmdir_stage_if_same(&stage_name, stage_id);
                         }
@@ -3412,7 +3618,7 @@ mod platform {
                     }
                 }
             }
-            drop(stage_fd);
+            drop(stage_dir);
         }
     }
 
@@ -7311,8 +7517,66 @@ mod platform {
                 return None;
             }
             match (self.file_identity(left), self.file_identity(right)) {
-                (Ok(Some(left_id)), Ok(Some(right_id))) => Some(left_id == right_id),
-                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => Some(false),
+                (Ok(Some(left_id)), Ok(Some(right_id))) => return Some(left_id == right_id),
+                (Ok(Some(_)), Ok(None)) | (Ok(None), Ok(Some(_))) => return Some(false),
+                _ => {}
+            }
+            // When `FileIdInfo` is unavailable (for example, on a Windows share
+            // or FAT volume), inspect actual entry existence and 8.3 alternate
+            // names (`FileAlternateNameInformation`) so separately created
+            // entries such as `messages-long.po` and `MESSAG~1.PO` can be
+            // distinguished without mutating the directory.
+            let left_open = nt_create_relative(
+                self.handle.as_raw_handle(),
+                left,
+                FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                FILE_ATTRIBUTE_NORMAL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_OPEN,
+                FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            );
+            let right_open = nt_create_relative(
+                self.handle.as_raw_handle(),
+                right,
+                FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                FILE_ATTRIBUTE_NORMAL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_OPEN,
+                FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            );
+            match (left_open, right_open) {
+                (Ok(_), Err(status)) | (Err(status), Ok(_)) if is_not_found_status(status) => {
+                    Some(false)
+                }
+                (Ok(left_h), Ok(right_h)) => {
+                    let left_alt = query_windows_alternate_name(left_h.as_raw_handle());
+                    let right_alt = query_windows_alternate_name(right_h.as_raw_handle());
+                    let left_str = left.to_str();
+                    let right_str = right.to_str();
+                    if let (Ok(Some(ref alt)), Some(r)) = (&left_alt, right_str)
+                        && windows_upcase_str(alt)
+                            == windows_upcase_str(r.trim_end_matches(['.', ' ']))
+                    {
+                        return Some(true);
+                    }
+                    if let (Ok(Some(ref alt)), Some(l)) = (&right_alt, left_str)
+                        && windows_upcase_str(alt)
+                            == windows_upcase_str(l.trim_end_matches(['.', ' ']))
+                    {
+                        return Some(true);
+                    }
+                    if let (Some(l), Some(r)) = (left_str, right_str)
+                        && windows_upcase_str(l.trim_end_matches(['.', ' ']))
+                            != windows_upcase_str(r.trim_end_matches(['.', ' ']))
+                        && left_alt.is_ok()
+                        && right_alt.is_ok()
+                    {
+                        return Some(false);
+                    }
+                    None
+                }
                 _ => None,
             }
         }
@@ -7893,7 +8157,7 @@ mod platform {
                     bytes,
                     ContainedNewFileMode::RespectUmask,
                     ContainedWriteDurability::Rename,
-                    false,
+                    super::WriteCondition::MustNotExist,
                 ) {
                     Ok(_) => return Ok(()),
                     Err(ContainedFsError::Io(io_err))
@@ -7935,7 +8199,68 @@ mod platform {
             new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
-            self.write_file_atomically_inner(file_name, bytes, new_file_mode, durability, true)
+            self.write_file_atomically_inner(
+                file_name,
+                bytes,
+                new_file_mode,
+                durability,
+                super::WriteCondition::Unconditional,
+            )
+        }
+
+        /// Atomically publishes `bytes` to `file_name` only if the live
+        /// destination still matches `expected_original` (`None` requires the
+        /// destination not to exist yet; `Some(orig)` requires its content
+        /// digest to still match `orig` right before publication).
+        ///
+        /// # Errors
+        ///
+        /// Returns [`ContainedFsError::Containment`] if `file_name` is a
+        /// symlink/reparse point or hard-linked target during transacted
+        /// update, or [`ContainedFsError::Io`] on OS errors or concurrent
+        /// modification conflicts.
+        pub fn write_file_atomically_if_unchanged(
+            &self,
+            file_name: &OsStr,
+            bytes: &[u8],
+            expected_original: Option<&[u8]>,
+            new_file_mode: ContainedNewFileMode,
+            durability: ContainedWriteDurability,
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
+            let condition = match expected_original {
+                None => super::WriteCondition::MustNotExist,
+                Some(orig) => super::WriteCondition::MatchesDigest(super::sha256_bytes(orig)),
+            };
+            self.write_file_atomically_inner(file_name, bytes, new_file_mode, durability, condition)
+        }
+
+        fn hash_existing_file(
+            &self,
+            file_name: &OsStr,
+        ) -> Result<Option<[u8; 32]>, ContainedFsError> {
+            let handle = match nt_create_relative(
+                self.handle.as_raw_handle(),
+                file_name,
+                FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                FILE_ATTRIBUTE_NORMAL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                FILE_OPEN,
+                FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+                std::ptr::null_mut(),
+            ) {
+                Ok(handle) => handle,
+                Err(status) if is_not_found_status(status) => return Ok(None),
+                Err(status) => return Err(ContainedFsError::Io(nt_status_to_io_error(status))),
+            };
+            let info = file_information(handle.as_raw_handle())?;
+            if (info.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(ContainedFsError::Containment(format!(
+                    "refusing to read through symlink \"{}\"",
+                    file_name.to_string_lossy()
+                )));
+            }
+            let file = File::from(handle);
+            Ok(Some(super::sha256_reader(file)?))
         }
 
         fn write_file_atomically_inner(
@@ -7944,22 +8269,54 @@ mod platform {
             bytes: &[u8],
             _new_file_mode: ContainedNewFileMode,
             durability: ContainedWriteDurability,
-            allow_replace: bool,
+            condition: super::WriteCondition,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
             super::validate_writable_file_name(file_name)?;
             let _target_lock = self.lock_target(file_name)?;
             for _ in 0..8 {
                 let existing_entry = self.inspect_entry(file_name, true)?;
                 let target_existed = existing_entry.is_some();
-                if !allow_replace && target_existed {
-                    return Err(ContainedFsError::Io(io::Error::new(
-                        io::ErrorKind::AlreadyExists,
-                        format!(
-                            "destination \"{}\" was created concurrently",
-                            file_name.to_string_lossy()
-                        ),
-                    )));
+                match condition {
+                    super::WriteCondition::Unconditional => {}
+                    super::WriteCondition::MustNotExist => {
+                        if target_existed {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "destination \"{}\" was created concurrently",
+                                    file_name.to_string_lossy()
+                                ),
+                            )));
+                        }
+                    }
+                    super::WriteCondition::MatchesDigest(expected_digest) => {
+                        if !target_existed {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "destination \"{}\" was removed concurrently before publication",
+                                    file_name.to_string_lossy()
+                                ),
+                            )));
+                        }
+                        if self.hash_existing_file(file_name)? != Some(expected_digest) {
+                            return Err(ContainedFsError::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "destination \"{}\" was modified concurrently before publication",
+                                    file_name.to_string_lossy()
+                                ),
+                            )));
+                        }
+                    }
                 }
+                let initial_digest = match condition {
+                    super::WriteCondition::MatchesDigest(digest) => Some(digest),
+                    super::WriteCondition::Unconditional if target_existed => {
+                        self.hash_existing_file(file_name).ok().flatten()
+                    }
+                    _ => None,
+                };
                 let existing_identity = existing_entry.as_ref().and_then(|(identity, _)| *identity);
                 let mut existing_security = existing_entry.and_then(|(_, security)| security);
                 let has_security_descriptors = existing_security.as_ref().is_some_and(|security| {
@@ -7979,6 +8336,7 @@ mod platform {
                     match self.try_overwrite_existing_transacted(
                         file_name,
                         existing_identity,
+                        initial_digest,
                         bytes,
                         durability,
                     )? {
@@ -8105,6 +8463,17 @@ mod platform {
                             io::ErrorKind::AlreadyExists,
                             format!(
                                 "destination \"{}\" was replaced concurrently before publication",
+                                file_name.to_string_lossy()
+                            ),
+                        )));
+                    }
+                    if let Some(expected_digest) = initial_digest
+                        && self.hash_existing_file(file_name)? != Some(expected_digest)
+                    {
+                        return Err(ContainedFsError::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            format!(
+                                "destination \"{}\" was modified concurrently before publication",
                                 file_name.to_string_lossy()
                             ),
                         )));
@@ -8253,6 +8622,7 @@ mod platform {
             &self,
             file_name: &OsStr,
             expected_identity: Option<FileIdentity>,
+            expected_digest: Option<[u8; 32]>,
             bytes: &[u8],
             durability: ContainedWriteDurability,
         ) -> Result<TransactedOverwriteOutcome, ContainedFsError> {
@@ -8300,7 +8670,7 @@ mod platform {
                 let open_result = nt_create_relative(
                     self.handle.as_raw_handle(),
                     file_name,
-                    FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
                     FILE_ATTRIBUTE_NORMAL,
                     FILE_SHARE_READ,
                     FILE_OPEN,
@@ -8366,6 +8736,20 @@ mod platform {
             }
 
             let mut file = File::from(handle);
+            if let Some(expected_digest) = expected_digest {
+                use std::io::Seek;
+                let live_digest = super::sha256_reader(&mut file)?;
+                if live_digest != expected_digest {
+                    return Err(ContainedFsError::Io(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "destination \"{}\" was modified concurrently before update",
+                            file_name.to_string_lossy()
+                        ),
+                    )));
+                }
+                file.seek(io::SeekFrom::Start(0))?;
+            }
             file.set_len(0)?;
             file.write_all(bytes)?;
             file.flush()?;
@@ -9374,6 +9758,57 @@ mod platform {
         Ok(wide)
     }
 
+    fn windows_upcase_str(text: &str) -> String {
+        #[link(name = "ntdll")]
+        unsafe extern "system" {
+            fn RtlUpcaseUnicodeChar(source_character: u16) -> u16;
+        }
+        let upcased: Vec<u16> = text
+            .encode_utf16()
+            .map(|unit| {
+                // SAFETY: `RtlUpcaseUnicodeChar` is a pure code-unit table lookup.
+                unsafe { RtlUpcaseUnicodeChar(unit) }
+            })
+            .collect();
+        String::from_utf16_lossy(&upcased)
+    }
+
+    fn query_windows_alternate_name(handle: *mut c_void) -> Result<Option<String>, NtStatus> {
+        const FILE_ALTERNATE_NAME_INFORMATION_CLASS: u32 = 21;
+        let mut iosb = IoStatusBlock {
+            status_or_pointer: 0,
+            information: 0,
+        };
+        let mut buf = [0u8; 4 + 260 * 2];
+        // SAFETY: `handle` is open and `buf` is writable for its byte length.
+        let status = unsafe {
+            NtQueryInformationFile(
+                handle,
+                &mut iosb,
+                buf.as_mut_ptr().cast::<c_void>(),
+                u32::try_from(buf.len()).unwrap_or(0),
+                FILE_ALTERNATE_NAME_INFORMATION_CLASS,
+            )
+        };
+        if status >= 0 {
+            let byte_len = u32::from_ne_bytes([buf[0], buf[1], buf[2], buf[3]]) as usize;
+            let max_bytes = buf.len().saturating_sub(4);
+            let actual_bytes = byte_len.min(max_bytes);
+            if actual_bytes == 0 {
+                return Ok(None);
+            }
+            let units: Vec<u16> = buf[4..4 + actual_bytes]
+                .chunks_exact(2)
+                .map(|pair| u16::from_ne_bytes([pair[0], pair[1]]))
+                .collect();
+            Ok(Some(String::from_utf16_lossy(&units)))
+        } else if is_not_found_status(status) {
+            Ok(None)
+        } else {
+            Err(status)
+        }
+    }
+
     const fn is_not_found_status(status: NtStatus) -> bool {
         status == STATUS_OBJECT_NAME_NOT_FOUND || status == STATUS_OBJECT_PATH_NOT_FOUND
     }
@@ -9561,6 +9996,18 @@ mod platform {
             &self,
             _file_name: &OsStr,
             _bytes: &[u8],
+            _new_file_mode: ContainedNewFileMode,
+            _durability: ContainedWriteDurability,
+        ) -> Result<ContainedWriteOutcome, ContainedFsError> {
+            Err(unsupported_containment_error())
+        }
+
+        /// Fails closed with [`io::ErrorKind::Unsupported`].
+        pub fn write_file_atomically_if_unchanged(
+            &self,
+            _file_name: &OsStr,
+            _bytes: &[u8],
+            _expected_original: Option<&[u8]>,
             _new_file_mode: ContainedNewFileMode,
             _durability: ContainedWriteDurability,
         ) -> Result<ContainedWriteOutcome, ContainedFsError> {
@@ -11409,6 +11856,128 @@ mod cross_platform_tests {
         assert!(
             !process_in_place_locks::is_held(id),
             "released lock identity must be pruned from the table"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_atomically_detects_in_place_edits_before_and_during_staging() {
+        use super::{
+            ContainedDir, ContainedFsError, ContainedNewFileMode, ContainedWriteDurability,
+        };
+        use std::ffi::OsStr;
+        use std::fs;
+        use std::io::{self, Write};
+        use std::os::unix::fs::MetadataExt;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        let target = root.path().join("de.po");
+        let original = b"msgid \"Hello\"\nmsgstr \"Alpha\"\n";
+        let editor_edit = b"msgid \"Hello\"\nmsgstr \"Bravo\"\n";
+        assert_eq!(original.len(), editor_edit.len());
+        fs::write(&target, original).expect("seed catalog");
+        let before_ino = fs::metadata(&target).expect("before meta").ino();
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+
+        // 1. In-place edit on the same inode between caller read and write_file_atomically_if_unchanged.
+        {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .truncate(false)
+                .open(&target)
+                .expect("open for in-place edit");
+            file.write_all(editor_edit).expect("write same-length edit");
+            file.flush().expect("flush");
+        }
+        assert_eq!(
+            fs::metadata(&target).expect("after edit meta").ino(),
+            before_ino,
+            "editor edit must stay on the same inode"
+        );
+        let err = dir
+            .write_file_atomically_if_unchanged(
+                OsStr::new("de.po"),
+                b"msgid \"Hello\"\nmsgstr \"Stale\"\n",
+                Some(original),
+                ContainedNewFileMode::Private,
+                ContainedWriteDurability::Rename,
+            )
+            .expect_err("in-place edit since read must trigger conflict");
+        assert!(
+            matches!(err, ContainedFsError::Io(ref io_err) if io_err.kind() == io::ErrorKind::AlreadyExists),
+            "expected AlreadyExists conflict, got {err:?}"
+        );
+        assert_eq!(
+            fs::read(&target).expect("read after rejected write"),
+            editor_edit,
+            "editor's in-place edit must not be discarded"
+        );
+
+        // 2. In-place same-length edit on the same inode occurring *during* staging
+        // (between `open_existing_for_replace` and `check_destination_snapshot`).
+        let staged_edit = b"msgid \"Hello\"\nmsgstr \"Delta\"\n";
+        assert_eq!(editor_edit.len(), staged_edit.len());
+        let err = dir
+            .write_file_atomically_with_pre_publish_hook(
+                OsStr::new("de.po"),
+                b"msgid \"Hello\"\nmsgstr \"Stale\"\n",
+                Some(editor_edit),
+                ContainedNewFileMode::Private,
+                ContainedWriteDurability::Rename,
+                || {
+                    let mut file = fs::OpenOptions::new()
+                        .write(true)
+                        .truncate(false)
+                        .open(&target)
+                        .expect("open for mid-staging in-place edit");
+                    file.write_all(staged_edit)
+                        .expect("write mid-staging same-length edit");
+                    file.flush().expect("flush");
+                },
+            )
+            .expect_err("mid-staging in-place edit must trigger conflict");
+        assert!(
+            matches!(err, ContainedFsError::Io(ref io_err) if io_err.kind() == io::ErrorKind::AlreadyExists),
+            "expected AlreadyExists conflict, got {err:?}"
+        );
+        assert_eq!(
+            fs::read(&target).expect("read after mid-staging conflict"),
+            staged_edit,
+            "mid-staging in-place edit must survive"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn interrupted_lock_recovery_leaves_shared_dir_temp_links_untouched() {
+        use super::{ContainedDir, ContainedFsError};
+        use std::ffi::OsStr;
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().expect("temp dir");
+        // Mark the directory sticky group-writable (`01770`) so lock
+        // acquisition is permitted, while another user could still swap
+        // `.pmds-ltmp-*` between `readdir` and `unlinkat`.
+        fs::set_permissions(root.path(), fs::Permissions::from_mode(0o1770))
+            .expect("set sticky group-writable dir mode");
+        let lock_path = root.path().join(".pmds-lock");
+        let stale_temp = root.path().join(".pmds-ltmp-999999-0");
+        fs::write(&lock_path, b"palamedes-dir-lock-v1\n").expect("seed lock");
+        fs::hard_link(&lock_path, &stale_temp).expect("seed hard link");
+
+        let dir = ContainedDir::open_root(root.path()).expect("open root");
+        let err = dir
+            .lock_target(OsStr::new("en.po"))
+            .expect_err("shared dir must not blindly unlink .pmds-ltmp-* entries");
+        assert!(
+            matches!(err, ContainedFsError::Containment(_)),
+            "expected containment refusal on unrecovered hard-linked lock, got {err:?}"
+        );
+        assert!(
+            stale_temp.exists(),
+            "entry in group-writable directory must be left untouched"
         );
     }
 }

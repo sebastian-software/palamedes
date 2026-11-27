@@ -2418,36 +2418,59 @@ fn process_catalog(
                                 path: catalog_path.clone(),
                                 source: error.into_io_error(),
                             })?;
-                    // Re-read under the exclusive lock; reuse the unlocked
-                    // preview when the bytes match, and re-render only if a
-                    // concurrent writer changed the file in the meantime.
-                    let existing = parent_dir.read_optional_file(&file_name).map_err(|error| {
-                        CliError::Io {
-                            path: catalog_path.clone(),
-                            source: error.into_io_error(),
-                        }
-                    })?;
-                    let locked_result = match unlocked_preview {
-                        Some((prior_bytes, preview)) if prior_bytes == existing => preview,
-                        _ => preview_catalog_update_from_content(
-                            make_request(),
-                            existing.as_deref(),
-                        )?,
-                    };
-                    if locked_result.created || locked_result.updated {
-                        parent_dir
-                            .write_file_atomically(
+                    // Re-read under the exclusive lock and carry the read bytes
+                    // as a content precondition into atomic publication. If an
+                    // external editor modifies the catalog in place before
+                    // publication, re-read and re-merge rather than discarding
+                    // the concurrent edit.
+                    let mut preview_candidate = unlocked_preview;
+                    let mut locked_result = None;
+                    for attempt in 0..4 {
+                        let existing =
+                            parent_dir.read_optional_file(&file_name).map_err(|error| {
+                                CliError::Io {
+                                    path: catalog_path.clone(),
+                                    source: error.into_io_error(),
+                                }
+                            })?;
+                        let result = match preview_candidate.take() {
+                            Some((prior_bytes, preview)) if prior_bytes == existing => preview,
+                            _ => preview_catalog_update_from_content(
+                                make_request(),
+                                existing.as_deref(),
+                            )?,
+                        };
+                        if result.created || result.updated {
+                            match parent_dir.write_file_atomically_if_unchanged(
                                 &file_name,
-                                locked_result.content.as_bytes(),
+                                result.content.as_bytes(),
+                                existing.as_deref().map(str::as_bytes),
                                 ContainedNewFileMode::Private,
                                 ContainedWriteDurability::Rename,
-                            )
-                            .map_err(|error: ContainedFsError| CliError::Io {
-                                path: catalog_path.clone(),
-                                source: error.into_io_error(),
-                            })?;
+                            ) {
+                                Ok(_) => {
+                                    locked_result = Some(result);
+                                    break;
+                                }
+                                Err(ContainedFsError::Io(ref io_err))
+                                    if io_err.kind() == std::io::ErrorKind::AlreadyExists
+                                        && attempt + 1 < 4 =>
+                                {
+                                    continue;
+                                }
+                                Err(error) => {
+                                    return Err(CliError::Io {
+                                        path: catalog_path.clone(),
+                                        source: error.into_io_error(),
+                                    });
+                                }
+                            }
+                        } else {
+                            locked_result = Some(result);
+                            break;
+                        }
                     }
-                    locked_result
+                    locked_result.expect("write loop always terminates with result or error")
                 }
             };
             if options.verbose {
