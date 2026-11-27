@@ -34,13 +34,16 @@ files from an RSC or browser module.
 import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
 import { locales } from "./i18n";
 
-export function createRequestI18n(request: Request) {
-  const { locale } = locales.resolve({
+export function resolveApplicationLocale(request: Request) {
+  return locales.resolve({
     strategy: "cookie",
     acceptLanguageHeader: request.headers.get("accept-language"),
     cookieHeader: request.headers.get("cookie"),
-  });
-  return createBundledServerI18n({ locale });
+  }).locale;
+}
+
+export function createRequestI18n(request: Request) {
+  return createBundledServerI18n({ locale: resolveApplicationLocale(request) });
 }
 ```
 
@@ -193,15 +196,17 @@ export async function getConfig() {
 Always generate the nonce per request on the server (or strip and regenerate it
 in a trusted edge proxy), and ensure any CDN or reverse proxy respects
 `Cache-Control: private, no-store` so nonce-bearing HTML is never cached across
-visitors. Note that in Waku `1.0.0-rc.4`'s default Node adapter, Waku's HTML fallback
-shell (served for an unmatched `/` route or a handler returning `"fallback"`)
-renders outside router handler interceptors and therefore receives no
-`unstable_setNonce` value (ordinary unmatched non-root URLs without a custom
-`404` page return plain-text `404 Not Found` with no bootstrap script); define a
-request-rendered `/` route through the router (or serve the fallback shell with
-its own CSP) so the nonce policy does not block fallback startup. Do not derive a CSP nonce from an
-arbitrary client-supplied request header such as `x-csp-nonce`: an attacker
-could supply a predictable value and bypass the script policy. See the
+visitors. Note that in Waku `1.0.0-rc.4`'s default Node adapter, Waku's default
+HTML fallback shell (served for an unmatched `/` route or a handler returning
+`"fallback"`) renders outside router handler interceptors without
+`unstable_setNonce` and omits `</head>`, so it receives neither the nonce CSP
+nor Palamedes's split-catalog import map (ordinary unmatched non-root URLs
+without a custom `404` page return plain-text `404 Not Found` with no bootstrap
+script); always define a request-rendered `/` route through the router for
+applications using split catalogs (or serve a custom fallback with full HTML
+catalog delivery and its own CSP). Do not derive a CSP nonce from an arbitrary
+client-supplied request header such as `x-csp-nonce`: an attacker could supply a
+predictable value and bypass the script policy. See the
 [deployment security guide](../security.md#csp-nonces-and-script-delivery).
 
 `clientDirectory` points at the Vite client build containing
