@@ -1146,6 +1146,13 @@ describe("security hardening", () => {
         "de-at",
         "de",
       ]);
+
+      const malformedTransformedAliasOverBudgetExclusion = `de-AT,de-t-en-arevela-posix-x-${Array.from({ length: 30 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(controls.preferredLocale(malformedTransformedAliasOverBudgetExclusion)).toBe("de");
+      expect(parseAcceptLanguage(malformedTransformedAliasOverBudgetExclusion)).toStrictEqual([
+        "de-at",
+        "de",
+      ]);
     });
 
     it("keeps exact, canonical, and extension-insensitive matching working for short and long configured locales", () => {

@@ -138,10 +138,15 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   return null;
 }
 
+type ParsedUnicodeLanguageId = {
+  endIndex: number;
+  variantsStart: number;
+};
+
 function parseUnicodeLanguageId(
   subtags: readonly string[],
   startIndex: number,
-): { endIndex: number; variantCount: number } | null {
+): ParsedUnicodeLanguageId | null {
   const language = subtags[startIndex];
   if (!language || !/^(?:[a-z]{2,3}|[a-z]{5,8})$/.test(language)) {
     return null;
@@ -157,6 +162,7 @@ function parseUnicodeLanguageId(
     index += 1;
   }
 
+  const variantsStart = index;
   const seenVariants = new Set<string>();
   while (index < subtags.length && /^(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3})$/.test(subtags[index]!)) {
     const variant = subtags[index]!;
@@ -167,7 +173,34 @@ function parseUnicodeLanguageId(
     index += 1;
   }
 
-  return { endIndex: index, variantCount: seenVariants.size };
+  return { endIndex: index, variantsStart };
+}
+
+function isValidTransformedLanguageId(
+  subtags: readonly string[],
+  startIndex: number,
+  parsed: ParsedUnicodeLanguageId,
+  maxTagLength: number,
+): boolean {
+  const fullSynthetic = `und-t-${subtags.slice(startIndex, parsed.endIndex).join("-")}`;
+  if (fullSynthetic.length <= maxTagLength) {
+    return languageTag(fullSynthetic, maxTagLength) !== null;
+  }
+
+  const prefix = subtags.slice(startIndex, parsed.variantsStart).join("-");
+  if (!languageTag(`und-t-${prefix}`, maxTagLength)) {
+    return false;
+  }
+
+  const variants = subtags.slice(parsed.variantsStart, parsed.endIndex);
+  if (!variants.includes("posix")) {
+    return true;
+  }
+
+  return variants.some(
+    (variant) =>
+      variant !== "posix" && languageTag(`und-t-${prefix}-${variant}-posix`, maxTagLength) !== null,
+  );
 }
 
 function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number): string | null {
@@ -216,16 +249,9 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number)
       let hasLangOrField = false;
       if (index < subtags.length && !/^[a-z][0-9]$/.test(subtags[index]!)) {
         const parsedTransformed = parseUnicodeLanguageId(subtags, index);
-        if (parsedTransformed === null) {
-          return null;
-        }
-        // ICU rejects a transformed language ID whose sole variant is `posix`
-        // (canonicalization would turn it into `-u-va-posix`, which is invalid
-        // inside `-t-`). Validate structurally without passing discarded
-        // subtags to Intl.Locale.
         if (
-          parsedTransformed.variantCount === 1 &&
-          subtags[parsedTransformed.endIndex - 1] === "posix"
+          parsedTransformed === null ||
+          !isValidTransformedLanguageId(subtags, index, parsedTransformed, maxTagLength)
         ) {
           return null;
         }
