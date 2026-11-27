@@ -353,8 +353,10 @@ accepts `requestHost` as caller-supplied input. In `subdomain` and `tld` modes (
 fallback in `map` mode), `canonicalUrl()`, `seoLinks()`, and `suggest()` derive destination
 URLs directly from `requestHost`.
 
-- Validate `Host` against an allowlist of your canonical production hostnames before passing
-  `requestHost` to `resolve()`, `canonicalUrl()`, `seoLinks()`, or `suggest()`.
+- Validate `Host` against an allowlist of your canonical production hostnames and pass the
+  normalized hostname (stripping or separately validating any port) as `requestHost` to
+  `resolve()`, `canonicalUrl()`, `seoLinks()`, or `suggest()`, because `canonicalUrl()`
+  copies a request port in `subdomain`, `tld`, and `map` modes when the destination has none.
 - Read `X-Forwarded-Host` only behind a trusted reverse proxy that strips and overwrites
   client-supplied forwarding headers on ingress.
 - Set `protocol: "https"` for production SEO URLs and pass a fixed canonical build host during

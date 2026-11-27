@@ -110,7 +110,7 @@ Palamedes compiles `.po` and `.fcl` catalogs into **executable JavaScript messag
 
 ### External Rust Catalogs
 
-In Rust applications using `palamedes-build` and `palamedes-i18n`, external `<locale>.pmd.json` files hold declarative compiled rendering instructions rather than executable code. `Catalog::load()` and `Catalog::from_bytes()` reject unknown JSON fields (`#[serde(deny_unknown_fields)]`) and validate the instruction format version, locale tag, complete message inventory, argument signatures, and schema contract fingerprint before returning a `Catalog`.
+In Rust applications using `palamedes-build` and `palamedes-i18n`, external `<locale>.pmd.json` files hold declarative compiled rendering instructions rather than executable code. `Catalog::load()` and `Catalog::from_bytes()` reject unknown JSON fields (`#[serde(deny_unknown_fields)]`) and validate the instruction format version, exact match against the caller-supplied locale string (plural-rule locale parsing runs only when the catalog contains plural instructions), complete message inventory, argument signatures, and schema contract fingerprint before returning a `Catalog`.
 
 Even with strict structural validation, external `.pmd.json` files control all displayed text in the application:
 
