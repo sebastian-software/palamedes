@@ -16,6 +16,7 @@ import {
   createServerCatalogStore,
   createServerI18nScope,
 } from "@palamedes/runtime/server";
+import { AcceptLanguage } from "remix/headers";
 import { createContextKey, type Middleware } from "remix/router";
 
 import type { PalamedesRemixCatalogAssetRegistry } from "./index";
@@ -225,6 +226,8 @@ const DEFAULT_FAILURE_MESSAGE =
   "Palamedes Remix i18n initialization failed before the handler ran.";
 const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const COOKIE_VALUE_PATTERN = /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/;
+const MAX_ACCEPT_LANGUAGE_LENGTH = 2048;
+const MAX_ACCEPT_LANGUAGE_ENTRIES = 32;
 
 export function createRemixI18nRequestScope<T extends I18nInstance = I18nInstance>(
   resolveI18n: RemixI18nResolver<T>,
@@ -624,17 +627,45 @@ function normalizeInput(input: RemixI18nRunInput): RemixLocaleResolutionInput {
   return input instanceof Request ? { request: input } : input;
 }
 
+function normalizeAcceptLanguageHeader(header: string | null): string | null {
+  if (!header || header.length > MAX_ACCEPT_LANGUAGE_LENGTH) {
+    return null;
+  }
+
+  let entryCount = 0;
+  let start = 0;
+  while (start <= header.length) {
+    const commaIndex = header.indexOf(",", start);
+    const end = commaIndex === -1 ? header.length : commaIndex;
+    if (header.slice(start, end).trim()) {
+      entryCount += 1;
+      if (entryCount > MAX_ACCEPT_LANGUAGE_ENTRIES) {
+        return null;
+      }
+    }
+    start = commaIndex === -1 ? header.length + 1 : commaIndex + 1;
+  }
+
+  if (entryCount === 0) {
+    return null;
+  }
+
+  const acceptLanguage = AcceptLanguage.from(header);
+  return acceptLanguage.size > 0 ? acceptLanguage.toString() : null;
+}
+
 function resolveLocaleFromInput<TLocale extends string>(
   input: RemixI18nRunInput,
   options: Pick<RemixI18nServerOptions<TLocale>, "locales" | "strategy" | "routeParam">,
 ): RemixResolvedLocale<TLocale> {
   const normalized = normalizeInput(input);
   const headers = normalized.headers ?? normalized.request.headers;
+  const acceptLanguageHeader = normalizeAcceptLanguageHeader(headers.get("accept-language"));
   const url = new URL(normalized.request.url);
 
   return options.locales.resolve({
     strategy: options.strategy,
-    acceptLanguageHeader: headers.get("accept-language"),
+    acceptLanguageHeader,
     cookieHeader: headers.get("cookie"),
     requestHost: headers.get("host"),
     routeLocale: normalized.params?.[options.routeParam ?? "locale"] ?? firstPathSegment(url),

@@ -167,7 +167,7 @@ function parseUnicodeLanguageId(subtags: readonly string[], startIndex: number):
   return index;
 }
 
-function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
+function extractWellFormedUnicodeBaseTag(lowerTag: string, maxTagLength: number): string | null {
   const subtags = lowerTag.split("-");
   const baseEndIndex = parseUnicodeLanguageId(subtags, 0);
   if (baseEndIndex === -1) {
@@ -212,8 +212,13 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
     if (singleton === "t") {
       let hasLangOrField = false;
       if (index < subtags.length && !/^[a-z][0-9]$/.test(subtags[index]!)) {
+        const tLangStart = index;
         const nextIndex = parseUnicodeLanguageId(subtags, index);
         if (nextIndex === -1) {
+          return null;
+        }
+        const tLang = subtags.slice(tLangStart, nextIndex).join("-");
+        if (tLang.length > maxTagLength || !languageTag(`und-t-${tLang}`)) {
           return null;
         }
         hasLangOrField = true;
@@ -273,7 +278,8 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
   }
 
   const baseTag = subtags.slice(0, baseEndIndex).join("-");
-  return hasPosixVariant ? `${baseTag}-u-va-posix` : baseTag;
+  const reducedTag = hasPosixVariant ? `${baseTag}-u-va-posix` : baseTag;
+  return reducedTag.length <= maxTagLength && languageTag(reducedTag) ? reducedTag : null;
 }
 
 function languagePreferences(
@@ -284,7 +290,7 @@ function languagePreferences(
     return [];
   }
 
-  const preferences: Array<{ quality: number; tag: string }> = [];
+  const preferences: Array<{ quality: number; tag: string; reduced: boolean }> = [];
   let entryCount = 0;
   let start = 0;
 
@@ -328,9 +334,9 @@ function languagePreferences(
       // Preserve well-formed over-budget tags by their canonical base tag so
       // both positive preferences and q=0 exclusions keep matching without
       // passing overlong strings to Intl.Locale.
-      const baseTag = extractWellFormedUnicodeBaseTag(lowerTag);
-      if (baseTag && baseTag.length <= maxTagLength) {
-        preferences.push({ quality, tag: baseTag });
+      const baseTag = extractWellFormedUnicodeBaseTag(lowerTag, maxTagLength);
+      if (baseTag) {
+        preferences.push({ quality, tag: baseTag, reduced: true });
       }
       continue;
     }
@@ -338,6 +344,7 @@ function languagePreferences(
     preferences.push({
       quality,
       tag: lowerTag,
+      reduced: false,
     });
   }
 
@@ -899,7 +906,7 @@ export function defineLocaleControls<TLocale extends string>(
     const unique = (matches: typeof languageLocales): TLocale | undefined =>
       matches.length === 1 ? matches[0]?.locale : undefined;
 
-    for (const { tag, quality } of preferences) {
+    for (const { tag, quality, reduced } of preferences) {
       if (quality <= 0) continue;
       const parsed = languageTag(tag, maxRequestTagLength);
       const canonicalTag = parsed?.baseName.toLowerCase() ?? tag;
@@ -920,7 +927,9 @@ export function defineLocaleControls<TLocale extends string>(
           },
         );
       });
-      const exact = unique(available.filter(({ locale }) => locale.toLowerCase() === tag));
+      const exact = reduced
+        ? undefined
+        : unique(available.filter(({ locale }) => locale.toLowerCase() === tag));
       if (exact) return exact;
 
       if (!parsed) continue;

@@ -1106,6 +1106,13 @@ describe("security hardening", () => {
         "de-at",
         "de",
       ]);
+
+      const malformedTransformedLangOverBudgetExclusion = `de-AT,de-t-en-posix-x-${Array.from({ length: 30 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(controls.preferredLocale(malformedTransformedLangOverBudgetExclusion)).toBe("de");
+      expect(parseAcceptLanguage(malformedTransformedLangOverBudgetExclusion)).toStrictEqual([
+        "de-at",
+        "de",
+      ]);
     });
 
     it("keeps exact, canonical, and extension-insensitive matching working for short and long configured locales", () => {
@@ -1121,6 +1128,14 @@ describe("security hardening", () => {
       const overlongExtendedGerman = `de-DE-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")}`;
       expect(regional.preferredLocale(overlongExtendedGerman)).toBe("de-DE");
       expect(parseAcceptLanguage(overlongExtendedGerman)).toStrictEqual(["de-de", "de"]);
+
+      const ambiguousRegional = defineLocaleControls({
+        locales: ["en", "fr", "de-DE", "de-DE-u-co-phonebk"] as const,
+        defaultLocale: "en",
+        labels: { "de-DE-u-co-phonebk": "Deutsch (Telefonbuch)" },
+      });
+      expect(ambiguousRegional.preferredLocale(`${overlongExtendedGerman}, fr`)).toBe("fr");
+      expect(ambiguousRegional.preferredLocale("de-DE-x-foo, fr")).toBe("fr");
 
       const longLocale = "de-DE-abcdefg-bcdefgh-cdefghi-defghij-efghijk-fghijkl-ghijklm-hijklmn";
       const reorderedLongLocale =

@@ -912,12 +912,24 @@ describe("createRemixI18nServer", () => {
     expect(() => remixI18n.serializeLocaleCookie("de", null as never)).toThrowError(TypeError);
   });
 
-  it("applies Core Accept-Language limits directly without pre-parsing oversized or duplicate headers", () => {
+  it("enforces Accept-Language caps before Remix parsing while preserving in-budget duplicate weights", () => {
+    const multilingualLocales = defineLocaleControls({
+      locales: ["en", "de", "es"] as const,
+      defaultLocale: "en",
+    });
     const remixI18n = createRemixI18nServer({
-      locales,
+      locales: multilingualLocales,
       strategy: "cookie",
       loadMessages: () => defineCompiledCatalog({}),
     });
+
+    expect(
+      remixI18n.resolveLocale(
+        new Request("https://example.test/", {
+          headers: { "accept-language": "de;q=0.9, es;q=0.8, DE;q=0.2" },
+        }),
+      ),
+    ).toStrictEqual({ locale: "es", source: "accept-language" });
 
     const duplicateOverCap = Array.from({ length: 40 }, () => "de").join(",");
     expect(
