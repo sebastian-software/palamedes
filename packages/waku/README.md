@@ -44,14 +44,24 @@ host or edge proxy):
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
 
-const cspNonceStorage = new AsyncLocalStorage<string>();
+type CspRequestState = { nonce: string; applied: boolean };
+const cspNonceStorage = new AsyncLocalStorage<CspRequestState>();
 
 export function runWithRequestNonce<T>(fn: () => T): T {
-  return cspNonceStorage.run(randomBytes(16).toString("base64"), fn);
+  return cspNonceStorage.run({ nonce: randomBytes(16).toString("base64"), applied: false }, fn);
 }
 
 export function getRequestNonce(): string | undefined {
-  return cspNonceStorage.getStore();
+  return cspNonceStorage.getStore()?.nonce;
+}
+
+export function markRequestNonceApplied(): void {
+  const state = cspNonceStorage.getStore();
+  if (state) state.applied = true;
+}
+
+export function wasRequestNonceApplied(): boolean {
+  return cspNonceStorage.getStore()?.applied === true;
 }
 ```
 
@@ -60,7 +70,7 @@ export function getRequestNonce(): string | undefined {
 import { fsRouter } from "waku";
 import adapter from "waku/adapters/default";
 import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
-import { getRequestNonce, runWithRequestNonce } from "./lib/csp.server";
+import { getRequestNonce, runWithRequestNonce, wasRequestNonceApplied } from "./lib/csp.server";
 
 const modules = Object.fromEntries(
   Object.entries(import.meta.glob("/src/pages/**/*.{tsx,ts}")).map(([key, value]) => [
@@ -70,8 +80,10 @@ const modules = Object.fromEntries(
 );
 
 function buildAppCsp(nonce: string): string {
-  // Include all of your application's directives (style-src, img-src, connect-src, etc.) here
-  // instead of splitting them across separate headers.
+  // Keep one CSP owner per response: put all of your application's directives
+  // (style-src, img-src, connect-src, etc.) here. If another middleware builds
+  // Content-Security-Policy, read getRequestNonce() there so the header and
+  // rendered scripts always share the exact same nonce.
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
@@ -87,12 +99,12 @@ export default adapter(fsRouter(modules), {
       runWithRequestNonce(async () => {
         await next();
         const nonce = getRequestNonce();
-        if (nonce && context.res.headers.get("content-type")?.startsWith("text/html")) {
-          // Preserve a response's own Content-Security-Policy (such as a separate fallback policy);
-          // otherwise attach the application's nonce-based policy.
-          if (!context.res.headers.has("content-security-policy")) {
-            context.header("content-security-policy", buildAppCsp(nonce));
-          }
+        if (
+          nonce &&
+          wasRequestNonceApplied() &&
+          context.res.headers.get("content-type")?.startsWith("text/html")
+        ) {
+          context.header("content-security-policy", buildAppCsp(nonce));
           // Nonce-bearing HTML must never be replayed across visitors by a shared cache.
           context.header("cache-control", "private, no-store");
         }
@@ -100,7 +112,7 @@ export default adapter(fsRouter(modules), {
     () =>
       createWakuCatalogDeliveryMiddleware({
         resolveLocale: (request) => resolveApplicationLocale(request),
-        nonce: () => getRequestNonce(),
+        nonce: () => (wasRequestNonceApplied() ? getRequestNonce() : undefined),
       }),
   ],
 });
@@ -109,15 +121,30 @@ export default adapter(fsRouter(modules), {
 ```ts
 // src/pages/_interceptors/csp.server.ts
 import { unstable_setNonce, type HandlerInterceptor } from "waku/router/server";
-import { getRequestNonce } from "../../lib/csp.server";
+import { getRequestNonce, markRequestNonceApplied } from "../../lib/csp.server";
 
 const cspInterceptor: HandlerInterceptor = async (next) => {
   const nonce = getRequestNonce();
-  if (nonce) unstable_setNonce(nonce);
+  if (nonce) {
+    unstable_setNonce(nonce);
+    markRequestNonceApplied();
+  }
   return await next();
 };
 
 export default cspInterceptor;
+```
+
+Because Waku's `fsRouter()` defaults pages to static rendering, opt routes that
+rely on request-time catalog delivery and per-request CSP nonces into dynamic
+rendering (as in `examples/waku-cookie/src/pages/_root.tsx` and `index.tsx`):
+
+```ts
+export async function getConfig() {
+  return {
+    render: "dynamic",
+  } as const;
+}
 ```
 
 Always generate the nonce per request on the server (or strip and regenerate it
