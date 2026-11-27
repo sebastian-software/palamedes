@@ -342,8 +342,9 @@ persist a preference or navigate.
 `locales.serializeChoice()` emits `Path=/; Max-Age=31536000; SameSite=Lax` without
 `Secure` or `HttpOnly` so it works with `document.cookie` and local HTTP. On HTTPS
 deployments, append `; Secure` when writing client-side choice cookies, and set
-`Secure` (and `HttpOnly` when JavaScript does not need access) on server-managed
-locale cookies. See [Cookie Attributes And HTTPS](./security.md#cookie-attributes-and-https).
+`Secure` (plus `HttpOnly` only when client JavaScript neither reads nor writes the
+cookie) on server-managed locale cookies. See
+[Cookie Attributes And HTTPS](./security.md#cookie-attributes-and-https).
 
 ## Security Considerations For Host And Cookie Strategies
 
@@ -359,7 +360,7 @@ URLs directly from `requestHost`.
 - Set `protocol: "https"` for production SEO URLs and pass a fixed canonical build host during
   static prerendering so previews or spoofed headers cannot poison canonical links or redirects.
 - Append `; Secure` to `serializeChoice()` on HTTPS and keep server-managed locale cookies
-  `SameSite=Lax; Secure` (and `HttpOnly` where browser scripts do not read them).
+  `SameSite=Lax; Secure` (plus `HttpOnly` only when browser scripts neither read nor write them).
 
 See the full [Security And Deployment Hardening](./security.md) guide for the SSR deployment
 checklist, CSP nonce guidance, and catalog/plugin trust boundaries.
