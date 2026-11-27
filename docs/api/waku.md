@@ -130,10 +130,11 @@ export default adapter(fsRouter(modules), {
     "!/src/middleware/*.{test,spec}.{js,ts,tsx,jsx,mjs,cjs}",
   ]),
   middlewareFns: [
-    // Register any middleware that compresses, clones, or transforms HTML bodies
-    // (for example, Hono `compress()` or `etag()`) here before this middleware—not
-    // in `src/middleware/*`—or at the reverse proxy so HTML rewriting runs first
-    // and outer middleware sees the final response and `Cache-Control: private, no-store`.
+    // Register any middleware or logging that compresses, clones (`response.clone()`),
+    // or transforms HTML bodies (for example, Hono `compress()` or `etag()`) here before
+    // this middleware—not in `src/middleware/*` or `_interceptors/*`—or at the reverse
+    // proxy so HTML rewriting runs first and outer middleware sees the final response
+    // and `Cache-Control: private, no-store`.
     () => async (context, next) =>
       runWithRequestNonce(async () => {
         await next();
@@ -171,7 +172,9 @@ export default adapter(fsRouter(modules), {
 // src/pages/_interceptors/zz-csp.server.ts
 // Waku loads `_interceptors/*` in sorted filename order and nests earlier files
 // outside later ones. Keep this file sorted last (after any response-replacing
-// interceptor) so it wraps Waku's render directly and tracks only Waku's SSR body.
+// interceptor) so it wraps Waku's render directly and tracks only Waku's SSR body;
+// move any HTML-cloning or body-wrapping interceptors (such as `response.clone()`)
+// to outer Hono middleware before the Palamedes/CSP wrapper in `src/waku.server.ts`.
 import {
   unstable_getRscPath,
   unstable_setNonce,
