@@ -1118,6 +1118,10 @@ describe("security hardening", () => {
       expect(regional.preferredLocale(extendedGerman)).toBe("de-DE");
       expect(parseAcceptLanguage(extendedGerman)).toContain("de");
 
+      const overlongExtendedGerman = `de-DE-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")}`;
+      expect(regional.preferredLocale(overlongExtendedGerman)).toBe("de-DE");
+      expect(parseAcceptLanguage(overlongExtendedGerman)).toStrictEqual(["de-de", "de"]);
+
       const longLocale = "de-DE-abcdefg-bcdefgh-cdefghi-defghij-efghijk-fghijkl-ghijklm-hijklmn";
       const reorderedLongLocale =
         "de-DE-hijklmn-abcdefg-bcdefgh-cdefghi-defghij-efghijk-fghijkl-ghijklm";

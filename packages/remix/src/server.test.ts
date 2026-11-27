@@ -911,6 +911,32 @@ describe("createRemixI18nServer", () => {
     );
     expect(() => remixI18n.serializeLocaleCookie("de", null as never)).toThrowError(TypeError);
   });
+
+  it("applies Core Accept-Language limits directly without pre-parsing oversized or duplicate headers", () => {
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+    });
+
+    const duplicateOverCap = Array.from({ length: 40 }, () => "de").join(",");
+    expect(
+      remixI18n.resolveLocale(
+        new Request("https://example.test/", {
+          headers: { "accept-language": duplicateOverCap },
+        }),
+      ),
+    ).toStrictEqual({ locale: "en", source: "default" });
+
+    const oversized = `de,${"xx,".repeat(1000)}`;
+    expect(
+      remixI18n.resolveLocale(
+        new Request("https://example.test/", {
+          headers: { "accept-language": oversized },
+        }),
+      ),
+    ).toStrictEqual({ locale: "en", source: "default" });
+  });
 });
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

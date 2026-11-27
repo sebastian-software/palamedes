@@ -16,7 +16,6 @@ import {
   createServerCatalogStore,
   createServerI18nScope,
 } from "@palamedes/runtime/server";
-import { AcceptLanguage } from "remix/headers";
 import { createContextKey, type Middleware } from "remix/router";
 
 import type { PalamedesRemixCatalogAssetRegistry } from "./index";
@@ -631,13 +630,11 @@ function resolveLocaleFromInput<TLocale extends string>(
 ): RemixResolvedLocale<TLocale> {
   const normalized = normalizeInput(input);
   const headers = normalized.headers ?? normalized.request.headers;
-  const acceptLanguage = AcceptLanguage.from(headers.get("accept-language"));
-  const acceptLanguageHeader = acceptLanguage.size > 0 ? acceptLanguage.toString() : null;
   const url = new URL(normalized.request.url);
 
   return options.locales.resolve({
     strategy: options.strategy,
-    acceptLanguageHeader,
+    acceptLanguageHeader: headers.get("accept-language"),
     cookieHeader: headers.get("cookie"),
     requestHost: headers.get("host"),
     routeLocale: normalized.params?.[options.routeParam ?? "locale"] ?? firstPathSegment(url),

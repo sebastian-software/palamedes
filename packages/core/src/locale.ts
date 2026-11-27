@@ -325,13 +325,12 @@ function languagePreferences(
 
     const lowerTag = rawTag.toLowerCase();
     if (rawTag.length > maxTagLength) {
-      // Preserve well-formed over-budget q=0 exclusions by their base language tag
-      // so they still exclude matching locales without discarding unrelated preferences.
-      if (quality === 0) {
-        const baseTag = extractWellFormedUnicodeBaseTag(lowerTag);
-        if (baseTag && baseTag.length <= maxTagLength) {
-          preferences.push({ quality: 0, tag: baseTag });
-        }
+      // Preserve well-formed over-budget tags by their canonical base tag so
+      // both positive preferences and q=0 exclusions keep matching without
+      // passing overlong strings to Intl.Locale.
+      const baseTag = extractWellFormedUnicodeBaseTag(lowerTag);
+      if (baseTag && baseTag.length <= maxTagLength) {
+        preferences.push({ quality, tag: baseTag });
       }
       continue;
     }
