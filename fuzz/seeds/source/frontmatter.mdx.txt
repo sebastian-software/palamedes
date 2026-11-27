@@ -1,0 +1,10 @@
+---
+title: Getting Started
+description: Build fast localized apps
+---
+
+# Welcome to **Palamedes**
+
+<img src="/hero.png" alt="Hero diagram" title="Architecture overview" aria-label="Diagram" />
+
+Read the [guide](/docs) for more details.

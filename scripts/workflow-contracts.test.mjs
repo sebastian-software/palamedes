@@ -177,6 +177,24 @@ describe("workflow contracts", () => {
     expect(runner).toContain('child.kill("SIGKILL")');
     expect(workflow).toContain("fuzz/artifacts/");
     expect(workflow).toContain("fuzz/target/run-*/");
+
+    const fuzzManifest = await readRepositoryFile("fuzz/Cargo.toml");
+    const manifestTargets = [...fuzzManifest.matchAll(/^\[\[bin\]\]\nname = "([^"]+)"/gmu)].map(
+      (match) => match[1],
+    );
+    expect(manifestTargets).toEqual([
+      "source",
+      "config",
+      "plugin",
+      "catalog_compile_render",
+      "translation_patches",
+      "i18n_artifact",
+    ]);
+    for (const target of manifestTargets) {
+      expect(runner).toContain(`"${target}"`);
+      const seedEntries = await readdir(resolve(repositoryRoot, "fuzz/seeds", target));
+      expect(seedEntries.length, `fuzz/seeds/${target} must not be empty`).toBeGreaterThan(0);
+    }
   });
 
   it("keeps paid benchmark VMs manual and retains separate, paired Linux/macOS evidence", async () => {

@@ -14,10 +14,10 @@ fuzz_target!(|data: &[u8]| {
         if !matches!(read, Ok(count) if count > 0) || line.len() > 1024 * 1024 {
             break;
         }
-        if let Ok(line) = std::str::from_utf8(&line) {
-            if let Ok(value) = serde_json::from_str(line.trim_end_matches(['\r', '\n'])) {
-                let _ = plugin_protocol::parse_event(value);
-            }
+        if let Ok(line) = std::str::from_utf8(&line)
+            && let Ok(value) = serde_json::from_str(line.trim_end_matches(['\r', '\n']))
+        {
+            let _ = plugin_protocol::parse_event(value);
         }
     }
 });

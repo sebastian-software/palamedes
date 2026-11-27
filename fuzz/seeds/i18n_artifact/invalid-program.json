@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "fingerprint": "fuzz-plural",
+  "locale": "en",
+  "messages": {
+    "p": {
+      "kind": "program",
+      "value": [
+        { "op": "pound" },
+        {
+          "op": "plural",
+          "name": "count",
+          "kind": "cardinal",
+          "offset": 4294967295,
+          "options": {
+            "=1": [{ "op": "text", "value": "a" }],
+            "=1.0": [{ "op": "text", "value": "b" }]
+          }
+        }
+      ]
+    }
+  }
+}

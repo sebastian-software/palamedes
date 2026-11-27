@@ -1,0 +1,6 @@
+"use server";
+import { t } from "@palamedes/core/macro";
+
+export async function greetAction(name: string) {
+  return t`Welcome back, ${name}!`;
+}

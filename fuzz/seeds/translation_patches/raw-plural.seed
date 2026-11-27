@@ -1,0 +1,5 @@
+0{count, plural, one {# file} other {# files}}
+count
+# Datei} one {# Dateien
+one=# Datei
+=0=Keine Dateien

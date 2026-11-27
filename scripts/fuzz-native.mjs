@@ -8,8 +8,15 @@ const root = resolve(import.meta.dirname, "..");
 const mode = process.argv[2] ?? "smoke";
 if (!["smoke", "scheduled"].includes(mode)) throw new Error("Use smoke or scheduled");
 const nightly = "nightly-2026-07-20";
-const targets = ["source", "config", "plugin"];
-const budget = mode === "smoke" ? { runs: 1000, seconds: 20 } : { runs: 1_000_000, seconds: 300 };
+const targets = [
+  "source",
+  "config",
+  "plugin",
+  "catalog_compile_render",
+  "translation_patches",
+  "i18n_artifact",
+];
+const budget = mode === "smoke" ? { runs: 1000, seconds: 20 } : { runs: 1_000_000, seconds: 180 };
 const output = resolve(root, "fuzz/target");
 await mkdir(output, { recursive: true });
 const runRoot = await mkdtemp(resolve(output, "run-"));

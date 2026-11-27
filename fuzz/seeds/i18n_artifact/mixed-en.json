@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "fingerprint": "fuzz-mixed",
+  "locale": "en",
+  "messages": {
+    "lit": {
+      "kind": "literal",
+      "value": "Hello world"
+    },
+    "msg": {
+      "kind": "program",
+      "value": [
+        { "op": "text", "value": "Hi " },
+        { "op": "argument", "name": "name" },
+        { "op": "text", "value": ": " },
+        {
+          "op": "select",
+          "name": "gender",
+          "options": {
+            "female": [{ "op": "text", "value": "she has " }],
+            "other": [{ "op": "text", "value": "they have " }]
+          }
+        },
+        {
+          "op": "plural",
+          "name": "count",
+          "kind": "cardinal",
+          "offset": 0,
+          "options": {
+            "=0": [{ "op": "text", "value": "no files" }],
+            "one": [{ "op": "pound" }, { "op": "text", "value": " file" }],
+            "other": [{ "op": "pound" }, { "op": "text", "value": " files" }]
+          }
+        }
+      ]
+    }
+  }
+}
