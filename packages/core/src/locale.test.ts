@@ -1064,6 +1064,20 @@ describe("security hardening", () => {
         "de-at",
         "de",
       ]);
+
+      const malformedUnicodeKeyOverBudgetExclusion = `de-AT,de-u-c1-gregory-x-${Array.from({ length: 30 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(controls.preferredLocale(malformedUnicodeKeyOverBudgetExclusion)).toBe("de");
+      expect(parseAcceptLanguage(malformedUnicodeKeyOverBudgetExclusion)).toStrictEqual([
+        "de-at",
+        "de",
+      ]);
+
+      const malformedTransformedOverBudgetExclusion = `de-AT,de-t-0a-ungegn-x-${Array.from({ length: 30 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(controls.preferredLocale(malformedTransformedOverBudgetExclusion)).toBe("de");
+      expect(parseAcceptLanguage(malformedTransformedOverBudgetExclusion)).toStrictEqual([
+        "de-at",
+        "de",
+      ]);
     });
 
     it("keeps exact, canonical, and extension-insensitive matching working for short and long configured locales", () => {

@@ -138,14 +138,13 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   return null;
 }
 
-function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
-  const subtags = lowerTag.split("-");
-  const language = subtags[0];
+function parseUnicodeLanguageId(subtags: readonly string[], startIndex: number): number {
+  const language = subtags[startIndex];
   if (!language || !/^(?:[a-z]{2,3}|[a-z]{5,8})$/.test(language)) {
-    return false;
+    return -1;
   }
 
-  let index = 1;
+  let index = startIndex + 1;
 
   if (index < subtags.length && /^[a-z]{4}$/.test(subtags[index]!)) {
     index += 1;
@@ -159,10 +158,20 @@ function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
   while (index < subtags.length && /^(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3})$/.test(subtags[index]!)) {
     const variant = subtags[index]!;
     if (seenVariants.has(variant)) {
-      return false;
+      return -1;
     }
     seenVariants.add(variant);
     index += 1;
+  }
+
+  return index;
+}
+
+function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
+  const subtags = lowerTag.split("-");
+  let index = parseUnicodeLanguageId(subtags, 0);
+  if (index === -1) {
+    return false;
   }
 
   const seenSingletons = new Set<string>();
@@ -173,6 +182,53 @@ function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
     }
     seenSingletons.add(singleton);
     index += 1;
+
+    if (singleton === "u") {
+      let hasAttributeOrKeyword = false;
+      while (index < subtags.length && /^[a-z0-9]{3,8}$/.test(subtags[index]!)) {
+        hasAttributeOrKeyword = true;
+        index += 1;
+      }
+      while (index < subtags.length && /^[a-z0-9][a-z]$/.test(subtags[index]!)) {
+        hasAttributeOrKeyword = true;
+        index += 1;
+        while (index < subtags.length && /^[a-z0-9]{3,8}$/.test(subtags[index]!)) {
+          index += 1;
+        }
+      }
+      if (!hasAttributeOrKeyword) {
+        return false;
+      }
+      continue;
+    }
+
+    if (singleton === "t") {
+      let hasLangOrField = false;
+      if (index < subtags.length && !/^[a-z][0-9]$/.test(subtags[index]!)) {
+        const nextIndex = parseUnicodeLanguageId(subtags, index);
+        if (nextIndex === -1) {
+          return false;
+        }
+        hasLangOrField = true;
+        index = nextIndex;
+      }
+      while (index < subtags.length && /^[a-z][0-9]$/.test(subtags[index]!)) {
+        index += 1;
+        let valueCount = 0;
+        while (index < subtags.length && /^[a-z0-9]{3,8}$/.test(subtags[index]!)) {
+          valueCount += 1;
+          index += 1;
+        }
+        if (valueCount === 0) {
+          return false;
+        }
+        hasLangOrField = true;
+      }
+      if (!hasLangOrField) {
+        return false;
+      }
+      continue;
+    }
 
     let extCount = 0;
     while (index < subtags.length) {
