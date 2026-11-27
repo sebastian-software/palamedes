@@ -1621,9 +1621,58 @@ function evaluateActionsFallbackBranch(rawBranch, stepEnv) {
   return { known: false, values: [], mayBeEmpty: true };
 }
 
+function exprReferencesMatrixOutsideQuotes(expr) {
+  let i = 0;
+  while (i < expr.length) {
+    if (expr[i] === "'") {
+      let end = i + 1;
+      while (end < expr.length) {
+        if (expr[end] === "'") {
+          if (expr[end + 1] === "'") {
+            end += 2;
+            continue;
+          }
+          end += 1;
+          break;
+        }
+        end += 1;
+      }
+      i = end;
+      continue;
+    }
+    if (
+      /^matrix(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])/iu.test(expr.slice(i)) &&
+      (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))
+    ) {
+      return true;
+    }
+    i += 1;
+  }
+  return false;
+}
+
+function textReferencesMatrixExpr(text) {
+  if (!String(text).includes("${{")) {
+    return false;
+  }
+  for (const blockMatch of String(text).matchAll(
+    new RegExp(ACTIONS_EXPRESSION_BLOCK_PATTERN.source, "gu"),
+  )) {
+    if (exprReferencesMatrixOutsideQuotes(blockMatch.groups.expr)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function evaluateActionsFallbackExpression(rawExpr, stepEnv, fallbackLine) {
   const expr = stripBalancedOuterParens(rawExpr.trim());
   if (!expr) {
+    return null;
+  }
+  // Defer expressions that still reference `matrix.*` until per-row matrix
+  // substitution replaces `matrix.*` with each row's actual value.
+  if (exprReferencesMatrixOutsideQuotes(expr)) {
     return null;
   }
 
@@ -3202,6 +3251,19 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   let commandConditional = false;
   let commandHasStdinHeredoc = false;
   let nextConditional = false;
+  let inPipeline = false;
+  let pendingFunctionBody = false;
+  const functionBraceStack = [];
+  let commandStartEventIndex = 0;
+
+  const wrapLastStageInSubshell = () => {
+    if (events.length <= commandStartEventIndex) {
+      return;
+    }
+    events.splice(commandStartEventIndex, 0, { kind: "enter-subshell" });
+    events.push({ kind: "exit-subshell" });
+    commandStartEventIndex = events.length;
+  };
   let current = "";
   let currentEscapedDollarOffsets = [];
   let tokenStarted = false;
@@ -3752,21 +3814,68 @@ function lexShellScript(text, startLine, shellMode = "posix") {
     }
 
     if (ch === "\n") {
+      const hadCommand = tokens.length > 0 || tokenStarted || commandSubstitutions.length > 0;
       flushCommand();
-      nextConditional = false;
+      if (hadCommand) {
+        if (inPipeline) {
+          wrapLastStageInSubshell();
+          inPipeline = false;
+        }
+        nextConditional = false;
+        commandStartEventIndex = events.length;
+      }
       line += 1;
       if (pendingHeredocs.length > 0) {
         index = consumeHeredocBodies(index + 1) - 1;
+        commandStartEventIndex = events.length;
       }
       continue;
     }
 
     if (ch === ";") {
       flushCommand();
+      if (inPipeline) {
+        wrapLastStageInSubshell();
+        inPipeline = false;
+      }
       nextConditional = false;
       if (text[index + 1] === ";") {
         events.push({ kind: "case-end" });
         index += 1;
+      }
+      commandStartEventIndex = events.length;
+      continue;
+    }
+
+    if (!isPwsh && ch === "{" && tokens.length === 0 && !tokenStarted) {
+      if (pendingFunctionBody) {
+        pendingFunctionBody = false;
+        events.push({ kind: "enter-subshell" });
+        functionBraceStack.push("fn");
+        commandStartEventIndex = events.length;
+        continue;
+      }
+      if (functionBraceStack.length > 0) {
+        functionBraceStack.push("block");
+        continue;
+      }
+    }
+
+    if (
+      !isPwsh &&
+      ch === "}" &&
+      tokens.length === 0 &&
+      !tokenStarted &&
+      functionBraceStack.length > 0
+    ) {
+      if (inPipeline) {
+        wrapLastStageInSubshell();
+        inPipeline = false;
+      }
+      const kind = functionBraceStack.pop();
+      if (kind === "fn") {
+        events.push({ kind: "exit-subshell" });
+        commandStartEventIndex = events.length;
       }
       continue;
     }
@@ -3786,9 +3895,44 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         flushCommand();
         continue;
       }
+      if (!isPwsh && text[index + 1] === ")") {
+        const candidateName = tokenStarted ? current : tokens.length === 1 ? tokens[0] : null;
+        const isFunctionHeader =
+          (tokens.length === 0 &&
+            tokenStarted &&
+            /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(candidateName ?? "")) ||
+          (tokens.length === 1 &&
+            !tokenStarted &&
+            /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(candidateName ?? "")) ||
+          (tokens[0] === "function" &&
+            (tokens.length === 2 || (tokens.length === 1 && tokenStarted)));
+        if (isFunctionHeader) {
+          tokens = [];
+          tokenSingleQuoted = [];
+          tokenQuoted = [];
+          tokenEscapedDollarOffsets = [];
+          current = "";
+          currentEscapedDollarOffsets = [];
+          tokenStarted = false;
+          currentHasUnquotedOrDoubleQuoted = false;
+          currentSawSingleQuote = false;
+          currentSawAnyQuote = false;
+          pendingFunctionBody = true;
+          index += 1;
+          continue;
+        }
+      }
+      if (pendingFunctionBody) {
+        pendingFunctionBody = false;
+      }
       flushCommand();
+      if (inPipeline) {
+        wrapLastStageInSubshell();
+        inPipeline = false;
+      }
       nextConditional = false;
       events.push({ kind: "enter-subshell" });
+      commandStartEventIndex = events.length;
       continue;
     }
 
@@ -3801,24 +3945,89 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       // Treat an unquoted `)` as a subshell delimiter even when it immediately
       // follows a word (e.g. `(docker pull node:24@sha256:...)`).
       flushCommand();
+      if (inPipeline) {
+        wrapLastStageInSubshell();
+        inPipeline = false;
+      }
       nextConditional = false;
       events.push({ kind: "exit-subshell" });
+      commandStartEventIndex = events.length;
+      continue;
+    }
+
+    if (!isPwsh && ch === "&" && text[index + 1] === ">") {
+      flushToken();
+      if (tokens.length === 0) {
+        commandLine = line;
+        commandConditional = nextConditional;
+        nextConditional = false;
+      }
+      if (text[index + 2] === ">") {
+        tokens.push(">>");
+        tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
+        index += 2;
+      } else {
+        tokens.push(">");
+        tokenSingleQuoted.push(false);
+        tokenQuoted.push(false);
+        index += 1;
+      }
       continue;
     }
 
     if (ch === "&" || ch === "|") {
       flushCommand();
       if (text[index + 1] === ch) {
+        if (inPipeline) {
+          wrapLastStageInSubshell();
+          inPipeline = false;
+        }
         nextConditional = true;
         index += 1;
+      } else if (ch === "|") {
+        if (!isPwsh) {
+          wrapLastStageInSubshell();
+          inPipeline = true;
+        }
+        if (text[index + 1] === "&") {
+          index += 1;
+        }
+        nextConditional = false;
       } else {
+        // Single `&` runs the preceding command/pipeline in the background
+        // (an isolated subshell), so its variable assignments cannot affect
+        // the parent shell.
+        if (!isPwsh) {
+          wrapLastStageInSubshell();
+          inPipeline = false;
+        }
         nextConditional = false;
       }
+      commandStartEventIndex = events.length;
       continue;
     }
 
     if (/[ \t\r]/u.test(ch)) {
       flushToken();
+      if (
+        !isPwsh &&
+        tokens.length === 2 &&
+        tokens[0] === "function" &&
+        /^[A-Za-z_][A-Za-z0-9_-]*$/u.test(tokens[1])
+      ) {
+        let lookahead = index + 1;
+        while (lookahead < text.length && /[ \t\r]/u.test(text[lookahead])) {
+          lookahead += 1;
+        }
+        if (text[lookahead] === "{") {
+          tokens = [];
+          tokenSingleQuoted = [];
+          tokenQuoted = [];
+          tokenEscapedDollarOffsets = [];
+          pendingFunctionBody = true;
+        }
+      }
       continue;
     }
 
@@ -3827,6 +4036,9 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   }
 
   flushCommand();
+  if (inPipeline) {
+    wrapLastStageInSubshell();
+  }
   return events;
 }
 
@@ -3952,36 +4164,30 @@ function decodeFromJsonScalarNodes(scalarNode, envMap) {
     return null;
   }
   const decoded = [];
+  let hasInvalidAlternative = false;
   for (const jsonText of argEval.values) {
+    if (!jsonText.trim()) {
+      hasInvalidAlternative = true;
+      continue;
+    }
     try {
       decoded.push(jsonToYamlAstNode(JSON.parse(jsonText), scalarNode.line));
     } catch {
-      return null;
+      hasInvalidAlternative = true;
     }
   }
-  return decoded.length > 0 ? decoded : null;
+  return decoded.length > 0 ? { nodes: decoded, hasInvalidAlternative } : null;
 }
 
-function expandSingleMatrixMap(matrixNode, filePath, problems, envMap) {
+function expandResolvedMatrixMap(matrixNode, filePath, problems, extraUnknown = false) {
   const axes = [];
   const axisNamesLower = new Set();
   const includeRows = [];
   const excludeRows = [];
-  let hasDynamicMatrixEntries = false;
+  let hasDynamicMatrixEntries = extraUnknown;
 
-  for (const [key, rawEntryNode] of matrixNode.value) {
+  for (const [key, entryNode] of matrixNode.value) {
     const lowerKey = key.toLowerCase();
-    let entryNode = rawEntryNode;
-    if (entryNode?.kind === "scalar") {
-      const decodedSeqs = decodeFromJsonScalarNodes(entryNode, envMap);
-      if (decodedSeqs && decodedSeqs.every((n) => n.kind === "seq")) {
-        const mergedItems = [];
-        for (const seqNode of decodedSeqs) {
-          mergedItems.push(...seqNode.value);
-        }
-        entryNode = { kind: "seq", line: entryNode.line, value: mergedItems };
-      }
-    }
     if (lowerKey === "exclude") {
       if (entryNode?.kind === "seq") {
         for (const rowNode of entryNode.value) {
@@ -4105,6 +4311,99 @@ function expandSingleMatrixMap(matrixNode, filePath, problems, envMap) {
   return allRows;
 }
 
+function serializeMatrixNode(node) {
+  if (!node) {
+    return null;
+  }
+  if (node.kind === "scalar") {
+    return ["s", String(node.value)];
+  }
+  if (node.kind === "seq") {
+    return ["q", node.value.map((item) => serializeMatrixNode(item))];
+  }
+  if (node.kind === "map") {
+    return [
+      "m",
+      [...node.value.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => [k, serializeMatrixNode(v)]),
+    ];
+  }
+  return [node.kind ?? "u"];
+}
+
+function expandSingleMatrixMap(matrixNode, filePath, problems, envMap, extraUnknown = false) {
+  // Expand alternative `fromJSON(...)` lists (e.g. alternative `exclude`,
+  // `include`, or axis arrays from conditional upstream outputs) into separate
+  // matrix map variants so mutually exclusive lists are never merged together.
+  let mapVariants = [{ map: new Map(), unknown: extraUnknown }];
+  let variantTruncated = false;
+
+  for (const [key, rawEntryNode] of matrixNode.value) {
+    let options = [{ node: rawEntryNode, unknown: false }];
+    if (rawEntryNode?.kind === "scalar") {
+      const decoded = decodeFromJsonScalarNodes(rawEntryNode, envMap);
+      if (decoded) {
+        const seqNodes = decoded.nodes.filter((n) => n.kind === "seq");
+        if (seqNodes.length > 0) {
+          options = seqNodes.map((seqNode) => ({
+            node: seqNode,
+            unknown: decoded.hasInvalidAlternative,
+          }));
+        }
+      }
+    }
+    const nextVariants = [];
+    for (const variant of mapVariants) {
+      for (const opt of options) {
+        if (nextVariants.length >= MAX_TOKEN_EXPANSIONS) {
+          variantTruncated = true;
+          break;
+        }
+        const clone = new Map(variant.map);
+        clone.set(key, opt.node);
+        nextVariants.push({ map: clone, unknown: variant.unknown || opt.unknown });
+      }
+      if (variantTruncated) {
+        break;
+      }
+    }
+    mapVariants = nextVariants;
+  }
+
+  if (variantTruncated) {
+    problems.push(
+      `${filePath}:${matrixNode.line}: matrix exceeds ${MAX_MATRIX_ROWS} combinations and cannot be verified exhaustively`,
+    );
+  }
+
+  const combinedRows = [];
+  const seenRowKeys = new Set();
+  const serializeRow = (row) =>
+    JSON.stringify(
+      [...row.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => [k, serializeMatrixNode(v)]),
+    );
+
+  for (const variant of mapVariants) {
+    const variantRows = expandResolvedMatrixMap(
+      { kind: "map", line: matrixNode.line, value: variant.map },
+      filePath,
+      problems,
+      variant.unknown,
+    );
+    for (const row of variantRows) {
+      const rowKey = `${row.hasUnknownProperties ? "1" : "0"}:${serializeRow(row)}`;
+      if (!seenRowKeys.has(rowKey)) {
+        seenRowKeys.add(rowKey);
+        combinedRows.push(row);
+      }
+    }
+  }
+  return combinedRows;
+}
+
 function extractJobMatrixRows(jobNode, filePath, problems, envMap = null) {
   const strategyNode = getMapField(jobNode, "strategy");
   const matrixNode = getMapField(strategyNode, "matrix");
@@ -4115,14 +4414,22 @@ function extractJobMatrixRows(jobNode, filePath, problems, envMap = null) {
     return expandSingleMatrixMap(matrixNode, filePath, problems, envMap);
   }
   if (matrixNode.kind === "scalar") {
-    const decodedMaps = decodeFromJsonScalarNodes(matrixNode, envMap);
-    if (!decodedMaps) {
+    const decoded = decodeFromJsonScalarNodes(matrixNode, envMap);
+    if (!decoded) {
       return [];
     }
     const allRows = [];
-    for (const candidate of decodedMaps) {
+    for (const candidate of decoded.nodes) {
       if (candidate.kind === "map") {
-        allRows.push(...expandSingleMatrixMap(candidate, filePath, problems, envMap));
+        allRows.push(
+          ...expandSingleMatrixMap(
+            candidate,
+            filePath,
+            problems,
+            envMap,
+            decoded.hasInvalidAlternative,
+          ),
+        );
       }
     }
     return allRows;
@@ -4130,15 +4437,106 @@ function extractJobMatrixRows(jobNode, filePath, problems, envMap = null) {
   return [];
 }
 
-function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
-  const matches = [...rawText.matchAll(MATRIX_EXPRESSION_PATTERN)];
-  if (matches.length === 0 || !matrixRows || matrixRows.length === 0) {
+function substituteMatrixInsideExpression(expr, row) {
+  const quoteActionsString = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  const missingReplacement = row.hasUnknownProperties ? null : "";
+  let out = "";
+  let i = 0;
+  let matchedAny = false;
+  let resolvedLine = null;
+  while (i < expr.length) {
+    if (expr[i] === "'") {
+      let end = i + 1;
+      while (end < expr.length) {
+        if (expr[end] === "'") {
+          if (expr[end + 1] === "'") {
+            end += 2;
+            continue;
+          }
+          end += 1;
+          break;
+        }
+        end += 1;
+      }
+      out += expr.slice(i, end);
+      i = end;
+      continue;
+    }
+    const mMatch = /^matrix(?<path>(?:\.[A-Za-z0-9_-]+|\[(?:'[^']+'|"[^"]+")\])+)/iu.exec(
+      expr.slice(i),
+    );
+    if (mMatch && (i === 0 || !/[A-Za-z0-9_.]/u.test(expr[i - 1]))) {
+      const resolved = resolveMatrixPath(row, parseMatrixPathSegments(mMatch.groups.path));
+      if (resolved) {
+        matchedAny = true;
+        resolvedLine = resolved.line;
+        out += quoteActionsString(resolved.value);
+      } else if (missingReplacement !== null) {
+        matchedAny = true;
+        out += quoteActionsString(missingReplacement);
+      } else {
+        out += mMatch[0];
+      }
+      i += mMatch[0].length;
+      continue;
+    }
+    out += expr[i];
+    i += 1;
+  }
+  return { expr: out, matchedAny, resolvedLine };
+}
+
+function substituteMatrixInTextForRow(rawText, row, fallbackLine) {
+  const missingReplacement = row.hasUnknownProperties ? null : "";
+  let resolvedLine = fallbackLine;
+  let matchedAny = false;
+  let expanded = rawText.replace(MATRIX_EXPRESSION_PATTERN, (match, _p1, _offset, _str, groups) => {
+    const resolved = resolveMatrixPath(row, parseMatrixPathSegments(groups.path));
+    if (!resolved) {
+      if (missingReplacement !== null) {
+        matchedAny = true;
+        return missingReplacement;
+      }
+      return match;
+    }
+    matchedAny = true;
+    resolvedLine = resolved.line;
+    return resolved.value;
+  });
+  if (expanded.includes("${{")) {
+    expanded = expanded.replace(
+      ACTIONS_EXPRESSION_BLOCK_PATTERN,
+      (match, _p1, _offset, _str, groups) => {
+        const sub = substituteMatrixInsideExpression(groups.expr, row);
+        if (!sub.matchedAny) {
+          return match;
+        }
+        matchedAny = true;
+        if (sub.resolvedLine !== null) {
+          resolvedLine = sub.resolvedLine;
+        }
+        return `\${{ ${sub.expr.trim()} }}`;
+      },
+    );
+  }
+  return { text: expanded, line: resolvedLine, matchedAny };
+}
+
+function expandMatrixReferences(rawText, matrixRows, fallbackLine, envMap = null) {
+  if (!matrixRows || matrixRows.length === 0 || !textReferencesMatrixExpr(rawText)) {
     return [{ text: rawText, line: fallbackLine }];
   }
 
   const singleMatrix = SINGLE_MATRIX_EXPRESSION_PATTERN.exec(rawText);
   const candidates = [];
   const seen = new Set();
+  const pushCandidate = (text, line) => {
+    const key = `${line}:${text}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      candidates.push({ text, line });
+    }
+  };
 
   for (const row of matrixRows) {
     const missingReplacement = row.hasUnknownProperties ? null : "";
@@ -4146,45 +4544,23 @@ function expandMatrixReferences(rawText, matrixRows, fallbackLine) {
       const resolved = resolveMatrixPath(row, parseMatrixPathSegments(singleMatrix.groups.path));
       if (!resolved) {
         if (missingReplacement !== null) {
-          const key = `${fallbackLine}:`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            candidates.push({ text: "", line: fallbackLine });
-          }
+          pushCandidate("", fallbackLine);
         }
         continue;
       }
-      const key = `${resolved.line}:${resolved.value}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        candidates.push({ text: resolved.value, line: resolved.line });
-      }
+      pushCandidate(resolved.value, resolved.line);
       continue;
     }
 
-    let resolvedLine = fallbackLine;
-    let matchedAny = false;
-    const expanded = rawText.replace(
-      MATRIX_EXPRESSION_PATTERN,
-      (match, _p1, _offset, _str, groups) => {
-        const resolved = resolveMatrixPath(row, parseMatrixPathSegments(groups.path));
-        if (!resolved) {
-          if (missingReplacement !== null) {
-            matchedAny = true;
-            return missingReplacement;
-          }
-          return match;
+    const sub = substituteMatrixInTextForRow(rawText, row, fallbackLine);
+    if (sub.matchedAny) {
+      if (sub.text.includes("${{")) {
+        const evaluated = resolveEnvExpressionCandidates(sub.text, envMap ?? new Map(), sub.line);
+        for (const cand of evaluated.candidates) {
+          pushCandidate(cand.text, cand.line);
         }
-        matchedAny = true;
-        resolvedLine = resolved.line;
-        return resolved.value;
-      },
-    );
-    if (matchedAny) {
-      const key = `${resolvedLine}:${expanded}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        candidates.push({ text: expanded, line: resolvedLine });
+      } else {
+        pushCandidate(sub.text, sub.line);
       }
     }
   }
@@ -7862,8 +8238,7 @@ function inspectShellRunScript(
   // the shell parses arguments. Expand statically known expressions prior to
   // lexing so values like `--platform linux/amd64` or `--rm` tokenize as flags
   // instead of being mistaken for the image operand.
-  const hasMatrixExpr =
-    matrixRows.length > 0 && new RegExp(MATRIX_EXPRESSION_PATTERN.source, "iu").test(scriptText);
+  const hasMatrixExpr = matrixRows.length > 0 && textReferencesMatrixExpr(scriptText);
   const hasExpandableActionsExpr = (value) =>
     (stepEnv.size > 0 &&
       (new RegExp(ENV_EXPRESSION_PATTERN.source, "iu").test(value) ||
@@ -7876,13 +8251,7 @@ function inspectShellRunScript(
     const perRunEmitted = [];
     const perRunEmittedOutput = [];
     const substituteMatrixForRow = (text, row) =>
-      text.replace(MATRIX_EXPRESSION_PATTERN, (match, _p1, _offset, _str, groups) => {
-        const resolved = resolveMatrixPath(row, parseMatrixPathSegments(groups.path));
-        if (resolved) {
-          return resolved.value;
-        }
-        return row.hasUnknownProperties ? match : "";
-      });
+      substituteMatrixInTextForRow(text, row, runNode.line).text;
 
     const effectiveRows = hasMatrixExpr ? matrixRows : [null];
     for (const row of effectiveRows) {
@@ -8032,6 +8401,7 @@ function checkImageField(
       envCandidate.text,
       matrixRows,
       envCandidate.line,
+      envMap,
     )) {
       const imageRef = candidate.text.trim();
       if (
