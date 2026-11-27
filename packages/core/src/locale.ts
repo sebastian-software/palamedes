@@ -167,18 +167,19 @@ function parseUnicodeLanguageId(subtags: readonly string[], startIndex: number):
   return index;
 }
 
-function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
+function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
   const subtags = lowerTag.split("-");
-  let index = parseUnicodeLanguageId(subtags, 0);
-  if (index === -1) {
-    return false;
+  const baseEndIndex = parseUnicodeLanguageId(subtags, 0);
+  if (baseEndIndex === -1) {
+    return null;
   }
 
+  let index = baseEndIndex;
   const seenSingletons = new Set<string>();
   while (index < subtags.length && /^[0-9a-wy-z]$/.test(subtags[index]!)) {
     const singleton = subtags[index]!;
     if (seenSingletons.has(singleton)) {
-      return false;
+      return null;
     }
     seenSingletons.add(singleton);
     index += 1;
@@ -197,7 +198,7 @@ function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
         }
       }
       if (!hasAttributeOrKeyword) {
-        return false;
+        return null;
       }
       continue;
     }
@@ -207,7 +208,7 @@ function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
       if (index < subtags.length && !/^[a-z][0-9]$/.test(subtags[index]!)) {
         const nextIndex = parseUnicodeLanguageId(subtags, index);
         if (nextIndex === -1) {
-          return false;
+          return null;
         }
         hasLangOrField = true;
         index = nextIndex;
@@ -220,12 +221,12 @@ function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
           index += 1;
         }
         if (valueCount === 0) {
-          return false;
+          return null;
         }
         hasLangOrField = true;
       }
       if (!hasLangOrField) {
-        return false;
+        return null;
       }
       continue;
     }
@@ -237,31 +238,31 @@ function isWellFormedUnicodeLocaleTag(lowerTag: string): boolean {
         break;
       }
       if (!/^[a-z0-9]{2,8}$/.test(part)) {
-        return false;
+        return null;
       }
       extCount += 1;
       index += 1;
     }
 
     if (extCount === 0) {
-      return false;
+      return null;
     }
   }
 
   if (index < subtags.length && subtags[index] === "x") {
     index += 1;
     if (index >= subtags.length) {
-      return false;
+      return null;
     }
     while (index < subtags.length) {
       if (!/^[a-z0-9]{1,8}$/.test(subtags[index]!)) {
-        return false;
+        return null;
       }
       index += 1;
     }
   }
 
-  return index === subtags.length;
+  return index === subtags.length ? subtags.slice(0, baseEndIndex).join("-") : null;
 }
 
 function languagePreferences(
@@ -313,10 +314,13 @@ function languagePreferences(
 
     const lowerTag = rawTag.toLowerCase();
     if (rawTag.length > maxTagLength) {
-      // Structurally invalid tags can never match a configured locale; only fail
-      // closed when an over-budget q=0 exclusion is a well-formed locale tag.
-      if (quality === 0 && isWellFormedUnicodeLocaleTag(lowerTag)) {
-        return [];
+      // Preserve well-formed over-budget q=0 exclusions by their base language tag
+      // so they still exclude matching locales without discarding unrelated preferences.
+      if (quality === 0) {
+        const baseTag = extractWellFormedUnicodeBaseTag(lowerTag);
+        if (baseTag && baseTag.length <= maxTagLength) {
+          preferences.push({ quality: 0, tag: baseTag });
+        }
       }
       continue;
     }
@@ -429,7 +433,12 @@ function parseRequestPort(rawPort: string | undefined): string | null | undefine
     return null;
   }
 
-  const portNumber = Number(rawPort);
+  const normalized = rawPort.replace(/^0+/, "");
+  if (normalized.length === 0 || normalized.length > 5) {
+    return undefined;
+  }
+
+  const portNumber = Number(normalized);
   if (portNumber < 1 || portNumber > 65_535) {
     return undefined;
   }
@@ -438,12 +447,12 @@ function parseRequestPort(rawPort: string | undefined): string | null | undefine
 }
 
 function parseRequestHost(host: string | null | undefined): ParsedRequestHost | null {
-  if (typeof host !== "string") {
+  if (typeof host !== "string" || host.length === 0 || host.length > 512) {
     return null;
   }
 
   if (host.startsWith("[")) {
-    const ipv6Match = /^(\[[0-9A-Fa-f:.]+\])(?::([0-9]{1,5}))?$/.exec(host);
+    const ipv6Match = /^(\[[0-9A-Fa-f:.]+\])(?::([0-9]+))?$/.exec(host);
     if (!ipv6Match) {
       return null;
     }
@@ -465,7 +474,7 @@ function parseRequestHost(host: string | null | undefined): ParsedRequestHost | 
     }
   }
 
-  const match = /^([^:]+)(?::([0-9]{1,5}))?$/.exec(host);
+  const match = /^([^:]+)(?::([0-9]+))?$/.exec(host);
   if (!match) {
     return null;
   }

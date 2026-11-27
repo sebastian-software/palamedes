@@ -890,6 +890,26 @@ describe("security hardening", () => {
         }),
       ).toBe("//es.example.test.:4012/docs");
 
+      expect(
+        subdomained.resolve({ strategy: "subdomain", requestHost: "de.example.test:004010" }),
+      ).toStrictEqual({ locale: "de", source: "subdomain" });
+
+      expect(
+        subdomained.canonicalUrl({
+          locale: "es",
+          pathname: "/docs",
+          requestHost: "de.example.test:004010",
+        }),
+      ).toBe("//es.example.test:4010/docs");
+
+      expect(
+        mappedWithDefault.canonicalUrl({
+          locale: "en",
+          pathname: "/docs",
+          requestHost: "[::1]:004010",
+        }),
+      ).toBe("//[::1]:4010/en/docs");
+
       const leadingZeroConfigured = defineLocaleControls({
         locales: ["en", "de"] as const,
         defaultLocale: "en",
@@ -1045,9 +1065,14 @@ describe("security hardening", () => {
       expect(controls.preferredLocale(overLengthCap)).toBe("en");
       expect(parseAcceptLanguage(overLengthCap)).toStrictEqual([]);
 
-      // Structurally valid over-budget exclusion tag (>128 chars) fails closed.
+      // Structurally valid over-budget exclusion tag (>128 chars) still excludes its matching locale
+      // without discarding unrelated positive preferences.
       const validOverBudgetExclusion = `de-AT,de-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-deber-x-${Array.from({ length: 24 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(validOverBudgetExclusion)).toBe("en");
+
+      const unrelatedOverBudgetExclusion = `de-AT,fr-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-frpar-x-${Array.from({ length: 24 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(controls.preferredLocale(unrelatedOverBudgetExclusion)).toBe("de");
+      expect(parseAcceptLanguage(unrelatedOverBudgetExclusion)).toStrictEqual(["de-at", "de"]);
 
       // Structurally malformed over-budget exclusion tags are ignored instead of dropping valid preferences.
       const malformedOverBudgetExclusion = `de-AT,${"a".repeat(140)}-US;q=0`;
