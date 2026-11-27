@@ -290,6 +290,14 @@ pub enum PalamedesError {
         /// Human-readable failure including locale and resource path.
         message: String,
     },
+    /// Nested syntax exceeded the maximum supported recursion depth.
+    #[error("{context} exceeded the maximum nesting depth of {max_depth}.")]
+    NestingTooDeep {
+        /// Human-readable description of the nested construct.
+        context: &'static str,
+        /// Maximum supported nesting depth.
+        max_depth: usize,
+    },
 }
 
 fn nested_branch_suffix(branch: Option<&str>) -> String {

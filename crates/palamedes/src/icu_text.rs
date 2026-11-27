@@ -35,6 +35,20 @@ pub(crate) fn parse_runtime_icu(value: &str) -> Result<IcuMessage, IcuParseError
     parse_icu(&canonicalize_runtime_icu(value))
 }
 
+/// Parses ICU text under the runtime apostrophe policy while rejecting inputs
+/// whose brace/tag nesting exceeds [`crate::runtime_message::MAX_NESTING_DEPTH`]
+/// before invoking the recursive parser.
+pub(crate) fn parse_runtime_icu_bounded(value: &str) -> Option<IcuMessage> {
+    let canonical = canonicalize_runtime_icu(value);
+    if crate::runtime_message::exceeds_icu_nesting_depth(
+        &canonical,
+        crate::runtime_message::MAX_NESTING_DEPTH,
+    ) {
+        return None;
+    }
+    parse_icu(&canonical).ok()
+}
+
 /// Escapes one authored literal segment for embedding into an ICU message.
 ///
 /// Odd apostrophe runs are doubled; already doubled ICU apostrophes stay a

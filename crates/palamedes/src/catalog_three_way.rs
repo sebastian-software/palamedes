@@ -220,30 +220,51 @@ fn read_catalog(path: &Path) -> PalamedesResult<String> {
     })
 }
 
-fn atomic_replace(path: &Path, content: &[u8]) -> PalamedesResult<()> {
+/// Atomically replaces `path` via a sibling temporary file, preserving
+/// existing regular-file permissions and respecting the process umask for
+/// newly created files.
+///
+/// # Errors
+///
+/// Returns an [`std::io::Error`] if creating, writing, setting permissions on,
+/// or persisting the temporary file fails.
+pub fn atomic_write_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let mut temporary =
-        tempfile::NamedTempFile::new_in(parent).map_err(|source| PalamedesError::WriteFile {
-            path: path.to_path_buf(),
-            source,
-        })?;
-    temporary
-        .write_all(content)
-        .and_then(|()| temporary.flush())
-        .map_err(|source| PalamedesError::WriteFile {
-            path: path.to_path_buf(),
-            source,
-        })?;
-    temporary
-        .persist(path)
-        .map_err(|error| PalamedesError::WriteFile {
-            path: path.to_path_buf(),
-            source: error.error,
-        })?;
+    let existing_permissions = fs::symlink_metadata(path)
+        .ok()
+        .filter(|metadata| metadata.file_type().is_file())
+        .map(|metadata| metadata.permissions());
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".pmd-");
+    #[cfg(unix)]
+    if existing_permissions.is_none() {
+        use std::os::unix::fs::PermissionsExt;
+        // Match ordinary data-file creation while respecting the process umask.
+        builder.permissions(fs::Permissions::from_mode(0o666));
+    }
+    let mut temporary = builder.tempfile_in(parent)?;
+    temporary.write_all(content)?;
+    temporary.flush()?;
+    if let Some(permissions) = existing_permissions {
+        #[cfg(unix)]
+        let permissions = {
+            use std::os::unix::fs::PermissionsExt;
+            fs::Permissions::from_mode(permissions.mode() & 0o777)
+        };
+        temporary.as_file().set_permissions(permissions)?;
+    }
+    temporary.persist(path).map_err(|error| error.error)?;
     Ok(())
+}
+
+fn atomic_replace(path: &Path, content: &[u8]) -> PalamedesResult<()> {
+    atomic_write_file(path, content).map_err(|source| PalamedesError::WriteFile {
+        path: path.to_path_buf(),
+        source,
+    })
 }
 
 #[cfg(test)]
@@ -431,6 +452,72 @@ mod tests {
             fs::read_to_string(output).expect("read output"),
             "unchanged"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_replace_respects_umask_and_preserves_existing_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = tempfile::tempdir().expect("tempdir");
+        let base = fixture.path().join("base.po");
+        let ours = fixture.path().join("ours.po");
+        let theirs = fixture.path().join("theirs.po");
+        let output = fixture.path().join("merged.po");
+        fs::write(&base, "msgid \"Hello\"\nmsgstr \"Alt\"\n").expect("base");
+        fs::write(&ours, "msgid \"Hello\"\nmsgstr \"Unser\"\n").expect("ours");
+        fs::write(&theirs, "msgid \"Hello\"\nmsgstr \"Alt\"\n").expect("theirs");
+
+        let baseline = fixture.path().join("baseline.po");
+        fs::write(&baseline, "x").expect("baseline");
+        let expected_umask_mode = fs::metadata(&baseline)
+            .expect("baseline meta")
+            .permissions()
+            .mode()
+            & 0o777;
+
+        merge_catalog_files_three_way(CatalogFileThreeWayMergeRequest {
+            ancestor_path: base.clone(),
+            ours_path: ours.clone(),
+            theirs_path: theirs.clone(),
+            output_path: output.clone(),
+            format: Some(PalamedesCatalogFormat::Po),
+            source_locale: "en".to_owned(),
+            locale: Some("de".to_owned()),
+            conflict_strategy: CatalogConflictStrategy::UseFirst,
+            po: None,
+        })
+        .expect("initial three-way merge");
+
+        let created_mode = fs::metadata(&output)
+            .expect("created meta")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(created_mode, expected_umask_mode);
+
+        for custom_mode in [0o640, 0o600] {
+            fs::set_permissions(&output, fs::Permissions::from_mode(custom_mode))
+                .expect("chmod output");
+            merge_catalog_files_three_way(CatalogFileThreeWayMergeRequest {
+                ancestor_path: base.clone(),
+                ours_path: ours.clone(),
+                theirs_path: theirs.clone(),
+                output_path: output.clone(),
+                format: Some(PalamedesCatalogFormat::Po),
+                source_locale: "en".to_owned(),
+                locale: Some("de".to_owned()),
+                conflict_strategy: CatalogConflictStrategy::UseFirst,
+                po: None,
+            })
+            .expect("re-merge");
+            let preserved_mode = fs::metadata(&output)
+                .expect("preserved meta")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(preserved_mode, custom_mode);
+        }
     }
 
     fn merge_po(

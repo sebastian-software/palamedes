@@ -163,6 +163,12 @@ pub enum Error {
         /// The serialization error.
         source: serde_json::Error,
     },
+    /// Nested Rust token groups exceeded the maximum supported recursion depth.
+    #[error("Rust token nesting exceeds the maximum depth of {max_depth}")]
+    NestingTooDeep {
+        /// Maximum supported nesting depth.
+        max_depth: usize,
+    },
 }
 
 impl Error {
