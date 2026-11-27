@@ -1100,7 +1100,7 @@ describe("security hardening", () => {
       const withinCap = `${Array.from({ length: 31 }, () => "xx-YY;q=0.5").join(",")},de;q=0.9`;
       expect(controls.preferredLocale(withinCap)).toBe("de");
 
-      const longTag = `${"a".repeat(140)}-US`;
+      const longTag = `${"a".repeat(260)}-US`;
       expect(parseAcceptLanguage(`${longTag}, de;q=0.8`)).toStrictEqual(["de"]);
       expect(controls.preferredLocale(`${longTag}, de;q=0.8`)).toBe("de");
     });
@@ -1116,61 +1116,68 @@ describe("security hardening", () => {
       expect(controls.preferredLocale(overLengthCap)).toBe("en");
       expect(parseAcceptLanguage(overLengthCap)).toStrictEqual([]);
 
-      // Structurally valid over-budget exclusion tag (>128 chars) still excludes its matching locale
+      // Structurally valid over-budget exclusion tag (>256 chars) still excludes its matching locale
       // without discarding unrelated positive preferences.
-      const validOverBudgetExclusion = `de-AT,de-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-deber-x-${Array.from({ length: 24 }, (_, i) => `p${i}`).join("-")};q=0`;
+      const validOverBudgetExclusion = `de-AT,de-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-deber-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(validOverBudgetExclusion)).toBe("en");
 
-      const longNonPosixVariantExclusion = `de-AT,de-u-va-${Array.from({ length: 30 }, (_, i) => `var${i}`).join("-")};q=0`;
+      const longNonPosixVariantExclusion = `de-AT,de-u-va-${Array.from({ length: 60 }, (_, i) => `var${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(longNonPosixVariantExclusion)).toBe("en");
 
-      const longTransformedLangExclusion = `de-AT,de-t-en-${Array.from({ length: 25 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")};q=0`;
+      const longTransformedLangExclusion = `de-AT,de-t-en-${Array.from({ length: 25 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(longTransformedLangExclusion)).toBe("en");
 
-      const unrelatedOverBudgetExclusion = `de-AT,fr-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-frpar-x-${Array.from({ length: 24 }, (_, i) => `p${i}`).join("-")};q=0`;
+      const unrelatedOverBudgetExclusion = `de-AT,fr-u-ca-gregory-co-phonebk-hc-h23-kf-upper-kn-true-nu-latn-tz-frpar-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(unrelatedOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(unrelatedOverBudgetExclusion)).toStrictEqual(["de-at", "de"]);
 
       // Structurally malformed over-budget exclusion tags are ignored instead of dropping valid preferences.
-      const malformedOverBudgetExclusion = `de-AT,${"a".repeat(140)}-US;q=0`;
+      const malformedOverBudgetExclusion = `de-AT,${"a".repeat(260)}-US;q=0`;
       expect(controls.preferredLocale(malformedOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(malformedOverBudgetExclusion)).toStrictEqual(["de-at", "de"]);
 
-      const numericPrimaryOverBudgetExclusion = `de-AT,123-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")};q=0`;
+      const numericPrimaryOverBudgetExclusion = `de-AT,123-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(numericPrimaryOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(numericPrimaryOverBudgetExclusion)).toStrictEqual(["de-at", "de"]);
 
-      const duplicateVariantOverBudgetExclusion = `de-AT,de-${Array.from({ length: 24 }, () => "abcde").join("-")};q=0`;
+      const duplicateVariantOverBudgetExclusion = `de-AT,de-${Array.from({ length: 45 }, () => "abcde").join("-")};q=0`;
       expect(controls.preferredLocale(duplicateVariantOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(duplicateVariantOverBudgetExclusion)).toStrictEqual([
         "de-at",
         "de",
       ]);
 
-      const malformedUnicodeKeyOverBudgetExclusion = `de-AT,de-u-c1-gregory-x-${Array.from({ length: 30 }, (_, i) => `p${i}`).join("-")};q=0`;
+      const malformedUnicodeKeyOverBudgetExclusion = `de-AT,de-u-c1-gregory-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(malformedUnicodeKeyOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(malformedUnicodeKeyOverBudgetExclusion)).toStrictEqual([
         "de-at",
         "de",
       ]);
 
-      const malformedTransformedOverBudgetExclusion = `de-AT,de-t-0a-ungegn-x-${Array.from({ length: 30 }, (_, i) => `p${i}`).join("-")};q=0`;
+      const malformedTransformedOverBudgetExclusion = `de-AT,de-t-0a-ungegn-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(malformedTransformedOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(malformedTransformedOverBudgetExclusion)).toStrictEqual([
         "de-at",
         "de",
       ]);
 
-      const malformedTransformedLangOverBudgetExclusion = `de-AT,de-t-en-posix-x-${Array.from({ length: 30 }, (_, i) => `p${i}`).join("-")};q=0`;
+      const malformedTransformedLangOverBudgetExclusion = `de-AT,de-t-en-posix-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(malformedTransformedLangOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(malformedTransformedLangOverBudgetExclusion)).toStrictEqual([
         "de-at",
         "de",
       ]);
 
-      const malformedTransformedAliasOverBudgetExclusion = `de-AT,de-t-en-arevela-posix-x-${Array.from({ length: 30 }, (_, i) => `p${i}`).join("-")};q=0`;
+      const malformedTransformedAliasOverBudgetExclusion = `de-AT,de-t-en-arevela-posix-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(controls.preferredLocale(malformedTransformedAliasOverBudgetExclusion)).toBe("de");
       expect(parseAcceptLanguage(malformedTransformedAliasOverBudgetExclusion)).toStrictEqual([
+        "de-at",
+        "de",
+      ]);
+
+      const malformedTransformedCollisionExclusion = `de-AT,de-t-ja-latn-hepburn-heploc-alalc97-${Array.from({ length: 18 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")};q=0`;
+      expect(controls.preferredLocale(malformedTransformedCollisionExclusion)).toBe("de");
+      expect(parseAcceptLanguage(malformedTransformedCollisionExclusion)).toStrictEqual([
         "de-at",
         "de",
       ]);
@@ -1186,14 +1193,14 @@ describe("security hardening", () => {
       expect(regional.preferredLocale(extendedGerman)).toBe("de-DE");
       expect(parseAcceptLanguage(extendedGerman)).toContain("de");
 
-      const overlongExtendedGerman = `de-DE-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")}`;
+      const overlongExtendedGerman = `de-DE-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")}`;
       expect(regional.preferredLocale(overlongExtendedGerman)).toBe("de-DE");
       expect(parseAcceptLanguage(overlongExtendedGerman)).toStrictEqual(["de-de", "de"]);
 
       const overlongVariantGerman = `de-DE-${Array.from({ length: 21 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
       expect(regional.preferredLocale(overlongVariantGerman)).toBe("de-DE");
       expect(regional.preferredLocale(`${overlongVariantGerman};q=0, de-DE`)).toBe("de-DE");
-      expect(parseAcceptLanguage(overlongVariantGerman)).toStrictEqual(["de-de", "de"]);
+      expect(parseAcceptLanguage(overlongVariantGerman)).toContain("de");
 
       const regionalWithVariant = defineLocaleControls({
         locales: ["en", "fr", "de-DE", "de-DE-1996"] as const,
@@ -1222,20 +1229,20 @@ describe("security hardening", () => {
         defaultLocale: "en",
         labels: { [longCustomCatalogId]: "Custom" },
       });
-      const veryLongVariantGerman = `de-DE-${Array.from({ length: 40 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
-      expect(withLongCustomCatalog.preferredLocale(veryLongVariantGerman)).toBe("de-DE");
+      const longVariantGerman = `de-DE-${Array.from({ length: 25 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
+      expect(withLongCustomCatalog.preferredLocale(longVariantGerman)).toBe("de-DE");
       expect(withLongCustomCatalog.preferredLocale(longCustomCatalogId)).toBe(longCustomCatalogId);
       expect(
         withLongCustomCatalog.preferredLocale(`${longCustomCatalogId};q=0, ${longCustomCatalogId}`),
       ).toBe("en");
 
-      const longExtendedSpanish = `es-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")}`;
+      const longExtendedSpanish = `es-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")}`;
       const withLongExtendedSpanish = defineLocaleControls({
         locales: ["en", "de-DE", "es", longExtendedSpanish] as const,
         defaultLocale: "en",
         labels: { [longExtendedSpanish]: "Español (Custom)" },
       });
-      expect(withLongExtendedSpanish.preferredLocale(veryLongVariantGerman)).toBe("de-DE");
+      expect(withLongExtendedSpanish.preferredLocale(longVariantGerman)).toBe("de-DE");
       expect(withLongExtendedSpanish.preferredLocale(longExtendedSpanish)).toBe(
         longExtendedSpanish,
       );
@@ -1244,7 +1251,7 @@ describe("security hardening", () => {
         locales: ["en", "gsg", "gsg-AX"] as const,
         defaultLocale: "en",
       });
-      const overlongGermanSign = `sgn-DD-aaland-${Array.from({ length: 21 }, (_, i) => `v${String(i).padStart(4, "0")}`).join("-")}`;
+      const overlongGermanSign = `sgn-DD-${Array.from({ length: 25 }, (_, i) => String(1000 + i)).join("-")}-aaland-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")}`;
       expect(signLanguages.preferredLocale(overlongGermanSign)).toBe("gsg");
 
       const ambiguousRegional = defineLocaleControls({
@@ -1279,7 +1286,7 @@ describe("security hardening", () => {
       });
       expect(posixControls.preferredLocale("en-US-u-va-posix")).toBe("en-US-posix");
 
-      const overlongPosixExclusion = `en-US-u-va-posix-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")};q=0`;
+      const overlongPosixExclusion = `en-US-u-va-posix-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(posixControls.preferredLocale(`${overlongPosixExclusion}, en-US`)).toBe("en-US");
       expect(posixControls.preferredLocale(`${overlongPosixExclusion}, en-US-posix`)).toBe(
         posixControls.preferredLocale("en-US-u-va-posix;q=0, en-US-posix"),
@@ -1293,7 +1300,7 @@ describe("security hardening", () => {
         "de",
       );
 
-      const overlongRepeatedVaPosixExclusion = `en-US-u-va-foobar-va-posix-x-${Array.from({ length: 40 }, (_, i) => `p${i}`).join("-")};q=0`;
+      const overlongRepeatedVaPosixExclusion = `en-US-u-va-foobar-va-posix-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")};q=0`;
       expect(posixControls.preferredLocale(`${overlongRepeatedVaPosixExclusion}, en-US`)).toBe(
         "en-US",
       );

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-11-27T13:17:19.742Z",
-  "sourceCommit": "f8c129e46649805e69d022cf74fba8920f756d82",
+  "measuredAt": "2026-11-27T13:27:29.529Z",
+  "sourceCommit": "88a51b57b9249188e231c55287158d2de718d925",
   "worktreeDirty": true,
-  "sourceSha256": "3232f033d66e79e294ccd77258705de9dcad7dbaeabf42920d1f845272d013e8",
+  "sourceSha256": "42b4596c03701a0e601b9bfee8e113e9d47d6d5155593085b0033a4e3ee89c3c",
   "environment": {
     "node": "v24.22.3",
     "vite": "8.2.4",
@@ -129,7 +129,7 @@
         },
         {
           "path": "packages/core/dist/locale.mjs",
-          "sha256": "21106fcafb12f5249d2108be9515bdb9c18a9823cd37fff0703a3368084e0de8"
+          "sha256": "8a64438fbf7bafcff16ba0c2f31921b69f124dc587ae0c880f331d7ec84963e6"
         },
         {
           "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
@@ -203,7 +203,7 @@
         },
         {
           "path": "packages/core/dist/locale.mjs",
-          "sha256": "21106fcafb12f5249d2108be9515bdb9c18a9823cd37fff0703a3368084e0de8"
+          "sha256": "8a64438fbf7bafcff16ba0c2f31921b69f124dc587ae0c880f331d7ec84963e6"
         },
         {
           "path": "packages/core/dist/shared/core.BivnJNsS.mjs",
