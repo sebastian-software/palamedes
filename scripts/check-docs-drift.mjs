@@ -289,7 +289,7 @@ export function findParentRelativeLinks(text) {
   let prevBlank = true;
   let prevQuoteDepth = 0;
   let inIndentedCode = false;
-  let listContentIndent = 0;
+  let listIndents = [];
   let pendingRefQuoteDepth = null;
 
   for (const [index, rawLine] of text.split(/\r?\n/u).entries()) {
@@ -319,7 +319,7 @@ export function findParentRelativeLinks(text) {
     if (quoteDepth !== prevQuoteDepth) {
       prevBlank = true;
       inIndentedCode = false;
-      listContentIndent = 0;
+      listIndents = [];
       prevQuoteDepth = quoteDepth;
     }
 
@@ -348,6 +348,11 @@ export function findParentRelativeLinks(text) {
     pendingRefQuoteDepth = null;
 
     const indent = leadingIndentColumns(content);
+    while (listIndents.length > 0 && indent < listIndents[listIndents.length - 1]) {
+      listIndents.pop();
+    }
+    const listContentIndent = listIndents[listIndents.length - 1] ?? 0;
+
     if ((prevBlank || inIndentedCode) && indent >= listContentIndent + 4) {
       inIndentedCode = true;
       prevBlank = false;
@@ -373,9 +378,7 @@ export function findParentRelativeLinks(text) {
 
     const listMarker = /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+)/u.exec(content);
     if (listMarker && indent <= listContentIndent + 3) {
-      listContentIndent = leadingIndentColumns(listMarker[1].replace(/[^\t]/gu, " "));
-    } else if (indent < listContentIndent) {
-      listContentIndent = 0;
+      listIndents.push(leadingIndentColumns(listMarker[1].replace(/[^\t]/gu, " ")));
     }
     prevBlank = false;
 

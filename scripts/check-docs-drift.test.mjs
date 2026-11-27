@@ -180,6 +180,12 @@ test("flags parent-relative links in published package READMEs while ignoring co
     "      [list-indented-code](../../docs/cli.md)",
     "",
     "  [list-prose-link](../../docs/cli.md)",
+    "10. Parent item:",
+    "    - Nested child item.",
+    "",
+    "    Continued parent paragraph.",
+    "",
+    "    [nested-parent-link](../../docs/cli.md)",
     "Inline code `[ignored](../../docs/cli.md)` and ``[also](../ignored.md)`` stay allowed.",
     "",
     "    [indented-code](../../docs/cli.md)",
@@ -206,6 +212,7 @@ test("flags parent-relative links in published package READMEs while ignoring co
     { line: 12, target: "../../docs/cli.md" },
     { line: 14, target: "../../docs/cli.md" },
     { line: 19, target: "../../docs/cli.md" },
+    { line: 25, target: "../../docs/cli.md" },
   ]);
 });
 
