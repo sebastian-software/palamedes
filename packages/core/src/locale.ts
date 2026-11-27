@@ -175,7 +175,8 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
   }
 
   let index = baseEndIndex;
-  let vaValues: string[] | null = null;
+  let seenVa = false;
+  let hasPosixVariant = false;
   const seenSingletons = new Set<string>();
   while (index < subtags.length && /^[0-9a-wy-z]$/.test(subtags[index]!)) {
     const singleton = subtags[index]!;
@@ -199,8 +200,9 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
         while (index < subtags.length && /^[a-z0-9]{3,8}$/.test(subtags[index]!)) {
           index += 1;
         }
-        if (key === "va" && vaValues === null && index > valuesStart) {
-          vaValues = subtags.slice(valuesStart, index);
+        if (key === "va" && !seenVa) {
+          seenVa = true;
+          hasPosixVariant = index === valuesStart + 1 && subtags[valuesStart] === "posix";
         }
       }
       if (!hasAttributeOrKeyword) {
@@ -273,7 +275,7 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
   }
 
   const baseTag = subtags.slice(0, baseEndIndex).join("-");
-  return vaValues ? `${baseTag}-u-va-${vaValues.join("-")}` : baseTag;
+  return hasPosixVariant ? `${baseTag}-u-va-posix` : baseTag;
 }
 
 function languagePreferences(
