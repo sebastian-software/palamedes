@@ -2928,7 +2928,29 @@ function isRedirectionOperator(token) {
   );
 }
 
-function consumeShellRedirection(tokens, index, stdinRedirectTargets = null, tokenQuoted = null) {
+function isAdjacentFdPrefix(tokens, index, tokenQuoted = null, tokenOffsets = null) {
+  const token = tokens[index];
+  if (
+    tokenQuoted?.[index] ||
+    tokenQuoted?.[index + 1] ||
+    !/^\d+$/u.test(token ?? "") ||
+    !isRedirectionOperator(tokens[index + 1])
+  ) {
+    return false;
+  }
+  if (tokenOffsets && tokenOffsets[index] !== undefined && tokenOffsets[index + 1] !== undefined) {
+    return tokenOffsets[index] + token.length === tokenOffsets[index + 1];
+  }
+  return true;
+}
+
+function consumeShellRedirection(
+  tokens,
+  index,
+  stdinRedirectTargets = null,
+  tokenQuoted = null,
+  tokenOffsets = null,
+) {
   const token = tokens[index];
   if (!tokenQuoted?.[index] && isRedirectionOperator(token)) {
     if (token === "<" && stdinRedirectTargets && tokens[index + 1] !== undefined) {
@@ -2936,12 +2958,7 @@ function consumeShellRedirection(tokens, index, stdinRedirectTargets = null, tok
     }
     return 2;
   }
-  if (
-    !tokenQuoted?.[index] &&
-    !tokenQuoted?.[index + 1] &&
-    /^\d+$/u.test(token ?? "") &&
-    isRedirectionOperator(tokens[index + 1])
-  ) {
+  if (isAdjacentFdPrefix(tokens, index, tokenQuoted, tokenOffsets)) {
     if (
       token === "0" &&
       tokens[index + 1] === "<" &&
@@ -3721,6 +3738,7 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   let arrayEscaping = false;
   let line = startLine;
   const pendingHeredocs = [];
+  const caseStack = [];
   const isPwsh = shellMode === "pwsh";
   const isCmd = shellMode === "cmd";
 
@@ -3766,6 +3784,37 @@ function lexShellScript(text, startLine, shellMode = "posix") {
   const flushCommand = () => {
     flushToken();
     if (tokens.length > 0 || commandSubstitutions.length > 0) {
+      if (!isPwsh && !isCmd && tokens.length > 0) {
+        let kwScan = 0;
+        while (
+          kwScan < tokens.length &&
+          (tokens[kwScan] === "if" ||
+            tokens[kwScan] === "then" ||
+            tokens[kwScan] === "else" ||
+            tokens[kwScan] === "elif" ||
+            tokens[kwScan] === "do" ||
+            tokens[kwScan] === "fi" ||
+            tokens[kwScan] === "done" ||
+            tokens[kwScan] === "esac")
+        ) {
+          if (tokens[kwScan] === "esac" && caseStack.length > 0) {
+            caseStack.pop();
+          }
+          kwScan += 1;
+        }
+        if (tokens[kwScan] === "case") {
+          caseStack.push({
+            awaitingPattern: tokens.slice(kwScan + 1).includes("in"),
+            patternHasWildcard: false,
+          });
+        } else if (
+          caseStack.length > 0 &&
+          !caseStack.at(-1).awaitingPattern &&
+          tokens[kwScan] === "in"
+        ) {
+          caseStack.at(-1).awaitingPattern = true;
+        }
+      }
       events.push({
         kind: "command",
         tokens,
@@ -4236,7 +4285,13 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       }
       if (delimiter.length > 0) {
         const prevToken = tokens.at(-1);
-        const isStdinFd = !(/^\d+$/u.test(prevToken ?? "") && prevToken !== "0");
+        const prevOffset = tokenOffsets.at(-1);
+        const isAdjacentFd =
+          !tokenQuoted.at(-1) &&
+          /^\d+$/u.test(prevToken ?? "") &&
+          prevOffset !== undefined &&
+          prevOffset + prevToken.length === index;
+        const isStdinFd = !(isAdjacentFd && prevToken !== "0");
         if (isStdinFd) {
           commandHasStdinHeredoc = true;
         }
@@ -4312,6 +4367,18 @@ function lexShellScript(text, startLine, shellMode = "posix") {
       nextConditional = false;
       if (text[index + 1] === ";") {
         events.push({ kind: "case-end" });
+        if (caseStack.length > 0) {
+          caseStack.at(-1).awaitingPattern = true;
+          caseStack.at(-1).patternHasWildcard = false;
+        }
+        if (text[index + 2] === "&") {
+          index += 2;
+        } else {
+          index += 1;
+        }
+      } else if (!isPwsh && !isCmd && text[index + 1] === "&" && caseStack.length > 0) {
+        caseStack.at(-1).awaitingPattern = true;
+        caseStack.at(-1).patternHasWildcard = false;
         index += 1;
       }
       commandStartEventIndex = events.length;
@@ -4358,6 +4425,16 @@ function lexShellScript(text, startLine, shellMode = "posix") {
     }
 
     if (ch === "(") {
+      if (
+        !isPwsh &&
+        !isCmd &&
+        caseStack.length > 0 &&
+        caseStack.at(-1).awaitingPattern &&
+        tokens.length === 0 &&
+        !tokenStarted
+      ) {
+        continue;
+      }
       if (current.endsWith("=")) {
         markTokenStart();
         arrayParenDepth = 1;
@@ -4440,6 +4517,31 @@ function lexShellScript(text, startLine, shellMode = "posix") {
         current += ch;
         continue;
       }
+      if (!isPwsh && !isCmd && caseStack.length > 0 && caseStack.at(-1).awaitingPattern) {
+        const topCase = caseStack.at(-1);
+        const endsWithWildcard =
+          (tokenStarted && !currentSawAnyQuote && current === "*") ||
+          (!tokenStarted && tokens.length === 1 && !tokenQuoted[0] && tokens[0] === "*");
+        const isCatchAll = topCase.patternHasWildcard || endsWithWildcard;
+        topCase.awaitingPattern = false;
+        topCase.patternHasWildcard = false;
+        tokens = [];
+        tokenOffsets = [];
+        tokenSingleQuoted = [];
+        tokenQuoted = [];
+        tokenEscapedDollarOffsets = [];
+        current = "";
+        currentEscapedDollarOffsets = [];
+        tokenStarted = false;
+        currentHasUnquotedOrDoubleQuoted = false;
+        currentSawSingleQuote = false;
+        currentSawAnyQuote = false;
+        commandConditional = false;
+        nextConditional = false;
+        events.push({ kind: "case-arm", isCatchAll });
+        commandStartEventIndex = events.length;
+        continue;
+      }
       // Treat an unquoted `)` as a subshell delimiter even when it immediately
       // follows a word (e.g. `(docker pull node:24@sha256:...)`).
       flushCommand();
@@ -4478,6 +4580,33 @@ function lexShellScript(text, startLine, shellMode = "posix") {
     }
 
     if (ch === "&" || ch === "|") {
+      if (
+        ch === "|" &&
+        text[index + 1] !== "|" &&
+        !isPwsh &&
+        !isCmd &&
+        caseStack.length > 0 &&
+        caseStack.at(-1).awaitingPattern
+      ) {
+        if (
+          (tokenStarted && !currentSawAnyQuote && current === "*") ||
+          (!tokenStarted && tokens.length === 1 && !tokenQuoted[0] && tokens[0] === "*")
+        ) {
+          caseStack.at(-1).patternHasWildcard = true;
+        }
+        tokens = [];
+        tokenOffsets = [];
+        tokenSingleQuoted = [];
+        tokenQuoted = [];
+        tokenEscapedDollarOffsets = [];
+        current = "";
+        currentEscapedDollarOffsets = [];
+        tokenStarted = false;
+        currentHasUnquotedOrDoubleQuoted = false;
+        currentSawSingleQuote = false;
+        currentSawAnyQuote = false;
+        continue;
+      }
       flushCommand();
       if (text[index + 1] === ch) {
         if (inPipeline) {
@@ -5464,12 +5593,18 @@ function formatPrintfLines(format, args) {
   return chunks.join("").split(/\r?\n/u);
 }
 
-function extractRedirectedWriteLines(tokens, startIndex, targetPredicate = isGithubEnvTarget) {
+function extractRedirectedWriteLines(
+  tokens,
+  startIndex,
+  targetPredicate = isGithubEnvTarget,
+  tokenQuoted = null,
+  tokenOffsets = null,
+) {
   const stripped = [];
   let targetsFile = false;
   for (let index = startIndex; index < tokens.length; index += 1) {
     const token = tokens[index];
-    if (isRedirectionOperator(token)) {
+    if (!tokenQuoted?.[index] && isRedirectionOperator(token)) {
       if (
         (token === ">" || token === ">>" || token === ">|") &&
         targetPredicate(tokens[index + 1])
@@ -5479,7 +5614,7 @@ function extractRedirectedWriteLines(tokens, startIndex, targetPredicate = isGit
       index += 1;
       continue;
     }
-    if (/^\d+$/u.test(token) && isRedirectionOperator(tokens[index + 1])) {
+    if (isAdjacentFdPrefix(tokens, index, tokenQuoted, tokenOffsets)) {
       if (
         (tokens[index + 1] === ">" || tokens[index + 1] === ">>" || tokens[index + 1] === ">|") &&
         targetPredicate(tokens[index + 2])
@@ -5571,13 +5706,11 @@ function peelControlKeywords(
       continue;
     }
     if (keyword === "for") {
-      frame.branches.push({
-        kind: "loop",
-        entryVars: cloneVarMap(frame.vars),
-      });
+      const entryVars = cloneVarMap(frame.vars);
       const varName = tokens[start + 1];
       if (varName && /^[A-Za-z_][A-Za-z0-9_]*$/u.test(varName) && tokens[start + 2] === "in") {
         let entries = [];
+        let guaranteedNonEmpty = false;
         const arrayExpPattern = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
         const splitUnquotedEntries = (rawEntries) => {
           const splitOut = [];
@@ -5604,6 +5737,7 @@ function peelControlKeywords(
           const isOpSingleQuoted = Boolean(tokenSingleQuoted?.[opIdx]);
           const isOpQuoted = Boolean(tokenQuoted?.[opIdx]);
           if (isOpSingleQuoted) {
+            guaranteedNonEmpty = true;
             entries = mergeVarEntries(entries, [{ value: operand, line: lineNumber }]);
             continue;
           }
@@ -5613,6 +5747,19 @@ function peelControlKeywords(
             (operand === "$@" || operand === "${@}" || operand === "$*" || operand === "${*}");
           if (arrMatch || isPositionalList) {
             const arrName = arrMatch ? arrMatch.groups.name : "@";
+            const arrObj = frame.arrays?.get(arrName);
+            if (
+              arrObj &&
+              !arrObj.truncated &&
+              arrObj.variants.length > 0 &&
+              arrObj.variants.every((variant) =>
+                isOpQuoted
+                  ? variant.length > 0
+                  : variant.some((item) => item.text.trim().length > 0),
+              )
+            ) {
+              guaranteedNonEmpty = true;
+            }
             const arrAllEntries = frame.vars.get(`${ARRAY_ELEM_KEY_PREFIX}${arrName}\0@`);
             if (arrAllEntries && arrAllEntries.length > 0) {
               const nextEntries =
@@ -5622,7 +5769,6 @@ function peelControlKeywords(
               entries = mergeVarEntries(entries, nextEntries);
               continue;
             }
-            const arrObj = frame.arrays?.get(arrName);
             if (arrObj && arrObj.variants.length > 0) {
               const elemEntries = [];
               for (const variant of arrObj.variants) {
@@ -5650,12 +5796,28 @@ function peelControlKeywords(
           );
           const candidateEntries = candidatesToVarEntries(expanded, lineNumber);
           const hasExpansion = operand.includes("$") || operand.includes("${{");
+          if (isOpQuoted || !hasExpansion) {
+            guaranteedNonEmpty = true;
+          } else if (
+            !expanded.truncated &&
+            expanded.candidates.length > 0 &&
+            expanded.candidates.every(
+              (cand) => !isDynamicReference(cand.text, shellMode) && cand.text.trim().length > 0,
+            )
+          ) {
+            guaranteedNonEmpty = true;
+          }
           const nextEntries =
             shellMode === "posix" && !isOpQuoted && hasExpansion
               ? splitUnquotedEntries(candidateEntries)
               : candidateEntries;
           entries = mergeVarEntries(entries, nextEntries);
         }
+        frame.branches.push({
+          kind: "loop",
+          entryVars,
+          mustExecute: guaranteedNonEmpty,
+        });
         if (entries.length > 0) {
           frame.vars.set(varName, entries);
           frame.arrays?.delete(varName);
@@ -5668,6 +5830,11 @@ function peelControlKeywords(
         }
         return [];
       }
+      frame.branches.push({
+        kind: "loop",
+        entryVars,
+        mustExecute: false,
+      });
       start += 1;
       continue;
     }
@@ -5675,6 +5842,7 @@ function peelControlKeywords(
       frame.branches.push({
         kind: "loop",
         entryVars: cloneVarMap(frame.vars),
+        mustExecute: false,
       });
       start += 1;
       continue;
@@ -5683,7 +5851,9 @@ function peelControlKeywords(
       const top = frame.branches.at(-1);
       if (top?.kind === "loop") {
         frame.branches.pop();
-        frame.vars = joinVarMaps([top.entryVars, frame.vars]);
+        if (!top.mustExecute) {
+          frame.vars = joinVarMaps([top.entryVars, frame.vars]);
+        }
       }
       start += 1;
       continue;
@@ -5693,6 +5863,8 @@ function peelControlKeywords(
         kind: "case",
         entryVars: cloneVarMap(frame.vars),
         branchEndVars: [],
+        hasCatchAll: false,
+        sawArmBody: false,
       });
       start += 1;
       continue;
@@ -5701,8 +5873,13 @@ function peelControlKeywords(
       const top = frame.branches.at(-1);
       if (top?.kind === "case") {
         frame.branches.pop();
-        top.branchEndVars.push(cloneVarMap(frame.vars), top.entryVars);
-        frame.vars = joinVarMaps(top.branchEndVars);
+        if (top.sawArmBody) {
+          top.branchEndVars.push(cloneVarMap(frame.vars));
+        }
+        if (!top.hasCatchAll) {
+          top.branchEndVars.push(top.entryVars);
+        }
+        frame.vars = top.branchEndVars.length > 0 ? joinVarMaps(top.branchEndVars) : top.entryVars;
       }
       start += 1;
       continue;
@@ -6787,6 +6964,98 @@ function inspectShellText(
     return result;
   };
 
+  const isFunctionPinRelevant = (targetFnDef, functionsMap, visited = new Set()) => {
+    if (!targetFnDef || visited.has(targetFnDef)) {
+      return false;
+    }
+    visited.add(targetFnDef);
+    for (const ev of targetFnDef.bodyEvents) {
+      if (ev.kind === "stdin-containerfile-heredoc" || ev.kind === "nested-shell-heredoc") {
+        return true;
+      }
+      if (ev.kind !== "command") {
+        continue;
+      }
+      if (ev.substitutions && ev.substitutions.length > 0) {
+        return true;
+      }
+      const evTokens = ev.tokens ?? [];
+      if (evTokens.length === 0) {
+        continue;
+      }
+      for (const tok of evTokens) {
+        if (isGithubEnvTarget(tok) || isGithubOutputTarget(tok)) {
+          return true;
+        }
+      }
+      let scan = 0;
+      while (
+        scan < evTokens.length &&
+        (evTokens[scan] === "if" ||
+          evTokens[scan] === "then" ||
+          evTokens[scan] === "else" ||
+          evTokens[scan] === "elif" ||
+          evTokens[scan] === "do" ||
+          evTokens[scan] === "fi" ||
+          evTokens[scan] === "done" ||
+          evTokens[scan] === "esac")
+      ) {
+        scan += 1;
+      }
+      const first = evTokens[scan];
+      if (!first) {
+        continue;
+      }
+      if (
+        first === "export" ||
+        first === "unset" ||
+        first === "declare" ||
+        first === "local" ||
+        first === "readonly" ||
+        first === "typeset" ||
+        first === "shift" ||
+        first === "cd" ||
+        first === "pushd" ||
+        first === "popd" ||
+        first === "eval" ||
+        first === "source" ||
+        first === "." ||
+        first === "for" ||
+        first.includes("$") ||
+        first.includes("${{") ||
+        /^[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]+\])?\+?=/u.test(first)
+      ) {
+        return true;
+      }
+      if (
+        path.basename(first) === "printf" &&
+        evTokens.some((t) => t === "-v" || t.startsWith("-v"))
+      ) {
+        return true;
+      }
+      for (let tIdx = scan; tIdx < evTokens.length; tIdx += 1) {
+        const base = path.basename(evTokens[tIdx]).toLowerCase();
+        if (
+          base === "docker" ||
+          base === "podman" ||
+          base === "buildah" ||
+          base === "docker-compose" ||
+          base === "podman-compose" ||
+          SHELL_INTERPRETERS.has(base)
+        ) {
+          return true;
+        }
+      }
+      if (
+        functionsMap.has(first) &&
+        isFunctionPinRelevant(functionsMap.get(first), functionsMap, visited)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   const inspectUncalledFunctions = (targetFrame) => {
     for (const fnDef of targetFrame.functions.values()) {
       if (calledFnDefs.has(fnDef)) {
@@ -6895,11 +7164,24 @@ function inspectShellText(
 
       const frame = scopeStack.at(-1);
 
+      if (event.kind === "case-arm") {
+        const top = frame.branches.at(-1);
+        if (top?.kind === "case") {
+          if (event.isCatchAll) {
+            top.hasCatchAll = true;
+          }
+          top.sawArmBody = true;
+          frame.vars = cloneVarMap(top.entryVars);
+        }
+        continue;
+      }
+
       if (event.kind === "case-end") {
         const top = frame.branches.at(-1);
         if (top?.kind === "case") {
           top.branchEndVars.push(cloneVarMap(frame.vars));
           frame.vars = cloneVarMap(top.entryVars);
+          top.sawArmBody = false;
         }
         continue;
       }
@@ -7066,6 +7348,144 @@ function inspectShellText(
         conditional,
         shellMode,
       );
+
+      if (shellMode === "posix" && (tokens[0] === "break" || tokens[0] === "continue")) {
+        for (const branch of frame.branches) {
+          if (branch.kind === "loop") {
+            branch.mustExecute = false;
+          }
+        }
+        continue;
+      }
+
+      // Bash `shift [N]` drops the leading N positional arguments from `$@` and
+      // shifts `$1`, `$2`, ... down in the current function/script frame.
+      if (shellMode === "posix" && tokens[0] === "shift") {
+        const shiftArgs = [];
+        for (let sIdx = 1; sIdx < tokens.length;) {
+          const redirSkip = consumeShellRedirection(
+            tokens,
+            sIdx,
+            [],
+            peeledQuoted,
+            peeledTokenOffsets,
+          );
+          if (redirSkip > 0) {
+            sIdx += redirSkip;
+            continue;
+          }
+          shiftArgs.push(tokens[sIdx]);
+          sIdx += 1;
+        }
+        const shiftCounts = [];
+        let shiftDynamic = false;
+        if (shiftArgs.length === 0) {
+          shiftCounts.push(1);
+        } else {
+          const expandedCount = resolveImageTokenCandidates(
+            shiftArgs[0],
+            stepEnv,
+            frame.vars,
+            lineNumber,
+            shellMode,
+          );
+          if (expandedCount.truncated || expandedCount.candidates.length === 0) {
+            shiftDynamic = true;
+          }
+          for (const cand of expandedCount.candidates) {
+            const trimmed = cand.text.trim();
+            if (/^\d+$/u.test(trimmed)) {
+              const parsed = Number(trimmed);
+              if (!shiftCounts.includes(parsed)) {
+                shiftCounts.push(parsed);
+              }
+            } else {
+              shiftDynamic = true;
+            }
+          }
+        }
+        const currentPosArr = frame.arrays.get("@");
+        if (currentPosArr && currentPosArr.variants.length > 0) {
+          const isBranchConditional = conditional || frame.branches.length > 0;
+          const shiftedVariants = [];
+          let shiftTruncated = Boolean(currentPosArr.truncated);
+          if (!shiftDynamic && shiftCounts.length > 0) {
+            for (const variant of currentPosArr.variants) {
+              for (const count of shiftCounts) {
+                if (shiftedVariants.length >= MAX_VAR_VALUES) {
+                  shiftTruncated = true;
+                  break;
+                }
+                shiftedVariants.push(variant.slice(count).map((item) => ({ ...item })));
+              }
+            }
+          } else {
+            // Dynamic shift count: any suffix of the positional vector is reachable.
+            for (const variant of currentPosArr.variants) {
+              for (let offset = 0; offset <= variant.length; offset += 1) {
+                if (shiftedVariants.length >= MAX_VAR_VALUES) {
+                  shiftTruncated = true;
+                  break;
+                }
+                shiftedVariants.push(variant.slice(offset).map((item) => ({ ...item })));
+              }
+            }
+          }
+          const merged = isBranchConditional
+            ? [...currentPosArr.variants, ...shiftedVariants]
+            : shiftedVariants;
+          if (merged.length > MAX_VAR_VALUES) {
+            shiftTruncated = true;
+          }
+          const nextPosArr = {
+            variants: merged.slice(0, MAX_VAR_VALUES),
+            truncated: shiftTruncated,
+          };
+          frame.arrays.set("@", nextPosArr);
+          syncArrayMirrorToVars(frame.vars, "@", nextPosArr, lineNumber);
+          const oldPosKeys = [...frame.vars.keys()].filter((k) => /^[1-9][0-9]*$/u.test(k));
+          const nextMaxLen = nextPosArr.variants.reduce((acc, v) => Math.max(acc, v.length), 0);
+          for (const oldKey of oldPosKeys) {
+            const idxNum = Number(oldKey);
+            if (idxNum > nextMaxLen) {
+              if (fnContext) {
+                recordLocalBinding(oldKey, frame);
+              }
+              if (isBranchConditional) {
+                frame.vars.set(
+                  oldKey,
+                  mergeVarEntries(frame.vars.get(oldKey), [{ value: "", line: 0, unset: true }]),
+                );
+              } else {
+                frame.vars.delete(oldKey);
+              }
+            }
+          }
+          for (let pIdx = 0; pIdx < nextMaxLen; pIdx += 1) {
+            const posKey = String(pIdx + 1);
+            if (fnContext) {
+              recordLocalBinding(posKey, frame);
+            }
+            let slotEntries = [];
+            for (const variant of nextPosArr.variants) {
+              if (pIdx < variant.length) {
+                slotEntries = mergeVarEntries(slotEntries, [
+                  { value: variant[pIdx].text, line: variant[pIdx].line },
+                ]);
+              } else {
+                slotEntries = mergeVarEntries(slotEntries, [{ value: "", line: 0, unset: true }]);
+              }
+            }
+            if (nextPosArr.truncated) {
+              slotEntries = mergeVarEntries(slotEntries, [
+                { value: "", line: lineNumber, truncated: true },
+              ]);
+            }
+            frame.vars.set(posKey, slotEntries);
+          }
+        }
+        continue;
+      }
 
       // `unset VAR ...` clears tracked shell variables (or marks them possibly unset
       // when executed conditionally).
@@ -7703,7 +8123,13 @@ function inspectShellText(
       const prefixAssignEntries = [];
       let cursor = 0;
       while (cursor < tokens.length) {
-        const redirConsumed = consumeShellRedirection(tokens, cursor, stdinRedirectTargets);
+        const redirConsumed = consumeShellRedirection(
+          tokens,
+          cursor,
+          stdinRedirectTargets,
+          peeledQuoted,
+          peeledTokenOffsets,
+        );
         if (redirConsumed > 0) {
           cursor += redirConsumed;
           continue;
@@ -7768,9 +8194,11 @@ function inspectShellText(
         const activeFns = fnContext?.activeFunctions ?? new Set();
         const curFnDepth = fnContext?.fnDepth ?? 0;
         if (curFnDepth >= 8) {
-          problems.push(
-            `${filePath}:${lineNumber}: shell function call ${cli} exceeds maximum nesting depth (8) and cannot be verified`,
-          );
+          if (isFunctionPinRelevant(fnDef, frame.functions)) {
+            problems.push(
+              `${filePath}:${lineNumber}: shell function call ${cli} exceeds maximum nesting depth (8) and cannot be verified`,
+            );
+          }
           continue;
         }
         calledFnDefs.add(fnDef);
@@ -7785,7 +8213,13 @@ function inspectShellText(
           let posTruncated = false;
           const fnCallArrayExpPattern = /^\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\[(?:@|\*)\]\}$/u;
           for (let argIdx = cursor + 1; argIdx < tokens.length;) {
-            const redirSkip = consumeShellRedirection(tokens, argIdx, [], peeledQuoted);
+            const redirSkip = consumeShellRedirection(
+              tokens,
+              argIdx,
+              [],
+              peeledQuoted,
+              peeledTokenOffsets,
+            );
             if (redirSkip > 0) {
               argIdx += redirSkip;
               continue;
@@ -8038,7 +8472,13 @@ function inspectShellText(
         const printfArgIdxs = [];
         let afterDoubleDash = false;
         for (let pIdx = cursor + 1; pIdx < tokens.length; pIdx += 1) {
-          const redirSkip = consumeShellRedirection(tokens, pIdx, []);
+          const redirSkip = consumeShellRedirection(
+            tokens,
+            pIdx,
+            [],
+            peeledQuoted,
+            peeledTokenOffsets,
+          );
           if (redirSkip > 0) {
             pIdx += redirSkip - 1;
             continue;
@@ -8144,7 +8584,13 @@ function inspectShellText(
         }
       }
 
-      const githubEnvLines = extractRedirectedWriteLines(tokens, cursor, isGithubEnvTarget);
+      const githubEnvLines = extractRedirectedWriteLines(
+        tokens,
+        cursor,
+        isGithubEnvTarget,
+        peeledQuoted,
+        peeledTokenOffsets,
+      );
       if (githubEnvLines) {
         if (!suppressSideEffects) {
           const isConditional = fnCallConditional || frame.branches.length > 0 || conditional;
@@ -8167,7 +8613,13 @@ function inspectShellText(
         continue;
       }
 
-      const githubOutputLines = extractRedirectedWriteLines(tokens, cursor, isGithubOutputTarget);
+      const githubOutputLines = extractRedirectedWriteLines(
+        tokens,
+        cursor,
+        isGithubOutputTarget,
+        peeledQuoted,
+        peeledTokenOffsets,
+      );
       if (githubOutputLines) {
         if (!suppressSideEffects) {
           const isConditional = fnCallConditional || frame.branches.length > 0 || conditional;
@@ -8536,6 +8988,7 @@ function inspectShellText(
           rawIdx,
           stdinRedirectTargets,
           peeledQuoted,
+          peeledTokenOffsets,
         );
         if (redirConsumed > 0) {
           rawIdx += redirConsumed;
@@ -9748,8 +10201,12 @@ function inspectShellText(
           isPositionalForward ||
           (token.startsWith("${") && (token.includes("[@]") || token.includes("[*]")));
         const fallbackLine = resolveFoldedLine(peeledTokenOffsets[index], token, lineNumber);
-        const isRawFdRedirPrefix =
-          !isAnyQuoted && /^\d+$/u.test(token) && isRedirectionOperator(tokens[index + 1]);
+        const isRawFdRedirPrefix = isAdjacentFdPrefix(
+          tokens,
+          index,
+          peeledQuoted,
+          peeledTokenOffsets,
+        );
         if (isRawFdRedirPrefix) {
           const nextLine = resolveFoldedLine(
             peeledTokenOffsets[index + 1],

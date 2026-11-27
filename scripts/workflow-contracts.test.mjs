@@ -4651,6 +4651,52 @@ describe("workflow contracts", () => {
       "<memory>:24: ubuntu:24.04 is not pinned to a sha256 digest",
       "<memory>:29: nginx:1.27 is not pinned to a sha256 digest",
     ]);
+    // Bash `shift` updates `$1`/`$@`, separated `2 >log` is not treated as an
+    // fd redirection, exhaustive `case ... *)` drops stale entry values,
+    // statically nonempty `for` loops drop stale pre-loop values, and deep
+    // non-pin helper chains do not trigger false depth failures.
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r63:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: |",
+          "          pull_labeled() {",
+          '            echo "$1"',
+          "            shift",
+          '            docker pull "$@"',
+          "          }",
+          `          pull_labeled ok-label node:24@${digest}`,
+          "          pull_labeled bad-label alpine:3.20",
+          `          docker run --cpus 2 >log node:24@${digest} echo hi`,
+          "          case_img=debian:12",
+          '          case "$TARGET" in',
+          `            a) case_img=node:24@${digest} ;;`,
+          `            *) case_img=node:24@${digest} ;;`,
+          "          esac",
+          '          docker pull "$case_img"',
+          "          loop_img=ubuntu:24.04",
+          "          for x in one two; do",
+          `            loop_img=node:24@${digest}`,
+          "          done",
+          '          docker pull "$loop_img"',
+          "          h1() { h2; }",
+          "          h2() { h3; }",
+          "          h3() { h4; }",
+          "          h4() { h5; }",
+          "          h5() { h6; }",
+          "          h6() { h7; }",
+          "          h7() { h8; }",
+          "          h8() { h9; }",
+          "          h9() { echo ok; }",
+          "          h1",
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual(["<memory>:13: alpine:3.20 is not pinned to a sha256 digest"]);
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
     expect(
       unpinnedActionReferences(
