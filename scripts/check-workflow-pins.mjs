@@ -2365,7 +2365,7 @@ function findNextShellParamExpansion(text, startIndex = 0) {
       if (depth === 0) {
         const inner = text.slice(index + 2, cursor - 1);
         const exprMatch =
-          /^(?<name>[A-Za-z_][A-Za-z0-9_]*|[1-9][0-9]*)(?:\[(?<idx>\d+)\])?(?:(?<op>:-|:=|:\+|-|=|\+)(?<word>.*))?$/su.exec(
+          /^(?<name>[A-Za-z_][A-Za-z0-9_]*|[1-9][0-9]*)(?:\[(?<idx>\d+)\])?(?:(?<op>:-|:=|:\+|:\?|-|=|\+|\?)(?<word>.*))?$/su.exec(
             inner,
           );
         if (exprMatch) {
@@ -2505,12 +2505,43 @@ function expandShellParamCandidates(candidates, shellVars, caseInsensitive, init
           continue;
         }
 
-        // Parameter expansion with default/alternate operator (`:-`, `-`, `:=`, `=`, `:+`, `+`).
-        expandedAny = true;
+        // Parameter expansion with default, alternate, or required-value operator
+        // (`:-`, `-`, `:=`, `=`, `:+`, `+`, `:?`, `?`).
         const isDefaultOp =
           expr.op === ":-" || expr.op === "-" || expr.op === ":=" || expr.op === "=";
+        const isRequiredOp = expr.op === ":?" || expr.op === "?";
         const checksEmpty = expr.op.startsWith(":");
         const alts = [];
+
+        if (isRequiredOp) {
+          if (!entries || entries.length === 0) {
+            appendToBuilders([{ text: rawMatch, line: null }]);
+            continue;
+          }
+          expandedAny = true;
+          for (const entry of entries) {
+            if (entry.truncated) {
+              truncated = true;
+              continue;
+            }
+            // Bash aborts the command before execution when the variable is unset
+            // (or empty for `:?`), so drop those branches from command operands.
+            if (entry.unset) {
+              continue;
+            }
+            if (checksEmpty && !isDynamicReference(entry.value) && entry.value.length === 0) {
+              continue;
+            }
+            alts.push({ text: entry.value, line: isWholeToken ? entry.line : null });
+          }
+          appendToBuilders(alts);
+          if (builders.length === 0) {
+            break;
+          }
+          continue;
+        }
+
+        expandedAny = true;
 
         if (isDefaultOp) {
           if (!entries || entries.length === 0) {
@@ -2957,90 +2988,6 @@ function inspectNonShellScript(
   emittedGithubOutput = null,
   language = "unknown",
 ) {
-  // Strip line/block comments outside quoted strings into `codeOnly`, and build
-  // a parallel same-length `codeWithoutStrings` where string literal interiors
-  // are blanked out so prose like `print("Example: import docker")` is never
-  // matched as an import, assignment, or call while string arguments remain
-  // readable from `codeOnly` at identical offsets.
-  let codeOnly = "";
-  let codeWithoutStrings = "";
-  let q = null;
-  let triple = false;
-  for (let i = 0; i < scriptText.length; i += 1) {
-    const ch = scriptText[i];
-    if (q) {
-      codeOnly += ch;
-      if (ch === "\\" && i + 1 < scriptText.length) {
-        codeOnly += scriptText[i + 1];
-        codeWithoutStrings += "  ";
-        i += 1;
-        continue;
-      }
-      if (triple) {
-        if (scriptText.slice(i, i + 3) === q.repeat(3)) {
-          codeOnly += q.repeat(2);
-          codeWithoutStrings += q.repeat(3);
-          i += 2;
-          q = null;
-          triple = false;
-        } else {
-          codeWithoutStrings += ch === "\n" ? "\n" : " ";
-        }
-      } else if (ch === q) {
-        codeWithoutStrings += ch;
-        q = null;
-      } else {
-        codeWithoutStrings += ch === "\n" ? "\n" : " ";
-      }
-      continue;
-    }
-    if (ch === "#") {
-      while (i < scriptText.length && scriptText[i] !== "\n") {
-        i += 1;
-      }
-      codeOnly += "\n";
-      codeWithoutStrings += "\n";
-      continue;
-    }
-    if (ch === "/" && scriptText[i + 1] === "/") {
-      while (i < scriptText.length && scriptText[i] !== "\n") {
-        i += 1;
-      }
-      codeOnly += "\n";
-      codeWithoutStrings += "\n";
-      continue;
-    }
-    if (ch === "/" && scriptText[i + 1] === "*") {
-      i += 2;
-      while (i < scriptText.length && !(scriptText[i] === "*" && scriptText[i + 1] === "/")) {
-        if (scriptText[i] === "\n") {
-          codeOnly += "\n";
-          codeWithoutStrings += "\n";
-        }
-        i += 1;
-      }
-      i += 1;
-      continue;
-    }
-    if (ch === "'" || ch === '"' || ch === "`") {
-      if (ch !== "`" && scriptText.slice(i, i + 3) === ch.repeat(3)) {
-        q = ch;
-        triple = true;
-        codeOnly += ch.repeat(3);
-        codeWithoutStrings += ch.repeat(3);
-        i += 2;
-        continue;
-      }
-      q = ch;
-      triple = false;
-      codeOnly += ch;
-      codeWithoutStrings += ch;
-      continue;
-    }
-    codeOnly += ch;
-    codeWithoutStrings += ch;
-  }
-
   const CONTAINER_CLI_BASENAMES = new Set([
     "docker",
     "podman",
@@ -3052,6 +2999,162 @@ function inspectNonShellScript(
     /(?:^|[;&|(\s`'"])(?:(?:[A-Za-z]:)?(?:[\\/][\w.@-]+)*[\\/])?(?:docker|podman|buildah|docker-compose|podman-compose)(?:\.exe)?(?=$|[\s;&|)'"`])/iu;
   const allowPythonSyntax = language === "python" || language === "unknown";
   const allowJsSyntax = language === "js" || language === "github-script" || language === "unknown";
+  const allowHashComments =
+    language === "python" ||
+    language === "ruby" ||
+    language === "perl" ||
+    language === "php" ||
+    language === "unknown";
+  const allowSlashComments =
+    language === "js" ||
+    language === "github-script" ||
+    language === "php" ||
+    language === "unknown";
+
+  // Strip comments into `codeOnly` and build a parallel same-length
+  // `codeWithoutStrings` where string literal interiors are masked to spaces
+  // while keeping executable interpolated expressions (JS `${...}` and Python
+  // f-string `{...}`) visible for call scanning.
+  let codeOnly = "";
+  let codeWithoutStrings = "";
+  const lexStack = [];
+  for (let i = 0; i < scriptText.length; i += 1) {
+    const ch = scriptText[i];
+    const state = lexStack.at(-1) ?? null;
+    if (state?.kind === "str") {
+      if (ch === "\\" && i + 1 < scriptText.length) {
+        const nextCh = scriptText[i + 1];
+        codeOnly += ch + nextCh;
+        codeWithoutStrings += nextCh === "\n" ? " \n" : "  ";
+        i += 1;
+        continue;
+      }
+      if (state.interp === "js-template" && ch === "$" && scriptText[i + 1] === "{") {
+        codeOnly += "${";
+        codeWithoutStrings += "${";
+        lexStack.push({ kind: "expr", braceDepth: 1 });
+        i += 1;
+        continue;
+      }
+      if (state.interp === "py-fstring") {
+        if (ch === "{" && scriptText[i + 1] === "{") {
+          codeOnly += "{{";
+          codeWithoutStrings += "  ";
+          i += 1;
+          continue;
+        }
+        if (ch === "}" && scriptText[i + 1] === "}") {
+          codeOnly += "}}";
+          codeWithoutStrings += "  ";
+          i += 1;
+          continue;
+        }
+        if (ch === "{") {
+          codeOnly += "{";
+          codeWithoutStrings += "{";
+          lexStack.push({ kind: "expr", braceDepth: 1 });
+          continue;
+        }
+      }
+      if (state.triple) {
+        if (scriptText.slice(i, i + 3) === state.quote.repeat(3)) {
+          codeOnly += state.quote.repeat(3);
+          codeWithoutStrings += state.quote.repeat(3);
+          lexStack.pop();
+          i += 2;
+          continue;
+        }
+        codeOnly += ch;
+        codeWithoutStrings += ch === "\n" ? "\n" : " ";
+        continue;
+      }
+      if (ch === state.quote) {
+        codeOnly += ch;
+        codeWithoutStrings += ch;
+        lexStack.pop();
+        continue;
+      }
+      codeOnly += ch;
+      codeWithoutStrings += ch === "\n" ? "\n" : " ";
+      continue;
+    }
+
+    if (state?.kind === "expr") {
+      if (ch === "{") {
+        state.braceDepth += 1;
+        codeOnly += ch;
+        codeWithoutStrings += ch;
+        continue;
+      }
+      if (ch === "}") {
+        state.braceDepth -= 1;
+        codeOnly += ch;
+        codeWithoutStrings += ch;
+        if (state.braceDepth === 0) {
+          lexStack.pop();
+        }
+        continue;
+      }
+    }
+
+    if (ch === "#" && (allowHashComments || (i === 0 && scriptText[1] === "!"))) {
+      while (i < scriptText.length && scriptText[i] !== "\n") {
+        i += 1;
+      }
+      if (i < scriptText.length) {
+        codeOnly += "\n";
+        codeWithoutStrings += "\n";
+      }
+      continue;
+    }
+    if (allowSlashComments && ch === "/" && scriptText[i + 1] === "/") {
+      while (i < scriptText.length && scriptText[i] !== "\n") {
+        i += 1;
+      }
+      if (i < scriptText.length) {
+        codeOnly += "\n";
+        codeWithoutStrings += "\n";
+      }
+      continue;
+    }
+    if (allowSlashComments && ch === "/" && scriptText[i + 1] === "*") {
+      i += 2;
+      while (i < scriptText.length && !(scriptText[i] === "*" && scriptText[i + 1] === "/")) {
+        if (scriptText[i] === "\n") {
+          codeOnly += "\n";
+          codeWithoutStrings += "\n";
+        }
+        i += 1;
+      }
+      i += 1;
+      continue;
+    }
+    if (ch === "'" || ch === '"' || (ch === "`" && allowJsSyntax)) {
+      const isTriple =
+        allowPythonSyntax && ch !== "`" && scriptText.slice(i, i + 3) === ch.repeat(3);
+      let interp = "none";
+      if (ch === "`" && allowJsSyntax) {
+        interp = "js-template";
+      } else if (allowPythonSyntax && ch !== "`") {
+        const prefixSlice = scriptText.slice(Math.max(0, i - 3), i);
+        if (/(?:^|[^A-Za-z0-9_])[rRuUbB]*[fF][rRuUbB]*$/u.test(prefixSlice)) {
+          interp = "py-fstring";
+        }
+      }
+      lexStack.push({ kind: "str", quote: ch, triple: isTriple, interp });
+      if (isTriple) {
+        codeOnly += ch.repeat(3);
+        codeWithoutStrings += ch.repeat(3);
+        i += 2;
+      } else {
+        codeOnly += ch;
+        codeWithoutStrings += ch;
+      }
+      continue;
+    }
+    codeOnly += ch;
+    codeWithoutStrings += ch;
+  }
 
   const extractBalancedSlice = (src, openIndex, openChar, closeChar) => {
     let depth = 0;
@@ -3855,9 +3958,60 @@ function inspectNonShellScript(
       }
     }
     if (callee === "actions_exec.exec" || callee === "actions_exec.getExecOutput") {
-      if (args.length === 1 || (args[1].trim().startsWith("{") && args[1].trim().endsWith("}"))) {
+      // `@actions/exec` tokenizes `commandLine` via `argStringToArray` rules
+      // (whitespace-separated outside double quotes, with `\"` escapes) and
+      // appends the optional `args` array before spawning.
+      const cmdLit = unquoteSimpleLiteral(primaryArg);
+      if (cmdLit === null) {
         return shellStringInvokesContainer(primaryArg);
       }
+      const cmdTokens = [];
+      let current = "";
+      let inQuotes = false;
+      let escaped = false;
+      let hasToken = false;
+      for (let i = 0; i < cmdLit.length; i += 1) {
+        const c = cmdLit[i];
+        if (escaped) {
+          current += c;
+          escaped = false;
+          hasToken = true;
+          continue;
+        }
+        if (c === "\\" && i + 1 < cmdLit.length && cmdLit[i + 1] === '"') {
+          escaped = true;
+          continue;
+        }
+        if (c === '"') {
+          inQuotes = !inQuotes;
+          hasToken = true;
+          continue;
+        }
+        if (!inQuotes && /\s/u.test(c)) {
+          if (hasToken) {
+            cmdTokens.push(JSON.stringify(current));
+            current = "";
+            hasToken = false;
+          }
+          continue;
+        }
+        current += c;
+        hasToken = true;
+      }
+      if (hasToken) {
+        cmdTokens.push(JSON.stringify(current));
+      }
+      if (args.length >= 2) {
+        const secondArg = args[1].trim();
+        if (secondArg.startsWith("[") && secondArg.endsWith("]")) {
+          const appended = splitTopLevelComma(secondArg.slice(1, -1));
+          return argvListInvokesContainer([...cmdTokens, ...appended], containerVarNames);
+        }
+        if (!(secondArg.startsWith("{") && secondArg.endsWith("}"))) {
+          return argvListInvokesContainer([...cmdTokens, secondArg], containerVarNames);
+        }
+      }
+      return argvListInvokesContainer(cmdTokens, containerVarNames);
     }
     const usesShellMode =
       SHELL_STRING_CALLEES.has(callee) ||
@@ -3981,7 +4135,7 @@ function inspectNonShellScript(
     "getoutput",
     "getstatusoutput",
   ]);
-  const childProcessAliases = new Set(["child_process"]);
+  const childProcessAliases = new Set();
   const subprocessAliases = new Set(["subprocess"]);
   const osAliases = new Set(["os"]);
   const localExecAliases = new Map();
@@ -4387,12 +4541,23 @@ function inspectNonShellScript(
           // Chained call like `require("node:child_process").execSync(...)` vs
           // unrelated method call like `/version/.exec("docker version")`.
           const beforeDot = codeOnly.slice(Math.max(0, prevNonSpaceIdx - 60), prevNonSpaceIdx);
-          if (!/require\s*\(\s*['"](?:node:)?child_process['"]\s*\)\s*$/u.test(beforeDot)) {
+          if (
+            !/(?:require|import)\s*\(\s*['"](?:node:)?child_process['"]\s*\)\s*\)?\s*$/u.test(
+              beforeDot,
+            )
+          ) {
             continue;
           }
           effectiveCallee = mapNodeCpMethod(callee);
-        } else if (callee === "exec" && !importsChildProcess) {
+        } else if (
+          (language === "ruby" && (callee === "exec" || callee === "spawn")) ||
+          ((language === "perl" || language === "php") && callee === "exec")
+        ) {
+          effectiveCallee = callee;
+        } else if (!localExecAliases.has(callee)) {
           continue;
+        } else {
+          effectiveCallee = localExecAliases.get(callee);
         }
       } else if (
         (callee === "system" || callee === "popen") &&

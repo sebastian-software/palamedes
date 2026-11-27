@@ -5327,6 +5327,59 @@ describe("workflow contracts", () => {
     ]);
   });
 
+  it("resolves required shell params, tokenized github-script exec, template interpolations, and bound Node calls", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const sha = "a".repeat(40);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  r76:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: |",
+          "          IMAGE=alpine:3.20",
+          '          docker pull "${IMAGE:?missing image}"',
+          '          EMPTY=""',
+          '          docker pull "alpine:${EMPTY:?missing tag}"',
+          '          docker pull "busybox${EMPTY?missing}"',
+          '          if [ "$COND" = "1" ]; then',
+          `            PINNED="node:24@${digest}"`,
+          "          fi",
+          '          docker pull "${PINNED:?}"',
+          `      - uses: actions/github-script@${sha}`,
+          "        with:",
+          "          script: |",
+          '            await exec.exec("docker pull", ["debian:12"]);',
+          `      - uses: actions/github-script@${sha}`,
+          "        with:",
+          "          script: |",
+          '            await exec.exec("docker container", ["start", "demo"]);',
+          "      - shell: node {0}",
+          "        run: |",
+          '          import { execFileSync } from "node:child_process";',
+          '          console.log(`pulled: ${execFileSync("docker", ["pull", "redis:7"])}`);',
+          "      - shell: node {0}",
+          "        run: |",
+          "          const spawn = (name) => ({ name });",
+          '          console.log(spawn("docker"));',
+          "      - shell: python",
+          "        run: |",
+          "          import subprocess",
+          '          x = 10 // 2; subprocess.run(["docker", "pull", "nginx:1.27"])',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:7: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:11: busybox is not pinned to a sha256 digest",
+      "<memory>:19: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:26: container tool invocation in non-shell run step cannot be verified statically",
+      "<memory>:34: container tool invocation in non-shell run step cannot be verified statically",
+    ]);
+  });
+
   it("enforces case-insensitive schema keys, PowerShell continuations, and matrix expansion limits", () => {
     const digest = `sha256:${"a".repeat(64)}`;
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
