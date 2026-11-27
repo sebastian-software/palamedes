@@ -106,9 +106,10 @@ pub use catalog_three_way::{
 pub use catalog_update::{
     AiProvenance, CatalogOriginMetadata, CatalogParseRequest, CatalogParseResult,
     CatalogUpdateMessage, CatalogUpdateOrigin, CatalogUpdatePreview, CatalogUpdateRequest,
-    CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata, ParsedCatalogMessage, PoLineBreaks,
-    PoOutputOptions, parse_catalog, preview_catalog_file_update,
-    preview_catalog_update_from_content, update_catalog_file,
+    CatalogUpdateRequestRef, CatalogUpdateResponse, CatalogUpdateStats, MachineMetadata,
+    ParsedCatalogMessage, PoLineBreaks, PoOutputOptions, parse_catalog,
+    preview_catalog_file_update, preview_catalog_update_from_content,
+    preview_catalog_update_from_content_ref, update_catalog_file, update_catalog_file_ref,
 };
 #[doc(hidden)]
 pub use contained_fs::{

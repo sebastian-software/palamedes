@@ -20,11 +20,11 @@ use std::time::Instant;
 
 use clap::Args;
 use palamedes::{
-    CatalogUpdateMessage, CatalogUpdateRequest, ContainedDir, ContainedFsError,
+    CatalogUpdateMessage, CatalogUpdateRequestRef, ContainedDir, ContainedFsError,
     ContainedNewFileMode, ContainedWriteDurability, DirFilenameEquivalence, ExtractCache,
     ExtractCatalogFileFailure, FileIdentity, SourceFileAnalysisRequest,
     collect_runtime_macro_manifest, extract_catalog_messages_cached,
-    preview_catalog_update_from_content, split_relative_catalog_path,
+    preview_catalog_update_from_content_ref, split_relative_catalog_path,
 };
 use serde::Serialize;
 use unicode_normalization::UnicodeNormalization;
@@ -2357,15 +2357,17 @@ fn process_catalog(
             path: catalog_path.clone(),
             source: error.into_io_error(),
         })?;
-    let make_request = || CatalogUpdateRequest {
-        target_path: catalog_path.to_string_lossy().into_owned(),
-        locale: locale.to_owned(),
-        source_locale: config.source_locale.clone(),
+    let po_options = catalog.po.clone().map(Into::into);
+    let target_path = catalog_path.to_string_lossy();
+    let update_request = CatalogUpdateRequestRef {
+        target_path: target_path.as_ref(),
+        locale,
+        source_locale: &config.source_locale,
         clean: options.clean,
         force_clean: options.force_clean,
         format: catalog.format,
-        po: catalog.po.clone().map(Into::into),
-        messages: messages.to_vec(),
+        po: po_options.as_ref(),
+        messages,
     };
 
     let mut lines = Vec::new();
@@ -2392,7 +2394,7 @@ fn process_catalog(
                         source: error.into_io_error(),
                     })?;
                 let preview =
-                    preview_catalog_update_from_content(make_request(), existing.as_deref())?;
+                    preview_catalog_update_from_content_ref(&update_request, existing.as_deref())?;
                 if !preview.created && !preview.updated {
                     unchanged_result = Some(preview);
                 } else {
@@ -2433,8 +2435,8 @@ fn process_catalog(
                             })?;
                         let result = match preview_candidate.take() {
                             Some((prior_bytes, preview)) if prior_bytes == existing => preview,
-                            _ => preview_catalog_update_from_content(
-                                make_request(),
+                            _ => preview_catalog_update_from_content_ref(
+                                &update_request,
                                 existing.as_deref(),
                             )?,
                         };
@@ -2500,7 +2502,8 @@ fn process_catalog(
                     }
                     None => None,
                 };
-            let result = preview_catalog_update_from_content(make_request(), existing.as_deref())?;
+            let result =
+                preview_catalog_update_from_content_ref(&update_request, existing.as_deref())?;
             if options.verbose {
                 lines.push(tr!("  -> checked {path}", path = catalog_path.display()));
                 for diagnostic in result.diagnostics {
