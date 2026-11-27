@@ -105,9 +105,10 @@ const modules = Object.fromEntries(
 function buildAppCsp(nonce: string): string {
   // Nonce-enabled same-origin policy: `script-src 'self'` assumes all same-origin
   // script URLs are trusted (do not host untrusted user-uploaded scripts on this
-  // origin). Keep one CSP owner per response and add any other directives
-  // (style-src, img-src, connect-src, etc.) here; if another middleware builds
-  // Content-Security-Policy, read getRequestNonce() there so header and scripts match.
+  // origin). Keep one CSP owner per response: either add your other directives
+  // (style-src, img-src, connect-src, etc.) here, or remove the
+  // `content-security-policy` write below when an existing `src/middleware/*`
+  // handler builds CSP with `getRequestNonce()`.
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
@@ -141,6 +142,9 @@ export default adapter(fsRouter(modules), {
           isSsrHtmlResponse() &&
           context.res.headers.get("content-type")?.startsWith("text/html")
         ) {
+          // Omit this write if an existing `src/middleware/*` handler already sets
+          // Content-Security-Policy using `getRequestNonce()`; otherwise this runs
+          // after `middlewareModules` and replaces that header. Always keep Cache-Control.
           context.header("content-security-policy", buildAppCsp(nonce));
           // Nonce-bearing HTML must never be replayed across visitors by a shared cache.
           context.header("cache-control", "private, no-store");
