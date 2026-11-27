@@ -708,7 +708,7 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
         page = '"/[[...locale]]/page"',
         pathname = '"/[[...locale]]"',
       ) =>
-        `import { createAppPageEntrypoint } from "./app-page-runtime"; ${body} const epRes = createAppPageEntrypoint({${treeField},page:${page},pathname:${pathname},require:r,loadChunk:lc,interopDefault:id}); export const __next_app__ = epRes.__next_app__; export const routeModule = epRes.routeModule; export const handler = epRes.handler;`;
+        `import { createAppPageEntrypoint } from "next/dist/esm/build/templates/app-page-runtime"; ${body} const epRes = createAppPageEntrypoint({${treeField},page:${page},pathname:${pathname},require:r,loadChunk:lc,interopDefault:id}); export const __next_app__ = epRes.__next_app__; export const routeModule = epRes.routeModule; export const handler = epRes.handler;`;
       writeFileSync(
         templateChunk,
         `module.exports=[1,a=>{let unrelated=["",{children:["other",{},{},[]]},{layout:[u,"other"]},[]];let j=["",{children:["[[...locale]]",{children:["__PAGE__",{},{metadata:{},page:[p,"[project]/app/[[...locale]]/page.page.tsx"]},[]]},{metadata:{},layout:[l,"[project]/app/[[...locale]]/layout.page.tsx"]},[]]},{"global-error":[g,"builtin"]},[]];${tpExports(1, "tree:j")}}];`,
@@ -778,7 +778,7 @@ globalThis.__RSC_MANIFEST["/[[...locale]]/page"] = ${JSON.stringify({
       // shorthand properties such as `{ tree, page: "...", interopDefault }`.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `import { createAppPageEntrypoint } from "./app-page-runtime";
+          `import { createAppPageEntrypoint } from "next/dist/esm/build/templates/app-page-runtime";
 const tree = ["", {
   "children": ["[[...locale]]", {
     "children": ["__PAGE__", {}, {
@@ -807,7 +807,7 @@ export const handler = entrypoint.handler;`,
         ),
       ).toBe(true);
 
-      // Webpack CJS template (`_export(exports, ...)` + `require("./app-page-runtime")`)
+      // Webpack CJS template (`_export(exports, ...)` + `require("next/dist/build/templates/app-page-runtime")`)
       // also passes entrypoint verification.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
@@ -818,7 +818,7 @@ _export(exports, {
   handler: function() { return handler; },
   routeModule: function() { return routeModule; }
 });
-const _apppageruntime = require("./app-page-runtime");
+const _apppageruntime = require("next/dist/build/templates/app-page-runtime");
 const tree = ["", { children: ["[[...locale]]", {}, { layout: [l, "layout.tsx"] }] }, {}];
 const entrypoint = (0, _apppageruntime.createAppPageEntrypoint)({
   tree,
@@ -877,6 +877,22 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
         ),
       ).toBe(true);
 
+      // Relative `./app-page-runtime` specifiers resolve relative to the emitted
+      // page file and could name a sibling wrapper that alters `loaderTree`, so
+      // single-file fallbacks must reject them as inconclusive.
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `import { createAppPageEntrypoint } from "./app-page-runtime"; const j = ["", { children: ["[[...locale]]", {}, {}, []] }, { layout: [l, "[project]/app/layout.tsx"] }, []]; const epRes = createAppPageEntrypoint({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: r, loadChunk: lc, interopDefault: id }); export const __next_app__ = epRes.__next_app__; export const routeModule = epRes.routeModule; export const handler = epRes.handler;`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+      expect(
+        compiledLoaderTreeHasOptionalRootLocale(
+          `const _apppageruntime = require("./app-page-runtime"); const j = ["", { children: ["[[...locale]]", {}, {}, []] }, { layout: [l, "[project]/app/layout.tsx"] }, []]; const epRes = _apppageruntime.createAppPageEntrypoint({ tree: j, page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: r, loadChunk: lc, interopDefault: id }); exports.__next_app__ = epRes.__next_app__; exports.routeModule = epRes.routeModule; exports.handler = epRes.handler;`,
+          "/[[...locale]]/page",
+        ),
+      ).toBeUndefined();
+
       // Diagnostic or unrelated calls — even when carrying all six entrypoint
       // argument fields — and imported wrappers that do not come from Next's
       // app-page-runtime must NOT impersonate the route entrypoint.
@@ -888,7 +904,7 @@ globalThis.__RSC_MANIFEST[${JSON.stringify("/Bob's recs/[[...locale]]/page")}] =
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `import { createAppPageEntrypoint } from "./app-page-runtime";
+          `import { createAppPageEntrypoint } from "next/dist/esm/build/templates/app-page-runtime";
 const diag = logDiagnostic({ tree: ["", {}, { layout: [l, "root"] }], page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: r, loadChunk: lc, interopDefault: id });
 const entrypoint = createAppPageEntrypoint(optionsObj);
 export const __next_app__ = entrypoint.__next_app__;
@@ -899,7 +915,7 @@ export const handler = entrypoint.handler;`,
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `import { createAppPageEntrypoint } from "./app-page-runtime";
+          `import { createAppPageEntrypoint } from "next/dist/esm/build/templates/app-page-runtime";
 let entrypoint = logDiagnostic({ tree: ["", {}, { layout: [l, "root"] }], page: "/[[...locale]]/page", pathname: "/[[...locale]]", require: r, loadChunk: lc, interopDefault: id });
 entrypoint = createAppPageEntrypoint(optionsObj);
 export const __next_app__ = entrypoint.__next_app__;
@@ -1047,7 +1063,7 @@ const handler = entrypoint.handler;`,
       // by outer mutation are treated as inconclusive.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `import { createAppPageEntrypoint } from "./app-page-runtime"; let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; function run(){ return createAppPageEntrypoint({tree:t,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:r,loadChunk:lc,interopDefault:id}); } t[2]={}; const epRes=run(); export const __next_app__=epRes.__next_app__; export const routeModule=epRes.routeModule; export const handler=epRes.handler;`,
+          `import { createAppPageEntrypoint } from "next/dist/esm/build/templates/app-page-runtime"; let t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; function run(){ return createAppPageEntrypoint({tree:t,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:r,loadChunk:lc,interopDefault:id}); } t[2]={}; const epRes=run(); export const __next_app__=epRes.__next_app__; export const routeModule=epRes.routeModule; export const handler=epRes.handler;`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -1116,13 +1132,13 @@ const handler = entrypoint.handler;`,
       // mutate the tree before the callee runs.
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `import { createAppPageEntrypoint } from "./app-page-runtime"; const t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const epRes = createAppPageEntrypoint({tree:t,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:makeRequire(t),loadChunk:lc,interopDefault:id}); export const __next_app__=epRes.__next_app__; export const routeModule=epRes.routeModule; export const handler=epRes.handler;`,
+          `import { createAppPageEntrypoint } from "next/dist/esm/build/templates/app-page-runtime"; const t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const epRes = createAppPageEntrypoint({tree:t,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:makeRequire(t),loadChunk:lc,interopDefault:id}); export const __next_app__=epRes.__next_app__; export const routeModule=epRes.routeModule; export const handler=epRes.handler;`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `import { createAppPageEntrypoint } from "./app-page-runtime"; const t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const epRes = createAppPageEntrypoint({tree:t,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:makeRequire(...t),loadChunk:lc,interopDefault:id}); export const __next_app__=epRes.__next_app__; export const routeModule=epRes.routeModule; export const handler=epRes.handler;`,
+          `import { createAppPageEntrypoint } from "next/dist/esm/build/templates/app-page-runtime"; const t=["",{children:["[[...locale]]",{},{layout:[i,"inner"]}]},{layout:[l,"root"]}]; const epRes = createAppPageEntrypoint({tree:t,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:makeRequire(...t),loadChunk:lc,interopDefault:id}); export const __next_app__=epRes.__next_app__; export const routeModule=epRes.routeModule; export const handler=epRes.handler;`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -1170,7 +1186,7 @@ const handler = entrypoint.handler;`,
       ).toBeUndefined();
       expect(
         compiledLoaderTreeHasOptionalRootLocale(
-          `import { createAppPageEntrypoint } from "./app-page-runtime"; let t=["",{},{layout:[o,"otherRoot"]}]; function run(t){ const epRes=createAppPageEntrypoint({tree:t,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:r,loadChunk:lc,interopDefault:id}); return epRes; }`,
+          `import { createAppPageEntrypoint } from "next/dist/esm/build/templates/app-page-runtime"; let t=["",{},{layout:[o,"otherRoot"]}]; function run(t){ const epRes=createAppPageEntrypoint({tree:t,page:"/[[...locale]]/page",pathname:"/[[...locale]]",require:r,loadChunk:lc,interopDefault:id}); return epRes; }`,
           "/[[...locale]]/page",
         ),
       ).toBeUndefined();
@@ -1671,16 +1687,39 @@ module.exports = [
 
           // Block-local function declarations inside `if (...) { function c() {} }`
           // do not shadow `c` in sibling statements of a strict-mode function,
-          // and writes inside destructuring defaults or computed keys must fail closed.
+          // writes inside destructuring defaults or computed keys must fail closed,
+          // and indirect mutations via calls (such as `Object.assign(r.userland, ...)`
+          // or `Object.assign(c, ...)`) must also fail closed.
           for (const tamperedHandlerBody of [
             `if (cond) { function c() {} } c = tampered; return null;`,
             `const { a = (c = tampered) } = {}; return a;`,
             `const { [c = "x"]: y } = {}; return y;`,
+            `Object.assign(r.userland, { loaderTree: tampered }); return null;`,
+            `Object.assign(c, tampered); return null;`,
           ]) {
             writeFileSync(
               namedRuntimeChunk,
               `module.exports = ([
 '${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function({tree:c,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},r=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:c}}); async function W(){ ${tamperedHandlerBody} } return {__next_app__:U,routeModule:r,handler:W}; }], '${namedRuntimeId}'); },
+'${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
+'${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
+]);\n`,
+            );
+            expect(compiledRouteHasOptionalRootLocale(distDir, manifestPath)).toBeUndefined();
+          }
+
+          // Top-level indirect mutation before `return` (such as
+          // `Object.assign(r.userland, ...)` or `mutate(c)`) must fail closed.
+          for (const topLevelTamper of [
+            `Object.assign(r.userland, { loaderTree: tampered });`,
+            `mutate(c);`,
+            `patch(r);`,
+            `W();`,
+          ]) {
+            writeFileSync(
+              namedRuntimeChunk,
+              `module.exports = ([
+'${namedRuntimeId}', a => { "use strict"; let h = a.i('${namedAppPageModuleId}'); a.s(["f", 0, function({tree:c,page:P,pathname:Q,require:R,loadChunk:S,interopDefault:T}){ let U={require:R,loadChunk:S},r=new h.AppPageRouteModule({definition:{kind:k.RouteKind.APP_PAGE,page:P,pathname:Q,bundlePath:"",filename:"",appPaths:[]},userland:{loaderTree:c}}); ${topLevelTamper} async function W(){ return null; } return {__next_app__:U,routeModule:r,handler:W}; }], '${namedRuntimeId}'); },
 '${namedAppPageModuleId}', (a, b) => { b.exports = a.r('${namedExternalId}'); },
 '${namedExternalId}', (a, b) => { b.exports = a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js", () => require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js")); }
 ]);\n`,

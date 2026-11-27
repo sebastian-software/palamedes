@@ -1573,7 +1573,7 @@ function isAssignmentOperatorAt(source: string, offset: number): boolean {
 }
 
 const NEXT_APP_PAGE_RUNTIME_SPECIFIER =
-  /^(?:\.\/app-page-runtime(?:\.js)?|next\/dist\/(?:esm\/)?build\/templates\/app-page-runtime(?:\.js)?)$/u;
+  /^next\/dist\/(?:esm\/)?build\/templates\/app-page-runtime(?:\.js)?$/u;
 
 const NEXT_APP_PAGE_EXTERNAL_SPECIFIER =
   /^next\/dist\/(?:compiled\/next-server\/app-page(?:-turbo)?(?:-experimental)?\.runtime\.(?:prod|dev)\.js|server\/route-modules\/app-page\/module\.compiled(?:\.js)?)$/u;
@@ -3130,6 +3130,392 @@ function hasWriteToIdentifier(source: string, ident: string, skipOffset = -1): b
   return foundWrite;
 }
 
+function findObjectPropertyNode(objNode: JsAstNode, keyName: string): JsAstNode | undefined {
+  if (objNode.type !== "ObjectExpression" || !Array.isArray(objNode.properties)) return;
+  for (const prop of objNode.properties) {
+    if (!isAstNode(prop) || prop.type !== "ObjectProperty" || !isAstNode(prop.key)) continue;
+    const matched = prop.computed
+      ? getStringLiteralValue(prop.key) === keyName
+      : (prop.key.type === "Identifier" && prop.key.name === keyName) ||
+        getStringLiteralValue(prop.key) === keyName;
+    if (matched) return prop;
+  }
+  return;
+}
+
+function isObjectOrReflectMutationCallee(callee: JsAstNode): boolean {
+  if (callee.type !== "MemberExpression" || !isAstNode(callee.object)) return false;
+  if (callee.object.type !== "Identifier") return false;
+  return callee.object.name === "Object" || callee.object.name === "Reflect";
+}
+
+function isIdentifierReference(node: JsAstNode, parent: JsAstNode | undefined): boolean {
+  if (node.type !== "Identifier") return false;
+  if (!parent) return true;
+  if (
+    (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+    !parent.computed &&
+    parent.property === node
+  ) {
+    return false;
+  }
+  if (
+    parent.type === "ObjectProperty" &&
+    !parent.computed &&
+    parent.key === node &&
+    !parent.shorthand
+  ) {
+    return false;
+  }
+  if (
+    (parent.type === "ObjectMethod" ||
+      parent.type === "ClassMethod" ||
+      parent.type === "ClassProperty") &&
+    !parent.computed &&
+    parent.key === node
+  ) {
+    return false;
+  }
+  if (
+    parent.type === "LabeledStatement" ||
+    parent.type === "BreakStatement" ||
+    parent.type === "ContinueStatement"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function verifyEntrypointRuntimeBodyUses(
+  fnBody: string,
+  treeParam: string,
+  routeModVar: string,
+  routeModDeclOffset: number,
+): boolean {
+  const program = parseJsProgram(fnBody);
+  if (!program || !Array.isArray(program.body) || program.body.length === 0) return false;
+
+  const statements = program.body as JsAstNode[];
+  const finalReturn = statements.at(-1);
+  if (!finalReturn || finalReturn.type !== "ReturnStatement") return false;
+
+  const fnDeclNames = new Set<string>();
+  let routeModDeclarator: JsAstNode | undefined;
+  for (const stmt of statements) {
+    if (
+      stmt.type === "FunctionDeclaration" &&
+      isAstNode(stmt.id) &&
+      stmt.id.type === "Identifier" &&
+      typeof stmt.id.name === "string"
+    ) {
+      fnDeclNames.add(stmt.id.name);
+    } else if (stmt.type === "VariableDeclaration" && Array.isArray(stmt.declarations)) {
+      for (const decl of stmt.declarations) {
+        if (
+          isAstNode(decl) &&
+          isAstNode(decl.id) &&
+          decl.id.type === "Identifier" &&
+          decl.id.name === routeModVar &&
+          decl.id.start === routeModDeclOffset
+        ) {
+          routeModDeclarator = decl;
+        }
+      }
+    }
+  }
+  if (!routeModDeclarator || !isAstNode(routeModDeclarator.init)) return false;
+  const ctorNew = routeModDeclarator.init;
+  if (
+    ctorNew.type !== "NewExpression" ||
+    !Array.isArray(ctorNew.arguments) ||
+    ctorNew.arguments.length !== 1 ||
+    !isAstNode(ctorNew.arguments[0])
+  ) {
+    return false;
+  }
+  const userlandProp = findObjectPropertyNode(ctorNew.arguments[0], "userland");
+  const loaderTreeProp =
+    userlandProp && isAstNode(userlandProp.value)
+      ? findObjectPropertyNode(userlandProp.value, "loaderTree")
+      : undefined;
+  const allowedTreeNode =
+    loaderTreeProp && isAstNode(loaderTreeProp.value) ? loaderTreeProp.value : undefined;
+  if (
+    !allowedTreeNode ||
+    allowedTreeNode.type !== "Identifier" ||
+    allowedTreeNode.name !== treeParam
+  ) {
+    return false;
+  }
+
+  let ok = true;
+  const checkNode = (
+    node: JsAstNode,
+    parent: JsAstNode | undefined,
+    shadowed: ReadonlySet<string>,
+    mode: "top-level" | "fn-decl",
+  ): void => {
+    if (!ok) return;
+
+    // Skip binding identifiers in variable/function/class declarations while
+    // still inspecting executable expressions (defaults, computed keys, inits).
+    if (node.type === "VariableDeclaration" && Array.isArray(node.declarations)) {
+      for (const decl of node.declarations) {
+        if (!ok || !isAstNode(decl)) continue;
+        if (decl === routeModDeclarator) {
+          checkNode(ctorNew, decl, shadowed, mode);
+          continue;
+        }
+        if (isAstNode(decl.id)) checkPatternExprs(decl.id, shadowed, mode);
+        if (ok && isAstNode(decl.init)) checkNode(decl.init, decl, shadowed, mode);
+      }
+      return;
+    }
+
+    if (
+      node.type === "FunctionDeclaration" ||
+      node.type === "FunctionExpression" ||
+      node.type === "ArrowFunctionExpression" ||
+      node.type === "ObjectMethod" ||
+      node.type === "ClassMethod" ||
+      node.type === "ClassPrivateMethod"
+    ) {
+      if (
+        (node.type === "ObjectMethod" || node.type === "ClassMethod") &&
+        node.computed &&
+        isAstNode(node.key)
+      ) {
+        checkNode(node.key, node, shadowed, mode);
+        if (!ok) return;
+      }
+      const nextShadowed = new Set(shadowed);
+      if (
+        node.type === "FunctionExpression" &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        typeof node.id.name === "string"
+      ) {
+        nextShadowed.add(node.id.name);
+      }
+      if (Array.isArray(node.params)) {
+        for (const param of node.params) {
+          if (isAstNode(param)) collectPatternBindingNames(param, nextShadowed);
+        }
+        for (const param of node.params) {
+          if (ok && isAstNode(param)) checkPatternExprs(param, nextShadowed, mode);
+        }
+      }
+      if (ok && isAstNode(node.body)) {
+        const bodyShadowed = new Set(nextShadowed);
+        collectHoistedVarBindings(node.body, bodyShadowed);
+        checkNode(node.body, node, bodyShadowed, mode);
+      }
+      return;
+    }
+
+    if (node.type === "BlockStatement" || node.type === "StaticBlock") {
+      const nextShadowed = new Set(shadowed);
+      if (Array.isArray(node.body)) collectLexicalStatementBindings(node.body, nextShadowed);
+      walkChildren(node, nextShadowed, mode);
+      return;
+    }
+
+    if (node.type === "SwitchStatement") {
+      if (isAstNode(node.discriminant)) checkNode(node.discriminant, node, shadowed, mode);
+      if (!ok || !Array.isArray(node.cases)) return;
+      const nextShadowed = new Set(shadowed);
+      for (const c of node.cases) {
+        if (isAstNode(c) && Array.isArray(c.consequent)) {
+          collectLexicalStatementBindings(c.consequent, nextShadowed);
+        }
+      }
+      for (const c of node.cases) {
+        if (ok && isAstNode(c)) checkNode(c, node, nextShadowed, mode);
+      }
+      return;
+    }
+
+    if (node.type === "ForStatement") {
+      const nextShadowed = new Set(shadowed);
+      if (
+        isAstNode(node.init) &&
+        node.init.type === "VariableDeclaration" &&
+        node.init.kind !== "var"
+      ) {
+        collectLexicalStatementBindings([node.init], nextShadowed);
+      }
+      walkChildren(node, nextShadowed, mode);
+      return;
+    }
+
+    if (node.type === "ForInStatement" || node.type === "ForOfStatement") {
+      const nextShadowed = new Set(shadowed);
+      if (
+        isAstNode(node.left) &&
+        node.left.type === "VariableDeclaration" &&
+        node.left.kind !== "var"
+      ) {
+        collectLexicalStatementBindings([node.left], nextShadowed);
+      }
+      walkChildren(node, nextShadowed, mode);
+      return;
+    }
+
+    if (node.type === "CatchClause") {
+      const nextShadowed = new Set(shadowed);
+      if (isAstNode(node.param)) {
+        collectPatternBindingNames(node.param, nextShadowed);
+        checkPatternExprs(node.param, nextShadowed, mode);
+      }
+      if (ok && isAstNode(node.body)) checkNode(node.body, node, nextShadowed, mode);
+      return;
+    }
+
+    if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
+      if (isAstNode(node.superClass)) checkNode(node.superClass, node, shadowed, mode);
+      if (!ok) return;
+      const nextShadowed = new Set(shadowed);
+      if (
+        node.type === "ClassExpression" &&
+        isAstNode(node.id) &&
+        node.id.type === "Identifier" &&
+        typeof node.id.name === "string"
+      ) {
+        nextShadowed.add(node.id.name);
+      }
+      if (isAstNode(node.body)) checkNode(node.body, node, nextShadowed, mode);
+      return;
+    }
+
+    if (isIdentifierReference(node, parent)) {
+      const name = node.name as string;
+      if (!shadowed.has(name)) {
+        if (mode === "top-level") {
+          const isAllowedTreeRef =
+            name === treeParam &&
+            (node === allowedTreeNode ||
+              (parent === loaderTreeProp &&
+                parent?.type === "ObjectProperty" &&
+                Boolean(parent.shorthand)));
+          if (
+            (name === treeParam && !isAllowedTreeRef) ||
+            name === routeModVar ||
+            fnDeclNames.has(name)
+          ) {
+            ok = false;
+            return;
+          }
+        } else if (name === treeParam) {
+          const isReadOnlyObjPropValue =
+            parent?.type === "ObjectProperty" &&
+            (parent.value === node || (parent.key === node && Boolean(parent.shorthand)));
+          if (!isReadOnlyObjPropValue) {
+            ok = false;
+            return;
+          }
+        } else if (name === routeModVar) {
+          if (
+            parent &&
+            (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+            parent.object === node &&
+            (parent.computed || getMemberPropertyName(parent) === "userland")
+          ) {
+            ok = false;
+            return;
+          }
+          if (
+            parent?.type === "CallExpression" &&
+            isAstNode(parent.callee) &&
+            isObjectOrReflectMutationCallee(parent.callee) &&
+            Array.isArray(parent.arguments) &&
+            parent.arguments.includes(node)
+          ) {
+            ok = false;
+            return;
+          }
+        }
+      }
+    }
+
+    walkChildren(node, shadowed, mode);
+  };
+
+  const checkPatternExprs = (
+    pattern: JsAstNode,
+    shadowed: ReadonlySet<string>,
+    mode: "top-level" | "fn-decl",
+  ): void => {
+    if (!ok) return;
+    switch (pattern.type) {
+      case "Identifier":
+        return;
+      case "RestElement":
+      case "SpreadElement":
+        if (isAstNode(pattern.argument)) checkPatternExprs(pattern.argument, shadowed, mode);
+        return;
+      case "AssignmentPattern":
+        if (isAstNode(pattern.right)) checkNode(pattern.right, pattern, shadowed, mode);
+        if (ok && isAstNode(pattern.left)) checkPatternExprs(pattern.left, shadowed, mode);
+        return;
+      case "ArrayPattern":
+        if (Array.isArray(pattern.elements)) {
+          for (const elem of pattern.elements) {
+            if (ok && isAstNode(elem)) checkPatternExprs(elem, shadowed, mode);
+          }
+        }
+        return;
+      case "ObjectPattern":
+        if (Array.isArray(pattern.properties)) {
+          for (const prop of pattern.properties) {
+            if (!ok || !isAstNode(prop)) continue;
+            if (prop.type === "RestElement" && isAstNode(prop.argument)) {
+              checkPatternExprs(prop.argument, shadowed, mode);
+            } else if (prop.type === "ObjectProperty") {
+              if (prop.computed && isAstNode(prop.key)) {
+                checkNode(prop.key, prop, shadowed, mode);
+              }
+              if (ok && isAstNode(prop.value)) checkPatternExprs(prop.value, shadowed, mode);
+            }
+          }
+        }
+        return;
+      default:
+        checkNode(pattern, undefined, shadowed, mode);
+    }
+  };
+
+  const walkChildren = (
+    node: JsAstNode,
+    shadowed: ReadonlySet<string>,
+    mode: "top-level" | "fn-decl",
+  ): void => {
+    for (const [key, value] of Object.entries(node)) {
+      if (!ok) return;
+      if (AST_METADATA_KEYS.has(key)) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (!ok) return;
+          if (isAstNode(item)) checkNode(item, node, shadowed, mode);
+        }
+      } else if (isAstNode(value)) {
+        checkNode(value, node, shadowed, mode);
+      }
+    }
+  };
+
+  const emptyShadowed = new Set<string>();
+  for (const stmt of statements) {
+    if (!ok) return false;
+    if (stmt === finalReturn) continue;
+    if (stmt.type === "FunctionDeclaration") {
+      checkNode(stmt, program, emptyShadowed, "fn-decl");
+    } else {
+      checkNode(stmt, program, emptyShadowed, "top-level");
+    }
+  }
+  return ok;
+}
+
 function verifyTurbopackAppPageRuntimeExport(
   runtimeModuleId: string,
   exportName: string,
@@ -3216,7 +3602,8 @@ function verifyTurbopackAppPageRuntimeExport(
   }
 
   // Verify the function returns `{ __next_app__: nextAppVar, routeModule: routeModVar, handler: ... }`
-  // and neither `treeParam` nor `routeModVar` is mutated or reassigned.
+  // and neither `treeParam` nor `routeModVar` is mutated, reassigned, or
+  // indirectly tampered with via calls (such as `Object.assign`).
   const returnMatch = /return\s*(\{[^{}]*\})\s*;?\s*$/u.exec(fnBody);
   if (!returnMatch) return false;
   const returnProps = parseTopLevelObjectProperties(returnMatch[1]!);
@@ -3231,6 +3618,9 @@ function verifyTurbopackAppPageRuntimeExport(
   const routeModDeclOffset = beforeRouteMod!.length;
   if (hasWriteToIdentifier(fnBody, treeParam)) return false;
   if (hasWriteToIdentifier(fnBody, routeModVar!, routeModDeclOffset)) return false;
+  if (!verifyEntrypointRuntimeBodyUses(fnBody, treeParam, routeModVar!, routeModDeclOffset)) {
+    return false;
+  }
 
   // Finally, prove `appPageNs` in `runtimeModuleId` resolves to Next's real
   // external `AppPageRouteModule` runtime module.
