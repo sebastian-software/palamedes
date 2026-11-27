@@ -262,16 +262,25 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
     }
   }
 
+  let legacyVariantSuffix = "";
   if (index < subtags.length && subtags[index] === "x") {
     index += 1;
     if (index >= subtags.length) {
       return null;
     }
+    let lvariantIndex = -1;
     while (index < subtags.length) {
-      if (!/^[a-z0-9]{1,8}$/.test(subtags[index]!)) {
+      const part = subtags[index]!;
+      if (!/^[a-z0-9]{1,8}$/.test(part)) {
         return null;
       }
+      if (lvariantIndex === -1 && part === "lvariant") {
+        lvariantIndex = index;
+      }
       index += 1;
+    }
+    if (lvariantIndex !== -1) {
+      legacyVariantSuffix = `-x-${subtags.slice(lvariantIndex).join("-")}`;
     }
   }
 
@@ -280,11 +289,12 @@ function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
   }
 
   const baseTag = subtags.slice(0, baseEndIndex).join("-");
-  const reducedTag = hasPosixVariant ? `${baseTag}-u-va-posix` : baseTag;
-  return reducedTag.length <= MAX_LANGUAGE_TAG_LENGTH &&
-    languageTag(reducedTag, MAX_LANGUAGE_TAG_LENGTH)
-    ? reducedTag
-    : null;
+  const reducedTag = `${baseTag}${hasPosixVariant ? "-u-va-posix" : ""}${legacyVariantSuffix}`;
+  const parsedReduced =
+    reducedTag.length <= MAX_LANGUAGE_TAG_LENGTH
+      ? languageTag(reducedTag, MAX_LANGUAGE_TAG_LENGTH)
+      : null;
+  return parsedReduced ? parsedReduced.baseName.toLowerCase() : null;
 }
 
 function languagePreferences(

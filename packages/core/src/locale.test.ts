@@ -1208,6 +1208,21 @@ describe("security hardening", () => {
       });
       expect(regionalWithVariant.preferredLocale(`${overlongVariantGerman}, fr`)).toBe("fr");
 
+      const overlongLegacyVariantGerman = `de-DE-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")}-lvariant-1996`;
+      expect(regionalWithVariant.preferredLocale(overlongLegacyVariantGerman)).toBe("de-DE-1996");
+      expect(regionalWithVariant.preferredLocale(`${overlongLegacyVariantGerman};q=0, de-DE`)).toBe(
+        "de-DE",
+      );
+      expect(
+        regionalWithVariant.preferredLocale(`${overlongLegacyVariantGerman};q=0, de-DE-1996`),
+      ).toBe("de-DE");
+      expect(parseAcceptLanguage(overlongLegacyVariantGerman)).toStrictEqual(["de-de-1996", "de"]);
+
+      const malformedLegacyVariantGerman = `de-DE-x-${Array.from({ length: 80 }, (_, i) => `p${i}`).join("-")}-lvariant-a`;
+      expect(
+        regionalWithVariant.preferredLocale(`${malformedLegacyVariantGerman};q=0, de-DE`),
+      ).toBe("de-DE");
+
       const armenian = defineLocaleControls({
         locales: ["en", "hy", "hyw"] as const,
         defaultLocale: "en",
