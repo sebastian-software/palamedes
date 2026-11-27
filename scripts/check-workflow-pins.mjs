@@ -2987,6 +2987,7 @@ function inspectNonShellScript(
   emittedGithubEnv = null,
   emittedGithubOutput = null,
   language = "unknown",
+  githubScriptResultEncodings = null,
 ) {
   const CONTAINER_CLI_BASENAMES = new Set([
     "docker",
@@ -4781,34 +4782,319 @@ function inspectNonShellScript(
     if (!envLookupPatterns.some((pattern) => pattern.test(codeOnly))) {
       return false;
     }
-    return /\b(?:open|writeFile\w*|appendFile\w*|createWriteStream|write_text|write_bytes|write|writelines|writeTextFile\w*|file_put_contents|fwrite)\s*\(/u.test(
-      codeWithoutStrings,
+
+    // Track variables that hold the path/Path object for `targetVarName`.
+    const targetPathVars = new Set();
+    const destructMatch = new RegExp(
+      `\\{\\s*(?<body>[^}]*\\b${targetVarName}\\b[^}]*)\\}\\s*=\\s*(?:process|Bun)\\s*\\.\\s*env\\b`,
+      "gu",
     );
+    for (const dMatch of codeWithoutStrings.matchAll(destructMatch)) {
+      for (const rawItem of dMatch.groups.body.split(",")) {
+        const bind = new RegExp(
+          `^${targetVarName}(?:\\s*:\\s*(?<local>[A-Za-z_$][A-Za-z0-9_$]*))?(?:\\s*=.*)?$`,
+          "u",
+        ).exec(rawItem.trim());
+        if (bind) {
+          targetPathVars.add(bind.groups?.local ?? targetVarName);
+        }
+      }
+    }
+    for (const aMatch of codeWithoutStrings.matchAll(
+      /(?:^|[;\n])\s*(?:(?:const|let|var|my|local)\s+)?(?<lhs>[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*/gu,
+    )) {
+      const rhsStart = aMatch.index + aMatch[0].length;
+      const nl = codeOnly.indexOf("\n", rhsStart);
+      const rhs = (nl === -1 ? codeOnly.slice(rhsStart) : codeOnly.slice(rhsStart, nl)).trim();
+      if (envLookupPatterns.some((pattern) => pattern.test(rhs))) {
+        targetPathVars.add(aMatch.groups.lhs);
+      }
+    }
+
+    const exprTargetsFile = (expr) => {
+      if (!expr) {
+        return false;
+      }
+      if (envLookupPatterns.some((pattern) => pattern.test(expr))) {
+        return true;
+      }
+      if (targetPathVars.size > 0) {
+        for (const idMatch of expr.matchAll(/\b[A-Za-z_$][A-Za-z0-9_$]*\b/gu)) {
+          if (targetPathVars.has(idMatch[0])) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    const modeCanWrite = (modeExpr) => {
+      if (!modeExpr) {
+        // Default mode for `open(path)` / `Path.open()` / `fs.openSync(path)` is read-only.
+        return false;
+      }
+      const modeLit = unquoteSimpleLiteral(modeExpr);
+      if (modeLit !== null) {
+        if (/^[rR][bBtTuU]*$/u.test(modeLit.trim()) || modeLit.trim() === "<") {
+          return false;
+        }
+        return /[wax+>]/.test(modeLit.toLowerCase());
+      }
+      if (/\bO_RDONLY\b/u.test(modeExpr)) {
+        return false;
+      }
+      return true;
+    };
+
+    // Always-write file APIs targeting the file as argument 0.
+    for (const wMatch of codeWithoutStrings.matchAll(
+      /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|writeTextFile(?:Sync)?|file_put_contents)\s*\(/gu,
+    )) {
+      const openIdx = wMatch.index + wMatch[0].length - 1;
+      const callArgs = splitTopLevelComma(extractBalancedSlice(codeOnly, openIdx, "(", ")"));
+      if (callArgs.length > 0 && exprTargetsFile(callArgs[0])) {
+        return true;
+      }
+    }
+    for (const wMatch of codeWithoutStrings.matchAll(/\b(?:Bun|File)\s*\.\s*write\s*\(/gu)) {
+      const openIdx = wMatch.index + wMatch[0].length - 1;
+      const callArgs = splitTopLevelComma(extractBalancedSlice(codeOnly, openIdx, "(", ")"));
+      if (callArgs.length > 0 && exprTargetsFile(callArgs[0])) {
+        return true;
+      }
+    }
+    // Receiver-targeted methods (`Path(os.environ["GITHUB_ENV"]).write_text(...)`, `p.open("a")`).
+    for (const mMatch of codeWithoutStrings.matchAll(
+      /\.\s*(?<method>write_text|write_bytes|open)\s*\(/gu,
+    )) {
+      const method = mMatch.groups.method;
+      const lineStart = codeOnly.lastIndexOf("\n", mMatch.index) + 1;
+      const receiverSlice = codeOnly.slice(lineStart, mMatch.index).trim();
+      if (!exprTargetsFile(receiverSlice)) {
+        continue;
+      }
+      if (method === "write_text" || method === "write_bytes") {
+        return true;
+      }
+      const openIdx = mMatch.index + mMatch[0].length - 1;
+      const callArgs = splitTopLevelComma(extractBalancedSlice(codeOnly, openIdx, "(", ")"));
+      const modeArg = extractKeywordArg(callArgs, "mode") ?? callArgs[0] ?? null;
+      if (modeCanWrite(modeArg)) {
+        return true;
+      }
+    }
+    // Standalone `open(...)` / `io.open(...)` / `fs.openSync(...)` / `File.open(...)` / `fopen(...)`.
+    for (const oMatch of codeWithoutStrings.matchAll(
+      /(?:(?<recv>[A-Za-z_$][A-Za-z0-9_$]*)\s*\.\s*)?(?<fn>open|openSync|fopen)\s*\(/gu,
+    )) {
+      const recv = oMatch.groups.recv ?? null;
+      const fn = oMatch.groups.fn;
+      if (recv && !/^(?:io|os|fs|File|promises)$/u.test(recv)) {
+        continue;
+      }
+      const openIdx = oMatch.index + oMatch[0].length - 1;
+      const callArgs = splitTopLevelComma(extractBalancedSlice(codeOnly, openIdx, "(", ")"));
+      if (callArgs.length === 0) {
+        continue;
+      }
+      // Perl 3-arg `open(my $fh, ">>", $ENV{GITHUB_ENV})`.
+      if (fn === "open" && callArgs.length >= 3 && exprTargetsFile(callArgs[2])) {
+        if (modeCanWrite(callArgs[1])) {
+          return true;
+        }
+        continue;
+      }
+      if (!exprTargetsFile(callArgs[0])) {
+        continue;
+      }
+      const modeArg =
+        extractKeywordArg(callArgs.slice(1), "mode") ??
+        extractKeywordArg(callArgs.slice(1), "flags") ??
+        (callArgs[1] && !/^[A-Za-z_][A-Za-z0-9_]*\s*=/u.test(callArgs[1].trim())
+          ? callArgs[1]
+          : null);
+      if (modeCanWrite(modeArg)) {
+        return true;
+      }
+    }
+    return false;
   };
+
+  const isConditionalJsPosition = (index) => {
+    let braceDepth = 0;
+    for (let k = 0; k < index; k += 1) {
+      if (codeWithoutStrings[k] === "{") {
+        braceDepth += 1;
+      } else if (codeWithoutStrings[k] === "}") {
+        braceDepth = Math.max(0, braceDepth - 1);
+      }
+    }
+    if (braceDepth > 0) {
+      return true;
+    }
+    const prefix = codeWithoutStrings.slice(0, index);
+    if (/\b(?:return|throw)\b/u.test(prefix)) {
+      return true;
+    }
+    const stmtStart = Math.max(
+      prefix.lastIndexOf(";"),
+      prefix.lastIndexOf("\n"),
+      prefix.lastIndexOf("{"),
+      prefix.lastIndexOf("}"),
+    );
+    const currentStmt = prefix.slice(stmtStart + 1);
+    return /\b(?:if|else|switch|case|catch|for|while)\b|&&|\|\||\?/u.test(currentStmt);
+  };
+
   const recordActionsCoreWrites = (methodName, targetMap, wildcardKey) => {
     const pattern = new RegExp(`\\bcore\\s*\\.\\s*${methodName}\\s*\\(`, "gu");
+    const seenKeys = new Set();
     for (const match of codeWithoutStrings.matchAll(pattern)) {
       const openIdx = match.index + match[0].length - 1;
       const callArgs = splitTopLevelComma(extractBalancedSlice(codeOnly, openIdx, "(", ")"));
       if (callArgs.length === 0) {
         continue;
       }
+      const conditional = isConditionalJsPosition(match.index);
       const keyLit = unquoteSimpleLiteral(callArgs[0]);
       if (keyLit !== null && keyLit.length > 0) {
         const valLit = callArgs.length >= 2 ? unquoteSimpleLiteral(callArgs[1]) : null;
         const entries = valLit !== null ? [{ value: valLit, line: startLine }] : opaqueEntries;
-        recordGithubEnvWrite(targetMap, keyLit, entries, false);
+        recordGithubEnvWrite(targetMap, keyLit, entries, conditional || seenKeys.has(keyLit));
+        seenKeys.add(keyLit);
       } else {
-        recordGithubEnvWrite(targetMap, wildcardKey, opaqueEntries, false);
+        recordGithubEnvWrite(targetMap, wildcardKey, opaqueEntries, conditional);
       }
     }
   };
+
+  const recordGithubScriptReturns = (targetMap, encodings) => {
+    // Track brace depths that belong to nested function/arrow bodies so only
+    // top-level `return <expr>` statements are recorded as `outputs.result`.
+    const effectiveEncodings = encodings && encodings.length > 0 ? encodings : ["json"];
+    const fnBraceDepths = [];
+    let braceDepth = 0;
+    let pendingFnBody = false;
+    const returnEntries = [];
+    let sawConditionalReturn = false;
+    for (let i = 0; i < codeWithoutStrings.length; i += 1) {
+      const ch = codeWithoutStrings[i];
+      if (ch === "=" && codeWithoutStrings[i + 1] === ">") {
+        let nextIdx = i + 2;
+        while (nextIdx < codeWithoutStrings.length && /\s/u.test(codeWithoutStrings[nextIdx])) {
+          nextIdx += 1;
+        }
+        if (codeWithoutStrings[nextIdx] === "{") {
+          pendingFnBody = true;
+        }
+        i += 1;
+        continue;
+      }
+      if (ch === "{") {
+        braceDepth += 1;
+        if (pendingFnBody) {
+          fnBraceDepths.push(braceDepth);
+          pendingFnBody = false;
+        }
+        continue;
+      }
+      if (ch === "}") {
+        if (fnBraceDepths.length > 0 && fnBraceDepths.at(-1) === braceDepth) {
+          fnBraceDepths.pop();
+        }
+        braceDepth = Math.max(0, braceDepth - 1);
+        continue;
+      }
+      if (
+        /[A-Za-z_$]/u.test(ch) &&
+        (i === 0 || !/[A-Za-z0-9_$]/u.test(codeWithoutStrings[i - 1]))
+      ) {
+        let end = i + 1;
+        while (end < codeWithoutStrings.length && /[A-Za-z0-9_$]/u.test(codeWithoutStrings[end])) {
+          end += 1;
+        }
+        const word = codeWithoutStrings.slice(i, end);
+        if (word === "function") {
+          pendingFnBody = true;
+        } else if (word === "return" && fnBraceDepths.length === 0) {
+          if (braceDepth > 0) {
+            sawConditionalReturn = true;
+          }
+          let exprStart = end;
+          while (
+            exprStart < codeOnly.length &&
+            (codeOnly[exprStart] === " " || codeOnly[exprStart] === "\t")
+          ) {
+            exprStart += 1;
+          }
+          if (
+            exprStart < codeOnly.length &&
+            codeOnly[exprStart] !== ";" &&
+            codeOnly[exprStart] !== "\n" &&
+            codeOnly[exprStart] !== "}"
+          ) {
+            let exprEnd = exprStart;
+            let pDepth = 0;
+            let bDepth = 0;
+            let cDepth = 0;
+            while (exprEnd < codeWithoutStrings.length) {
+              const ec = codeWithoutStrings[exprEnd];
+              if (ec === "(") {
+                pDepth += 1;
+              } else if (ec === ")") {
+                pDepth = Math.max(0, pDepth - 1);
+              } else if (ec === "[") {
+                bDepth += 1;
+              } else if (ec === "]") {
+                bDepth = Math.max(0, bDepth - 1);
+              } else if (ec === "{") {
+                cDepth += 1;
+              } else if (ec === "}") {
+                if (cDepth === 0 && pDepth === 0 && bDepth === 0) {
+                  break;
+                }
+                cDepth = Math.max(0, cDepth - 1);
+              } else if (
+                (ec === ";" || ec === "\n") &&
+                pDepth === 0 &&
+                bDepth === 0 &&
+                cDepth === 0
+              ) {
+                break;
+              }
+              exprEnd += 1;
+            }
+            const retExpr = codeOnly.slice(exprStart, exprEnd).trim();
+            if (retExpr && retExpr !== "undefined") {
+              const retLit = unquoteSimpleLiteral(retExpr);
+              if (retLit !== null) {
+                for (const enc of effectiveEncodings) {
+                  const formatted = enc === "string" ? retLit : JSON.stringify(retLit);
+                  returnEntries.push({ value: formatted, line: startLine });
+                }
+              } else {
+                returnEntries.push({ value: OPAQUE_UNVERIFIED_SENTINEL, line: startLine });
+              }
+            }
+          }
+        }
+        i = end - 1;
+      }
+    }
+    if (returnEntries.length > 0) {
+      recordGithubEnvWrite(targetMap, "result", returnEntries, sawConditionalReturn);
+    }
+  };
+
   if (emittedGithubOutput) {
     if (hasGithubFileWrite("GITHUB_OUTPUT")) {
       recordGithubEnvWrite(emittedGithubOutput, "*", opaqueEntries, false);
     }
     if (language === "github-script" || allowJsSyntax) {
       recordActionsCoreWrites("setOutput", emittedGithubOutput, "*");
+    }
+    if (language === "github-script") {
+      recordGithubScriptReturns(emittedGithubOutput, githubScriptResultEncodings);
     }
   }
   if (emittedGithubEnv) {
@@ -15151,14 +15437,41 @@ function checkStepsList(
     ) {
       const withNode = getMapField(stepNode, "with");
       const scriptNode = withNode?.kind === "map" ? getMapField(withNode, "script") : null;
+      const encodingNode =
+        withNode?.kind === "map" ? getMapField(withNode, "result-encoding") : null;
       if (scriptNode?.kind === "scalar") {
         const rawScript = String(scriptNode.value);
         const scriptRows = applicableMatrixRows.length > 0 ? applicableMatrixRows : [null];
-        const seenScriptTexts = new Set();
+        const cachedScriptResults = new Map();
         const seenScriptProblems = new Set();
         for (const row of scriptRows) {
           const rowStepEnv = getRowStepEnv(row);
           const rowList = row ? [row] : [];
+          let resultEncodings = ["json"];
+          if (encodingNode?.kind === "scalar") {
+            const rawEnc = String(encodingNode.value).trim();
+            const encExpanded = resolveEnvExpressionCandidates(
+              rawEnc,
+              rowStepEnv,
+              encodingNode.line,
+            );
+            const resolvedEncs = new Set();
+            for (const envCand of encExpanded.candidates) {
+              for (const cand of expandMatrixReferences(envCand.text, rowList, envCand.line)) {
+                const lower = cand.text.trim().toLowerCase();
+                if (lower === "string" || lower === "json") {
+                  resolvedEncs.add(lower);
+                } else {
+                  resolvedEncs.add("string");
+                  resolvedEncs.add("json");
+                }
+              }
+            }
+            if (resolvedEncs.size > 0) {
+              resultEncodings = [...resolvedEncs];
+            }
+          }
+          const encKey = resultEncodings.join(",");
           const expanded = resolveEnvExpressionCandidates(rawScript, rowStepEnv, scriptNode.line);
           if (expanded.truncated) {
             const msg = `${filePath}:${scriptNode.line}: actions/github-script script expression exceeds expansion limit and cannot be verified exhaustively`;
@@ -15175,24 +15488,51 @@ function checkStepsList(
               rowList,
               envCandidate.line,
             )) {
-              if (seenScriptTexts.has(candidate.text)) {
-                continue;
+              const cacheKey = `${candidate.line}:${encKey}:${candidate.text}`;
+              let cached = cachedScriptResults.get(cacheKey);
+              if (!cached) {
+                const cachedProblems = [];
+                const cachedEnv = new Map();
+                const cachedOut = new Map();
+                inspectNonShellScript(
+                  candidate.text,
+                  candidate.line,
+                  filePath,
+                  cachedProblems,
+                  cachedEnv,
+                  cachedOut,
+                  "github-script",
+                  resultEncodings,
+                );
+                cached = {
+                  problems: cachedProblems,
+                  emittedEnv: cachedEnv,
+                  emittedOut: cachedOut,
+                };
+                cachedScriptResults.set(cacheKey, cached);
               }
-              seenScriptTexts.add(candidate.text);
-              const scriptProblems = [];
-              inspectNonShellScript(
-                candidate.text,
-                candidate.line,
-                filePath,
-                scriptProblems,
-                rowEmitted,
-                rowEmittedOut,
-                "github-script",
-              );
-              for (const msg of scriptProblems) {
+              for (const msg of cached.problems) {
                 if (!seenScriptProblems.has(msg)) {
                   seenScriptProblems.add(msg);
                   problems.push(msg);
+                }
+              }
+              for (const [envName, writeRecord] of cached.emittedEnv) {
+                recordGithubEnvWrite(
+                  rowEmitted,
+                  envName,
+                  writeRecord.entries,
+                  writeRecord.conditional,
+                );
+              }
+              if (rowEmittedOut) {
+                for (const [outName, outRecord] of cached.emittedOut) {
+                  recordGithubEnvWrite(
+                    rowEmittedOut,
+                    outName,
+                    outRecord.entries,
+                    outRecord.conditional,
+                  );
                 }
               }
             }
@@ -17187,6 +17527,11 @@ export function unpinnedWorkflowContainerReferences(
         }
         const decodedFromJson = decodeFromJsonScalarNodes(servicesNode, envMap);
         if (decodedFromJson) {
+          if (decodedFromJson.truncated) {
+            ctxProblems.push(
+              `${filePath}:${servicesNode.line}: ${raw} exceeds expansion limit and cannot be verified exhaustively`,
+            );
+          }
           for (const node of decodedFromJson.nodes) {
             if (node.kind === "map") {
               checkServicesNode(node, envMap, matrixRows);

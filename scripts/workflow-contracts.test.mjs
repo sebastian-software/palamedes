@@ -5431,6 +5431,71 @@ describe("workflow contracts", () => {
     ]);
   });
 
+  it("preserves conditional github-script exports, matrix replay, result outputs, and read-only env opens", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const sha = "a".repeat(40);
+    expect(
+      unpinnedWorkflowContainerReferences(
+        [
+          "on: push",
+          "jobs:",
+          "  conditional-and-result:",
+          "    runs-on: ubuntu-latest",
+          "    env:",
+          `      IMAGE: node:24@${digest}`,
+          "    steps:",
+          `      - uses: actions/github-script@${sha}`,
+          "        with:",
+          "          script: |",
+          "            if (process.env.USE_MUTABLE) {",
+          '              core.exportVariable("COND_IMG", "alpine:3.20");',
+          "            } else {",
+          `              core.exportVariable("COND_IMG", "node:24@${digest}");`,
+          "            }",
+          '      - run: docker pull "$COND_IMG"',
+          "      - id: pick_str",
+          `        uses: actions/github-script@${sha}`,
+          "        with:",
+          "          result-encoding: string",
+          "          script: |",
+          '            return "busybox:1.36";',
+          '      - run: docker pull "${{ steps.pick_str.outputs.result }}"',
+          "      - id: pick_dyn",
+          `        uses: actions/github-script@${sha}`,
+          "        with:",
+          "          result-encoding: string",
+          "          script: |",
+          "            return computeImage();",
+          '      - run: docker pull "${{ steps.pick_dyn.outputs.result }}"',
+          "      - shell: python",
+          "        run: |",
+          "          import os",
+          '          with open(os.environ["GITHUB_ENV"], "r") as f:',
+          "            print(f.read())",
+          '      - run: docker run --rm "$IMAGE" node -v',
+          "  matrix-script-replay:",
+          "    runs-on: ubuntu-latest",
+          "    strategy:",
+          "      matrix:",
+          "        os: [ubuntu-latest, macos-latest]",
+          "    steps:",
+          `      - uses: actions/github-script@${sha}`,
+          "        with:",
+          "          script: |",
+          '            core.exportVariable("MATRIX_IMG", "debian:12");',
+          "      - if: matrix.os == 'macos-latest'",
+          '        run: docker pull "$MATRIX_IMG"',
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "<memory>:11: alpine:3.20 is not pinned to a sha256 digest",
+      "<memory>:23: busybox:1.36 is not pinned to a sha256 digest",
+      "<memory>:30: container image reference depends on an unverified non-shell output or environment variable",
+      "<memory>:46: debian:12 is not pinned to a sha256 digest",
+    ]);
+  });
+
   it("enforces case-insensitive schema keys, PowerShell continuations, and matrix expansion limits", () => {
     const digest = `sha256:${"a".repeat(64)}`;
     // Case-insensitive workflow schema keys (`Jobs`, `Steps`, `Uses`) are checked.
