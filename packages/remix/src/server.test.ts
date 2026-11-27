@@ -838,6 +838,117 @@ describe("createRemixI18nServer", () => {
       rmSync(root, { force: true, recursive: true });
     }
   });
+
+  it("validates cookieName, cookieMaxAge, and serializeLocaleCookie inputs and supports Secure", () => {
+    for (const invalidName of [
+      "",
+      "bad; Path=/",
+      "bad\r\nSet-Cookie: x=1",
+      "has space",
+      "a=b",
+      null as never,
+    ]) {
+      expect(() =>
+        createRemixI18nServer({
+          locales,
+          strategy: "cookie",
+          loadMessages: () => defineCompiledCatalog({}),
+          cookieName: invalidName,
+        }),
+      ).toThrowError(TypeError);
+    }
+
+    for (const invalidMaxAge of [
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+      "3600" as never,
+      null as never,
+    ]) {
+      expect(() =>
+        createRemixI18nServer({
+          locales,
+          strategy: "cookie",
+          loadMessages: () => defineCompiledCatalog({}),
+          cookieMaxAge: invalidMaxAge,
+        }),
+      ).toThrowError(RangeError);
+    }
+
+    const remixI18n = createRemixI18nServer({
+      locales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+      cookieName: "app-locale",
+      cookieMaxAge: 0,
+    });
+
+    expect(remixI18n.serializeLocaleCookie("de")).toBe(
+      "app-locale=de; Path=/; Max-Age=0; SameSite=Lax",
+    );
+    expect(remixI18n.serializeLocaleCookie("de", { secure: false })).toBe(
+      "app-locale=de; Path=/; Max-Age=0; SameSite=Lax",
+    );
+    expect(remixI18n.serializeLocaleCookie("de", { secure: true })).toBe(
+      "app-locale=de; Path=/; Max-Age=0; SameSite=Lax; Secure",
+    );
+
+    for (const invalidLocale of [
+      "fr",
+      "de; HttpOnly",
+      "de\r\nSet-Cookie: evil=1",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(() => remixI18n.serializeLocaleCookie(invalidLocale as never)).toThrowError(TypeError);
+    }
+
+    expect(() => remixI18n.serializeLocaleCookie("de", { secure: "yes" as never })).toThrowError(
+      TypeError,
+    );
+    expect(() => remixI18n.serializeLocaleCookie("de", null as never)).toThrowError(TypeError);
+  });
+
+  it("enforces Accept-Language caps before Remix parsing while preserving in-budget duplicate weights", () => {
+    const multilingualLocales = defineLocaleControls({
+      locales: ["en", "de", "es"] as const,
+      defaultLocale: "en",
+    });
+    const remixI18n = createRemixI18nServer({
+      locales: multilingualLocales,
+      strategy: "cookie",
+      loadMessages: () => defineCompiledCatalog({}),
+    });
+
+    expect(
+      remixI18n.resolveLocale(
+        new Request("https://example.test/", {
+          headers: { "accept-language": "de;q=0.9, es;q=0.8, DE;q=0.2" },
+        }),
+      ),
+    ).toStrictEqual({ locale: "es", source: "accept-language" });
+
+    const duplicateOverCap = Array.from({ length: 40 }, () => "de").join(",");
+    expect(
+      remixI18n.resolveLocale(
+        new Request("https://example.test/", {
+          headers: { "accept-language": duplicateOverCap },
+        }),
+      ),
+    ).toStrictEqual({ locale: "en", source: "default" });
+
+    const oversized = `de,${"xx,".repeat(1000)}`;
+    expect(
+      remixI18n.resolveLocale(
+        new Request("https://example.test/", {
+          headers: { "accept-language": oversized },
+        }),
+      ),
+    ).toStrictEqual({ locale: "en", source: "default" });
+  });
 });
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

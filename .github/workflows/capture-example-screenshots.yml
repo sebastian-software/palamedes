@@ -47,6 +47,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up workspace
         uses: ./.github/actions/setup-workspace
@@ -62,11 +64,13 @@ jobs:
 
       - name: Capture screenshots
         shell: bash
+        env:
+          EXAMPLE_ID: ${{ inputs.example_id }}
         run: |
           set -euo pipefail
 
-          if [ "${{ inputs.example_id }}" != "all" ]; then
-            pnpm capture:example-screenshots -- --id "${{ inputs.example_id }}"
+          if [ "$EXAMPLE_ID" != "all" ]; then
+            pnpm capture:example-screenshots -- --id "$EXAMPLE_ID"
           else
             pnpm capture:example-screenshots
           fi

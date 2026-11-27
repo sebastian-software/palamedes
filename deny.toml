@@ -45,10 +45,10 @@ allow = ["NCSA"]
 # Duplicates are surfaced for maintenance review without blocking a safe build.
 multiple-versions = "warn"
 wildcards = "deny"
-# The workspace-internal crates are path dependencies without a version
-# requirement. None of them is published, so a wildcard cannot leak to a
-# registry consumer.
-allow-wildcard-paths = true
+# Published crates (`palamedes`, `palamedes-build`, `palamedes-i18n`) must
+# declare explicit versions on all path dependencies so wildcards cannot leak
+# to registry consumers.
+allow-wildcard-paths = false
 
 [sources]
 unknown-registry = "deny"

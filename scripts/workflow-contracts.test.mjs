@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 
 import {
   checkWorkflowPins,
@@ -381,7 +382,8 @@ describe("workflow contracts", () => {
     }
     expect(native).toContain("if: matrix.rust_target == ''\n        run: pnpm --filter");
     expect(native).toContain("uses: ./.github/actions/verify-musl-native");
-    expect(musl).toContain('run: pnpm --filter "${{ inputs.package_name }}" build');
+    expect(musl).toContain("PACKAGE_NAME: ${{ inputs.package_name }}");
+    expect(musl).toContain('run: pnpm --filter "$PACKAGE_NAME" build');
     expect(cliBuild).toContain('cargoPackage: "palamedes-cli"');
     expect(nativeBuild).toContain("const cargoEnv = { ...process.env }");
     expect(nativeBuild).toContain("env: cargoEnv");
@@ -612,8 +614,10 @@ describe("workflow contracts", () => {
       validateMuslNative.match(/uses: \.\/\.github\/actions\/verify-musl-native/gu),
     ).toHaveLength(2);
     expect(publishNative).toContain("uses: ./.github/actions/verify-musl-native");
-    expect(verifyMuslNative).toContain('rustup target add "${{ inputs.rust_target }}"');
-    expect(verifyMuslNative).toContain('pnpm --filter "${{ inputs.package_name }}" build');
+    expect(verifyMuslNative).toContain("RUST_TARGET: ${{ inputs.rust_target }}");
+    expect(verifyMuslNative).toContain('rustup target add "$RUST_TARGET"');
+    expect(verifyMuslNative).toContain("PACKAGE_NAME: ${{ inputs.package_name }}");
+    expect(verifyMuslNative).toContain('pnpm --filter "$PACKAGE_NAME" build');
     expect(verifyMuslNative).toContain("uses: actions/cache@");
     expect(verifyMuslNative).toContain("inputs.cargo-cache == 'true'");
     expect(verifyMuslNative).toContain("/usr/local/cargo/registry");
@@ -657,23 +661,30 @@ describe("workflow contracts", () => {
     const step = action
       .split("- name: Build musl core-node addon (native musl toolchain)")[1]
       .split("\n    - name:")[0];
+    expect(step).toContain("CARGO_CACHE: ${{ inputs.cargo-cache }}");
+    expect(step).toContain("RUST_TARGET: ${{ inputs.rust_target }}");
+    expect(step).toContain("PACKAGE_DIR: ${{ inputs.package_dir }}");
+    expect(step).toContain("MUSL_TOOLCHAIN_IMAGE: ${{ steps.musl-toolchain.outputs.image }}");
     const script = step.split("run: |\n")[1].replace(/^ {8}/gmu, "");
+    expect(script).not.toContain("${{");
     const runnerTemp = await mkdtemp(join(tmpdir(), "palamedes musl cache-"));
     try {
       for (const target of ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]) {
         for (const enabled of ["true", "false"]) {
-          const rendered = script
-            .replaceAll("${{ inputs.cargo-cache }}", enabled)
-            .replaceAll("${{ inputs.rust_target }}", target)
-            .replaceAll("${{ inputs.package_dir }}", "packages/core-node-test-musl")
-            .replaceAll("${{ steps.musl-toolchain.outputs.image }}", "sha256:test-image");
           // Exercise Bash quoting and argument expansion without requiring a Docker daemon.
           const result = spawnSync(
             "bash",
-            ["-e", "-c", `docker() { printf '%s\\0' "$@"; }\n${rendered}`],
+            ["-e", "-c", `docker() { printf '%s\\0' "$@"; }\n${script}`],
             {
               cwd: repositoryRoot,
-              env: { ...process.env, RUNNER_TEMP: runnerTemp },
+              env: {
+                ...process.env,
+                RUNNER_TEMP: runnerTemp,
+                CARGO_CACHE: enabled,
+                RUST_TARGET: target,
+                PACKAGE_DIR: "packages/core-node-test-musl",
+                MUSL_TOOLCHAIN_IMAGE: "sha256:test-image",
+              },
               encoding: "utf8",
             },
           );
@@ -6156,5 +6167,107 @@ describe("workflow contracts", () => {
     expect(badge[3]).toBe(
       "https://github.com/sebastian-software/palamedes/blob/main/.github/workflows/ci.yml",
     );
+  });
+
+  it("pins cargo-audit and audits the shipped proof lockfiles alongside the root workspace", async () => {
+    const dependencyAudit = await readRepositoryFile(".github/workflows/dependency-audit.yml");
+    const parsed = parseYaml(dependencyAudit);
+    const auditSteps = parsed.jobs.audit.steps;
+
+    const installStep = auditSteps.find((step) => step.name === "Install pinned cargo-audit");
+    expect(installStep).toBeDefined();
+    expect(installStep.uses).toMatch(/^taiki-e\/install-action@[0-9a-f]{40}$/u);
+    expect(installStep.with?.tool).toMatch(/^cargo-audit@\d+\.\d+\.\d+$/u);
+    expect(dependencyAudit).not.toContain("cargo install cargo-audit --locked");
+
+    const npmAuditStep = auditSteps.find((step) => step.id === "npm-audit");
+    expect(npmAuditStep).toBeDefined();
+    for (const proofDir of [
+      "proof/nuxt-ssr",
+      "proof/svelte-vite",
+      "proof/sveltekit-ssr",
+      "proof/vue-vite",
+    ]) {
+      expect(npmAuditStep.run).toContain(proofDir);
+    }
+    expect(npmAuditStep.run).toContain(
+      'pnpm --dir "$dir" audit --audit-level=high >> audit-report.md 2>&1 || dir_status=$?',
+    );
+  });
+
+  it("forbids wildcard path dependencies, checks the full workspace in cargo-deny, and lints all features in CI clippy", async () => {
+    const [denyToml, ci] = await Promise.all([
+      readRepositoryFile("deny.toml"),
+      readRepositoryFile(".github/workflows/ci.yml"),
+    ]);
+
+    expect(denyToml).toMatch(/^allow-wildcard-paths\s*=\s*false$/mu);
+    expect(denyToml).not.toMatch(/^allow-wildcard-paths\s*=\s*true$/mu);
+
+    const validateRust = job(ci, "validate-rust", "validate-dependency-policy");
+    expect(validateRust).toContain(
+      "run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+    );
+
+    const dependencyPolicy = job(ci, "validate-dependency-policy", "ci-gate");
+    expect(dependencyPolicy).toContain('arguments: "--workspace --locked"');
+  });
+
+  it("passes workflow and composite action inputs through env instead of direct shell interpolation", async () => {
+    const [verifyMusl, capture] = await Promise.all([
+      readRepositoryFile(".github/actions/verify-musl-native/action.yml"),
+      readRepositoryFile(".github/workflows/capture-example-screenshots.yml"),
+    ]);
+
+    const parsedMusl = parseYaml(verifyMusl);
+    for (const step of parsedMusl.runs.steps) {
+      if (typeof step.run === "string") {
+        expect(step.run, step.name).not.toMatch(/\$\{\{\s*inputs\./u);
+      }
+    }
+
+    const parsedCapture = parseYaml(capture);
+    for (const step of parsedCapture.jobs.capture.steps) {
+      if (typeof step.run === "string") {
+        expect(step.run, step.name).not.toMatch(/\$\{\{\s*inputs\./u);
+      }
+    }
+  });
+
+  it("pins ubuntu-24.04 on readme-theme and enforces timeout-minutes and persist-credentials across workflows", async () => {
+    const workflowDir = resolve(repositoryRoot, ".github/workflows");
+    const workflowFiles = (await readdir(workflowDir))
+      .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+      .sort();
+    expect(workflowFiles.length).toBeGreaterThan(0);
+
+    const readmeTheme = parseYaml(await readRepositoryFile(".github/workflows/readme-theme.yml"));
+    expect(readmeTheme.jobs["readme-themes"]["runs-on"]).toBe("ubuntu-24.04");
+    expect(readmeTheme.concurrency?.group).toBeTruthy();
+
+    for (const file of workflowFiles) {
+      const parsed = parseYaml(await readRepositoryFile(`.github/workflows/${file}`));
+      expect(parsed.jobs, file).toBeDefined();
+      for (const [jobName, jobConfig] of Object.entries(parsed.jobs)) {
+        if (jobConfig.uses) continue;
+        expect(
+          typeof jobConfig["timeout-minutes"],
+          `${file}:${jobName} missing timeout-minutes`,
+        ).toBe("number");
+        expect(
+          jobConfig["timeout-minutes"],
+          `${file}:${jobName} timeout-minutes must be positive`,
+        ).toBeGreaterThan(0);
+
+        for (const step of jobConfig.steps ?? []) {
+          if (typeof step.uses === "string" && step.uses.startsWith("actions/checkout@")) {
+            expect(
+              step.with?.["persist-credentials"],
+              `${file}:${jobName} checkout must set persist-credentials: false`,
+            ).toBe(false);
+          }
+        }
+      }
+    }
   });
 });

@@ -28,19 +28,216 @@ Do not import `.po` modules from browser-facing files or serialize catalog
 functions through RSC.
 
 For production builds, connect the generated active-locale import map to Waku's
-document response with the server-only entry point:
+document response with the server-only entry point. For request-rendered HTML
+documents using a nonce-based CSP, generate a fresh cryptographic nonce per
+request on the server, keep those responses out of shared caches, and share the
+nonce across the response header, Palamedes catalog delivery, and Waku's
+framework nonce (with Waku `1.0.0-rc.4`'s default Node adapter, prerendered
+static pages are served by `serveStatic` before `middlewareFns` runs—bypassing
+both the CSP middleware and `createWakuCatalogDeliveryMiddleware`, so routes
+whose client chunks use split catalogs need request-time rendering or a separate
+build-time catalog delivery step before computing a hash-based CSP at the static
+host or edge proxy):
 
 ```ts
-import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
+// src/lib/i18n.server.ts
+import { createBundledServerI18n } from "@palamedes/runtime/server/bundled";
+import { locales } from "./i18n";
 
-middlewareFns: [
-  () =>
-    createWakuCatalogDeliveryMiddleware({
-      resolveLocale: (request) => resolveApplicationLocale(request),
-      nonce: (request) => request.headers.get("x-csp-nonce") ?? undefined,
-    }),
-];
+export function resolveApplicationLocale(request: Request) {
+  return locales.resolve({
+    strategy: "cookie",
+    acceptLanguageHeader: request.headers.get("accept-language"),
+    cookieHeader: request.headers.get("cookie"),
+  }).locale;
+}
+
+export function createRequestI18n(request: Request) {
+  return createBundledServerI18n({ locale: resolveApplicationLocale(request) });
+}
 ```
+
+```ts
+// src/lib/csp.server.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomBytes } from "node:crypto";
+
+type TrackedHtml = { body: NonNullable<Response["body"]>; ssr: boolean };
+type CspRequestState = { nonce: string; html?: TrackedHtml };
+const cspNonceStorage = new AsyncLocalStorage<CspRequestState>();
+
+export function runWithRequestNonce<T>(fn: () => T): T {
+  return cspNonceStorage.run({ nonce: randomBytes(16).toString("base64") }, fn);
+}
+
+export function getRequestNonce(): string | undefined {
+  return cspNonceStorage.getStore()?.nonce;
+}
+
+export function trackRouterHtmlBody(body: NonNullable<Response["body"]>, ssr: boolean): void {
+  const state = cspNonceStorage.getStore();
+  if (state) state.html = { body, ssr };
+}
+
+export function getTrackedRouterHtml(body: Response["body"]): TrackedHtml | undefined {
+  const html = cspNonceStorage.getStore()?.html;
+  return body !== null && html?.body === body ? html : undefined;
+}
+```
+
+```ts
+// src/waku.server.ts
+import { fsRouter } from "waku";
+import adapter from "waku/adapters/default";
+import { createWakuCatalogDeliveryMiddleware } from "@palamedes/waku/server";
+import { getRequestNonce, getTrackedRouterHtml, runWithRequestNonce } from "./lib/csp.server";
+import { resolveApplicationLocale } from "./lib/i18n.server";
+
+const modules = Object.fromEntries(
+  Object.entries(import.meta.glob("/src/pages/**/*.{js,ts,tsx,jsx,mjs,cjs}")).map(
+    ([key, value]) => [key.slice("/src/".length), value],
+  ),
+);
+
+function buildAppCsp(nonce: string): string {
+  // Nonce-enabled same-origin policy: `script-src 'self'` assumes all same-origin
+  // script URLs are trusted (do not host untrusted user-uploaded scripts on this
+  // origin). Keep one CSP owner per response: either add your other directives
+  // (style-src, img-src, connect-src, etc.) here, or remove the
+  // `content-security-policy` write below when an existing `src/middleware/*`
+  // handler builds CSP with `getRequestNonce()`.
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}'`,
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+const catalogDelivery = createWakuCatalogDeliveryMiddleware({
+  resolveLocale: (request) => resolveApplicationLocale(request),
+  nonce: () => (!import.meta.env.DEV ? getRequestNonce() : undefined),
+});
+
+export default adapter(fsRouter(modules), {
+  // Preserve Waku's managed `src/middleware/*` discovery when adding a custom server entry.
+  middlewareModules: import.meta.glob([
+    "/src/middleware/*.{js,ts,tsx,jsx,mjs,cjs}",
+    "!/src/middleware/*.{test,spec}.{js,ts,tsx,jsx,mjs,cjs}",
+  ]),
+  middlewareFns: [
+    // Register any middleware or logging that compresses, clones (`response.clone()`),
+    // or transforms HTML bodies (for example, Hono `compress()` or `etag()`) here before
+    // this middleware—not in `src/middleware/*` or `_interceptors/*`—or at the reverse
+    // proxy so HTML rewriting runs first and outer middleware sees the final response
+    // and `Cache-Control: private, no-store`.
+    () => async (context, next) =>
+      runWithRequestNonce(async () => {
+        await next();
+        // Rewrite and apply the nonce CSP only to the exact SSR HTML stream rendered
+        // by Waku. If a `src/middleware/*` handler replaced `context.res` (for example,
+        // with an HTML error or maintenance page), leave that response and its CSP untouched.
+        const tracked = getTrackedRouterHtml(context.res.body);
+        if (!tracked) {
+          return;
+        }
+        if (tracked.ssr) {
+          await catalogDelivery(context, async () => {});
+        }
+        const nonce = getRequestNonce();
+        // Apply this nonce-enabled same-origin policy in production builds;
+        // Vite dev injects HMR scripts and inline styles that need a separate dev policy.
+        if (
+          !import.meta.env.DEV &&
+          nonce &&
+          context.res.headers.get("content-type")?.startsWith("text/html")
+        ) {
+          if (tracked.ssr) {
+            // Omit this write if an existing `src/middleware/*` handler already sets
+            // Content-Security-Policy using `getRequestNonce()`; otherwise this runs
+            // after `middlewareModules` and replaces that header. Always keep Cache-Control.
+            context.header("content-security-policy", buildAppCsp(nonce));
+          }
+          // Nonce-bearing HTML (including Waku's `unstable_disableSSR: true` fallback
+          // shell, which also receives `unstable_setNonce`) must never be replayed
+          // across visitors by a shared or in-app cache: exclude these routes from
+          // any `src/middleware/*` cache (or keep cache middleware outside this
+          // middleware so it honors no-store).
+          context.header("cache-control", "private, no-store");
+        }
+      }),
+  ],
+});
+```
+
+```ts
+// src/pages/_interceptors/zz-csp.server.ts
+// Waku loads `_interceptors/*` in sorted filename order and nests earlier files
+// outside later ones. Keep this file sorted last (after any response-replacing
+// interceptor) so it wraps Waku's render directly and tracks only Waku's router HTML;
+// move any HTML-cloning or body-wrapping interceptors (such as `response.clone()`)
+// to outer Hono middleware before the Palamedes/CSP wrapper in `src/waku.server.ts`.
+import {
+  unstable_getRscPath,
+  unstable_setNonce,
+  type HandlerInterceptor,
+} from "waku/router/server";
+import { getRequestNonce, trackRouterHtmlBody } from "../../lib/csp.server";
+
+const cspInterceptor: HandlerInterceptor = async (next) => {
+  const nonce = getRequestNonce();
+  if (!import.meta.env.DEV && nonce) unstable_setNonce(nonce);
+  const result = await next();
+  // Waku sets an RSC path for SSR pages and leaves it unset for `_api` handlers
+  // and `unstable_disableSSR: true` fallback shells (which still receive the
+  // interceptor's nonce, so tracking non-SSR router HTML ensures `no-store` is
+  // applied without injecting split catalogs or overwriting `_api` CSP).
+  if (
+    result instanceof Response &&
+    result.body !== null &&
+    result.headers.get("content-type")?.startsWith("text/html")
+  ) {
+    trackRouterHtmlBody(result.body, unstable_getRscPath() !== undefined);
+  }
+  return result;
+};
+
+export default cspInterceptor;
+```
+
+Because Waku's `fsRouter()` defaults pages to static rendering, opt SSR routes
+that rely on request-time catalog delivery and per-request CSP nonces into
+dynamic rendering (as in `examples/waku-cookie/src/pages/_root.tsx` and
+`index.tsx`). This recipe is scoped to SSR-enabled dynamic routes; routes using
+`unstable_disableSSR: true` are outside its scope (Waku `1.0.0-rc.4`'s default
+non-SSR shell omits `</head>` and does not receive the split-catalog import map):
+
+```ts
+export async function getConfig() {
+  return {
+    render: "dynamic",
+  } as const;
+}
+```
+
+Always generate the nonce per request on the server (or strip and regenerate it
+in a trusted edge proxy), exclude nonce-bearing SSR routes from any in-app
+`src/middleware/*` cache (which runs before `Cache-Control: private, no-store`,
+CSP, and catalog delivery are applied), and ensure any outer cache middleware,
+CDN, or reverse proxy respects `Cache-Control: private, no-store` so
+nonce-bearing HTML is never cached across visitors. Note that in Waku `1.0.0-rc.4`'s default Node adapter, Waku's default
+HTML fallback shell (served for an unmatched `/` route or a handler returning
+`"fallback"`) renders outside router handler interceptors without
+`unstable_setNonce` and omits `</head>`, so it receives neither the nonce CSP
+nor Palamedes's split-catalog import map (ordinary unmatched non-root URLs
+without a custom `404` page return plain-text `404 Not Found` with no bootstrap
+script); always define a request-rendered `/` route through the router for
+applications using split catalogs (or serve a custom fallback with full HTML
+catalog delivery and its own CSP). Do not derive a CSP nonce from an arbitrary
+client-supplied request header such as `x-csp-nonce`: an attacker could supply a
+predictable value and bypass the script policy. See the
+[deployment security guide](https://palamedes.dev/docs/security/#csp-nonces-and-script-delivery).
 
 The middleware transforms HTML document streams after Waku renders them. RSC
 and action responses pass through unchanged. If an active fragment cannot be

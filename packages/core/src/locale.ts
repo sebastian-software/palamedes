@@ -108,6 +108,12 @@ const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const COOKIE_VALUE_PATTERN = /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/;
 const HTTP_PROTOCOL_PATTERN = /^https?:?$/i;
 const DNS_LABEL_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+const MAX_ACCEPT_LANGUAGE_LENGTH = 2048;
+const MAX_ACCEPT_LANGUAGE_ENTRIES = 32;
+// ICU rejects any bare or transformed language ID beyond ~208 chars, so a fixed
+// 256-char Intl.Locale boundary preserves exact host canonicalization for every
+// valid base/transformed tag while bounding per-tag parser work.
+const MAX_LANGUAGE_TAG_LENGTH = 256;
 
 // ---------------------------------------------------------------------------
 // Config-free helpers
@@ -132,20 +138,244 @@ function readCookie(cookieHeader: string | null | undefined, name: string): stri
   return null;
 }
 
-function languagePreferences(header: string | null | undefined) {
-  return (header ?? "")
-    .split(",")
-    .map((entry) => {
-      const [tag, ...params] = entry.trim().split(";");
-      const qParam = params.find((param) => param.trim().startsWith("q="));
-      const quality = qParam ? Number(qParam.split("=")[1]) : 1;
-      return {
-        quality: Number.isFinite(quality) ? quality : 1,
-        tag: tag.toLowerCase(),
-      };
-    })
-    .filter(({ tag }) => tag.length > 0)
-    .sort((left, right) => right.quality - left.quality);
+function parseUnicodeLanguageId(subtags: readonly string[], startIndex: number): number {
+  const language = subtags[startIndex];
+  if (!language || !/^(?:[a-z]{2,3}|[a-z]{5,8})$/.test(language)) {
+    return -1;
+  }
+
+  let index = startIndex + 1;
+
+  if (index < subtags.length && /^[a-z]{4}$/.test(subtags[index]!)) {
+    index += 1;
+  }
+
+  if (index < subtags.length && /^(?:[a-z]{2}|[0-9]{3})$/.test(subtags[index]!)) {
+    index += 1;
+  }
+
+  const seenVariants = new Set<string>();
+  while (index < subtags.length && /^(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3})$/.test(subtags[index]!)) {
+    const variant = subtags[index]!;
+    if (seenVariants.has(variant)) {
+      return -1;
+    }
+    seenVariants.add(variant);
+    index += 1;
+  }
+
+  return index;
+}
+
+function extractWellFormedUnicodeBaseTag(lowerTag: string): string | null {
+  const subtags = lowerTag.split("-");
+  const baseEndIndex = parseUnicodeLanguageId(subtags, 0);
+  if (baseEndIndex === -1) {
+    return null;
+  }
+
+  let index = baseEndIndex;
+  let hasPosixVariant = false;
+  const seenSingletons = new Set<string>();
+  while (index < subtags.length && /^[0-9a-wy-z]$/.test(subtags[index]!)) {
+    const singleton = subtags[index]!;
+    if (seenSingletons.has(singleton)) {
+      return null;
+    }
+    seenSingletons.add(singleton);
+    index += 1;
+
+    if (singleton === "u") {
+      let hasAttributeOrKeyword = false;
+      while (index < subtags.length && /^[a-z0-9]{3,8}$/.test(subtags[index]!)) {
+        hasAttributeOrKeyword = true;
+        index += 1;
+      }
+      while (index < subtags.length && /^[a-z0-9][a-z]$/.test(subtags[index]!)) {
+        const key = subtags[index]!;
+        hasAttributeOrKeyword = true;
+        index += 1;
+        const valuesStart = index;
+        while (index < subtags.length && /^[a-z0-9]{3,8}$/.test(subtags[index]!)) {
+          index += 1;
+        }
+        if (key === "va" && index === valuesStart + 1 && subtags[valuesStart] === "posix") {
+          hasPosixVariant = true;
+        }
+      }
+      if (!hasAttributeOrKeyword) {
+        return null;
+      }
+      continue;
+    }
+
+    if (singleton === "t") {
+      let hasLangOrField = false;
+      if (index < subtags.length && !/^[a-z][0-9]$/.test(subtags[index]!)) {
+        const transformedEnd = parseUnicodeLanguageId(subtags, index);
+        if (transformedEnd === -1) {
+          return null;
+        }
+        const syntheticTransformed = `und-t-${subtags.slice(index, transformedEnd).join("-")}`;
+        if (
+          syntheticTransformed.length > MAX_LANGUAGE_TAG_LENGTH ||
+          !languageTag(syntheticTransformed, MAX_LANGUAGE_TAG_LENGTH)
+        ) {
+          return null;
+        }
+        hasLangOrField = true;
+        index = transformedEnd;
+      }
+      while (index < subtags.length && /^[a-z][0-9]$/.test(subtags[index]!)) {
+        index += 1;
+        let valueCount = 0;
+        while (index < subtags.length && /^[a-z0-9]{3,8}$/.test(subtags[index]!)) {
+          valueCount += 1;
+          index += 1;
+        }
+        if (valueCount === 0) {
+          return null;
+        }
+        hasLangOrField = true;
+      }
+      if (!hasLangOrField) {
+        return null;
+      }
+      continue;
+    }
+
+    let extCount = 0;
+    while (index < subtags.length) {
+      const part = subtags[index]!;
+      if (part.length === 1) {
+        break;
+      }
+      if (!/^[a-z0-9]{2,8}$/.test(part)) {
+        return null;
+      }
+      extCount += 1;
+      index += 1;
+    }
+
+    if (extCount === 0) {
+      return null;
+    }
+  }
+
+  let legacyVariantSuffix = "";
+  if (index < subtags.length && subtags[index] === "x") {
+    index += 1;
+    if (index >= subtags.length) {
+      return null;
+    }
+    let lvariantIndex = -1;
+    while (index < subtags.length) {
+      const part = subtags[index]!;
+      if (!/^[a-z0-9]{1,8}$/.test(part)) {
+        return null;
+      }
+      if (lvariantIndex === -1 && part === "lvariant") {
+        lvariantIndex = index;
+      }
+      index += 1;
+    }
+    if (lvariantIndex !== -1) {
+      legacyVariantSuffix = `-x-${subtags.slice(lvariantIndex).join("-")}`;
+    }
+  }
+
+  if (index !== subtags.length) {
+    return null;
+  }
+
+  const baseTag = subtags.slice(0, baseEndIndex).join("-");
+  const reducedTag = `${baseTag}${hasPosixVariant ? "-u-va-posix" : ""}${legacyVariantSuffix}`;
+  const parsedReduced =
+    reducedTag.length <= MAX_LANGUAGE_TAG_LENGTH
+      ? languageTag(reducedTag, MAX_LANGUAGE_TAG_LENGTH)
+      : null;
+  return parsedReduced ? parsedReduced.baseName.toLowerCase() : null;
+}
+
+function languagePreferences(
+  header: string | null | undefined,
+  exactOnlyTags?: ReadonlySet<string>,
+  configuredExactTags?: ReadonlySet<string>,
+) {
+  if (!header || header.length > MAX_ACCEPT_LANGUAGE_LENGTH) {
+    return [];
+  }
+
+  const preferences: Array<{
+    quality: number;
+    tag: string;
+    exactTag?: string;
+  }> = [];
+  let entryCount = 0;
+  let start = 0;
+
+  while (start <= header.length) {
+    const commaIndex = header.indexOf(",", start);
+    const end = commaIndex === -1 ? header.length : commaIndex;
+    const entry = header.slice(start, end).trim();
+    start = commaIndex === -1 ? header.length + 1 : commaIndex + 1;
+
+    if (!entry) {
+      continue;
+    }
+
+    entryCount += 1;
+    if (entryCount > MAX_ACCEPT_LANGUAGE_ENTRIES) {
+      // Never negotiate from a truncated prefix: a later q=0 exclusion could be dropped.
+      return [];
+    }
+
+    const semiIndex = entry.indexOf(";");
+    const rawTag = (semiIndex === -1 ? entry : entry.slice(0, semiIndex)).trim();
+    if (!rawTag) {
+      continue;
+    }
+
+    let quality = 1;
+    if (semiIndex !== -1) {
+      const params = entry.slice(semiIndex + 1).split(";");
+      for (const param of params) {
+        const trimmed = param.trim();
+        if (trimmed.startsWith("q=")) {
+          const parsedQuality = Number(trimmed.slice(2));
+          quality = Number.isFinite(parsedQuality) ? parsedQuality : 1;
+          break;
+        }
+      }
+    }
+
+    const lowerTag = rawTag.toLowerCase();
+    if (rawTag.length > MAX_LANGUAGE_TAG_LENGTH) {
+      if (exactOnlyTags?.has(lowerTag)) {
+        preferences.push({ quality, tag: lowerTag, exactTag: lowerTag });
+        continue;
+      }
+      // Preserve well-formed over-budget extended tags by their canonical base
+      // tag without passing overlong strings to Intl.Locale.
+      const baseTag = extractWellFormedUnicodeBaseTag(lowerTag);
+      if (baseTag) {
+        preferences.push({
+          quality,
+          tag: baseTag,
+          exactTag: configuredExactTags?.has(lowerTag) ? lowerTag : undefined,
+        });
+      }
+      continue;
+    }
+
+    preferences.push({
+      quality,
+      tag: lowerTag,
+      exactTag: lowerTag,
+    });
+  }
+
+  return preferences.sort((left, right) => right.quality - left.quality);
 }
 
 /** Accept-Language tags sorted by quality, with base languages expanded. */
@@ -158,7 +388,11 @@ export function parseAcceptLanguage(header: string | null | undefined): string[]
     });
 }
 
-function languageTag(tag: string): Intl.Locale | null {
+function languageTag(tag: string, maxLength?: number): Intl.Locale | null {
+  if (tag.length === 0 || (maxLength !== undefined && tag.length > maxLength)) {
+    return null;
+  }
+
   try {
     return new Intl.Locale(tag);
   } catch (error) {
@@ -231,6 +465,93 @@ export function consumeChoiceHandoff<TLocale extends string>(options: {
   };
 }
 
+type ParsedRequestHost = {
+  hostname: string;
+  trailingDot: boolean;
+  port: string | null;
+  isDns: boolean;
+};
+
+function parseRequestPort(rawPort: string | undefined): string | null | undefined {
+  if (rawPort === undefined) {
+    return null;
+  }
+
+  const normalized = rawPort.replace(/^0+/, "");
+  if (normalized.length === 0 || normalized.length > 5) {
+    return undefined;
+  }
+
+  const portNumber = Number(normalized);
+  if (portNumber < 1 || portNumber > 65_535) {
+    return undefined;
+  }
+
+  return String(portNumber);
+}
+
+function parseRequestHost(host: string | null | undefined): ParsedRequestHost | null {
+  if (typeof host !== "string" || host.length === 0 || host.length > 512) {
+    return null;
+  }
+
+  if (host.startsWith("[")) {
+    const ipv6Match = /^(\[[0-9A-Fa-f:.]+\])(?::([0-9]+))?$/.exec(host);
+    if (!ipv6Match) {
+      return null;
+    }
+
+    const bracketedHost = ipv6Match[1];
+    const ipv6Port = parseRequestPort(ipv6Match[2]);
+    if (!bracketedHost || ipv6Port === undefined) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(`http://${bracketedHost}/`);
+      if (!parsed.hostname.startsWith("[") || !parsed.hostname.endsWith("]")) {
+        return null;
+      }
+      return { hostname: parsed.hostname, trailingDot: false, port: ipv6Port, isDns: false };
+    } catch {
+      return null;
+    }
+  }
+
+  const match = /^([^:]+)(?::([0-9]+))?$/.exec(host);
+  if (!match) {
+    return null;
+  }
+
+  const rawHostname = match[1];
+  const port = parseRequestPort(match[2]);
+  if (!rawHostname || port === undefined) {
+    return null;
+  }
+
+  const trailingDot = rawHostname.endsWith(".");
+  const hostname = trailingDot ? rawHostname.slice(0, -1) : rawHostname;
+  if (!hostname || hostname.length > 253 || !hostname.split(".").every(isDnsLabel)) {
+    return null;
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(`http://${rawHostname}/`);
+  } catch {
+    return null;
+  }
+
+  if (/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(parsedUrl.hostname)) {
+    if (trailingDot || parsedUrl.hostname !== hostname) {
+      return null;
+    }
+    return { hostname: parsedUrl.hostname, trailingDot: false, port, isDns: false };
+  }
+
+  return { hostname, trailingDot, port, isDns: true };
+}
+
 function stripPort(host: string | null | undefined): string | null {
   if (!host) {
     return null;
@@ -240,12 +561,45 @@ function stripPort(host: string | null | undefined): string | null {
 }
 
 function getPort(host: string | null | undefined): string | null {
-  if (!host) {
-    return null;
+  return parseRequestHost(host)?.port ?? null;
+}
+
+function hasControlChar(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) {
+      return true;
+    }
   }
 
-  const match = host.match(/:(\d+)$/);
-  return match?.[1] ?? null;
+  return false;
+}
+
+function normalizeCanonicalPath(pathname: string): string {
+  if (typeof pathname !== "string") {
+    throw new TypeError("defineLocaleControls: pathname must be a string.");
+  }
+  if (hasControlChar(pathname)) {
+    throw new TypeError("defineLocaleControls: pathname must not contain control characters.");
+  }
+
+  const normalized = /^ *(?:[/\\]{2,}|\\)/.test(pathname)
+    ? pathname.replace(/^ *[/\\]+/, "")
+    : pathname.replace(/^[/\\]+/, "");
+  return `/${normalized}`;
+}
+
+function normalizeSearch(search: string | null | undefined): string {
+  if (search === undefined || search === null || search === "") {
+    return "";
+  }
+  if (typeof search !== "string" || !search.startsWith("?") || hasControlChar(search)) {
+    throw new TypeError(
+      'defineLocaleControls: search must be empty or start with "?" without control characters.',
+    );
+  }
+
+  return search;
 }
 
 function resolveLabels<TLocale extends string>(
@@ -311,7 +665,11 @@ function isDnsHost(value: string): boolean {
     return false;
   }
 
-  return port === undefined || (Number(port) >= 1 && Number(port) <= 65_535);
+  if (port !== undefined && (Number(port) < 1 || Number(port) > 65_535)) {
+    return false;
+  }
+
+  return parseRequestHost(value) !== null;
 }
 
 function assertDomainHosts<TLocale extends string>(
@@ -502,7 +860,7 @@ export type LocaleControls<TLocale extends string> = {
   /** The deliberate-choice cookie value, or null when unset/invalid. */
   readChoice(cookieHeader: string | null | undefined): TLocale | null;
   /** A `document.cookie` string recording a deliberate choice. */
-  serializeChoice(locale: TLocale): string;
+  serializeChoice(locale: TLocale, options?: { secure?: boolean }): string;
 
   /**
    * Suggest the browser's Accept-Language locale unless a recorded choice
@@ -563,35 +921,48 @@ export function defineLocaleControls<TLocale extends string>(
 
   const languageLocales = config.locales.map((locale) => {
     const parsed = languageTag(locale);
-    return { locale, parsed, maximized: parsed?.maximize() };
+    return {
+      locale,
+      lower: parsed?.baseName.toLowerCase() ?? locale.toLowerCase(),
+      parsed,
+      maximized: parsed?.maximize(),
+    };
   });
+  const customLocaleIds = new Set(
+    languageLocales
+      .filter((entry) => entry.parsed === null)
+      .map((entry) => entry.locale.toLowerCase()),
+  );
+  const configuredExactLocaleIds = new Set(
+    languageLocales.map((entry) => entry.locale.toLowerCase()),
+  );
 
   const preferredLocale = (header: string | null | undefined): TLocale => {
-    const preferences = languagePreferences(header);
+    const preferences = languagePreferences(header, customLocaleIds, configuredExactLocaleIds);
     const exclusions = preferences
       .filter(({ quality }) => quality === 0)
       .map(({ tag }) => {
-        const parsed = languageTag(tag);
+        const parsed = languageTag(tag, MAX_LANGUAGE_TAG_LENGTH);
+        const excludedTag = parsed?.baseName.toLowerCase() ?? tag;
         return {
-          tag: parsed?.baseName.toLowerCase() ?? tag,
+          tag: excludedTag,
+          specificity: excludedTag.split("-").length,
           maximized: parsed?.maximize(),
         };
       });
     const unique = (matches: typeof languageLocales): TLocale | undefined =>
       matches.length === 1 ? matches[0]?.locale : undefined;
 
-    for (const { tag, quality } of preferences) {
+    for (const { tag, exactTag, quality } of preferences) {
       if (quality <= 0) continue;
-      const parsed = languageTag(tag);
+      const parsed = languageTag(tag, MAX_LANGUAGE_TAG_LENGTH);
       const canonicalTag = parsed?.baseName.toLowerCase() ?? tag;
-      const available = languageLocales.filter(
-        ({ locale, parsed: configured, maximized: supported }) => {
-          const lower = configured?.baseName.toLowerCase() ?? locale.toLowerCase();
-          const specificity =
-            lower === canonicalTag || lower.startsWith(`${canonicalTag}-`)
-              ? canonicalTag.split("-").length
-              : 0;
-          return exclusions.every(({ tag: excludedTag, maximized: excluded }) => {
+      const canonicalSpecificity = canonicalTag.split("-").length;
+      const available = languageLocales.filter(({ lower, maximized: supported }) => {
+        const specificity =
+          lower === canonicalTag || lower.startsWith(`${canonicalTag}-`) ? canonicalSpecificity : 0;
+        return exclusions.every(
+          ({ tag: excludedTag, specificity: excludedSpecificity, maximized: excluded }) => {
             // A specific accepted range overrides a broader rejection, including
             // '*;q=0'. Inference cannot override an explicitly rejected locale.
             if (excludedTag === "*") return true;
@@ -599,11 +970,14 @@ export function defineLocaleControls<TLocale extends string>(
               lower === excludedTag ||
               lower.startsWith(`${excludedTag}-`) ||
               (excluded && supported && excluded.baseName === supported.baseName);
-            return !matches || specificity > excludedTag.split("-").length;
-          });
-        },
-      );
-      const exact = unique(available.filter(({ locale }) => locale.toLowerCase() === tag));
+            return !matches || specificity > excludedSpecificity;
+          },
+        );
+      });
+      const exact =
+        exactTag !== undefined
+          ? unique(available.filter(({ locale }) => locale.toLowerCase() === exactTag))
+          : undefined;
       if (exact) return exact;
 
       if (!parsed) continue;
@@ -642,12 +1016,33 @@ export function defineLocaleControls<TLocale extends string>(
     return isLocale(value) ? value : null;
   };
 
-  const serializeChoice = (locale: TLocale): string =>
-    `${choiceCookie}=${locale}; Path=/; Max-Age=${CHOICE_MAX_AGE_SECONDS}; SameSite=Lax`;
+  const serializeChoice = (locale: TLocale, options?: { secure?: boolean }): string => {
+    if (!isLocale(locale)) {
+      throw new TypeError("defineLocaleControls: serializeChoice locale must be configured.");
+    }
+    if (
+      options !== undefined &&
+      (options === null ||
+        typeof options !== "object" ||
+        Array.isArray(options) ||
+        (options.secure !== undefined && typeof options.secure !== "boolean"))
+    ) {
+      throw new TypeError(
+        "defineLocaleControls: serializeChoice options.secure must be a boolean.",
+      );
+    }
+
+    const secure = options?.secure === true ? "; Secure" : "";
+    return `${choiceCookie}=${locale}; Path=/; Max-Age=${CHOICE_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
+  };
 
   /** The leftmost DNS label of the host, if it is a supported locale. */
   const extractSubdomainLocale = (requestHost: string | null | undefined): TLocale | null => {
-    const firstLabel = stripPort(requestHost)?.split(".")[0]?.toLowerCase();
+    const parsedHost = parseRequestHost(requestHost);
+    if (!parsedHost?.isDns) {
+      return null;
+    }
+    const firstLabel = parsedHost.hostname.split(".")[0]?.toLowerCase();
     return isLocale(firstLabel) ? (firstLabel as TLocale) : null;
   };
 
@@ -660,19 +1055,23 @@ export function defineLocaleControls<TLocale extends string>(
     requestHost: string | null | undefined,
     locale: TLocale,
   ): string | null => {
-    const stripped = stripPort(requestHost);
-    if (!stripped) {
+    const parsedHost = parseRequestHost(requestHost);
+    if (!parsedHost?.isDns) {
       return null;
     }
 
-    const parts = stripped.split(".");
+    const parts = parsedHost.hostname.split(".");
     if (parts.length > 0 && isLocale(parts[0]?.toLowerCase())) {
       parts[0] = locale;
     } else {
       parts.unshift(locale);
     }
 
-    return parts.join(".");
+    const swapped = parts.join(".");
+    if (!isDnsHost(swapped)) {
+      return null;
+    }
+    return parsedHost.trailingDot ? `${swapped}.` : swapped;
   };
 
   /**
@@ -682,8 +1081,12 @@ export function defineLocaleControls<TLocale extends string>(
    * no TLD and yields null.
    */
   const extractTldLocale = (requestHost: string | null | undefined): TLocale | null => {
-    const parts = stripPort(requestHost)?.split(".");
-    if (!parts || parts.length < 2) {
+    const parsedHost = parseRequestHost(requestHost);
+    if (!parsedHost?.isDns) {
+      return null;
+    }
+    const parts = parsedHost.hostname.split(".");
+    if (parts.length < 2) {
       return null;
     }
 
@@ -715,12 +1118,12 @@ export function defineLocaleControls<TLocale extends string>(
    * TLD. Mirrors `swapSubdomainLabel` for the tld strategy.
    */
   const swapTldLabel = (requestHost: string | null | undefined, locale: TLocale): string | null => {
-    const stripped = stripPort(requestHost);
-    if (!stripped) {
+    const parsedHost = parseRequestHost(requestHost);
+    if (!parsedHost?.isDns) {
       return null;
     }
 
-    const parts = stripped.split(".");
+    const parts = parsedHost.hostname.split(".");
     if (parts.length < 2) {
       // A single-label host has no tld to swap; mirror the no-host path so
       // `canonicalUrl` falls back to a bare path instead of reflecting the host
@@ -729,7 +1132,11 @@ export function defineLocaleControls<TLocale extends string>(
     }
 
     parts[parts.length - 1] = tldForLocale(locale);
-    return parts.join(".");
+    const swapped = parts.join(".");
+    if (!isDnsHost(swapped)) {
+      return null;
+    }
+    return parsedHost.trailingDot ? `${swapped}.` : swapped;
   };
 
   const resolve = (options: {
@@ -787,7 +1194,7 @@ export function defineLocaleControls<TLocale extends string>(
   };
 
   const replaceLocaleInPath = (pathname: string, locale: TLocale): string => {
-    const normalizedPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
+    const normalizedPathname = normalizeCanonicalPath(pathname);
     const segments = normalizedPathname.split("/").filter(Boolean);
 
     if (segments.length > 0 && isLocale(segments[0])) {
@@ -796,7 +1203,7 @@ export function defineLocaleControls<TLocale extends string>(
       segments.unshift(locale);
     }
 
-    return `/${segments.join("/")}`;
+    return normalizeCanonicalPath(`/${segments.join("/")}`);
   };
 
   const extractLocaleFromPath = (pathname: string): TLocale | null => {
@@ -817,7 +1224,7 @@ export function defineLocaleControls<TLocale extends string>(
       return extractTldLocale(requestHost);
     }
 
-    const normalizedHost = stripPort(requestHost)?.toLowerCase();
+    const normalizedHost = parseRequestHost(requestHost)?.hostname.toLowerCase();
     if (!normalizedHost) {
       return null;
     }
@@ -856,12 +1263,12 @@ export function defineLocaleControls<TLocale extends string>(
       return host;
     }
 
-    return (
-      config.hosts?.locales?.[locale] ??
-      stripPort(fallbackHost) ??
-      config.hosts?.defaultHost ??
-      null
-    );
+    const parsedFallbackHost = parseRequestHost(fallbackHost);
+    const fallbackHostname = parsedFallbackHost
+      ? `${parsedFallbackHost.hostname}${parsedFallbackHost.trailingDot ? "." : ""}`
+      : null;
+
+    return config.hosts?.locales?.[locale] ?? fallbackHostname ?? config.hosts?.defaultHost ?? null;
   };
 
   const canonicalUrl = (options: {
@@ -870,14 +1277,23 @@ export function defineLocaleControls<TLocale extends string>(
     requestHost?: string | null;
     search?: string | null;
   }): string => {
+    if (!isLocale(options.locale)) {
+      throw new TypeError(
+        config.hosts?.mode === "domain"
+          ? "defineLocaleControls: domain URLs require a configured locale host."
+          : "defineLocaleControls: canonicalUrl locale must be configured.",
+      );
+    }
+    const search = normalizeSearch(options.search);
     // Domain, subdomain, and TLD modes carry locale in the host; the existing
     // map mode remains an additional signal on top of locale-prefixed paths.
-    const canonicalPath =
+    const canonicalPath = normalizeCanonicalPath(
       config.hosts?.mode === "domain" ||
-      config.hosts?.mode === "subdomain" ||
-      config.hosts?.mode === "tld"
+        config.hosts?.mode === "subdomain" ||
+        config.hosts?.mode === "tld"
         ? options.pathname
-        : replaceLocaleInPath(options.pathname, options.locale);
+        : replaceLocaleInPath(options.pathname, options.locale),
+    );
     const canonicalHost = config.hosts
       ? getCanonicalHost(options.locale, options.requestHost)
       : null;
@@ -886,18 +1302,18 @@ export function defineLocaleControls<TLocale extends string>(
     const requestPort = config.hosts?.mode === "domain" ? null : getPort(options.requestHost);
 
     if (!canonicalHost) {
-      return `${canonicalPath}${options.search ?? ""}`;
+      return `${canonicalPath}${search}`;
     }
 
     const hostWithPort =
-      requestPort && !canonicalHost.includes(":")
+      requestPort && !/:\d+$/.test(canonicalHost)
         ? `${canonicalHost}:${requestPort}`
         : canonicalHost;
 
     // Protocol-relative by default so an HTTPS page never links users to
     // http://; an explicit `protocol` config produces absolute URLs.
     const scheme = config.protocol ? `${config.protocol.replace(/:$/, "")}:` : "";
-    return `${scheme}//${hostWithPort}${canonicalPath}${options.search ?? ""}`;
+    return `${scheme}//${hostWithPort}${canonicalPath}${search}`;
   };
 
   const seoLinks = (options: {

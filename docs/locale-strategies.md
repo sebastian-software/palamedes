@@ -90,7 +90,10 @@ Cookie examples follow this rule set:
 - an initial explicit choice still persists the currently rendered locale when
   the cookie is missing or unsupported
 
-This is the verified path for apps that do not encode locale in the URL.
+This is the verified path for apps that do not encode locale in the URL. On
+HTTPS deployments, set `SameSite=Lax; Secure` (and `HttpOnly` when client
+JavaScript does not need to read or write the cookie) on server-managed locale
+cookies; see [Cookie Attributes And HTTPS](./security.md#cookie-attributes-and-https).
 
 Use a GET resource loader for read-only React Router queries. A POST action
 triggers the framework's normal loader revalidation even when it writes no
@@ -335,6 +338,34 @@ if (handoff.search !== location.search) {
 The helpers are pure. The app owns the rendered copy and markup, the timing of
 cookie writes, and URL replacement. Browser language detection alone does not
 persist a preference or navigate.
+
+`locales.serializeChoice()` emits `Path=/; Max-Age=31536000; SameSite=Lax` without
+`Secure` or `HttpOnly` so it works with `document.cookie` and local HTTP. On HTTPS
+deployments, append `; Secure` when writing client-side choice cookies, and set
+`Secure` (plus `HttpOnly` only when client JavaScript neither reads nor writes the
+cookie) on server-managed locale cookies. See
+[Cookie Attributes And HTTPS](./security.md#cookie-attributes-and-https).
+
+## Security Considerations For Host And Cookie Strategies
+
+Every host-based strategy (`domain`, `subdomain`, `tld`, and advisory `hosts.mode: "map"`)
+accepts `requestHost` as caller-supplied input. In `subdomain` and `tld` modes (and as a
+fallback in `map` mode), `canonicalUrl()`, `seoLinks()`, and `suggest()` derive destination
+URLs directly from `requestHost`.
+
+- Validate `Host` against an allowlist of your canonical production hostnames and pass the
+  normalized hostname (stripping or separately validating any port) as `requestHost` to
+  `resolve()`, `canonicalUrl()`, `seoLinks()`, or `suggest()`, because `canonicalUrl()`
+  copies a request port in `subdomain`, `tld`, and `map` modes when the destination has none.
+- Read `X-Forwarded-Host` only behind a trusted reverse proxy that strips and overwrites
+  client-supplied forwarding headers on ingress.
+- Set `protocol: "https"` for production SEO URLs and pass a fixed canonical build host during
+  static prerendering so previews or spoofed headers cannot poison canonical links or redirects.
+- Append `; Secure` to `serializeChoice()` on HTTPS and keep server-managed locale cookies
+  `SameSite=Lax; Secure` (plus `HttpOnly` only when browser scripts neither read nor write them).
+
+See the full [Security And Deployment Hardening](./security.md) guide for the SSR deployment
+checklist, CSP nonce guidance, and catalog/plugin trust boundaries.
 
 ## Switching Locale
 
