@@ -117,6 +117,51 @@ history and use the migration guide for 2.0 behavior.
   bounded lazy parser and existing fallback behavior. Native and TypeScript
   entry points share one Ferrocat-backed code generator.
 
+## [2.3.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v2.2.0...palamedes-v2.3.0) (2026-11-28)
+
+
+### Features
+
+* add translation tools and React catalog HMR ([795ce6c](https://github.com/sebastian-software/palamedes/commit/795ce6c60b0a96db90293b769eb4653ced618228))
+* **next-plugin:** add experimental per-locale client chunk permutations ([e722926](https://github.com/sebastian-software/palamedes/commit/e722926ca13dc73e930fd2a3810f2aeff59a643d))
+* **site:** highlight PO catalogs on the homepage ([#1574](https://github.com/sebastian-software/palamedes/issues/1574)) ([b51a1cc](https://github.com/sebastian-software/palamedes/commit/b51a1ccf49b4c98877f5cda50c6f2e99d607649f))
+* **vite:** bootstrap post-prerender static catalogs ([0450ed7](https://github.com/sebastian-software/palamedes/commit/0450ed7b73909dd09eb5d68a4727888c00a408fc))
+* **vite:** support static catalog bootstrap and Solid HMR ([050d486](https://github.com/sebastian-software/palamedes/commit/050d4865c381ea8839cb71cf0f026592fa2a08c3))
+* **vite:** update tracked Solid translations in place ([25781d8](https://github.com/sebastian-software/palamedes/commit/25781d847cfa73cf67a7687a487ff7ad896ae5e1))
+
+
+### Bug Fixes
+
+* **benchmarks:** make catalog measurements independent of checkout path ([af76497](https://github.com/sebastian-software/palamedes/commit/af76497c484ca464c0fad4289aba37490118ee3f))
+* **benchmarks:** make catalog measurements independent of checkout path ([07caa96](https://github.com/sebastian-software/palamedes/commit/07caa9673de97dc547dc75b2cfa47d69768a1e7a))
+* **cli:** catch changes during watch startup ([#1530](https://github.com/sebastian-software/palamedes/issues/1530)) ([87da046](https://github.com/sebastian-software/palamedes/commit/87da046d5c29d67575fb42c07e77abec693e4f95))
+* **cli:** prevent path traversal in plugin resolution, locales, and catalog paths ([#1555](https://github.com/sebastian-software/palamedes/issues/1555)) ([b0bc209](https://github.com/sebastian-software/palamedes/commit/b0bc2092b4d1ef6100ff05be21dd2574862b2491))
+* **cli:** protect catalog input during conversion ([#1529](https://github.com/sebastian-software/palamedes/issues/1529)) ([afcc0c3](https://github.com/sebastian-software/palamedes/commit/afcc0c3424aac14a0ccf309f354e155dce0d74c5))
+* **cli:** report missing merge-driver config ([2e491d4](https://github.com/sebastian-software/palamedes/commit/2e491d45e71401ea2f8bb5b89639b9f3416cf4e6))
+* **core,cli:** add recursion depth guards, fallible MDX diagnostics, atomic writes, and plugin shutdown ([#1569](https://github.com/sebastian-software/palamedes/issues/1569)) ([de851be](https://github.com/sebastian-software/palamedes/commit/de851bee9dbd1981d5c80333d38121a443e2207d))
+* **core:** eliminate panics in Vue scanner, plural parser, and nested macros ([#1541](https://github.com/sebastian-software/palamedes/issues/1541)) ([#1561](https://github.com/sebastian-software/palamedes/issues/1561)) ([5c9dc08](https://github.com/sebastian-software/palamedes/commit/5c9dc080765924a5b46d47a77d8e54c2118dd8ae))
+* **core:** harden locale host, redirect, Accept-Language, and cookie handling ([#1558](https://github.com/sebastian-software/palamedes/issues/1558)) ([c923eec](https://github.com/sebastian-software/palamedes/commit/c923eecacc435fc962b9a62eb0d4d672214bcbad))
+* **core:** validate and escape Rust codegen inputs ([#1539](https://github.com/sebastian-software/palamedes/issues/1539)) ([#1559](https://github.com/sebastian-software/palamedes/issues/1559)) ([5b1858a](https://github.com/sebastian-software/palamedes/commit/5b1858aae10779fe321f196980fd3bc67efe3278))
+* **deps:** patch vulnerable runtime dependencies ([#1532](https://github.com/sebastian-software/palamedes/issues/1532)) ([a42c714](https://github.com/sebastian-software/palamedes/commit/a42c714091d0dadad64119d4cb4384c8ee2e8af5))
+* **deps:** secure benchmark dependency graphs ([#1534](https://github.com/sebastian-software/palamedes/issues/1534)) ([72304a4](https://github.com/sebastian-software/palamedes/commit/72304a46a01a49e9318b2efe1f9d1d41449f5e25))
+* **integrations:** fix uncaught crashes, poisoned promises, and prototype lookups ([#1542](https://github.com/sebastian-software/palamedes/issues/1542)) ([#1565](https://github.com/sebastian-software/palamedes/issues/1565)) ([27c2060](https://github.com/sebastian-software/palamedes/commit/27c2060e124269c037aa03d18a9b4be9fa0a5c31))
+* **integrations:** harden client bootstrap against script breakout, DOM clobbering, and header spoofing ([#1556](https://github.com/sebastian-software/palamedes/issues/1556)) ([1555c64](https://github.com/sebastian-software/palamedes/commit/1555c647210ee8c7242be41bc3f9a28621748643))
+* **integrations:** harden HTML stream transforms and Remix SSR catalog/Trans state ([#1570](https://github.com/sebastian-software/palamedes/issues/1570)) ([c694a41](https://github.com/sebastian-software/palamedes/commit/c694a417acd4b769db634cb4d12e7e05e754eb4a))
+* **next-plugin:** inspect evaluated catalog manifest paths ([#1531](https://github.com/sebastian-software/palamedes/issues/1531)) ([2c6294c](https://github.com/sebastian-software/palamedes/commit/2c6294c4a97874b5cc80bfab9dc0056eada8b5df))
+* **test:** drain browser artifact receipts before navigation ([8b689e7](https://github.com/sebastian-software/palamedes/commit/8b689e76a51af2e28c9fba2115a07e983006595e))
+* **vite:** make catalog HMR fixtures portable ([99fe458](https://github.com/sebastian-software/palamedes/commit/99fe458b5464be896c8165e82232cce6ff57e26c))
+* **vite:** reject deferred classic startup scripts ([ea5c1e6](https://github.com/sebastian-software/palamedes/commit/ea5c1e66c86993b5c875e7fcd7695d38cfda4510))
+
+
+### Performance Improvements
+
+* **ci:** reuse musl addon compilation between runs ([#1498](https://github.com/sebastian-software/palamedes/issues/1498)) ([5257aa4](https://github.com/sebastian-software/palamedes/commit/5257aa4b69b49bc7e4af3e90d4f19228ebdcdd8b))
+* **core-node,next-plugin:** avoid double deep-cloning and per-module config SHA-256 hashing ([#1545](https://github.com/sebastian-software/palamedes/issues/1545)) ([#1563](https://github.com/sebastian-software/palamedes/issues/1563)) ([eb4b630](https://github.com/sebastian-software/palamedes/commit/eb4b6303ae106e9138fdb7d7525bf648dfd5a32f))
+* **core,cli:** optimize transform source maps, SFC/Vue parsing, warm lint cache, watch mode, and CLI passes ([#1572](https://github.com/sebastian-software/palamedes/issues/1572)) ([d625ccb](https://github.com/sebastian-software/palamedes/commit/d625ccb8f5c698fd0a2c3ba5b104c126c37b06c0))
+* **core,integrations:** optimize Intl formatter hot paths, async Remix HTTP compilation, and Next.js permutation emitters ([#1573](https://github.com/sebastian-software/palamedes/issues/1573)) ([3273718](https://github.com/sebastian-software/palamedes/commit/32737188ebc4420a6a0c9cfa175faf6a69ce6ef2))
+* **core:** optimize catalog compilation cache and PO catalog updates ([#1544](https://github.com/sebastian-software/palamedes/issues/1544)) ([#1566](https://github.com/sebastian-software/palamedes/issues/1566)) ([ab7e223](https://github.com/sebastian-software/palamedes/commit/ab7e223fd4c24ac16a266520fa0c6d6441a86623))
+* **vite-plugin:** cache SSR import-map bindings and batch catalog compilations ([#1568](https://github.com/sebastian-software/palamedes/issues/1568)) ([90fba19](https://github.com/sebastian-software/palamedes/commit/90fba196a074dc144b1b0de42ed268f45a61d17d))
+
 ## [2.2.0](https://github.com/sebastian-software/palamedes/compare/palamedes-v2.1.1...palamedes-v2.2.0) (2026-11-10)
 
 
