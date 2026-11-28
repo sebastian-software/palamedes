@@ -1,11 +1,11 @@
 {
   "schemaVersion": 3,
-  "measuredAt": "2026-11-27T19:07:33.126Z",
-  "sourceCommit": "620128da55f07d60864a4c6f4c1ef08b5814943a",
+  "measuredAt": "2026-11-28T12:51:12.108Z",
+  "sourceCommit": "d625ccb8f5c698fd0a2c3ba5b104c126c37b06c0",
   "worktreeDirty": true,
-  "sourceSha256": "ccce6822d9c9eb3e794994f944e07d63b8a5ac4847f3997cff1c6af236120d5b",
+  "sourceSha256": "d00f9ecb093c14138e0a28096c4f670e2751581477cf5acaca2e345c89e4ae4c",
   "environment": {
-    "node": "v24.22.3",
+    "node": "v24.22.1",
     "vite": "8.2.4",
     "rolldown": "1.2.14",
     "browser": "151.0.7922.34",
@@ -26,7 +26,7 @@
       "id": "core",
       "bytes": {
         "raw": 15078,
-        "gzip": 5067,
+        "gzip": 5065,
         "brotli": 4480
       },
       "sha256": "8b8c0eaf11b2f392302b07d121939b6116fc9002549a3343805629fe3edffaeb",
@@ -86,7 +86,7 @@
       "id": "react",
       "bytes": {
         "raw": 17366,
-        "gzip": 5835,
+        "gzip": 5820,
         "brotli": 5174
       },
       "sha256": "67080b92ff5654beac5d8ad67348e0a2a7e13d447b6276646fb11a88d91e79f9",
@@ -161,7 +161,7 @@
       "id": "solid",
       "bytes": {
         "raw": 16778,
-        "gzip": 5572,
+        "gzip": 5565,
         "brotli": 4944
       },
       "sha256": "2d6639a139329343e19ec99e3c948b0cd7285de460730cc2559c529ff0ac0e62",
@@ -235,7 +235,7 @@
       "id": "remix",
       "bytes": {
         "raw": 17103,
-        "gzip": 5684,
+        "gzip": 5683,
         "brotli": 5050
       },
       "sha256": "7d0eb503c4d49333e2a61e62d4202c3bc81d278cca559ab6d9c6c7ebc61376fa",
@@ -303,7 +303,7 @@
       "id": "core",
       "bytes": {
         "raw": 11312,
-        "gzip": 3968,
+        "gzip": 3967,
         "brotli": 3523
       },
       "sha256": "a871ababcbab297ceeeca66ac7665005c577a3b33000cb60a0b609b8baed5841",
@@ -341,7 +341,7 @@
       "id": "react",
       "bytes": {
         "raw": 13283,
-        "gzip": 4621,
+        "gzip": 4609,
         "brotli": 4093
       },
       "sha256": "aeb71c1cbb0a017e5c93791a68eb4c67861a7218dbc5cd9cacbe2f67c0519333",
@@ -393,7 +393,7 @@
       "id": "solid",
       "bytes": {
         "raw": 12727,
-        "gzip": 4367,
+        "gzip": 4364,
         "brotli": 3870
       },
       "sha256": "8996c4c64df913d5587610334c8085f1d3ad060881d8b90f19e5ac521d2d9195",
@@ -445,7 +445,7 @@
       "id": "remix",
       "bytes": {
         "raw": 13305,
-        "gzip": 4598,
+        "gzip": 4592,
         "brotli": 4071
       },
       "sha256": "74dad6d89ca848996f478adb61848d44697b496e498cda19f26f5ce8fbba8a6b",
@@ -495,7 +495,7 @@
       "id": "catalog-only",
       "bytes": {
         "raw": 803,
-        "gzip": 461,
+        "gzip": 463,
         "brotli": 403
       },
       "sha256": "bfbc52ff60535ab44fdede176147831b843e6c6687294b46e1e414e94feb558c",
@@ -520,7 +520,7 @@
     "messages": 38,
     "bytes": {
       "raw": 2296,
-      "gzip": 1222,
+      "gzip": 1232,
       "brotli": 1062
     },
     "sha256": "68022d84f32b11e70d388792dbf10a71c7c2cc48daa16bc61e450c5a6dc20795",

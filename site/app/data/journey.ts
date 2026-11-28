@@ -35,22 +35,6 @@ export function TripCard({ seats }: { seats: number }) {
   )
 }`;
 
-export const JOURNEY_PO = `#: src/TripCard.tsx#TripCard
-msgid "Your trip starts tomorrow."
-msgstr ""
-
-#: src/TripCard.tsx#TripCard
-msgid "{seats, plural, one {# seat left} other {# seats left}}"
-msgstr ""`;
-
-export const JOURNEY_PO_TRANSLATED = `#: src/TripCard.tsx#TripCard
-msgid "Your trip starts tomorrow."
-msgstr "Deine Reise beginnt morgen."
-
-#: src/TripCard.tsx#TripCard
-msgid "{seats, plural, one {# seat left} other {# seats left}}"
-msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`;
-
 export const JOURNEY_TRANSFORMED = `import { getI18n } from "@palamedes/runtime"
 import { Trans } from "@palamedes/react/compiled"
 

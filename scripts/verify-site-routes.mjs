@@ -848,9 +848,22 @@ async function checkRoutes(context, label, { expectHydration }) {
       fail("header search: expected a result for First Working Translation");
     }
   } else {
-    // No-JS completeness: the new proof strip and ledger must be static HTML.
+    // The highlighted catalogs, proof strip, and ledger must be static HTML.
     currentPath = "/";
     await gotoAndSettle(page, "/", { settleMs: 100 });
+    const poBlocks = page.locator('#journey [data-lang="po"] pre code');
+    const highlighted = await poBlocks.evaluateAll((examples) =>
+      examples.map((example) => {
+        const colors = Array.from(
+          example.querySelectorAll("span[style]"),
+          (token) => getComputedStyle(token).color,
+        );
+        return new Set(colors).size > 1;
+      }),
+    );
+    if (highlighted.length !== 2 || highlighted.includes(false)) {
+      fail("no-JS: expected two syntax-highlighted PO catalog examples");
+    }
     const statText = await page
       .getByText("example applications, built and smoke-checked in the production image")
       .isVisible();
