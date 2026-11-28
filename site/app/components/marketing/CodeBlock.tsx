@@ -2,10 +2,8 @@ import type { ReactNode } from "ardo/react";
 
 /*
  * A small, dependency-free code figure for marketing pages, set like a printed
- * listing. Source code sits on the cool listing ground; text files such as PO
- * catalogs sit on paper. `marks` names the fragments a reader should notice
- * (the sentence, the generated ID); they are set in bronze. Lines that start
- * with a comment or a PO reference are dimmed.
+ * listing. `marks` sets fragments such as the source sentence or generated ID
+ * in bronze. Comment lines are dimmed.
  */
 
 function segments(text: string, pattern: RegExp) {
@@ -22,7 +20,7 @@ function escapeForPattern(value: string): string {
 }
 
 function renderLine(line: string, pattern: RegExp | null): ReactNode {
-  const dim = /^\s*(\/\/|#)/u.test(line);
+  const dim = /^\s*\/\//u.test(line);
   if (dim) {
     return <span className="text-gray-spec">{line}</span>;
   }
@@ -44,13 +42,11 @@ export function CodeBlock({
   label,
   code,
   marks = [],
-  tone = "code",
   caption,
 }: {
   label: string;
   code: string;
   marks?: readonly string[];
-  tone?: "code" | "file";
   caption?: ReactNode;
 }) {
   const pattern =
@@ -58,7 +54,7 @@ export function CodeBlock({
   const lines = code.split("\n").map((text, index) => ({ no: index + 1, text }));
 
   return (
-    <figure className={tone === "code" ? "pmds-code" : "border border-hair bg-paper text-ink"}>
+    <figure className="pmds-code">
       <p className="pmds-code-label micro px-5 py-3 text-[11px] tracking-label text-slate">
         {label}
       </p>

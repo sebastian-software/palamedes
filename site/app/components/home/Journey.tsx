@@ -1,16 +1,10 @@
-import { ArdoContentContainer } from "ardo/ui";
+import { ArdoCodeBlock, ArdoContentContainer } from "ardo/ui";
 import type { ReactNode } from "ardo/react";
 
 import { CodeBlock } from "~/components/marketing/CodeBlock";
 import { BandHeader } from "~/components/marketing/Band";
 import { PlainWords } from "~/components/marketing/PlainWords";
-import {
-  JOURNEY_COMPILED,
-  JOURNEY_PO,
-  JOURNEY_PO_TRANSLATED,
-  JOURNEY_SOURCE,
-  JOURNEY_TRANSFORMED,
-} from "~/data/journey";
+import { JOURNEY_COMPILED, JOURNEY_SOURCE, JOURNEY_TRANSFORMED } from "~/data/journey";
 
 import { RenderedCard } from "./RenderedCard";
 import { SplitDiagram } from "./SplitDiagram";
@@ -57,34 +51,42 @@ const STOPS: Stop[] = [
         "The way text leaves your code for translation. Instead of someone copying strings into a spreadsheet, a tool scans the code and writes down everything that needs translating — together with the file and component each sentence came from.",
     },
     artifact: (
-      <CodeBlock
-        label="$ pmds extract → src/locales/de.po"
-        code={JOURNEY_PO}
-        marks={['msgstr ""']}
-        tone="file"
-        caption="Both messages are waiting for a German translation. The English catalog fills itself: in the source language, the sentence is the translation."
-      />
+      <figure>
+        <ArdoCodeBlock language="po" title="$ pmds extract → src/locales/de.po" wrap>
+          {`#: src/TripCard.tsx#TripCard
+msgid "Your trip starts tomorrow."
+msgstr ""
+
+#: src/TripCard.tsx#TripCard
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr ""`}
+        </ArdoCodeBlock>
+        <figcaption className="mt-2 text-[13px] leading-relaxed text-ink/70">
+          Both messages are waiting for a German translation. The English catalog fills itself: in
+          the source language, the sentence is the translation.
+        </figcaption>
+      </figure>
     ),
   },
   {
     step: "Translate",
     title: "Translators get a real file, not your codebase.",
-    body: "Each language is a plain .po file in your repository. Translators fill in msgstr — by hand, in a translation tool, or through your own scripts — and the change arrives as a diff you can review.",
+    body: "By default, each language gets a plain .po file in your repository. Translators fill in msgstr by hand, in a translation tool, or through your own scripts, and the change arrives as a diff you can review.",
     plain: {
       question: "What is a .po file?",
       answer:
         "The gettext catalog format, in use since the 1990s. Each entry holds the original sentence, its translation, and where it came from. Because it is plain text and a long-standing standard, translation tools can open it, Git can diff it, and your translations never depend on one vendor.",
     },
     artifact: (
-      <CodeBlock
-        label="src/locales/de.po — translated"
-        code={JOURNEY_PO_TRANSLATED}
-        marks={[
-          '"Deine Reise beginnt morgen."',
-          '"{seats, plural, one {# Platz frei} other {# Plätze frei}}"',
-        ]}
-        tone="file"
-      />
+      <ArdoCodeBlock language="po" title="src/locales/de.po — translated" wrap>
+        {`#: src/TripCard.tsx#TripCard
+msgid "Your trip starts tomorrow."
+msgstr "Deine Reise beginnt morgen."
+
+#: src/TripCard.tsx#TripCard
+msgid "{seats, plural, one {# seat left} other {# seats left}}"
+msgstr "{seats, plural, one {# Platz frei} other {# Plätze frei}}"`}
+      </ArdoCodeBlock>
     ),
   },
   {
