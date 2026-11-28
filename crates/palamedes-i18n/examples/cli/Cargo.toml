@@ -1,6 +1,6 @@
 [package]
 name = "palamedes-example-rust-cli"
-version = "2.2.0"
+version = "2.3.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -10,11 +10,11 @@ publish = false
 workspace = true
 
 [dependencies]
-palamedes-i18n = { version = "2.2.0", path = "../.." }
+palamedes-i18n = { version = "2.3.0", path = "../.." }
 
 [build-dependencies]
-palamedes-build = { version = "2.2.0", path = "../../../palamedes-build" }
+palamedes-build = { version = "2.3.0", path = "../../../palamedes-build" }
 
 [dev-dependencies]
-palamedes-build = { version = "2.2.0", path = "../../../palamedes-build" }
+palamedes-build = { version = "2.3.0", path = "../../../palamedes-build" }
 tempfile = "3.27.0"
